@@ -1,0 +1,103 @@
+import React, { useContext } from 'react';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { ThemeContext } from './ThemeContext';
+
+const teamNavLinks = [
+  { to: '/teams/chat', label: 'Chat', icon: '💬' },
+  { to: '/teams/calendar', label: 'Calendar', icon: '📅' },
+  { to: '/teams/canvas', label: 'Canvas', icon: '🎨' },
+  // Future links can be added here
+];
+
+export default function TeamsLayout() {
+  const navigate = useNavigate();
+  const { theme } = useContext(ThemeContext);
+
+  const isDark = theme === 'dark';
+
+  const secondarySidebarStyle: React.CSSProperties = {
+    width: '80px',
+    background: isDark ? '#1a1a1a' : '#f8f9fa',
+    borderRight: `1px solid ${isDark ? '#333' : '#e0e0e0'}`,
+    padding: '20px 12px',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    transition: 'background 0.3s, border-color 0.3s',
+  };
+
+  const navLinkStyle: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '12px',
+    borderRadius: '8px',
+    textDecoration: 'none',
+    color: isDark ? '#a0a0a0' : '#333',
+    fontWeight: 500,
+    fontSize: '24px',
+    marginBottom: '8px',
+    transition: 'background 0.2s, color 0.2s',
+    width: '48px',
+    height: '48px'
+  };
+
+  const activeNavLinkStyle: React.CSSProperties = {
+    background: isDark ? '#333' : '#e0e0e0',
+    color: isDark ? '#fff' : '#000',
+  };
+  
+  const titleStyle: React.CSSProperties = {
+      fontSize: '14px',
+      fontWeight: 600,
+      marginBottom: '24px',
+      color: isDark ? '#a0a0a0' : '#333',
+  }
+
+  const createTeamButtonStyle: React.CSSProperties = {
+      width: '100%',
+      background: isDark ? '#333' : '#000',
+      color: '#fff',
+      border: 'none',
+      padding: '10px 0',
+      borderRadius: '8px',
+      cursor: 'pointer',
+      fontWeight: 500,
+      fontSize: '13px',
+      textAlign: 'center',
+      transition: 'background 0.3s',
+  }
+
+  return (
+    <div style={{ display: 'flex', height: '100vh' }}>
+      <aside style={secondarySidebarStyle}>
+        <h2 style={titleStyle}>TEAMS</h2>
+        <nav style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          {teamNavLinks.map(({ to, icon }) => (
+            <NavLink
+              key={to}
+              to={to}
+              style={({ isActive }) => ({
+                ...navLinkStyle,
+                ...(isActive ? activeNavLinkStyle : {}),
+              })}
+            >
+              <span title={to}>{icon}</span>
+            </NavLink>
+          ))}
+        </nav>
+        <div style={{ marginTop: 'auto', width: '100%' }}>
+          <button
+            onClick={() => navigate('/teams/create')}
+            style={createTeamButtonStyle}
+          >
+            Create Team
+          </button>
+        </div>
+      </aside>
+      <main style={{ flex: 1, overflow: 'hidden' }}>
+        <Outlet />
+      </main>
+    </div>
+  );
+} 

@@ -1,0 +1,150 @@
+.sidebar {
+  width: 250px;
+  background: #2d2d2d;
+  color: #a9a9a9;
+  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+  transition: transform 0.3s ease, width 0.3s ease, background-color 0.2s ease, color 0.2s ease;
+  z-index: 1000;
+  flex-shrink: 0; /* Prevent sidebar from shrinking */
+}
+
+.sidebarOverlay {
+  position: fixed;
+  left: 0;
+  top: 0;
+  height: 100vh;
+  transform: translateX(-100%);
+}
+
+.sidebarOpen {
+  transform: translateX(0);
+}
+
+.sidebarClosed {
+    transform: translateX(-100%);
+}
+
+/* Specific styles for the collapsed state trigger */
+.sidebarOverlay.sidebarClosed {
+    transform: translateX(calc(-100% + 50px)); /* Keep a small part visible */
+    box-shadow: none;
+}
+
+.sidebarOverlay.sidebarClosed .logo {
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    transform: rotate(180deg);
+    position: absolute;
+    right: 0;
+    top: 50%;
+    margin-top: -50px; /* Adjust based on logo height */
+    background: #1f2937;
+    padding: 10px 5px;
+    border-radius: 0 8px 8px 0;
+    cursor: pointer;
+}
+
+.sidebarOverlay.sidebarClosed > *:not(.logo) {
+    display: none;
+}
+
+.logo {
+  font-size: 24px;
+  font-weight: bold;
+  color: #fff;
+  text-align: center;
+  margin-bottom: 24px;
+  outline: none; /* Remove focus outline */
+}
+
+.logo:focus {
+  outline: none;
+}
+
+.sectionTitle {
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0 8px;
+  margin-bottom: 8px;
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+}
+
+.navItem {
+  margin-bottom: 4px;
+}
+
+.navLink {
+  display: block;
+  color: #a9a9a9;
+  text-decoration: none;
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-size: 16px;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.navLink:hover {
+  background-color: #ffffff;
+  color: #2d2d2d;
+}
+
+.navLinkActive {
+  background-color: #4f46e5;
+  color: #fff;
+  font-weight: 500;
+}
+
+.hr {
+  border: none;
+  border-top: 1px solid #374151;
+  margin: 16px 0;
+}
+
+.footer {
+  margin-top: auto;
+  font-size: 14px;
+}
+
+.footerItem {
+  padding: 8px 16px;
+  cursor: pointer;
+}
+
+.footerItem:hover {
+  color: #fff;
+}
+
+.themeToggleButton {
+  width: 100%;
+  padding: 10px;
+  background: #374151;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: center;
+}
+
+.themeToggleButton:hover {
+  background: #4f46e5;
+}
+
+.backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.5);
+    z-index: 999;
+} 

@@ -1,0 +1,127 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  name          String?
+  role          UserRole  @default(USER)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  events        Event[]   @relation("EventAdmins")
+  managedEvents Event[]   @relation("EventManagers")
+  messages      Message[]
+}
+
+model Event {
+  id          String    @id @default(uuid())
+  name        String
+  description String?
+  startDate   DateTime
+  endDate     DateTime
+  status      EventStatus @default(DRAFT)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  admins      User[]    @relation("EventAdmins")
+  managers    User[]    @relation("EventManagers")
+  guests      Guest[]
+  logistics   Logistics[]
+  inventory   Inventory[]
+  messages    Message[]
+}
+
+model Guest {
+  id          String    @id @default(uuid())
+  eventId     String
+  event       Event     @relation(fields: [eventId], references: [id])
+  name        String
+  email       String
+  phone       String?
+  arrivalTime DateTime?
+  flightInfo  String?
+  status      GuestStatus @default(INVITED)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Logistics {
+  id          String    @id @default(uuid())
+  eventId     String
+  event       Event     @relation(fields: [eventId], references: [id])
+  type        LogisticsType
+  description String
+  status      LogisticsStatus @default(PENDING)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Inventory {
+  id          String    @id @default(uuid())
+  eventId     String
+  event       Event     @relation(fields: [eventId], references: [id])
+  name        String
+  quantity    Int
+  status      InventoryStatus @default(IN_STOCK)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Message {
+  id        String    @id @default(uuid())
+  eventId   String
+  event     Event     @relation(fields: [eventId], references: [id])
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  content   String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+enum UserRole {
+  ADMIN
+  AGENCY
+  USER
+}
+
+enum EventStatus {
+  DRAFT
+  PUBLISHED
+  ONGOING
+  COMPLETED
+  CANCELLED
+}
+
+enum GuestStatus {
+  INVITED
+  CONFIRMED
+  CHECKED_IN
+  CANCELLED
+}
+
+enum LogisticsType {
+  TRANSPORTATION
+  ACCOMMODATION
+  VENUE
+  EQUIPMENT
+  OTHER
+}
+
+enum LogisticsStatus {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+enum InventoryStatus {
+  IN_STOCK
+  LOW_STOCK
+  OUT_OF_STOCK
+  ORDERED
+} 

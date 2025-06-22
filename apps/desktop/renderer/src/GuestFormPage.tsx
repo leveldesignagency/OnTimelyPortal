@@ -1,0 +1,204 @@
+import React, { useState, useEffect } from 'react';
+import { useParams, useLocation, useNavigate } from 'react-router-dom';
+import countryList from 'country-list';
+import { codes as countryCallingCodes } from 'country-calling-code';
+
+// Re-defining necessary components and data here to avoid complex imports
+
+const GUEST_MODULES_CONFIG = [
+  { key: 'flightNumber', label: 'Flight Tracker', type: 'text', placeholder: 'e.g. BA2490' },
+  { key: 'seatNumber', label: 'Seat Number', type: 'text', placeholder: 'e.g. 14A' },
+  { key: 'eventReference', label: 'Event Reference', type: 'text', placeholder: 'Enter reference number' },
+  { key: 'hotelReservation', label: 'Hotel Reservation', type: 'text', placeholder: 'Enter confirmation number' },
+  { key: 'trainBookingNumber', label: 'Train Booking Number', type: 'text', placeholder: 'Enter booking reference' },
+  { key: 'coachBookingNumber', label: 'Coach Booking Number', type: 'text', placeholder: 'Enter booking reference' },
+  { key: 'idUpload', label: 'ID Upload', type: 'file', placeholder: 'Upload ID (PNG, JPG, PDF)' },
+];
+
+const GUEST_FIELDS_CONFIG = [
+    { key: 'prefix', label: 'Prefix' },
+    { key: 'gender', label: 'Gender' },
+    { key: 'firstName', label: 'First Name', required: true },
+    { key: 'middleName', label: 'Middle Name' },
+    { key: 'lastName', label: 'Last Name', required: true },
+    { key: 'dob', label: 'Date of Birth' },
+    { key: 'countryCode', label: 'Contact Number', required: true },
+    { key: 'email', label: 'Email', required: true },
+    { key: 'idType', label: 'ID Type', required: true },
+    { key: 'idNumber', label: 'ID Number', required: true },
+    { key: 'idCountry', label: 'Country of Origin' },
+    { key: 'nextOfKinName', label: 'Next of Kin Name' },
+    { key: 'nextOfKinEmail', label: 'Next of Kin Email' },
+    { key: 'nextOfKinPhone', label: 'Next of Kin Phone' },
+    { key: 'dietary', label: 'Dietary Requirements' },
+    { key: 'disabilities', label: 'Disabilities/Accessibility' },
+];
+
+const PREFIXES = ['Mr', 'Mrs', 'Ms', 'Mx', 'Dr', 'Prof'];
+const GENDERS = ['Male', 'Female', 'Transgender', 'Non Binary', 'Other', 'Prefer Not to Say'];
+const COUNTRIES = countryList.getNames();
+
+function getFlagEmoji(isoCode2: string) {
+  if (!isoCode2) return '';
+  return isoCode2.toUpperCase().replace(/./g, (char: string) => String.fromCodePoint(127397 + char.charCodeAt(0)));
+}
+
+const COUNTRY_CODES = Array.from(
+  new Map(
+    countryCallingCodes
+      .filter(c => c.countryCodes[0] && c.isoCode2)
+      .map(c => [`+${c.countryCodes[0]}`, {
+        code: `+${c.countryCodes[0]}`,
+        label: c.country,
+        flag: getFlagEmoji(c.isoCode2)
+      }])
+  ).values()
+);
+
+export default function GuestFormPage() {
+  const { eventId } = useParams();
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const [formConfig, setFormConfig] = useState<{ fields: string[], modules: string[] } | null>(null);
+  const [guestData, setGuestData] = useState<any>({});
+  const [eventName, setEventName] = useState('');
+
+  useEffect(() => {
+    const queryParams = new URLSearchParams(location.search);
+    const fields = queryParams.get('fields')?.split(',') || [];
+    const modules = queryParams.get('modules')?.split(',') || [];
+    setFormConfig({ fields, modules });
+
+    const events = JSON.parse(localStorage.getItem('timely_events') || '[]');
+    const currentEvent = events.find((e: any) => e.id === eventId);
+    if (currentEvent) {
+      setEventName(currentEvent.name);
+    }
+  }, [location.search, eventId]);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    setGuestData((prev: any) => ({ ...prev, [e.target.name]: e.target.value }));
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      setGuestData((prev: any) => ({
+        ...prev,
+        [e.target.name]: e.target.files ? e.target.files[0] : null
+      }));
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    // In a real app, this would submit the data to a server.
+    // For now, we'll just log it and show a success message.
+    console.log('Form Submitted:', guestData);
+    alert('Thank you! Your information has been submitted successfully.');
+    // Optionally, navigate to a success page or back to the main site
+  };
+
+  if (!formConfig) {
+    return <div>Loading form...</div>;
+  }
+
+  const renderField = (key: string) => {
+    const fieldConfig = GUEST_FIELDS_CONFIG.find(f => f.key === key);
+    if (!fieldConfig) return null;
+
+    // A simplified renderer for various field types
+    // This can be expanded with more complex inputs
+    return (
+      <div key={key} style={{ marginBottom: 16 }}>
+        <label style={{ display: 'block', fontWeight: 500, marginBottom: 8 }}>
+          {fieldConfig.label} {fieldConfig.required && <span style={{ color: '#c00' }}>*</span>}
+        </label>
+        <input
+          type="text"
+          value={guestData[key] || ''}
+          onChange={handleInputChange}
+          required={fieldConfig.required}
+          style={{ width: '100%', padding: 12, borderRadius: 8, border: '1.5px solid #d1d5db' }}
+        />
+      </div>
+    );
+  };
+
+  const renderModule = (key: string) => {
+    const moduleConfig = GUEST_MODULES_CONFIG.find(m => m.key === key);
+    if (!moduleConfig) return null;
+
+    // Simplified styles for this example
+    const fieldStyle: React.CSSProperties = {
+      display: 'flex',
+      flexDirection: 'column',
+      marginBottom: 20,
+    };
+    const labelStyle: React.CSSProperties = {
+      marginBottom: 8,
+      fontSize: 14,
+      fontWeight: 500,
+      color: '#333'
+    };
+    const inputStyle: React.CSSProperties = {
+      padding: '12px 16px',
+      border: '2px solid #ccc',
+      borderRadius: 8,
+      fontSize: 16,
+      outline: 'none',
+    };
+
+    if (moduleConfig.type === 'file') {
+      return (
+        <div style={fieldStyle}>
+          <label style={labelStyle} htmlFor={moduleConfig.key}>{moduleConfig.label}</label>
+          <input
+            type="file"
+            id={moduleConfig.key}
+            name={moduleConfig.key}
+            onChange={handleFileChange}
+            style={inputStyle}
+          />
+        </div>
+      );
+    }
+
+    // Default to text input
+    return (
+      <div style={fieldStyle}>
+        <label style={labelStyle} htmlFor={moduleConfig.key}>{moduleConfig.label}</label>
+        <input
+          type="text"
+          id={moduleConfig.key}
+          name={moduleConfig.key}
+          value={guestData[moduleConfig.key] as string || ''}
+          onChange={handleInputChange}
+          placeholder={moduleConfig.placeholder}
+          style={inputStyle}
+        />
+      </div>
+    );
+  };
+
+  return (
+    <div style={{ background: '#f8f9fa', minHeight: '100vh', padding: '40px 20px' }}>
+      <div style={{ maxWidth: 700, margin: '0 auto', background: '#fff', padding: '40px', borderRadius: 16, boxShadow: '0 4px 24px rgba(0,0,0,0.1)' }}>
+        <h1 style={{ textAlign: 'center', margin: '0 0 16px', fontSize: 28 }}>{eventName}</h1>
+        <h2 style={{ textAlign: 'center', margin: '0 0 32px', fontSize: 20, color: '#555' }}>Guest Information Form</h2>
+        <form onSubmit={handleSubmit}>
+          {formConfig.fields.map(renderField)}
+          {formConfig.modules.length > 0 && (
+            <div style={{ marginTop: 32 }}>
+              <h3 style={{ borderTop: '2px solid #eee', paddingTop: 24, margin: '0 0 24px', fontSize: 22 }}>Additional Information</h3>
+              {formConfig.modules.map(renderModule)}
+            </div>
+          )}
+          <button type="submit" style={{ width: '100%', padding: 16, fontSize: 18, fontWeight: 600, background: '#222', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', marginTop: 32 }}>
+            Submit Information
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+} 
