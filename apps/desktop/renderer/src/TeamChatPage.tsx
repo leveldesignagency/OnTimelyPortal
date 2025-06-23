@@ -87,6 +87,13 @@ type Chat = {
   isArchived?: boolean;
 };
 
+type Notification = {
+  id: string;
+  message: string;
+  type: 'success' | 'error' | 'info' | 'warning';
+  timestamp: number;
+};
+
 // Mock data with enhanced features - REPLACED WITH REAL DATA
 let CURRENT_USER: User | null = null;
 
@@ -1118,13 +1125,14 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
     );
 };
 
-const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleArchive }: { 
+const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleArchive, onRemoveUser }: { 
   chat: Chat | undefined, 
   isOpen: boolean, 
   isDark: boolean,
   onToggleMute: (chatId: string) => void,
   onTogglePin: (chatId: string) => void,
-  onToggleArchive: (chatId: string) => void
+  onToggleArchive: (chatId: string) => void,
+  onRemoveUser: (userId: string, userName: string) => void
 }) => {
   if (!isOpen || !chat) return null;
 
@@ -1153,10 +1161,19 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
     }
   };
 
+  const handleRemoveUser = (userId: string, userName: string) => {
+    if (chat.type === 'group' && userId !== CURRENT_USER?.id) {
+      const confirmRemove = confirm(`Are you sure you want to remove ${userName} from "${chat.name}"?`);
+      if (confirmRemove) {
+        onRemoveUser(userId, userName);
+      }
+    }
+  };
+
   const actionButtons = [
-    { icon: chat.isMuted ? '🔇' : '🔊', label: chat.isMuted ? 'Unmute' : 'Mute', action: () => onToggleMute(chat.id) },
-    { icon: chat.isPinned ? '📌' : '📍', label: chat.isPinned ? 'Unpin' : 'Pin', action: () => onTogglePin(chat.id) },
-    { icon: '🗃️', label: 'Archive', action: () => onToggleArchive(chat.id) }
+    { iconSrc: '/icons/bell.svg', label: chat.isMuted ? 'Unmute' : 'Mute', action: () => onToggleMute(chat.id) },
+    { iconSrc: '/icons/pin.svg', label: chat.isPinned ? 'Unpin' : 'Pin', action: () => onTogglePin(chat.id) },
+    { iconSrc: '/icons/archive.svg', label: 'Archive', action: () => onToggleArchive(chat.id) }
   ];
 
   return (
@@ -1166,11 +1183,13 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
       borderLeft: `1px solid ${isDark ? '#2a2a2a' : '#e9ecef'}`,
       display: 'flex',
       flexDirection: 'column',
-      boxShadow: isDark ? '-2px 0 8px rgba(0,0,0,0.3)' : '-2px 0 8px rgba(0,0,0,0.1)'
+      height: '100vh',
+      overflowY: 'auto',
+      flexShrink: 0
     }}>
       {/* Profile/Group Info */}
-      <div style={{ padding: '24px', borderBottom: `1px solid ${isDark ? '#2a2a2a' : '#e9ecef'}` }}>
-        <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+      <div style={{ padding: '20px', borderBottom: `1px solid ${isDark ? '#2a2a2a' : '#e9ecef'}` }}>
+        <div style={{ textAlign: 'center', marginBottom: '16px' }}>
           <div style={{
             width: '80px',
             height: '80px',
@@ -1180,16 +1199,16 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: '32px',
+            fontSize: '28px',
             fontWeight: '600',
-            margin: '0 auto 16px',
+            margin: '0 auto 12px',
             boxShadow: isDark ? '0 4px 16px rgba(0,0,0,0.3)' : '0 4px 16px rgba(0,0,0,0.1)'
           }}>
             {chat.avatar}
           </div>
           <h3 style={{
-            margin: '0 0 8px 0',
-            fontSize: '20px',
+            margin: '0 0 6px 0',
+            fontSize: '18px',
             fontWeight: '600',
             color: isDark ? '#ffffff' : '#1a1a1a'
           }}>
@@ -1197,7 +1216,7 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
           </h3>
           <p style={{
             margin: 0,
-            fontSize: '14px',
+            fontSize: '13px',
             color: isDark ? '#adb5bd' : '#6c757d'
           }}>
             {chat.type === 'group' ? `${chat.participants.length} members` : 'Direct message'}
@@ -1205,7 +1224,7 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
         </div>
 
         {/* Action Buttons */}
-        <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+        <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
           {actionButtons.map((button, idx) => (
             <button
               key={idx}
@@ -1215,12 +1234,11 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
                 background: isDark ? '#2a2a2a' : '#f8f9fa',
                 border: 'none',
                 borderRadius: '6px',
-                padding: '12px 14px',
-                fontSize: '16px',
+                padding: '10px 12px',
                 cursor: 'pointer',
                 transition: 'all 0.2s ease',
-                minWidth: '48px',
-                minHeight: '48px',
+                minWidth: '44px',
+                minHeight: '44px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center'
@@ -1232,7 +1250,16 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
                 e.currentTarget.style.background = isDark ? '#2a2a2a' : '#f8f9fa';
               }}
             >
-              {button.icon}
+              <img 
+                src={button.iconSrc} 
+                alt={button.label}
+                width={16}
+                height={16}
+                style={{ 
+                  filter: isDark ? 'invert(1)' : 'none',
+                  opacity: 0.8
+                }}
+              />
             </button>
           ))}
         </div>
@@ -1240,32 +1267,33 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
 
       {/* Participants */}
       {chat.type === 'group' && (
-        <div style={{ padding: '20px', borderBottom: `1px solid ${isDark ? '#2a2a2a' : '#e9ecef'}` }}>
+        <div style={{ padding: '16px', borderBottom: `1px solid ${isDark ? '#2a2a2a' : '#e9ecef'}` }}>
           <h4 style={{
-            margin: '0 0 16px 0',
-            fontSize: '16px',
+            margin: '0 0 12px 0',
+            fontSize: '15px',
             fontWeight: '600',
             color: isDark ? '#ffffff' : '#1a1a1a'
           }}>
             Members ({chat.participants.length})
           </h4>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ 
+            display: 'flex', 
+            flexDirection: 'column', 
+            gap: '8px',
+            maxHeight: '200px',
+            overflowY: 'auto'
+          }}>
             {chat.participants.map((participant, idx) => (
               <div 
                 key={idx} 
                 style={{ 
                   display: 'flex', 
                   alignItems: 'center', 
-                  gap: '12px',
-                  cursor: 'pointer',
-                  padding: '8px',
-                  borderRadius: '8px',
-                  transition: 'background 0.2s ease'
-                }}
-                onClick={() => {
-                  if (participant.id !== CURRENT_USER?.id) {
-                    alert(`Starting direct chat with ${participant.name}`);
-                  }
+                  gap: '10px',
+                  padding: '6px 8px',
+                  borderRadius: '6px',
+                  transition: 'background 0.2s ease',
+                  position: 'relative'
                 }}
                 onMouseEnter={e => {
                   if (participant.id !== CURRENT_USER?.id) {
@@ -1278,37 +1306,83 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
               >
                 <div style={{ position: 'relative' }}>
                   <div style={{
-                    width: '36px',
-                    height: '36px',
+                    width: '32px',
+                    height: '32px',
                     borderRadius: '50%',
                     background: isDark ? 'linear-gradient(135deg, #4a4a4a, #2a2a2a)' : 'linear-gradient(135deg, #e9ecef, #dee2e6)',
                     color: isDark ? '#fff' : '#495057',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    fontSize: '14px',
+                    fontSize: '12px',
                     fontWeight: '600'
                   }}>
                     {participant.avatar}
                   </div>
-                  <StatusIndicator status={participant.status} />
-                </div>
-                <div style={{ flex: 1 }}>
                   <div style={{
-                    fontSize: '14px',
+                    position: 'absolute',
+                    bottom: '-2px',
+                    right: '-2px',
+                    width: '12px',
+                    height: '12px',
+                    borderRadius: '50%',
+                    background: participant.status === 'online' ? '#10b981' : 
+                               participant.status === 'away' ? '#f59e0b' : 
+                               participant.status === 'busy' ? '#ef4444' : '#6b7280',
+                    border: `2px solid ${isDark ? '#1a1a1a' : '#ffffff'}`
+                  }} />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{
+                    fontSize: '13px',
                     fontWeight: '500',
-                    color: isDark ? '#ffffff' : '#1a1a1a'
+                    color: isDark ? '#ffffff' : '#1a1a1a',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis'
                   }}>
                     {participant.name} {participant.id === CURRENT_USER?.id && '(You)'}
                   </div>
                   <div style={{
-                    fontSize: '12px',
+                    fontSize: '11px',
                     color: isDark ? '#adb5bd' : '#6c757d',
                     textTransform: 'capitalize'
                   }}>
                     {participant.status}
                   </div>
                 </div>
+                
+                {/* Remove User Button - Only show for other users, not current user */}
+                {participant.id !== CURRENT_USER?.id && (
+                  <button
+                    onClick={() => handleRemoveUser(participant.id, participant.name)}
+                    title={`Remove ${participant.name} from group`}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: '#ef4444',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      padding: '4px',
+                      borderRadius: '4px',
+                      opacity: 0.7,
+                      transition: 'all 0.2s ease',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.opacity = '1';
+                      e.currentTarget.style.background = isDark ? '#2a1f1f' : '#fef2f2';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.opacity = '0.7';
+                      e.currentTarget.style.background = 'transparent';
+                    }}
+                  >
+                    ✕
+                  </button>
+                )}
               </div>
             ))}
           </div>
@@ -1316,16 +1390,16 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
       )}
 
       {/* Shared Media */}
-      <div style={{ padding: '20px', borderBottom: `1px solid ${isDark ? '#2a2a2a' : '#e9ecef'}` }}>
+      <div style={{ padding: '16px', borderBottom: `1px solid ${isDark ? '#2a2a2a' : '#e9ecef'}` }}>
         <h4 style={{
-          margin: '0 0 16px 0',
-          fontSize: '16px',
+          margin: '0 0 12px 0',
+          fontSize: '15px',
           fontWeight: '600',
           color: isDark ? '#ffffff' : '#1a1a1a'
         }}>
           Shared Media
         </h4>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
           {[1, 2, 3, 4, 5, 6].map((item) => (
             <div
               key={item}
@@ -1333,11 +1407,11 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
               style={{
                 aspectRatio: '1',
                 background: isDark ? '#2a2a2a' : '#f8f9fa',
-                borderRadius: '8px',
+                borderRadius: '6px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontSize: '20px',
+                fontSize: '16px',
                 cursor: 'pointer',
                 transition: 'all 0.2s ease'
               }}
@@ -1357,16 +1431,16 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
       </div>
 
       {/* Settings */}
-      <div style={{ padding: '20px' }}>
+      <div style={{ padding: '16px' }}>
         <h4 style={{
-          margin: '0 0 16px 0',
-          fontSize: '16px',
+          margin: '0 0 12px 0',
+          fontSize: '15px',
           fontWeight: '600',
           color: isDark ? '#ffffff' : '#1a1a1a'
         }}>
           Chat Settings
         </h4>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {[
             { iconSrc: '/icons/bell.svg', label: 'Notifications', value: !chat.isMuted, action: () => onToggleMute(chat.id) },
             { iconSrc: '/icons/pin.svg', label: 'Pin Chat', value: chat.isPinned, action: () => onTogglePin(chat.id) },
@@ -1376,21 +1450,21 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              padding: '8px 0'
+              padding: '6px 0'
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <img 
                   src={setting.iconSrc} 
                   alt={setting.label}
-                  width={16}
-                  height={16}
+                  width={14}
+                  height={14}
                   style={{ 
                     filter: isDark ? 'invert(1)' : 'none',
                     opacity: 0.8
                   }}
                 />
                 <span style={{
-                  fontSize: '14px',
+                  fontSize: '13px',
                   color: isDark ? '#ffffff' : '#1a1a1a'
                 }}>
                   {setting.label}
@@ -1399,9 +1473,9 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
               <div 
                 onClick={setting.action}
                 style={{
-                  width: '40px',
-                  height: '20px',
-                  borderRadius: '10px',
+                  width: '36px',
+                  height: '18px',
+                  borderRadius: '9px',
                   background: setting.value ? '#228B22' : isDark ? '#404040' : '#dee2e6',
                   position: 'relative',
                   cursor: 'pointer',
@@ -1409,13 +1483,13 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
                 }}
               >
                 <div style={{
-                  width: '16px',
-                  height: '16px',
+                  width: '14px',
+                  height: '14px',
                   borderRadius: '50%',
                   background: '#ffffff',
                   position: 'absolute',
                   top: '2px',
-                  left: setting.value ? '22px' : '2px',
+                  left: setting.value ? '20px' : '2px',
                   transition: 'all 0.2s ease'
                 }} />
               </div>
@@ -1425,31 +1499,31 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
 
         {/* Group Actions - Only show for groups */}
         {chat.type === 'group' && (
-          <div style={{ marginTop: '24px' }}>
+          <div style={{ marginTop: '20px' }}>
             <h4 style={{
-              margin: '0 0 16px 0',
-              fontSize: '16px',
+              margin: '0 0 12px 0',
+              fontSize: '15px',
               fontWeight: '600',
               color: isDark ? '#ffffff' : '#1a1a1a'
             }}>
               Group Actions
             </h4>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <button
                 onClick={handleLeaveGroup}
                 style={{
                   background: isDark ? '#2a2a2a' : '#f8f9fa',
                   border: `1px solid ${isDark ? '#404040' : '#dee2e6'}`,
-                  borderRadius: '8px',
-                  padding: '12px 16px',
-                  fontSize: '14px',
+                  borderRadius: '6px',
+                  padding: '10px 12px',
+                  fontSize: '13px',
                   fontWeight: '500',
                   color: '#f59e0b',
                   cursor: 'pointer',
                   transition: 'all 0.2s ease',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '8px'
+                  gap: '6px'
                 }}
                 onMouseEnter={e => {
                   e.currentTarget.style.background = isDark ? '#404040' : '#e9ecef';
@@ -1466,16 +1540,16 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
                 style={{
                   background: isDark ? '#2a2a2a' : '#f8f9fa',
                   border: `1px solid ${isDark ? '#404040' : '#dee2e6'}`,
-                  borderRadius: '8px',
-                  padding: '12px 16px',
-                  fontSize: '14px',
+                  borderRadius: '6px',
+                  padding: '10px 12px',
+                  fontSize: '13px',
                   fontWeight: '500',
                   color: '#ef4444',
                   cursor: 'pointer',
                   transition: 'all 0.2s ease',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '8px'
+                  gap: '6px'
                 }}
                 onMouseEnter={e => {
                   e.currentTarget.style.background = isDark ? '#404040' : '#e9ecef';
@@ -1491,6 +1565,130 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
           </div>
         )}
       </div>
+    </div>
+  );
+};
+
+// Add notification component
+const NotificationBubble = ({ notification, onRemove, isDark }: { 
+  notification: Notification, 
+  onRemove: (id: string) => void, 
+  isDark: boolean 
+}) => {
+  const [isVisible, setIsVisible] = useState(true);
+  const [isExiting, setIsExiting] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsExiting(true);
+      setTimeout(() => {
+        onRemove(notification.id);
+      }, 300); // Match exit animation duration
+    }, 4000); // Show for 4 seconds
+
+    return () => clearTimeout(timer);
+  }, [notification.id, onRemove]);
+
+  const getNotificationColor = () => {
+    switch (notification.type) {
+      case 'success': return '#10b981';
+      case 'error': return '#ef4444';
+      case 'warning': return '#f59e0b';
+      case 'info': return '#3b82f6';
+      default: return '#6b7280';
+    }
+  };
+
+  const getNotificationIcon = () => {
+    switch (notification.type) {
+      case 'success': return '✓';
+      case 'error': return '✕';
+      case 'warning': return '⚠';
+      case 'info': return 'ℹ';
+      default: return '•';
+    }
+  };
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        top: '20px',
+        right: '20px',
+        background: isDark ? '#2a2a2a' : '#ffffff',
+        border: `1px solid ${getNotificationColor()}`,
+        borderRadius: '12px',
+        padding: '16px 20px',
+        boxShadow: isDark 
+          ? '0 8px 32px rgba(0,0,0,0.4)' 
+          : '0 8px 32px rgba(0,0,0,0.15)',
+        zIndex: 1000,
+        minWidth: '300px',
+        maxWidth: '400px',
+        transform: isExiting 
+          ? 'translateX(100%) scale(0.9)' 
+          : isVisible ? 'translateX(0) scale(1)' : 'translateX(100%) scale(0.9)',
+        opacity: isExiting ? 0 : isVisible ? 1 : 0,
+        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px'
+      }}
+    >
+      <div
+        style={{
+          width: '24px',
+          height: '24px',
+          borderRadius: '50%',
+          background: getNotificationColor(),
+          color: '#ffffff',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '14px',
+          fontWeight: 'bold',
+          flexShrink: 0
+        }}
+      >
+        {getNotificationIcon()}
+      </div>
+      <div style={{ flex: 1 }}>
+        <div
+          style={{
+            fontSize: '14px',
+            fontWeight: '500',
+            color: isDark ? '#ffffff' : '#1a1a1a',
+            lineHeight: '1.4'
+          }}
+        >
+          {notification.message}
+        </div>
+      </div>
+      <button
+        onClick={() => {
+          setIsExiting(true);
+          setTimeout(() => onRemove(notification.id), 300);
+        }}
+        style={{
+          background: 'transparent',
+          border: 'none',
+          color: isDark ? '#adb5bd' : '#6c757d',
+          cursor: 'pointer',
+          fontSize: '16px',
+          padding: '4px',
+          borderRadius: '4px',
+          flexShrink: 0,
+          transition: 'color 0.2s ease'
+        }}
+        onMouseEnter={e => {
+          e.currentTarget.style.color = getNotificationColor();
+        }}
+        onMouseLeave={e => {
+          e.currentTarget.style.color = isDark ? '#adb5bd' : '#6c757d';
+        }}
+      >
+        ✕
+      </button>
     </div>
   );
 };
@@ -1516,6 +1714,7 @@ export default function TeamChatPage() {
   const [loading, setLoading] = useState(true);
   const [groupUserSearch, setGroupUserSearch] = useState(''); // New search field for group creation
   const [recentUsers, setRecentUsers] = useState<User[]>([]); // Track recent/frequent users
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   
   const messagesEndRef = useRef<null | HTMLDivElement>(null);
   const { theme } = useContext(ThemeContext);
@@ -1939,6 +2138,53 @@ export default function TeamChatPage() {
     navigate('/');
   };
 
+  const addNotification = (message: string, type: Notification['type'] = 'info') => {
+    const notification: Notification = {
+      id: `notification_${Date.now()}_${Math.random()}`,
+      message,
+      type,
+      timestamp: Date.now()
+    };
+    
+    setNotifications(prev => [...prev, notification]);
+  };
+
+  const removeNotification = (id: string) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
+  };
+
+  const handleRemoveUserFromGroup = async (userId: string, userName: string) => {
+    if (!activeChatId || !CURRENT_USER) return;
+
+    try {
+      // Call the removeUserFromGroup function with the current user as the remover
+      await removeUserFromGroup(activeChatId, userId, CURRENT_USER.id);
+      
+      // Update local state to remove user from chat participants
+      setChats(prevChats => 
+        prevChats.map(chat => {
+          if (chat.id === activeChatId) {
+            const updatedParticipants = chat.participants.filter(p => p.id !== userId);
+            return {
+              ...chat,
+              participants: updatedParticipants
+            };
+          }
+          return chat;
+        })
+      );
+
+      // Show success notification
+      addNotification(`${userName} has been removed from the group`, 'success');
+      
+      // The removeUserFromGroup function already sends a system message, so we don't need to add one manually
+      scrollToBottom();
+    } catch (error) {
+      console.error('Failed to remove user from group:', error);
+      addNotification(`Failed to remove ${userName} from the group`, 'error');
+    }
+  };
+
   // Add loading state check
   if (loading) {
   return (
@@ -1961,8 +2207,31 @@ export default function TeamChatPage() {
       display: 'flex', 
       height: '100vh', 
       background: isDark ? '#0f0f0f' : '#f8f9fa',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+      position: 'relative'
     }}>
+      {/* Notifications */}
+      <div style={{
+        position: 'fixed',
+        top: '20px',
+        right: '20px',
+        zIndex: 1000,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '12px',
+        pointerEvents: 'none'
+      }}>
+        {notifications.map(notification => (
+          <div key={notification.id} style={{ pointerEvents: 'auto' }}>
+            <NotificationBubble
+              notification={notification}
+              onRemove={removeNotification}
+              isDark={isDark}
+            />
+          </div>
+        ))}
+      </div>
+
       {/* Left Sidebar */}
       <div style={{ 
         width: '380px', 
@@ -2603,6 +2872,7 @@ export default function TeamChatPage() {
         onToggleMute={handleToggleMute}
         onTogglePin={handleTogglePin}
         onToggleArchive={handleToggleArchive}
+        onRemoveUser={handleRemoveUserFromGroup}
       />
     </div>
   );
