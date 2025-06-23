@@ -2184,23 +2184,30 @@ export default function TeamChatPage() {
       // Load company users and teams
       const authUser = getCurrentUser();
       if (authUser) {
-        const [users, teams] = await Promise.all([
-          getCompanyUsers(authUser.company_id),
-          getCompanyTeams(authUser.company_id)
-        ]);
+        try {
+          const users = await getCompanyUsers(authUser.company_id);
+          const convertedUsers = users.filter(u => u.id !== CURRENT_USER?.id).map(convertSupabaseUser);
+          setCompanyUsers(convertedUsers);
+        } catch (error) {
+          console.error('Failed to fetch company users:', error);
+          setCompanyUsers([]);
+        }
         
-        const convertedUsers = users.filter(u => u.id !== CURRENT_USER?.id).map(convertSupabaseUser);
-        setCompanyUsers(convertedUsers);
-        
-        const convertedTeams = teams.map(team => ({
-          id: team.id,
-          name: team.name,
-          description: team.description,
-          avatar: team.avatar,
-          member_count: team.member_count || 0,
-          members: team.members?.map(member => convertSupabaseUser(member.user!)).filter(Boolean)
-        }));
-        setCompanyTeams(convertedTeams);
+        try {
+          const teams = await getCompanyTeams(authUser.company_id);
+          const convertedTeams = teams.map(team => ({
+            id: team.id,
+            name: team.name,
+            description: team.description,
+            avatar: team.avatar,
+            member_count: team.member_count || 0,
+            members: team.members?.map(member => convertSupabaseUser(member.user!)).filter(Boolean)
+          }));
+          setCompanyTeams(convertedTeams);
+        } catch (error) {
+          console.error('Failed to fetch company teams:', error);
+          setCompanyTeams([]);
+        }
       }
       
       // Select first chat if available
@@ -2208,23 +2215,59 @@ export default function TeamChatPage() {
         await selectChat(convertedChats[0].id);
       }
       
-      // Subscribe to messages for ALL user chats (not just active one)
-      convertedChats.forEach(chat => {
-        console.log(`🔔 Subscribing to messages for chat: ${chat.name} (${chat.id})`);
-        subscribeToMessages(chat.id, handleNewMessage);
-      });
-      
-      // Subscribe to user status changes
-      const currentAuthUser = getCurrentUser();
-      if (currentAuthUser) {
-        subscribeToUserStatus(currentAuthUser.company_id, handleUserStatusChange);
-      }
     } catch (error) {
       console.error('Failed to load initial data:', error);
     } finally {
       setLoading(false);
     }
   };
+
+  // Set up subscriptions after initial data load
+  useEffect(() => {
+    if (!CURRENT_USER || chats.length === 0) return;
+
+    const subscriptions: any[] = [];
+
+    // Subscribe to messages for ALL user chats
+    chats.forEach(chat => {
+      console.log(`🔔 Subscribing to messages for chat: ${chat.name} (${chat.id})`);
+      try {
+        const subscription = subscribeToMessages(chat.id, handleNewMessage);
+        if (subscription) {
+          subscriptions.push(subscription);
+        }
+      } catch (error) {
+        console.error(`Failed to subscribe to chat ${chat.id}:`, error);
+      }
+    });
+
+    // Subscribe to user status changes
+    const currentAuthUser = getCurrentUser();
+    if (currentAuthUser) {
+      try {
+        const statusSubscription = subscribeToUserStatus(currentAuthUser.company_id, handleUserStatusChange);
+        if (statusSubscription) {
+          subscriptions.push(statusSubscription);
+        }
+      } catch (error) {
+        console.error('Failed to subscribe to user status:', error);
+      }
+    }
+
+    // Cleanup function
+    return () => {
+      console.log('🧹 Cleaning up subscriptions...');
+      subscriptions.forEach(subscription => {
+        try {
+          if (subscription && typeof subscription.unsubscribe === 'function') {
+            subscription.unsubscribe();
+          }
+        } catch (error) {
+          console.error('Error unsubscribing:', error);
+        }
+      });
+    };
+  }, [chats.length, CURRENT_USER?.id]); // Only re-run when chats change or user changes
 
   const selectChat = async (chatId: string) => {
     setActiveChatId(chatId);
@@ -2785,6 +2828,32 @@ export default function TeamChatPage() {
     selectChat(chatId);
   };
 
+  // Test notification function for debugging
+  const testNotification = () => {
+    console.log('🧪 Testing notification system...');
+    
+    // Test browser notification
+    if (Notification.permission === 'granted') {
+      new Notification('Test Notification', {
+        body: 'This is a test message from Timely',
+        icon: '/favicon.ico'
+      });
+    } else {
+      console.log('❌ Browser notifications not permitted');
+    }
+    
+    // Test sound
+    try {
+      playNotificationSound();
+      console.log('🔊 Test sound played');
+    } catch (error) {
+      console.log('❌ Sound test failed:', error);
+    }
+    
+    // Test in-app notification
+    addNotification('Test notification created successfully!', 'success');
+  };
+
   // Add loading state check
   if (loading) {
   return (
@@ -2865,56 +2934,6 @@ export default function TeamChatPage() {
           isDark={isDark}
           notificationCount={messageNotifications.filter(n => !n.isRead).length}
         />
-
-        {/* Debug: Test Notification Button */}
-        <div style={{ padding: '0 20px 16px 20px' }}>
-          <button
-            onClick={testNotification}
-            style={{
-              width: '100%',
-              background: isDark ? '#2a2a2a' : '#f8f9fa',
-              color: isDark ? '#ffffff' : '#1a1a1a',
-              border: `1px solid ${isDark ? '#404040' : '#dee2e6'}`,
-              borderRadius: '8px',
-              padding: '8px 12px',
-              fontSize: '12px',
-              fontWeight: '500',
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-              opacity: 0.7
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.opacity = '1';
-              e.currentTarget.style.background = isDark ? '#404040' : '#e9ecef';
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.opacity = '0.7';
-              e.currentTarget.style.background = isDark ? '#2a2a2a' : '#f8f9fa';
-            }}
-          >
-            🧪 Test Notification
-          </button>
-        </div>
-
-        {/* Add CSS animation for pulse effect */}
-        <style>
-          {`
-            @keyframes pulse {
-              0% {
-                transform: scale(1);
-                box-shadow: 0 2px 8px rgba(220, 53, 69, 0.3);
-              }
-              50% {
-                transform: scale(1.1);
-                box-shadow: 0 4px 16px rgba(220, 53, 69, 0.5);
-              }
-              100% {
-                transform: scale(1);
-                box-shadow: 0 2px 8px rgba(220, 53, 69, 0.3);
-              }
-            }
-          `}
-        </style>
 
         {/* Search */}
         <div style={{ padding: '16px 20px' }}>
