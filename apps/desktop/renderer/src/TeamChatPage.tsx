@@ -1,5 +1,24 @@
 import React, { useState, useEffect, useRef, useContext } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ThemeContext } from './ThemeContext';
+import { getCurrentUser, getCompanyUsers, logout, User as AuthUser } from './lib/auth';
+import { 
+  getUserChats, 
+  getChatMessages, 
+  sendMessage, 
+  subscribeToMessages, 
+  subscribeToUserStatus,
+  createDirectChat,
+  createGroupChat,
+  addMessageReaction,
+  removeMessageReaction,
+  Chat as SupabaseChat,
+  Message as SupabaseMessage,
+  getCompanyTeams,
+  searchTeams,
+  createTeamChat,
+  Team as SupabaseTeam
+} from './lib/chat';
 
 // Enhanced types for comprehensive chat features
 type MessageType = 'text' | 'file' | 'image' | 'audio' | 'location';
@@ -24,6 +43,7 @@ type Message = {
   edited?: boolean;
   editedAt?: string;
   sent: boolean;
+  sender_id?: string;
 };
 
 type UserStatus = 'online' | 'offline' | 'away' | 'busy';
@@ -38,7 +58,16 @@ type User = {
   phone?: string;
 };
 
-type ChatType = 'direct' | 'group';
+type Team = {
+  id: string;
+  name: string;
+  description?: string;
+  avatar: string;
+  member_count: number;
+  members?: User[];
+};
+
+type ChatType = 'direct' | 'group' | 'team';
 
 type Chat = {
   id: string;
@@ -50,20 +79,65 @@ type Chat = {
   avatar: string;
   messages: Message[];
   participants: User[];
+  team_id?: string;
   isTyping?: boolean;
   isPinned?: boolean;
   isMuted?: boolean;
   isArchived?: boolean;
 };
 
-// Mock data with enhanced features
-const CURRENT_USER: User = {
-  id: 'current_user',
-  name: 'You',
-  avatar: 'Y',
-  status: 'online'
-};
+// Mock data with enhanced features - REPLACED WITH REAL DATA
+let CURRENT_USER: User | null = null;
 
+// Helper function to convert Supabase user to local User type
+const convertSupabaseUser = (supabaseUser: AuthUser): User => ({
+  id: supabaseUser.id,
+  name: supabaseUser.name,
+  avatar: supabaseUser.avatar || supabaseUser.name.charAt(0).toUpperCase(),
+  status: supabaseUser.status as UserStatus,
+  lastSeen: supabaseUser.last_seen,
+  email: supabaseUser.email
+});
+
+// Helper function to convert Supabase message to local Message type
+const convertSupabaseMessage = (supabaseMessage: SupabaseMessage): Message => ({
+  id: supabaseMessage.id,
+  text: supabaseMessage.content,
+  sender: supabaseMessage.sender?.name || 'Unknown',
+  sender_id: supabaseMessage.sender_id,
+  timestamp: new Date(supabaseMessage.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+  type: supabaseMessage.message_type as MessageType,
+  fileUrl: supabaseMessage.file_url,
+  fileName: supabaseMessage.file_name,
+  fileSize: supabaseMessage.file_size,
+  reactions: supabaseMessage.reactions?.map(r => ({
+    emoji: r.emoji,
+    users: r.user_id ? [r.user_id] : [],
+    count: 1
+  })) || [],
+  replyTo: supabaseMessage.reply_to_id,
+  edited: supabaseMessage.is_edited,
+  editedAt: supabaseMessage.edited_at,
+  sent: true
+});
+
+// Helper function to convert Supabase chat to local Chat type
+const convertSupabaseChat = (supabaseChat: SupabaseChat): Chat => ({
+  id: supabaseChat.id,
+  name: supabaseChat.name || supabaseChat.participants?.map(p => p.name).join(', ') || 'Unknown',
+  type: supabaseChat.type as ChatType,
+  lastMessage: supabaseChat.last_message?.content || 'No messages yet',
+  timestamp: new Date(supabaseChat.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+  unread: supabaseChat.unread_count || 0,
+  avatar: supabaseChat.avatar || (supabaseChat.name?.charAt(0) || 'C'),
+  messages: [],
+  participants: supabaseChat.participants?.map(convertSupabaseUser) || [],
+  isPinned: false,
+  isMuted: false,
+  isArchived: supabaseChat.is_archived
+});
+
+// Mock data with enhanced features
 const MOCK_USERS: User[] = [
   { id: 'user_1', name: 'Leon JENKINGS!', avatar: 'LJ', status: 'online', email: 'leon@example.com' },
   { id: 'user_2', name: 'Luis', avatar: 'L', status: 'away', email: 'luis@example.com' },
@@ -73,78 +147,53 @@ const MOCK_USERS: User[] = [
   { id: 'user_6', name: 'Charlie Brown', avatar: 'CB', status: 'online', email: 'charlie@example.com' },
 ];
 
-const TIMELY_BOT_CHAT: Chat = {
-  id: 'chat_bot_timely',
-  name: 'Timely',
-  type: 'direct',
-  lastMessage: 'Welcome to Timely! How can I help you?',
-  timestamp: 'Now',
-  unread: 1,
-  avatar: 'T',
-  participants: [CURRENT_USER, { id: 'bot', name: 'Timely', avatar: 'T', status: 'online' }],
-  messages: [
-    {
-      id: 'msg_bot_1',
-      text: 'Welcome to Timely! I can help you with scheduling, reminders, and more. What would you like to do?',
-      sender: 'Timely',
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      type: 'text',
-      sent: false
-    }
-  ]
-};
-
 // Enhanced components
-const UserProfileCard = ({ user, isDark }: { user: User, isDark: boolean }) => (
+const UserProfileCard: React.FC<{ user: User; isDark: boolean }> = ({ user, isDark }) => (
   <div style={{
-    padding: '20px 24px',
-    borderBottom: `1px solid ${isDark ? '#2a2a2a' : '#e9ecef'}`,
-    background: isDark ? '#1a1a1a' : '#ffffff'
+    display: 'flex',
+    alignItems: 'center',
+    padding: '12px',
+    borderBottom: `1px solid ${isDark ? '#333' : '#e0e0e0'}`,
+    background: isDark ? '#1a1a1a' : '#ffffff',
   }}>
-    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-      <div style={{ position: 'relative' }}>
-        <div style={{
-          width: '48px',
-          height: '48px',
-          borderRadius: '50%',
-          background: isDark ? 'linear-gradient(135deg, #4a4a4a, #2a2a2a)' : 'linear-gradient(135deg, #e9ecef, #dee2e6)',
-          color: isDark ? '#fff' : '#495057',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: '18px',
-          fontWeight: '600',
-          boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.1)'
-        }}>
-          {user.avatar}
-        </div>
-        <div style={{
-          position: 'absolute',
-          bottom: '2px',
-          right: '2px',
-          width: '14px',
-          height: '14px',
-          borderRadius: '50%',
-          background: user.status === 'online' ? '#228B22' : user.status === 'away' ? '#f59e0b' : user.status === 'busy' ? '#ef4444' : '#6b7280',
-          border: `2px solid ${isDark ? '#1a1a1a' : '#ffffff'}`
-        }} />
+    <div style={{
+      width: '40px',
+      height: '40px',
+      borderRadius: '50%',
+      background: user.avatar ? `url(${user.avatar})` : `linear-gradient(135deg, #667eea 0%, #764ba2 100%)`,
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      color: 'white',
+      fontWeight: 'bold',
+      fontSize: '16px',
+      marginRight: '12px',
+    }}>
+      {!user.avatar && user.name.charAt(0).toUpperCase()}
+    </div>
+    <div style={{ flex: 1 }}>
+      <div style={{
+        fontWeight: '600',
+        fontSize: '14px',
+        color: isDark ? '#ffffff' : '#1a1a1a',
+        marginBottom: '2px',
+      }}>
+        {user.name}
       </div>
-      <div style={{ flex: 1 }}>
-        <div style={{
-          fontWeight: '600',
-          fontSize: '16px',
-          color: isDark ? '#ffffff' : '#1a1a1a',
-          marginBottom: '2px'
-        }}>
-          {user.name}
-        </div>
-        <div style={{
-          fontSize: '13px',
-          color: isDark ? '#adb5bd' : '#6c757d',
-          textTransform: 'capitalize'
-        }}>
-          {user.status}
-        </div>
+      <div style={{
+        fontSize: '12px',
+        color: isDark ? '#888' : '#666',
+        display: 'flex',
+        alignItems: 'center',
+      }}>
+        <StatusIndicator status={user.status} />
+        <span style={{ marginLeft: '6px' }}>
+          {user.status === 'online' ? 'Online' : 
+           user.status === 'away' ? 'Away' : 
+           user.status === 'busy' ? 'Busy' : 'Offline'}
+        </span>
       </div>
     </div>
   </div>
@@ -267,57 +316,105 @@ const ChatListItem = ({ chat, active, onClick, isDark }: { chat: Chat, active: b
 
 const SearchResultItem = ({ user, onClick, isDark }: { user: User, onClick: () => void, isDark: boolean }) => (
   <div 
-    onClick={onClick} 
-    style={{ 
-      display: 'flex', 
-      alignItems: 'center', 
-      padding: '16px 20px', 
+    onClick={onClick}
+    style={{
+      display: 'flex',
+      alignItems: 'center',
+      padding: '12px 16px',
       cursor: 'pointer',
-      transition: 'all 0.2s ease',
-      borderRadius: '12px',
-      margin: '4px 12px'
+      borderBottom: `1px solid ${isDark ? '#2a2a2a' : '#f0f0f0'}`,
+      backgroundColor: isDark ? '#1e1e1e' : '#ffffff',
+      transition: 'background-color 0.2s'
     }}
     onMouseEnter={(e) => {
-      e.currentTarget.style.background = isDark ? '#1f1f1f' : '#f0f0f0';
+      e.currentTarget.style.backgroundColor = isDark ? '#2a2a2a' : '#f8f9fa';
     }}
     onMouseLeave={(e) => {
-      e.currentTarget.style.background = 'transparent';
+      e.currentTarget.style.backgroundColor = isDark ? '#1e1e1e' : '#ffffff';
     }}
   >
-    <div style={{ position: 'relative', marginRight: '16px' }}>
     <div style={{
-      width: '48px',
-      height: '48px',
+      width: '40px',
+      height: '40px',
       borderRadius: '50%',
-        background: isDark ? 'linear-gradient(135deg, #4a4a4a, #2a2a2a)' : 'linear-gradient(135deg, #e9ecef, #dee2e6)',
-        color: isDark ? '#fff' : '#495057',
+      backgroundColor: isDark ? '#444' : '#e9ecef',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-        fontSize: '16px', 
-        fontWeight: '600',
-        boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.1)'
-      }}>
-        {user.avatar}
-      </div>
-      <StatusIndicator status={user.status} />
+      fontSize: '16px',
+      fontWeight: 'bold',
+      color: isDark ? '#ffffff' : '#495057',
+      marginRight: '12px'
+    }}>
+      {user.avatar}
     </div>
     <div style={{ flex: 1 }}>
       <div style={{ 
-        fontWeight: '600', 
-        fontSize: '16px',
-        color: isDark ? '#ffffff' : '#1a1a1a',
-        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        fontSize: '14px', 
+        fontWeight: 500, 
+        color: isDark ? '#ffffff' : '#212529',
         marginBottom: '2px'
       }}>
         {user.name}
       </div>
-      <div style={{
-        fontSize: '13px',
-        color: isDark ? '#adb5bd' : '#6c757d',
-        textTransform: 'capitalize'
+      <div style={{ 
+        fontSize: '12px', 
+        color: isDark ? '#adb5bd' : '#6c757d'
       }}>
-        {user.status} • {user.email}
+        Start new chat
+      </div>
+    </div>
+  </div>
+);
+
+const TeamSearchResultItem = ({ team, onClick, isDark }: { team: Team, onClick: () => void, isDark: boolean }) => (
+  <div 
+    onClick={onClick}
+    style={{
+      display: 'flex',
+      alignItems: 'center',
+      padding: '12px 16px',
+      cursor: 'pointer',
+      borderBottom: `1px solid ${isDark ? '#2a2a2a' : '#f0f0f0'}`,
+      backgroundColor: isDark ? '#1e1e1e' : '#ffffff',
+      transition: 'background-color 0.2s'
+    }}
+    onMouseEnter={(e) => {
+      e.currentTarget.style.backgroundColor = isDark ? '#2a2a2a' : '#f8f9fa';
+    }}
+    onMouseLeave={(e) => {
+      e.currentTarget.style.backgroundColor = isDark ? '#1e1e1e' : '#ffffff';
+    }}
+  >
+    <div style={{
+      width: '40px',
+      height: '40px',
+      borderRadius: '8px',
+      backgroundColor: isDark ? '#444' : '#e9ecef',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontSize: '16px',
+      fontWeight: 'bold',
+      color: isDark ? '#ffffff' : '#495057',
+      marginRight: '12px'
+    }}>
+      {team.avatar}
+    </div>
+    <div style={{ flex: 1 }}>
+      <div style={{ 
+        fontSize: '14px', 
+        fontWeight: 500, 
+        color: isDark ? '#ffffff' : '#212529',
+        marginBottom: '2px'
+      }}>
+        {team.name}
+      </div>
+      <div style={{ 
+        fontSize: '12px', 
+        color: isDark ? '#adb5bd' : '#6c757d'
+      }}>
+        {team.member_count} members • Create team chat
       </div>
     </div>
   </div>
@@ -354,8 +451,7 @@ const ChatHeader = ({ chat, isDark, onToggleRightPanel }: { chat: Chat | undefin
             <div style={{
               fontWeight: '600',
               fontSize: '16px',
-              color: isDark ? '#ffffff' : '#1a1a1a',
-              marginBottom: '2px'
+              color: isDark ? '#ffffff' : '#1a1a1a'
             }}>
               {chat.name}
             </div>
@@ -365,7 +461,7 @@ const ChatHeader = ({ chat, isDark, onToggleRightPanel }: { chat: Chat | undefin
             }}>
               {chat.type === 'group' ? 
                 `${chat.participants.length} members` : 
-                chat.participants.find(p => p.id !== CURRENT_USER.id)?.status || 'offline'
+                chat.participants.find(p => p.id !== CURRENT_USER?.id)?.status || 'offline'
               }
             </div>
           </div>
@@ -1036,6 +1132,26 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
     alert(`Opening media item ${index + 1}`);
   };
 
+  const handleLeaveGroup = () => {
+    if (chat.type === 'group') {
+      const confirmLeave = confirm(`Are you sure you want to leave "${chat.name}"?`);
+      if (confirmLeave) {
+        // TODO: Implement leave group functionality with Supabase
+        alert('Leave group functionality will be implemented');
+      }
+    }
+  };
+
+  const handleDeleteGroup = () => {
+    if (chat.type === 'group') {
+      const confirmDelete = confirm(`Are you sure you want to delete "${chat.name}"? This action cannot be undone.`);
+      if (confirmDelete) {
+        // TODO: Implement delete group functionality with Supabase
+        alert('Delete group functionality will be implemented');
+      }
+    }
+  };
+
   const actionButtons = [
     { icon: chat.isMuted ? '🔇' : '🔊', label: chat.isMuted ? 'Unmute' : 'Mute', action: () => onToggleMute(chat.id) },
     { icon: chat.isPinned ? '📌' : '📍', label: chat.isPinned ? 'Unpin' : 'Pin', action: () => onTogglePin(chat.id) },
@@ -1146,12 +1262,12 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
                   transition: 'background 0.2s ease'
                 }}
                 onClick={() => {
-                  if (participant.id !== CURRENT_USER.id) {
+                  if (participant.id !== CURRENT_USER?.id) {
                     alert(`Starting direct chat with ${participant.name}`);
                   }
                 }}
                 onMouseEnter={e => {
-                  if (participant.id !== CURRENT_USER.id) {
+                  if (participant.id !== CURRENT_USER?.id) {
                     e.currentTarget.style.background = isDark ? '#2a2a2a' : '#f8f9fa';
                   }
                 }}
@@ -1182,7 +1298,7 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
                     fontWeight: '500',
                     color: isDark ? '#ffffff' : '#1a1a1a'
                   }}>
-                    {participant.name} {participant.id === CURRENT_USER.id && '(You)'}
+                    {participant.name} {participant.id === CURRENT_USER?.id && '(You)'}
                   </div>
                   <div style={{
                     fontSize: '12px',
@@ -1253,7 +1369,7 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
           {[
             { icon: '🔔', label: 'Notifications', value: !chat.isMuted, action: () => onToggleMute(chat.id) },
             { icon: '📌', label: 'Pin Chat', value: chat.isPinned, action: () => onTogglePin(chat.id) },
-            { icon: '🗃️', label: 'Archive Chat', value: false, action: () => onToggleArchive(chat.id) }
+            { icon: '🗃️', label: 'Archive Chat', value: chat.isArchived, action: () => onToggleArchive(chat.id) }
           ].map((setting, idx) => (
             <div key={idx} style={{
               display: 'flex',
@@ -1296,6 +1412,74 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
             </div>
           ))}
         </div>
+
+        {/* Group Actions - Only show for groups */}
+        {chat.type === 'group' && (
+          <div style={{ marginTop: '24px' }}>
+            <h4 style={{
+              margin: '0 0 16px 0',
+              fontSize: '16px',
+              fontWeight: '600',
+              color: isDark ? '#ffffff' : '#1a1a1a'
+            }}>
+              Group Actions
+            </h4>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <button
+                onClick={handleLeaveGroup}
+                style={{
+                  background: isDark ? '#2a2a2a' : '#f8f9fa',
+                  border: `1px solid ${isDark ? '#404040' : '#dee2e6'}`,
+                  borderRadius: '8px',
+                  padding: '12px 16px',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  color: '#f59e0b',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = isDark ? '#404040' : '#e9ecef';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = isDark ? '#2a2a2a' : '#f8f9fa';
+                }}
+              >
+                <span>🚪</span>
+                Leave Group
+              </button>
+              <button
+                onClick={handleDeleteGroup}
+                style={{
+                  background: isDark ? '#2a2a2a' : '#f8f9fa',
+                  border: `1px solid ${isDark ? '#404040' : '#dee2e6'}`,
+                  borderRadius: '8px',
+                  padding: '12px 16px',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  color: '#ef4444',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = isDark ? '#404040' : '#e9ecef';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = isDark ? '#2a2a2a' : '#f8f9fa';
+                }}
+              >
+                <span>🗑️</span>
+                Delete Group
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1303,10 +1487,12 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
 
 // Main component for the enhanced Teams Chat page
 export default function TeamChatPage() {
-  const [chats, setChats] = useState<Chat[]>([TIMELY_BOT_CHAT]);
-  const [activeChatId, setActiveChatId] = useState<string | null>(TIMELY_BOT_CHAT.id);
+  const navigate = useNavigate();
+  const [chats, setChats] = useState<Chat[]>([]);
+  const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<User[]>([]);
+  const [teamSearchResults, setTeamSearchResults] = useState<Team[]>([]);
   const [activeTab, setActiveTab] = useState<'chats' | 'groups' | 'archived'>('chats');
   const [showRightPanel, setShowRightPanel] = useState(false);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
@@ -1315,12 +1501,148 @@ export default function TeamChatPage() {
   const [messageSearch, setMessageSearch] = useState('');
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  const [companyUsers, setCompanyUsers] = useState<User[]>([]);
+  const [companyTeams, setCompanyTeams] = useState<Team[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [groupUserSearch, setGroupUserSearch] = useState(''); // New search field for group creation
+  const [recentUsers, setRecentUsers] = useState<User[]>([]); // Track recent/frequent users
   
   const messagesEndRef = useRef<null | HTMLDivElement>(null);
   const { theme } = useContext(ThemeContext);
 
   const isDark = theme === 'dark';
   const activeChat = chats.find(chat => chat.id === activeChatId);
+
+  // Initialize data on component mount
+  useEffect(() => {
+    const initializeData = async () => {
+      const user = getCurrentUser();
+      if (!user) {
+        // Redirect to login if no user (this should be handled at app level)
+        navigate('/login');
+        return;
+      }
+      
+      CURRENT_USER = convertSupabaseUser(user);
+      await loadInitialData();
+    };
+
+    initializeData();
+  }, [navigate]);
+
+  const loadInitialData = async () => {
+    if (!CURRENT_USER) return;
+    
+    try {
+      setLoading(true);
+      
+      // Load user's chats
+      const userChats = await getUserChats(CURRENT_USER.id);
+      const convertedChats = userChats.map(convertSupabaseChat);
+      setChats(convertedChats);
+      
+      // Load company users and teams
+      const authUser = getCurrentUser();
+      if (authUser) {
+        const [users, teams] = await Promise.all([
+          getCompanyUsers(authUser.company_id),
+          getCompanyTeams(authUser.company_id)
+        ]);
+        
+        const convertedUsers = users.filter(u => u.id !== CURRENT_USER?.id).map(convertSupabaseUser);
+        setCompanyUsers(convertedUsers);
+        
+        const convertedTeams = teams.map(team => ({
+          id: team.id,
+          name: team.name,
+          description: team.description,
+          avatar: team.avatar,
+          member_count: team.member_count || 0,
+          members: team.members?.map(member => convertSupabaseUser(member.user!)).filter(Boolean)
+        }));
+        setCompanyTeams(convertedTeams);
+      }
+      
+      // Select first chat if available
+      if (convertedChats.length > 0) {
+        await selectChat(convertedChats[0].id);
+      }
+      
+      // Subscribe to user status changes
+      const currentAuthUser = getCurrentUser();
+      if (currentAuthUser) {
+        subscribeToUserStatus(currentAuthUser.company_id, handleUserStatusChange);
+      }
+    } catch (error) {
+      console.error('Failed to load initial data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const selectChat = async (chatId: string) => {
+    setActiveChatId(chatId);
+    setSearchQuery('');
+    setShowRightPanel(false);
+    
+    try {
+      const chatMessages = await getChatMessages(chatId);
+      const convertedMessages = chatMessages.map(convertSupabaseMessage);
+      
+      // Update the specific chat with its messages
+      setChats(prevChats => 
+        prevChats.map(chat => 
+          chat.id === chatId 
+            ? { ...chat, messages: convertedMessages }
+            : chat
+        )
+      );
+      
+      // Subscribe to real-time messages for this chat
+      subscribeToMessages(chatId, handleNewMessage);
+    } catch (error) {
+      console.error('Failed to load chat messages:', error);
+    }
+  };
+
+  const handleNewMessage = (message: SupabaseMessage) => {
+    // Don't add message if it's from the current user (they already see it immediately)
+    if (message.sender_id === CURRENT_USER?.id) {
+      return;
+    }
+    
+    const convertedMessage = convertSupabaseMessage(message);
+    
+    setChats(prevChats => 
+      prevChats.map(chat => {
+        if (chat.id === message.chat_id) {
+          // Check if message already exists to prevent duplicates
+          const messageExists = chat.messages.some(msg => msg.id === message.id);
+          if (messageExists) {
+            return chat; // Don't add duplicate message
+          }
+          
+          return {
+            ...chat, 
+            messages: [...chat.messages, convertedMessage],
+            lastMessage: message.content,
+            timestamp: new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          };
+        }
+        return chat;
+      })
+    );
+    scrollToBottom();
+  };
+
+  const handleUserStatusChange = (updatedUser: AuthUser) => {
+    const convertedUser = convertSupabaseUser(updatedUser);
+    setCompanyUsers(prev => 
+      prev.map(user => 
+        user.id === updatedUser.id ? convertedUser : user
+      )
+    );
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -1333,15 +1655,24 @@ export default function TeamChatPage() {
   useEffect(() => {
     if (searchQuery.trim() === '') {
         setSearchResults([]);
+        setTeamSearchResults([]);
         return;
     }
+    
+    // Search users
     const existingChatNames = chats.map(c => c.name.toLowerCase());
-    const results = MOCK_USERS.filter(user =>
+    const userResults = companyUsers.filter(user =>
         user.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
         !existingChatNames.includes(user.name.toLowerCase())
     );
-    setSearchResults(results);
-  }, [searchQuery, chats]);
+    setSearchResults(userResults);
+    
+    // Search teams
+    const teamResults = companyTeams.filter(team =>
+        team.name.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+    setTeamSearchResults(teamResults);
+  }, [searchQuery, chats, companyUsers, companyTeams]);
 
   const handleSelectChat = (chatId: string) => {
     setActiveChatId(chatId);
@@ -1349,41 +1680,73 @@ export default function TeamChatPage() {
     setShowRightPanel(false);
   };
 
-  const handleStartNewChat = (user: User) => {
-    const newChat: Chat = {
-        id: `chat_${user.id}`,
-        name: user.name,
-      type: 'direct',
-        avatar: user.avatar,
-        lastMessage: '',
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        unread: 0,
-      messages: [],
-      participants: [CURRENT_USER, user]
-    };
-    setChats(prevChats => [newChat, ...prevChats.filter(c => c.id !== newChat.id)]);
-    setActiveChatId(newChat.id);
-    setSearchQuery('');
+  const handleStartNewChat = async (user: User) => {
+    if (!CURRENT_USER) return;
+
+    try {
+      const authUser = getCurrentUser();
+      if (!authUser) return;
+
+      const chat = await createDirectChat(CURRENT_USER.id, user.id, authUser.company_id);
+      if (chat) {
+        const convertedChat = convertSupabaseChat(chat);
+        setChats(prevChats => [convertedChat, ...prevChats.filter(c => c.id !== convertedChat.id)]);
+        setActiveChatId(convertedChat.id);
+        setSearchQuery('');
+      }
+    } catch (error) {
+      console.error('Failed to create direct chat:', error);
+    }
   };
 
-  const handleCreateGroup = () => {
-    if (groupName.trim() && selectedUsers.length > 0) {
-      const newGroup: Chat = {
-        id: `group_${Date.now()}`,
-        name: groupName,
-        type: 'group',
-        avatar: groupName.charAt(0).toUpperCase(),
-        lastMessage: '',
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        unread: 0,
-        messages: [],
-        participants: [CURRENT_USER, ...selectedUsers]
-      };
-      setChats(prevChats => [newGroup, ...prevChats]);
-      setActiveChatId(newGroup.id);
-      setShowCreateGroup(false);
-      setGroupName('');
-      setSelectedUsers([]);
+  const handleStartTeamChat = async (team: Team) => {
+    if (!CURRENT_USER) return;
+
+    try {
+      const authUser = getCurrentUser();
+      if (!authUser) return;
+
+      const chat = await createTeamChat(CURRENT_USER.id, authUser.company_id, team.id);
+      if (chat) {
+        const convertedChat = convertSupabaseChat(chat);
+        setChats(prevChats => [convertedChat, ...prevChats.filter(c => c.id !== convertedChat.id)]);
+        setActiveChatId(convertedChat.id);
+        setSearchQuery('');
+      }
+    } catch (error) {
+      console.error('Failed to create team chat:', error);
+    }
+  };
+
+  const handleCreateGroup = async () => {
+    if (!groupName.trim() || selectedUsers.length === 0 || !CURRENT_USER) return;
+
+    try {
+      const authUser = getCurrentUser();
+      if (!authUser) return;
+
+      // Get participant IDs
+      const participantIds = selectedUsers.map(user => user.id);
+      
+      // Create group chat in Supabase
+      const chat = await createGroupChat(
+        CURRENT_USER.id, 
+        authUser.company_id, 
+        groupName.trim(), 
+        participantIds
+      );
+
+      if (chat) {
+        const convertedChat = convertSupabaseChat(chat);
+        setChats(prevChats => [convertedChat, ...prevChats]);
+        setActiveChatId(convertedChat.id);
+        setShowCreateGroup(false);
+        setGroupName('');
+        setSelectedUsers([]);
+        setGroupUserSearch('');
+      }
+    } catch (error) {
+      console.error('Failed to create group chat:', error);
     }
   };
 
@@ -1395,33 +1758,32 @@ export default function TeamChatPage() {
     setReplyingTo(null);
   };
 
-  const handleSendMessage = (text: string, type: MessageType = 'text') => {
-    if (!activeChatId) return;
+  const handleSendMessage = async (text: string, type: MessageType = 'text') => {
+    if (!activeChatId || !CURRENT_USER) return;
 
-    const newMessage: Message = {
-      id: `msg_${Date.now()}`,
-      text,
-      sender: CURRENT_USER.name,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      type,
-      sent: true,
-      replyTo: replyingTo ? `${replyingTo.sender}: ${replyingTo.text.substring(0, 50)}${replyingTo.text.length > 50 ? '...' : ''}` : undefined
-    };
-
-    const updatedChats = chats.map(chat => {
-      if (chat.id === activeChatId) {
-        return {
-          ...chat,
-          messages: [...chat.messages, newMessage],
-          lastMessage: type === 'text' ? text : `${type === 'file' ? '📄' : type === 'image' ? '📷' : '📍'} ${text}`,
-          timestamp: newMessage.timestamp,
-        };
+    try {
+      const message = await sendMessage(activeChatId, CURRENT_USER.id, text, type);
+      if (message) {
+        // Immediately add the message to local state so sender sees it right away
+        const convertedMessage = convertSupabaseMessage(message);
+        
+        setChats(prevChats => 
+          prevChats.map(chat => 
+            chat.id === activeChatId 
+              ? { 
+                  ...chat, 
+                  messages: [...chat.messages, convertedMessage],
+                  lastMessage: message.content,
+                  timestamp: new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                }
+              : chat
+          )
+        );
+        scrollToBottom();
       }
-      return chat;
-    });
-
-    setChats(updatedChats);
-    setReplyingTo(null); // Clear reply after sending
+    } catch (error) {
+      console.error('Failed to send message:', error);
+    }
   };
 
   const handleFileUpload = (file: File) => {
@@ -1430,7 +1792,7 @@ export default function TeamChatPage() {
     const fileMessage: Message = {
       id: `msg_${Date.now()}`,
       text: file.name,
-      sender: CURRENT_USER.name,
+      sender: CURRENT_USER?.name || 'Unknown',
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       type: file.type.startsWith('image/') ? 'image' : 'file',
       fileName: file.name,
@@ -1454,45 +1816,15 @@ export default function TeamChatPage() {
     setChats(updatedChats);
   };
 
-  const handleReaction = (messageId: string, emoji: string) => {
-    const updatedChats = chats.map(chat => {
-      if (chat.id === activeChatId) {
-        const updatedMessages = chat.messages.map(msg => {
-          if (msg.id === messageId) {
-            const reactions = msg.reactions || [];
-            const existingReaction = reactions.find(r => r.emoji === emoji);
-            
-            if (existingReaction) {
-              if (existingReaction.users.includes(CURRENT_USER.id)) {
-                // Remove reaction
-                existingReaction.users = existingReaction.users.filter(u => u !== CURRENT_USER.id);
-                existingReaction.count = existingReaction.users.length;
-                return {
-                  ...msg,
-                  reactions: reactions.filter(r => r.count > 0)
-                };
-              } else {
-                // Add reaction
-                existingReaction.users.push(CURRENT_USER.id);
-                existingReaction.count = existingReaction.users.length;
-                return { ...msg, reactions };
-              }
-            } else {
-              // New reaction
-              return {
-                ...msg,
-                reactions: [...reactions, { emoji, users: [CURRENT_USER.id], count: 1 }]
-              };
-            }
-          }
-          return msg;
-        });
-        return { ...chat, messages: updatedMessages };
-      }
-      return chat;
-    });
+  const handleReaction = async (messageId: string, emoji: string) => {
+    if (!CURRENT_USER) return;
 
-    setChats(updatedChats);
+    try {
+      await addMessageReaction(messageId, CURRENT_USER.id, emoji);
+      // Real-time updates will handle the UI update
+    } catch (error) {
+      console.error('Failed to add reaction:', error);
+    }
   };
 
   // Updated handler functions for button functionality
@@ -1551,10 +1883,38 @@ export default function TeamChatPage() {
     setSearchQuery('');
   };
 
+  // Get top 3 suggested users (most recent chats or frequently contacted)
+  const getSuggestedUsers = (): User[] => {
+    // Get users from recent direct chats, prioritizing most recent
+    const directChatUsers = chats
+      .filter(chat => chat.type === 'direct')
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, 3)
+      .map(chat => chat.participants.find(p => p.id !== CURRENT_USER?.id))
+      .filter(Boolean) as User[];
+
+    // Fill remaining slots with other company users if needed
+    const remainingSlots = 3 - directChatUsers.length;
+    if (remainingSlots > 0) {
+      const otherUsers = companyUsers
+        .filter(user => !directChatUsers.some(du => du.id === user.id))
+        .slice(0, remainingSlots);
+      return [...directChatUsers, ...otherUsers];
+    }
+
+    return directChatUsers;
+  };
+
+  const filteredGroupUsers = companyUsers.filter(user => {
+    if (groupUserSearch.trim() === '') return true;
+    return user.name.toLowerCase().includes(groupUserSearch.toLowerCase()) ||
+           user.email?.toLowerCase().includes(groupUserSearch.toLowerCase());
+  });
+
   const filteredChats = chats.filter(chat => {
     if (activeTab === 'archived') return chat.isArchived;
     if (activeTab === 'groups') return chat.type === 'group' && !chat.isArchived;
-    if (activeTab === 'chats') return chat.type === 'direct' && !chat.isArchived;
+    if (activeTab === 'chats') return !chat.isArchived; // Show both direct and group chats
     return !chat.isArchived;
   }).sort((a, b) => {
     // Sort pinned chats to the top
@@ -1562,6 +1922,29 @@ export default function TeamChatPage() {
     if (!a.isPinned && b.isPinned) return 1;
     return 0;
   });
+
+  const handleLogout = async () => {
+    await logout();
+    CURRENT_USER = null;
+    navigate('/');
+  };
+
+  // Add loading state check
+  if (loading) {
+  return (
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh',
+        fontSize: '18px',
+        color: '#666',
+        background: isDark ? '#0f0f0f' : '#f8f9fa'
+      }}>
+        Loading...
+      </div>
+    );
+  }
 
   return (
     <div style={{ 
@@ -1580,7 +1963,17 @@ export default function TeamChatPage() {
         boxShadow: isDark ? '2px 0 8px rgba(0,0,0,0.3)' : '2px 0 8px rgba(0,0,0,0.1)'
       }}>
         {/* User Profile */}
-        <UserProfileCard user={CURRENT_USER} isDark={isDark} />
+        <UserProfileCard 
+          user={CURRENT_USER || {
+            id: 'unknown',
+            name: 'Unknown User',
+            email: 'unknown@example.com',
+            avatar: '',
+            status: 'offline' as const,
+            lastSeen: new Date().toISOString()
+          }}
+          isDark={isDark}
+        />
 
         {/* Search */}
         <div style={{ padding: '16px 20px' }}>
@@ -1707,37 +2100,308 @@ export default function TeamChatPage() {
                 color: isDark ? '#ffffff' : '#1a1a1a',
                 outline: 'none',
                 fontSize: '14px',
-                marginBottom: '12px'
+                marginBottom: '12px',
+                boxSizing: 'border-box'
               }}
             />
+
+            {/* Search field for users */}
+            <input
+              type="text"
+              placeholder="Search users..."
+              value={groupUserSearch}
+              onChange={(e) => setGroupUserSearch(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '12px 16px',
+                borderRadius: '8px',
+                border: `1px solid ${isDark ? '#404040' : '#dee2e6'}`,
+                background: isDark ? '#2a2a2a' : '#f8f9fa',
+                color: isDark ? '#ffffff' : '#1a1a1a',
+                outline: 'none',
+                fontSize: '14px',
+                marginBottom: '12px',
+                boxSizing: 'border-box'
+              }}
+            />
+
+            {/* Quick suggestions */}
+            {groupUserSearch.trim() === '' && (
+              <div style={{ marginBottom: '12px' }}>
+                <div style={{
+                  fontSize: '12px',
+                  fontWeight: '600',
+                  color: isDark ? '#adb5bd' : '#6c757d',
+                  marginBottom: '8px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px'
+                }}>
+                  Quick Add (Recent/Frequent)
+                </div>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  {getSuggestedUsers().map(user => (
+                    <button
+                      key={user.id}
+                      onClick={() => {
+                        if (!selectedUsers.some(u => u.id === user.id)) {
+                          setSelectedUsers(prev => [...prev, user]);
+                        }
+                      }}
+                      disabled={selectedUsers.some(u => u.id === user.id)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '6px 10px',
+                        borderRadius: '16px',
+                        border: 'none',
+                        background: selectedUsers.some(u => u.id === user.id) 
+                          ? isDark ? '#404040' : '#e9ecef'
+                          : '#228B22',
+                        color: selectedUsers.some(u => u.id === user.id)
+                          ? isDark ? '#888' : '#6c757d'
+                          : 'white',
+                        fontSize: '12px',
+                        fontWeight: '500',
+                        cursor: selectedUsers.some(u => u.id === user.id) ? 'not-allowed' : 'pointer',
+                        opacity: selectedUsers.some(u => u.id === user.id) ? 0.5 : 1,
+                        transition: 'all 0.2s ease'
+                      }}
+                    >
+                      <div style={{
+                        width: '20px',
+                        height: '20px',
+                        borderRadius: '50%',
+                        background: isDark ? 'linear-gradient(135deg, #4a4a4a, #2a2a2a)' : 'linear-gradient(135deg, #e9ecef, #dee2e6)',
+                        color: isDark ? '#fff' : '#495057',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '10px',
+                        fontWeight: '600'
+                      }}>
+                        {user.avatar}
+                      </div>
+                      {user.name}
+                      {selectedUsers.some(u => u.id === user.id) && ' ✓'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            {/* User Selection */}
+            <div style={{
+              maxHeight: '200px',
+              overflowY: 'auto',
+              border: `1px solid ${isDark ? '#404040' : '#dee2e6'}`,
+              borderRadius: '8px',
+              background: isDark ? '#2a2a2a' : '#f8f9fa',
+              marginBottom: '12px'
+            }}>
+              <div style={{
+                padding: '8px 12px',
+                borderBottom: `1px solid ${isDark ? '#404040' : '#dee2e6'}`,
+                fontSize: '12px',
+                fontWeight: '600',
+                color: isDark ? '#adb5bd' : '#6c757d',
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px'
+              }}>
+                Select Members ({selectedUsers.length} selected)
+              </div>
+              {filteredGroupUsers.map(user => (
+                <div
+                  key={user.id}
+                  onClick={() => {
+                    setSelectedUsers(prev => {
+                      const isSelected = prev.some(u => u.id === user.id);
+                      if (isSelected) {
+                        return prev.filter(u => u.id !== user.id);
+                      } else {
+                        return [...prev, user];
+                      }
+                    });
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    padding: '8px 12px',
+                    cursor: 'pointer',
+                    borderBottom: `1px solid ${isDark ? '#333' : '#f0f0f0'}`,
+                    transition: 'background 0.2s ease'
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = isDark ? '#333' : '#f0f0f0';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = 'transparent';
+                  }}
+                >
+                  <div style={{
+                    width: '16px',
+                    height: '16px',
+                    borderRadius: '3px',
+                    border: `2px solid ${selectedUsers.some(u => u.id === user.id) ? '#228B22' : (isDark ? '#666' : '#ccc')}`,
+                    background: selectedUsers.some(u => u.id === user.id) ? '#228B22' : 'transparent',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginRight: '12px',
+                    flexShrink: 0
+                  }}>
+                    {selectedUsers.some(u => u.id === user.id) && (
+                      <span style={{ color: 'white', fontSize: '10px', fontWeight: 'bold' }}>✓</span>
+                    )}
+                  </div>
+                  <div style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '50%',
+                    background: isDark ? 'linear-gradient(135deg, #4a4a4a, #2a2a2a)' : 'linear-gradient(135deg, #e9ecef, #dee2e6)',
+                    color: isDark ? '#fff' : '#495057',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '12px',
+                    fontWeight: '600',
+                    marginRight: '12px',
+                    flexShrink: 0
+                  }}>
+                    {user.avatar}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      fontSize: '14px',
+                      fontWeight: '500',
+                      color: isDark ? '#ffffff' : '#1a1a1a',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis'
+                    }}>
+                      {user.name}
+                    </div>
+                    <div style={{
+                      fontSize: '12px',
+                      color: isDark ? '#adb5bd' : '#6c757d'
+                    }}>
+                      {user.email}
+                    </div>
+                  </div>
+                  <StatusIndicator status={user.status} />
+                </div>
+              ))}
+              {filteredGroupUsers.length === 0 && (
+                <div style={{
+                  padding: '20px',
+                  textAlign: 'center',
+                  color: isDark ? '#6c757d' : '#adb5bd',
+                  fontSize: '14px'
+                }}>
+                  {groupUserSearch.trim() ? 'No users found' : 'No users available'}
+                </div>
+              )}
+            </div>
+
+            {/* Selected Users Preview */}
+            {selectedUsers.length > 0 && (
+              <div style={{
+                marginBottom: '12px',
+                padding: '8px',
+                background: isDark ? '#1a1a1a' : '#f8f9fa',
+                borderRadius: '6px',
+                border: `1px solid ${isDark ? '#333' : '#e0e0e0'}`
+              }}>
+                <div style={{
+                  fontSize: '12px',
+                  fontWeight: '600',
+                  color: isDark ? '#adb5bd' : '#6c757d',
+                  marginBottom: '6px'
+                }}>
+                  Selected Members:
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                  {selectedUsers.map(user => (
+                    <span
+                      key={user.id}
+                      style={{
+                        background: '#228B22',
+                        color: 'white',
+                        padding: '2px 8px',
+                        borderRadius: '12px',
+                        fontSize: '11px',
+                        fontWeight: '500',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}
+                    >
+                      {user.name}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedUsers(prev => prev.filter(u => u.id !== user.id));
+                        }}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: 'white',
+                          cursor: 'pointer',
+                          fontSize: '12px',
+                          fontWeight: 'bold',
+                          padding: '0',
+                          margin: '0',
+                          lineHeight: '1',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div style={{ display: 'flex', gap: '8px' }}>
               <button
                 onClick={handleCreateGroup}
                 disabled={!groupName.trim() || selectedUsers.length === 0}
                 style={{
-                  flex: 1,
+                  width: '50%',
                   background: (groupName.trim() && selectedUsers.length > 0) ? '#228B22' : (isDark ? '#404040' : '#dee2e6'),
                   color: (groupName.trim() && selectedUsers.length > 0) ? '#ffffff' : (isDark ? '#888' : '#6c757d'),
                   border: 'none',
                   borderRadius: '6px',
-                  padding: '8px 12px',
+                  padding: '10px 12px',
                   fontSize: '13px',
                   fontWeight: '600',
-                  cursor: (groupName.trim() && selectedUsers.length > 0) ? 'pointer' : 'not-allowed'
+                  cursor: (groupName.trim() && selectedUsers.length > 0) ? 'pointer' : 'not-allowed',
+                  transition: 'all 0.2s ease'
                 }}
               >
-                Create
+                Create Group
               </button>
               <button
-                onClick={() => setShowCreateGroup(false)}
+                onClick={() => {
+                  setShowCreateGroup(false);
+                  setGroupName('');
+                  setSelectedUsers([]);
+                  setGroupUserSearch('');
+                }}
                 style={{
+                  width: '50%',
                   background: 'transparent',
                   color: isDark ? '#adb5bd' : '#6c757d',
                   border: `1px solid ${isDark ? '#404040' : '#dee2e6'}`,
                   borderRadius: '6px',
-                  padding: '8px 12px',
+                  padding: '10px 12px',
                   fontSize: '13px',
-                  cursor: 'pointer'
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
                 }}
               >
                 Cancel
@@ -1748,25 +2412,66 @@ export default function TeamChatPage() {
 
         {/* Chat List */}
         <div style={{ flex: 1, overflowY: 'auto' }}>
-          {searchQuery && searchResults.length > 0 ? (
+          {searchQuery.trim() !== '' ? (
             <>
-              <div style={{
-                padding: '12px 20px',
-                fontSize: '13px',
-                fontWeight: '600',
-                color: isDark ? '#adb5bd' : '#6c757d',
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px'
-              }}>
-                Search Results
-              </div>
-              {searchResults.map(user => 
-                <SearchResultItem 
-                  key={user.id} 
-                  user={user} 
-                  onClick={() => handleStartNewChat(user)} 
-                  isDark={isDark} 
-                />
+              {/* User Search Results */}
+              {searchResults.length > 0 && (
+                <>
+                  <div style={{
+                    padding: '12px 20px',
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    color: isDark ? '#adb5bd' : '#6c757d',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px'
+                  }}>
+                    Users
+                  </div>
+                  {searchResults.map(user => 
+                    <SearchResultItem 
+                      key={user.id} 
+                      user={user} 
+                      onClick={() => handleStartNewChat(user)} 
+                      isDark={isDark} 
+                    />
+                  )}
+                </>
+              )}
+              
+              {/* Team Search Results */}
+              {teamSearchResults.length > 0 && (
+                <>
+                  <div style={{
+                    padding: '12px 20px',
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    color: isDark ? '#adb5bd' : '#6c757d',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px'
+                  }}>
+                    Teams
+                  </div>
+                  {teamSearchResults.map(team => 
+                    <TeamSearchResultItem 
+                      key={team.id} 
+                      team={team} 
+                      onClick={() => handleStartTeamChat(team)} 
+                      isDark={isDark} 
+                    />
+                  )}
+                </>
+              )}
+              
+              {/* No Results */}
+              {searchResults.length === 0 && teamSearchResults.length === 0 && (
+                <div style={{
+                  textAlign: 'center',
+                  color: isDark ? '#6c757d' : '#adb5bd',
+                  padding: '40px 20px',
+                  fontSize: '14px'
+                }}>
+                  No users or teams found for "{searchQuery}"
+                </div>
               )}
             </>
           ) : (
@@ -1832,7 +2537,7 @@ export default function TeamChatPage() {
               <MessageBubble 
                 key={message.id} 
                 message={message}
-                sent={message.sender === CURRENT_USER.name}
+                sent={message.sender === CURRENT_USER?.name}
                 isDark={isDark}
                 onReact={handleReaction}
                 onReply={handleReply}
