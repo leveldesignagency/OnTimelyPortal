@@ -15,6 +15,7 @@ import CanvasPage from './CanvasPage';
 import CreateTeamFlowPage from './CreateTeamFlowPage';
 import RealtimeTestPage from './pages/realtime-test';
 import LoginPage from './pages/LoginPage';
+import NotificationPreview from './NotificationPreview';
 import ProtectedRoute from './components/ProtectedRoute';
 import { ThemeProvider, ThemeContext } from './ThemeContext';
 import { EventType } from './types';
@@ -224,6 +225,7 @@ const AppContent = () => {
           <Route path="/event/:eventId/itinerary/edit/:itineraryIndex" element={<ProtectedRoute><CreateItinerary /></ProtectedRoute>} />
           <Route path="/event/:eventId/modules" element={<ProtectedRoute><ModulesPage /></ProtectedRoute>} />
           <Route path="/realtime-test" element={<ProtectedRoute><RealtimeTestPage /></ProtectedRoute>} />
+          <Route path="/notification-preview" element={<ProtectedRoute><NotificationPreview /></ProtectedRoute>} />
           <Route path="/teams" element={<ProtectedRoute><TeamsLayout /></ProtectedRoute>}>
             <Route index element={<Navigate to="/teams/chat" replace />} />
             <Route path="chat" element={<TeamChatPage />} />

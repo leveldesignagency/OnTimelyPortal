@@ -1295,47 +1295,6 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
             {chat.type === 'group' ? `${chat.participants.length} members` : 'Direct message'}
           </p>
         </div>
-
-        {/* Action Buttons */}
-        <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
-          {actionButtons.map((button, idx) => (
-            <button
-              key={idx}
-              onClick={button.action}
-              title={button.label}
-              style={{
-                background: isDark ? '#2a2a2a' : '#f8f9fa',
-                border: 'none',
-                borderRadius: '6px',
-                padding: '10px 12px',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
-                minWidth: '44px',
-                minHeight: '44px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.background = isDark ? '#404040' : '#e9ecef';
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.background = isDark ? '#2a2a2a' : '#f8f9fa';
-              }}
-            >
-              <img 
-                src={button.iconSrc} 
-                alt={button.label}
-                width={16}
-                height={16}
-                style={{ 
-                  filter: isDark ? 'invert(1)' : 'none',
-                  opacity: 0.8
-                }}
-              />
-            </button>
-          ))}
-        </div>
       </div>
 
       {/* Participants */}
