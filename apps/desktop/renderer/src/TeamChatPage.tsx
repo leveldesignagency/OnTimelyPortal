@@ -483,11 +483,10 @@ const TeamSearchResultItem = ({ team, onClick, isDark }: { team: Team, onClick: 
   </div>
 );
 
-const ChatHeader = ({ chat, isDark, onToggleRightPanel, onTestNotification }: { 
+const ChatHeader = ({ chat, isDark, onToggleRightPanel }: { 
   chat: Chat | undefined, 
   isDark: boolean, 
-  onToggleRightPanel: () => void,
-  onTestNotification?: () => void 
+  onToggleRightPanel: () => void
 }) => (
         <div style={{
     padding: '16px 24px',
@@ -538,29 +537,6 @@ const ChatHeader = ({ chat, isDark, onToggleRightPanel, onTestNotification }: {
     </div>
 
     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-      {/* Debug: Test Notification Button */}
-      {onTestNotification && (
-        <button
-          onClick={onTestNotification}
-          style={{
-            background: '#ff6b6b',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            padding: '6px 12px',
-            fontSize: '11px',
-            fontWeight: '600',
-            cursor: 'pointer',
-            opacity: 0.8,
-            transition: 'opacity 0.2s'
-          }}
-          onMouseEnter={e => e.currentTarget.style.opacity = '1'}
-          onMouseLeave={e => e.currentTarget.style.opacity = '0.8'}
-        >
-          🧪 Test
-        </button>
-      )}
-      
       <button
         onClick={onToggleRightPanel}
         style={{
@@ -2401,18 +2377,10 @@ export default function TeamChatPage() {
       timestamp: message.created_at
     });
 
-    // TEMPORARY: For testing purposes, allow notifications even from same user
-    // In production, you'd remove this or make it configurable
-    const isTestingMode = true; // Set to false in production
-    const shouldSkipSameUser = !isTestingMode && message.sender_id === CURRENT_USER?.id;
-
-    if (shouldSkipSameUser) {
-      console.log('❌ Skipping notification - message is from current user (testing mode disabled)');
+    // Don't add message if it's from the current user (they already see it immediately)
+    if (message.sender_id === CURRENT_USER?.id) {
+      console.log('❌ Skipping notification - message is from current user');
       return;
-    }
-    
-    if (message.sender_id === CURRENT_USER?.id && isTestingMode) {
-      console.log('🧪 TESTING MODE: Allowing notification from same user for testing purposes');
     }
     
     const convertedMessage = convertSupabaseMessage(message);
@@ -2429,12 +2397,11 @@ export default function TeamChatPage() {
       senderName: sender?.name,
       isActiveChat: message.chat_id === activeChatId,
       hasFocus: document.hasFocus(),
-      testingMode: isTestingMode,
-      shouldNotify: chat && sender
+      shouldNotify: chat && sender && (message.chat_id !== activeChatId || !document.hasFocus())
     });
     
-    // Create message notification - simplified logic for testing
-    if (chat && sender) {
+    // Create message notification if chat is not currently active or app is not focused
+    if (chat && sender && (message.chat_id !== activeChatId || !document.hasFocus())) {
       console.log('✅ Creating notification for message');
       
       const messageNotification: MessageNotification = {
@@ -2451,43 +2418,26 @@ export default function TeamChatPage() {
       };
       
       setMessageNotifications(prev => {
-        console.log('📬 Adding notification to state. Current count:', prev.length);
-        console.log('📬 New notification:', messageNotification);
-        const newNotifications = [...prev, messageNotification];
-        console.log('📬 Total notifications after adding:', newNotifications.length);
-        return newNotifications;
+        console.log('📬 Adding notification to state:', messageNotification);
+        return [...prev, messageNotification];
       });
       
       // Play notification sound
-      console.log('🔊 Attempting to play notification sound...');
-      try {
-        playNotificationSound();
-        console.log('🔊 ✅ Notification sound played successfully');
-      } catch (error) {
-        console.log('🔊 ❌ Failed to play notification sound:', error);
-      }
+      console.log('🔊 Playing notification sound');
+      playNotificationSound();
       
-      // Show browser notification
-      console.log('🌐 Attempting to show browser notification...');
-      try {
+      // Show browser notification if app is not focused
+      if (!document.hasFocus()) {
+        console.log('🌐 Showing browser notification');
         showBrowserNotification(sender.name, message.content, chat.name, chat.type);
-        console.log('🌐 ✅ Browser notification shown');
-      } catch (error) {
-        console.log('🌐 ❌ Failed to show browser notification:', error);
       }
       
-      // Auto-remove after 8 seconds (increased for testing)
+      // Auto-remove after 5 seconds if not interacted with
       setTimeout(() => {
-        console.log('⏰ Auto-removing notification after 8 seconds');
         setMessageNotifications(prev => prev.filter(n => n.id !== messageNotification.id));
-      }, 8000);
+      }, 5000);
     } else {
-      console.log('❌ Not creating notification - chat or sender not found:', {
-        chatFound: !!chat,
-        senderFound: !!sender,
-        chatId: message.chat_id,
-        senderId: message.sender_id
-      });
+      console.log('❌ Not creating notification - conditions not met');
     }
     
     setChats(prevChats => 
@@ -2881,32 +2831,6 @@ export default function TeamChatPage() {
     setSearchQuery('');
     setShowRightPanel(false);
     selectChat(chatId);
-  };
-
-  // Test notification function for debugging
-  const testNotification = () => {
-    console.log('🧪 Testing notification system...');
-    
-    // Test browser notification
-    if (Notification.permission === 'granted') {
-      new Notification('Test Notification', {
-        body: 'This is a test message from Timely',
-        icon: '/favicon.ico'
-      });
-    } else {
-      console.log('❌ Browser notifications not permitted');
-    }
-    
-    // Test sound
-    try {
-      playNotificationSound();
-      console.log('🔊 Test sound played');
-    } catch (error) {
-      console.log('❌ Sound test failed:', error);
-    }
-    
-    // Test in-app notification
-    addNotification('Test notification created successfully!', 'success');
   };
 
   // Add loading state check
@@ -3536,7 +3460,6 @@ export default function TeamChatPage() {
           chat={activeChat} 
           isDark={isDark} 
           onToggleRightPanel={() => setShowRightPanel(!showRightPanel)}
-          onTestNotification={testNotification}
         />
         
         {/* Messages Area */}
