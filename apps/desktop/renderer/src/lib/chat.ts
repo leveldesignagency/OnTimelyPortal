@@ -600,4 +600,53 @@ export const createGroupChat = async (
     console.error('Failed to create group chat:', error)
     return null
   }
+}
+
+// Remove user from group chat
+export const removeUserFromGroup = async (
+  chatId: string,
+  userId: string,
+  removedBy: string
+): Promise<boolean> => {
+  try {
+    // Check if the chat is a group chat and if the remover is a participant
+    const { data: chat } = await supabase
+      .from('chats')
+      .select('type, created_by')
+      .eq('id', chatId)
+      .single()
+
+    if (!chat || chat.type !== 'group') {
+      throw new Error('Chat is not a group chat')
+    }
+
+    // Check if the person removing is the creator or the user themselves
+    if (chat.created_by !== removedBy && userId !== removedBy) {
+      throw new Error('Only group creator or the user themselves can remove participants')
+    }
+
+    // Remove the user from chat_participants
+    const { error } = await supabase
+      .from('chat_participants')
+      .delete()
+      .eq('chat_id', chatId)
+      .eq('user_id', userId)
+
+    if (error) throw error
+
+    // Send a system message about the user being removed (optional)
+    await sendMessage(
+      chatId,
+      removedBy,
+      userId === removedBy 
+        ? `left the group` 
+        : `removed a user from the group`,
+      'text'
+    )
+
+    return true
+  } catch (error) {
+    console.error('Failed to remove user from group:', error)
+    return false
+  }
 } 

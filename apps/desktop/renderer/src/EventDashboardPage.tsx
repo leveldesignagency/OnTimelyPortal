@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useContext } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import { ModulesPage } from './pages/ModulesPage';
 import Icon from './Icon';
+import { ThemeContext } from './ThemeContext';
 
 console.log("THIS IS EVENT DASHBOARD PAGE");
 
@@ -63,11 +64,11 @@ const DASHBOARD_MODULES: DashboardModules = {
     { key: 'guestExport', label: 'Guest Export', type: 'tool', description: 'Export guest lists' }
   ],
   addons: [
-    { key: 'flightTracker', label: 'Flight Tracker', type: 'service', description: 'Real-time flight status tracking', icon: '✈️' },
+    { key: 'flightTracker', label: 'Flight Tracker', type: 'service', description: 'Real-time flight status tracking', icon: 'flight' },
     { key: 'safetyBeacon', label: 'Safety SOS', type: 'service', description: 'Emergency alert system for guests', icon: '🆘' },
-    { key: 'gpsTracking', label: 'GPS Tracking', type: 'service', description: 'Track logistics team location', icon: '📍' },
+    { key: 'gpsTracking', label: 'GPS Tracking', type: 'service', description: 'Track logistics team location', icon: 'pin' },
     { key: 'eventUpdates', label: 'Event Updates', type: 'service', description: 'Live event status notifications', icon: '🔔' },
-    { key: 'hotelBooking', label: 'Hotel Manager', type: 'service', description: 'Hotel reservation tracking', icon: '🏨' }
+    { key: 'hotelBooking', label: 'Hotel Manager', type: 'service', description: 'Hotel reservation tracking', icon: 'hotel' }
   ]
 };
 
@@ -86,6 +87,8 @@ const MODULES: ActivityModule[] = [
 ];
 
 export default function EventDashboardPage({ events }: { events: EventType[] }) {
+  const { theme } = useContext(ThemeContext);
+  const isDark = theme === 'dark';
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -93,7 +96,7 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
   const [showModules, setShowModules] = useState(true);
   const [activeTab, setActiveTab] = useState(() => {
     const params = new URLSearchParams(location.search);
-    return params.get('tab') || 'itineraries';
+    return params.get('tab') || 'dashboard';
   });
   const [itineraryToDelete, setItineraryToDelete] = useState<number | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -422,10 +425,10 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
 
   if (!event) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', fontFamily: 'Roboto, Arial, system-ui, sans-serif', background: '#fff' }}>
-        <div style={{ fontSize: 36, fontWeight: 600, color: '#c00', marginBottom: 24 }}>Event not found</div>
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Roboto, Arial, system-ui, sans-serif', background: '#fff' }}>
+        <div style={{ fontSize: 36, fontWeight: 600, color: '#000', marginBottom: 24 }}>Event not found</div>
         <div style={{ fontSize: 18, color: '#555', marginBottom: 40 }}>The event you are looking for does not exist or has been deleted.</div>
-        <div style={{ display: 'flex', gap: 24 }}>
+        <div style={{ display: 'flex', gap: 16 }}>
           <button onClick={() => navigate('/')} style={{ background: '#222', color: '#fff', fontWeight: 500, fontSize: 18, border: 'none', borderRadius: 8, padding: '12px 32px', minWidth: 140, minHeight: 48, cursor: 'pointer' }}>Go to Dashboard</button>
           <button onClick={() => navigate('/create-event')} style={{ background: '#fff', color: '#222', fontWeight: 500, fontSize: 18, border: '2px solid #bbb', borderRadius: 8, padding: '12px 32px', minWidth: 140, minHeight: 48, cursor: 'pointer' }}>Create New Event</button>
         </div>
@@ -583,16 +586,15 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
     <button
       onClick={() => setActiveTab(id)}
       style={{
-        background: activeTab === id ? '#222' : '#fff',
-        color: activeTab === id ? '#fff' : '#222',
-        border: activeTab === id ? 'none' : '2px solid #bbb',
+        background: activeTab === id ? (isDark ? '#ffffff' : '#000') : 'transparent',
+        color: activeTab === id ? (isDark ? '#000000' : '#fff') : (isDark ? '#ffffff' : '#666'),
+        border: isDark ? '1.5px solid #444' : '1.5px solid #ddd',
         borderRadius: 8,
         padding: '12px 24px',
         fontSize: 16,
-        fontWeight: 500,
         cursor: 'pointer',
-        minWidth: 120,
-        transition: 'all 0.2s'
+        fontFamily: 'inherit',
+        transition: 'all 0.2s ease',
       }}
     >
       {label}
@@ -731,19 +733,19 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
     };
 
     const cardStyle: React.CSSProperties = {
-      background: isSelected ? '#eef2ff' : '#fff',
+      background: isSelected ? (isDark ? '#2a2a2a' : '#f0f0f0') : (isDark ? '#1e1e1e' : '#fff'),
       borderRadius: 12,
-      border: isSelected ? '2px solid #4f46e5' : '1.5px solid #bbb',
+      border: isSelected ? (isDark ? '2px solid #ffffff' : '2px solid #000') : (isDark ? '1.5px solid #444' : '1.5px solid #bbb'),
       transition: 'all 0.2s ease-in-out',
-      boxShadow: isSelected ? '0 4px 12px rgba(0,0,0,0.1)' : '0 1px 3px rgba(0,0,0,0.05)',
+      boxShadow: isSelected ? (isDark ? '0 4px 12px rgba(255,255,255,0.1)' : '0 4px 12px rgba(0,0,0,0.1)') : (isDark ? '0 1px 3px rgba(0,0,0,0.3)' : '0 1px 3px rgba(0,0,0,0.05)'),
       display: 'flex',
       alignItems: 'center',
       cursor: 'pointer',
     };
     
     if (!standalone) {
-        cardStyle.background = isSelected ? '#eef2ff' : '#f8f9fa';
-        cardStyle.border = isSelected ? '2px solid #4f46e5' : '1px solid #ddd';
+        cardStyle.background = isSelected ? (isDark ? '#2a2a2a' : '#f0f0f0') : (isDark ? '#1a1a1a' : '#f8f9fa');
+        cardStyle.border = isSelected ? (isDark ? '2px solid #ffffff' : '2px solid #000') : (isDark ? '1px solid #333' : '1px solid #ddd');
     }
 
     return (
@@ -757,18 +759,18 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
           </div>
         )}
         <div style={{ flex: 1, padding: isSelectModeActive ? '16px 16px 16px 0' : '16px' }}>
-          <div style={{ fontSize: standalone ? 18 : 16, fontWeight: 500, marginBottom: standalone ? 12 : 8, textTransform: 'uppercase' }}>
+          <div style={{ fontSize: standalone ? 18 : 16, fontWeight: 500, marginBottom: standalone ? 12 : 8, textTransform: 'uppercase', color: isDark ? '#ffffff' : '#222' }}>
             {[guest.firstName, guest.middleName, guest.lastName].filter(Boolean).join(' ')}
           </div>
           <>
-            <div style={{ fontSize: 14, color: '#666', marginBottom: 8 }}>
-              <span style={{ color: '#444', fontWeight: 500 }}>Email:</span> {guest.email}
+            <div style={{ fontSize: 14, color: isDark ? '#b0b0b0' : '#666', marginBottom: 8 }}>
+              <span style={{ color: isDark ? '#d0d0d0' : '#444', fontWeight: 500 }}>Email:</span> {guest.email}
             </div>
-            <div style={{ fontSize: 14, color: '#666', marginBottom: 8 }}>
-              <span style={{ color: '#444', fontWeight: 500 }}>Phone:</span> {guest.countryCode} {guest.contactNumber}
+            <div style={{ fontSize: 14, color: isDark ? '#b0b0b0' : '#666', marginBottom: 8 }}>
+              <span style={{ color: isDark ? '#d0d0d0' : '#444', fontWeight: 500 }}>Phone:</span> {guest.countryCode} {guest.contactNumber}
             </div>
-            <div style={{ fontSize: 14, color: '#666' }}>
-              <span style={{ color: '#444', fontWeight: 500 }}>ID:</span> {guest.idType} {guest.idNumber}
+            <div style={{ fontSize: 14, color: isDark ? '#b0b0b0' : '#666' }}>
+              <span style={{ color: isDark ? '#d0d0d0' : '#444', fontWeight: 500 }}>ID:</span> {guest.idType} {guest.idNumber}
             </div>
           </>
         </div>
@@ -783,7 +785,7 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
     cursor: 'pointer',
     height: 45,
     width: '160px',
-    border: '2px solid #000',
+    border: isDark ? '2px solid #ffffff' : '2px solid #000',
     boxSizing: 'border-box',
     display: 'flex',
     alignItems: 'center',
@@ -793,26 +795,26 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
   
   const guestPageBlackButtonStyle: React.CSSProperties = {
     ...guestPageButtonBaseStyle,
-    background: '#000',
-    color: '#fff',
+    background: isDark ? '#ffffff' : '#000',
+    color: isDark ? '#000000' : '#fff',
   };
   
   const guestPageWhiteButtonStyle: React.CSSProperties = {
     ...guestPageButtonBaseStyle,
-    background: '#fff',
-    color: '#000',
+    background: isDark ? '#1e1e1e' : '#fff',
+    color: isDark ? '#ffffff' : '#000',
   };
 
   const guestPageInputStyle: React.CSSProperties = {
     height: 45,
     padding: '0 16px',
-    border: '2px solid #000',
+    border: isDark ? '2px solid #444' : '2px solid #000',
     borderRadius: '8px',
     boxSizing: 'border-box',
     fontSize: 15,
     width: '280px',
-    background: '#fff',
-    color: '#333',
+    background: isDark ? '#2a2a2a' : '#fff',
+    color: isDark ? '#ffffff' : '#333',
   };
 
   const selectAllCheckboxRef = useRef<HTMLInputElement>(null);
@@ -847,8 +849,8 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
   };
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: '#f8f9fa' }}>
-      <div style={{ position: 'fixed', top: 0, left: 0, width: 260, height: '100vh', background: '#222', color: '#fff', zIndex: 100, display: 'flex', flexDirection: 'column' }}>
+    <div style={{ display: 'flex', minHeight: '100vh', background: isDark ? '#121212' : '#f8f9fa' }}>
+      <div style={{ position: 'fixed', top: 0, left: 0, width: 260, height: '100vh', background: isDark ? '#1a1a1a' : '#222', color: '#fff', zIndex: 100, display: 'flex', flexDirection: 'column' }}>
         <Sidebar 
           events={events} 
           isOverlay={false} 
@@ -864,7 +866,7 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
           right: 0,
           width: showModules ? 320 : 32, 
           height: '100vh',
-          background: '#1a1a1a', 
+          background: isDark ? '#2a2a2a' : '#1a1a1a', 
           color: '#fff',
           transition: 'width 0.3s ease',
           display: 'flex',
@@ -899,7 +901,7 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                     draggable
                     onDragStart={(e) => handleDragStart(e, module.key)}
                     style={{
-                      background: '#333',
+                      background: isDark ? '#404040' : '#333',
                       borderRadius: 8,
                       padding: '12px 16px',
                       cursor: 'grab',
@@ -930,7 +932,7 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
         right: activeTab === 'addons' ? (showModules ? 320 : 32) : 0,
         height: '100vh',
         overflowY: 'auto',
-        background: '#fff',
+        background: isDark ? '#121212' : '#fff',
         padding: '0 40px',
         transition: 'right 0.3s ease'
       }}>
@@ -939,20 +941,33 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
           margin: '0 auto',
           padding: '40px',
           fontFamily: 'Roboto, Arial, system-ui, sans-serif',
-          color: '#222',
+          color: isDark ? '#ffffff' : '#222',
           width: '100%'
         }}>
           <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 0 }}>
-            <div style={{ fontSize: 36, fontWeight: 500, letterSpacing: 0, marginBottom: 0 }}>{event.name}</div>
-            <div style={{ fontSize: 22, color: '#888', fontWeight: 400, marginBottom: 0, textAlign: 'right' }}>{formatUK(event.from)} - {formatUK(event.to)}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              <h1 style={{ fontSize: 32, fontWeight: 600, margin: 0, color: isDark ? '#fff' : '#333' }}>
+                {currentEvent?.name || 'Event Dashboard'}
+              </h1>
+              <span style={{
+                background: currentEvent?.status === 'Upcoming' ? '#ef4444' : 
+                           currentEvent?.status === 'Live' ? '#f59e0b' : '#22c55e',
+                color: '#fff',
+                padding: '6px 12px',
+                borderRadius: 20,
+                fontSize: 12,
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px'
+              }}>
+                {currentEvent?.status || 'Unknown'}
+              </span>
           </div>
-          <hr style={{ margin: '7px 0 16px 0', border: 'none', borderTop: '2px solid #bbb' }} />
-          <div style={{ display: 'flex', justifyContent: 'flex-end', margin: '0 0 16px 0', paddingTop: 0, paddingBottom: 0 }}>
-            <span style={{ background: '#FFD600', color: '#fff', borderRadius: 8, padding: '7px 24px', fontWeight: 500, fontSize: 16 }}>{event.status}</span>
+            <div style={{ fontSize: 22, color: isDark ? '#b0b0b0' : '#888', fontWeight: 400, marginBottom: 0, textAlign: 'right' }}>{formatUK(event.from)} - {formatUK(event.to)}</div>
           </div>
-
+          <hr style={{ margin: '7px 0 16px 0', border: 'none', borderTop: isDark ? '2px solid #444' : '2px solid #bbb' }} />
           <div style={{ display: 'flex', gap: 16, marginBottom: 32 }}>
-            <TabButton id="settings" label="Settings" />
+            <TabButton id="settings" label="Event Dashboard" />
             <TabButton id="itineraries" label="Itineraries" />
             <TabButton id="guests" label="Guests" />
             <TabButton id="addons" label="Add Ons" />
@@ -961,7 +976,7 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
           {activeTab === 'settings' && (
             <div style={{ marginBottom: 64, paddingBottom: 48 }}>
               <h2 style={{ fontSize: 28, fontWeight: 600, margin: '0 0 32px 0', display: 'flex', alignItems: 'center', gap: 12 }}>
-                <span style={{ fontSize: 32 }}>📊</span>
+                <Icon name="report" style={{ fontSize: 32, color: isDark ? '#60A5FA' : '#3B82F6' }} />
                 Event Dashboard
               </h2>
               
@@ -970,14 +985,15 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                 
                 {/* Total Guests Card */}
                 <div style={{ 
-                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', 
+                  background: isDark ? '#1e1e1e' : '#000', 
                   borderRadius: 16, 
                   padding: 32, 
                   color: '#fff',
-                  boxShadow: '0 8px 32px rgba(102, 126, 234, 0.3)'
+                  boxShadow: isDark ? '0 8px 32px rgba(0, 0, 0, 0.3)' : '0 8px 32px rgba(0, 0, 0, 0.15)',
+                  border: isDark ? '1px solid #333' : 'none'
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                    <div style={{ fontSize: 48 }}>👥</div>
+                    <Icon name="person" style={{ fontSize: 48, color: isDark ? '#60A5FA' : '#3B82F6' }} />
                     <div style={{ textAlign: 'right' }}>
                       <div style={{ fontSize: 36, fontWeight: 700 }}>{guests.length}</div>
                       <div style={{ fontSize: 14, opacity: 0.8 }}>Total Guests</div>
@@ -1001,25 +1017,26 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
 
                 {/* Itinerary Progress Card */}
                 <div style={{ 
-                  background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', 
+                  background: isDark ? '#2a2a2a' : '#333', 
                   borderRadius: 16, 
                   padding: 32, 
                   color: '#fff',
-                  boxShadow: '0 8px 32px rgba(240, 147, 251, 0.3)'
+                  boxShadow: isDark ? '0 8px 32px rgba(0, 0, 0, 0.3)' : '0 8px 32px rgba(0, 0, 0, 0.15)',
+                  border: isDark ? '1px solid #444' : 'none'
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                    <div style={{ fontSize: 48 }}>📋</div>
+                    <Icon name="clipboard" style={{ fontSize: 48, color: isDark ? '#34D399' : '#10B981' }} />
                     <div style={{ textAlign: 'right' }}>
                       <div style={{ fontSize: 36, fontWeight: 700 }}>{savedItineraries.length}</div>
                       <div style={{ fontSize: 14, opacity: 0.8 }}>Active Itineraries</div>
                     </div>
                   </div>
-                  <div style={{ background: 'rgba(255,255,255,0.2)', borderRadius: 12, padding: 16 }}>
+                  <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 12, padding: 16 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                       <span>Completion Rate</span>
                       <span>75%</span>
                     </div>
-                    <div style={{ background: 'rgba(255,255,255,0.3)', borderRadius: 8, height: 8 }}>
+                    <div style={{ background: 'rgba(255,255,255,0.2)', borderRadius: 8, height: 8 }}>
                       <div style={{ background: '#fff', borderRadius: 8, height: 8, width: '75%' }}></div>
                     </div>
                   </div>
@@ -1027,77 +1044,87 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
 
                 {/* Event Status Card */}
                 <div style={{ 
-                  background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)', 
+                  background: isDark ? '#3a3a3a' : '#666', 
                   borderRadius: 16, 
                   padding: 32, 
                   color: '#fff',
-                  boxShadow: '0 8px 32px rgba(79, 172, 254, 0.3)'
+                  boxShadow: isDark ? '0 8px 32px rgba(0, 0, 0, 0.3)' : '0 8px 32px rgba(0, 0, 0, 0.15)',
+                  border: isDark ? '1px solid #555' : 'none'
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                    <div style={{ fontSize: 48 }}>⚡</div>
+                    <Icon name="satellite" style={{ fontSize: 48, color: isDark ? '#A78BFA' : '#8B5CF6' }} />
                     <div style={{ textAlign: 'right' }}>
                       <div style={{ fontSize: 24, fontWeight: 700 }}>{event?.status || 'Active'}</div>
                       <div style={{ fontSize: 14, opacity: 0.8 }}>Event Status</div>
                     </div>
                   </div>
                   <div style={{ fontSize: 14 }}>
-                    <div style={{ marginBottom: 8 }}>📅 Start: {event?.from}</div>
-                    <div>🏁 End: {event?.to}</div>
+                    <div style={{ marginBottom: 8 }}>Start: {event?.from}</div>
+                    <div>End: {event?.to}</div>
                   </div>
                 </div>
               </div>
 
               {/* Guest Journey Tracking */}
               <div style={{ 
-                background: '#fff', 
+                background: isDark ? '#1e1e1e' : '#fff', 
                 borderRadius: 16, 
                 padding: 32, 
                 marginBottom: 32,
-                boxShadow: '0 4px 24px rgba(0,0,0,0.08)'
+                boxShadow: isDark ? '0 4px 24px rgba(0,0,0,0.3)' : '0 4px 24px rgba(0,0,0,0.08)',
+                border: isDark ? '1px solid #333' : '1px solid #e5e7eb'
               }}>
-                <h3 style={{ fontSize: 24, fontWeight: 600, marginBottom: 24, display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <span style={{ fontSize: 28 }}>🛫</span>
+                <h3 style={{ fontSize: 24, fontWeight: 600, marginBottom: 24, display: 'flex', alignItems: 'center', gap: 12, color: isDark ? '#ffffff' : '#222' }}>
+                  <Icon name="flight" style={{ fontSize: 28, color: isDark ? '#60A5FA' : '#3B82F6' }} />
                   Guest Journey Checkpoints
                 </h3>
                 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 20 }}>
                   
                   {/* Flight Status */}
-                  <div style={{ border: '2px solid #e5e7eb', borderRadius: 12, padding: 20 }}>
+                  <div style={{ 
+                    border: isDark ? '2px solid #444' : '2px solid #e5e7eb', 
+                    borderRadius: 12, 
+                    padding: 20,
+                    background: isDark ? '#2a2a2a' : '#fff'
+                  }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
                       <div style={{ 
                         width: 40, 
                         height: 40, 
                         borderRadius: '50%', 
-                        background: 'linear-gradient(135deg, #667eea, #764ba2)', 
+                        background: isDark ? '#333' : '#000', 
                         display: 'flex', 
                         alignItems: 'center', 
                         justifyContent: 'center',
-                        fontSize: 18
-                      }}>✈️</div>
+                        fontSize: 18,
+                        color: '#fff'
+                      }}>
+                        <Icon name="flight" style={{ fontSize: 18, color: '#fff' }} />
+                      </div>
                       <div>
-                        <div style={{ fontWeight: 600, fontSize: 16 }}>Flight Status</div>
-                        <div style={{ color: '#666', fontSize: 14 }}>Landing & Arrival</div>
+                        <div style={{ fontWeight: 600, fontSize: 16, color: isDark ? '#ffffff' : '#000' }}>Flight Status</div>
+                        <div style={{ color: isDark ? '#aaa' : '#666', fontSize: 14 }}>Landing & Arrival</div>
                       </div>
                     </div>
                     
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: 14 }}>Flights Landed</span>
+                        <span style={{ fontSize: 14, color: isDark ? '#ddd' : '#000' }}>Flights Landed</span>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{ fontWeight: 600 }}>12/15</span>
-                          <div style={{ width: 60, height: 6, background: '#e5e7eb', borderRadius: 3 }}>
-                            <div style={{ width: '80%', height: 6, background: '#10b981', borderRadius: 3 }}></div>
+                          <span style={{ fontWeight: 600, color: isDark ? '#ffffff' : '#000' }}>12/15</span>
+                          <div style={{ width: 60, height: 6, background: isDark ? '#555' : '#e5e7eb', borderRadius: 3 }}>
+                            <div style={{ width: '80%', height: 6, background: isDark ? '#fff' : '#333', borderRadius: 3 }}></div>
                           </div>
                         </div>
                       </div>
                       
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: 14 }}>Confirmed Arrival</span>
+                        <span style={{ fontSize: 14, color: isDark ? '#ddd' : '#000' }}>Confirmed Arrival</span>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{ fontWeight: 600 }}>10/15</span>
-                          <div style={{ width: 60, height: 6, background: '#e5e7eb', borderRadius: 3 }}>
-                            <div style={{ width: '67%', height: 6, background: '#3b82f6', borderRadius: 3 }}></div>
+                          <span style={{ fontWeight: 600, color: isDark ? '#ffffff' : '#000' }}>10/15</span>
+                          <div style={{ width: 60, height: 6, background: isDark ? '#555' : '#e5e7eb', borderRadius: 3 }}>
+                            <div style={{ width: '67%', height: 6, background: isDark ? '#ccc' : '#666', borderRadius: 3 }}></div>
                           </div>
                         </div>
                       </div>
@@ -1105,31 +1132,39 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                   </div>
 
                   {/* Security Checkpoint */}
-                  <div style={{ border: '2px solid #e5e7eb', borderRadius: 12, padding: 20 }}>
+                  <div style={{ 
+                    border: isDark ? '2px solid #444' : '2px solid #e5e7eb', 
+                    borderRadius: 12, 
+                    padding: 20,
+                    background: isDark ? '#2a2a2a' : '#fff'
+                  }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
                       <div style={{ 
                         width: 40, 
                         height: 40, 
                         borderRadius: '50%', 
-                        background: 'linear-gradient(135deg, #fbbf24, #f59e0b)', 
+                        background: isDark ? '#444' : '#333', 
                         display: 'flex', 
                         alignItems: 'center', 
                         justifyContent: 'center',
-                        fontSize: 18
-                      }}>🔒</div>
+                        fontSize: 18,
+                        color: '#fff'
+                      }}>
+                        <Icon name="padlock" style={{ fontSize: 18, color: '#fff' }} />
+                      </div>
                       <div>
-                        <div style={{ fontWeight: 600, fontSize: 16 }}>Security</div>
-                        <div style={{ color: '#666', fontSize: 14 }}>Customs & Immigration</div>
+                        <div style={{ fontWeight: 600, fontSize: 16, color: isDark ? '#ffffff' : '#000' }}>Security</div>
+                        <div style={{ color: isDark ? '#aaa' : '#666', fontSize: 14 }}>Customs & Immigration</div>
                       </div>
                     </div>
                     
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: 14 }}>Through Security</span>
+                        <span style={{ fontSize: 14, color: isDark ? '#ddd' : '#000' }}>Through Security</span>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{ fontWeight: 600 }}>8/10</span>
-                          <div style={{ width: 60, height: 6, background: '#e5e7eb', borderRadius: 3 }}>
-                            <div style={{ width: '80%', height: 6, background: '#f59e0b', borderRadius: 3 }}></div>
+                          <span style={{ fontWeight: 600, color: isDark ? '#ffffff' : '#000' }}>8/10</span>
+                          <div style={{ width: 60, height: 6, background: isDark ? '#555' : '#e5e7eb', borderRadius: 3 }}>
+                            <div style={{ width: '80%', height: 6, background: isDark ? '#ccc' : '#666', borderRadius: 3 }}></div>
                           </div>
                         </div>
                       </div>
@@ -1137,31 +1172,39 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                   </div>
 
                   {/* Transportation */}
-                  <div style={{ border: '2px solid #e5e7eb', borderRadius: 12, padding: 20 }}>
+                  <div style={{ 
+                    border: isDark ? '2px solid #444' : '2px solid #e5e7eb', 
+                    borderRadius: 12, 
+                    padding: 20,
+                    background: isDark ? '#2a2a2a' : '#fff'
+                  }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
                       <div style={{ 
                         width: 40, 
                         height: 40, 
                         borderRadius: '50%', 
-                        background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)', 
+                        background: isDark ? '#555' : '#555', 
                         display: 'flex', 
                         alignItems: 'center', 
                         justifyContent: 'center',
-                        fontSize: 18
-                      }}>🚗</div>
+                        fontSize: 18,
+                        color: '#fff'
+                      }}>
+                        <Icon name="pin" style={{ fontSize: 18, color: '#fff' }} />
+                      </div>
                       <div>
-                        <div style={{ fontWeight: 600, fontSize: 16 }}>Transportation</div>
-                        <div style={{ color: '#666', fontSize: 14 }}>Driver Assignment</div>
+                        <div style={{ fontWeight: 600, fontSize: 16, color: isDark ? '#ffffff' : '#000' }}>Transportation</div>
+                        <div style={{ color: isDark ? '#aaa' : '#666', fontSize: 14 }}>Driver Assignment</div>
                       </div>
                     </div>
                     
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: 14 }}>With Driver</span>
+                        <span style={{ fontSize: 14, color: isDark ? '#ddd' : '#000' }}>With Driver</span>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{ fontWeight: 600 }}>6/8</span>
-                          <div style={{ width: 60, height: 6, background: '#e5e7eb', borderRadius: 3 }}>
-                            <div style={{ width: '75%', height: 6, background: '#8b5cf6', borderRadius: 3 }}></div>
+                          <span style={{ fontWeight: 600, color: isDark ? '#ffffff' : '#000' }}>6/8</span>
+                          <div style={{ width: 60, height: 6, background: isDark ? '#555' : '#e5e7eb', borderRadius: 3 }}>
+                            <div style={{ width: '75%', height: 6, background: isDark ? '#bbb' : '#777', borderRadius: 3 }}></div>
                           </div>
                         </div>
                       </div>
@@ -1169,31 +1212,39 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                   </div>
 
                   {/* Hotel Check-in */}
-                  <div style={{ border: '2px solid #e5e7eb', borderRadius: 12, padding: 20 }}>
+                  <div style={{ 
+                    border: isDark ? '2px solid #444' : '2px solid #e5e7eb', 
+                    borderRadius: 12, 
+                    padding: 20,
+                    background: isDark ? '#2a2a2a' : '#fff'
+                  }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
                       <div style={{ 
                         width: 40, 
                         height: 40, 
                         borderRadius: '50%', 
-                        background: 'linear-gradient(135deg, #06b6d4, #0891b2)', 
+                        background: isDark ? '#666' : '#888', 
                         display: 'flex', 
                         alignItems: 'center', 
                         justifyContent: 'center',
-                        fontSize: 18
-                      }}>🏨</div>
+                        fontSize: 18,
+                        color: '#fff'
+                      }}>
+                        <Icon name="hotel" style={{ fontSize: 18, color: '#fff' }} />
+                      </div>
                       <div>
-                        <div style={{ fontWeight: 600, fontSize: 16 }}>Accommodation</div>
-                        <div style={{ color: '666', fontSize: 14 }}>Hotel Check-in</div>
+                        <div style={{ fontWeight: 600, fontSize: 16, color: isDark ? '#ffffff' : '#000' }}>Accommodation</div>
+                        <div style={{ color: isDark ? '#aaa' : '#666', fontSize: 14 }}>Hotel Check-in</div>
                       </div>
                     </div>
                     
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: 14 }}>Checked In</span>
+                        <span style={{ fontSize: 14, color: isDark ? '#ddd' : '#000' }}>Checked In</span>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{ fontWeight: 600 }}>5/6</span>
-                          <div style={{ width: 60, height: 6, background: '#e5e7eb', borderRadius: 3 }}>
-                            <div style={{ width: '83%', height: 6, background: '#06b6d4', borderRadius: 3 }}></div>
+                          <span style={{ fontWeight: 600, color: isDark ? '#ffffff' : '#000' }}>5/6</span>
+                          <div style={{ width: 60, height: 6, background: isDark ? '#555' : '#e5e7eb', borderRadius: 3 }}>
+                            <div style={{ width: '83%', height: 6, background: isDark ? '#aaa' : '#999', borderRadius: 3 }}></div>
                           </div>
                         </div>
                       </div>
@@ -1204,58 +1255,83 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
 
               {/* Real-time Activity Feed */}
               <div style={{ 
-                background: '#fff', 
+                background: isDark ? '#1e1e1e' : '#fff', 
                 borderRadius: 16, 
                 padding: 32, 
                 marginBottom: 32,
-                boxShadow: '0 4px 24px rgba(0,0,0,0.08)'
+                boxShadow: isDark ? '0 4px 24px rgba(0,0,0,0.3)' : '0 4px 24px rgba(0,0,0,0.08)',
+                border: isDark ? '1px solid #333' : '1px solid #e5e7eb'
               }}>
-                <h3 style={{ fontSize: 24, fontWeight: 600, marginBottom: 24, display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <span style={{ fontSize: 28 }}>📡</span>
+                <h3 style={{ fontSize: 24, fontWeight: 600, marginBottom: 24, display: 'flex', alignItems: 'center', gap: 12, color: isDark ? '#ffffff' : '#222' }}>
+                  <Icon name="satellite" style={{ fontSize: 28, color: isDark ? '#60A5FA' : '#3B82F6' }} />
                   Live Activity Feed
                 </h3>
                 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxHeight: 400, overflowY: 'auto' }}>
                   
                   {/* Sample activity items */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 16, background: '#f8fafc', borderRadius: 12, border: '1px solid #e2e8f0' }}>
-                    <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#10b981', flexShrink: 0 }}></div>
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: 16, 
+                    padding: 16, 
+                    background: isDark ? '#2a2a2a' : '#f8fafc', 
+                    borderRadius: 12, 
+                    border: isDark ? '1px solid #444' : '1px solid #e2e8f0' 
+                  }}>
+                    <div style={{ width: 12, height: 12, borderRadius: '50%', background: isDark ? '#fff' : '#000', flexShrink: 0 }}></div>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 600, fontSize: 15 }}>John Smith confirmed arrival</div>
-                      <div style={{ color: '#666', fontSize: 13 }}>Through security checkpoint • 2 minutes ago</div>
+                      <div style={{ fontWeight: 600, fontSize: 15, color: isDark ? '#ffffff' : '#000' }}>John Smith confirmed arrival</div>
+                      <div style={{ color: isDark ? '#aaa' : '#666', fontSize: 13 }}>Through security checkpoint • 2 minutes ago</div>
                     </div>
-                    <div style={{ fontSize: 20 }}>✅</div>
+                    <div style={{ fontSize: 20 }}>
+                      <Icon name="clipboard" style={{ fontSize: 18, color: '#22c55e' }} />
+                    </div>
+                  </div>
+
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: 16, 
+                    padding: 16, 
+                    background: isDark ? '#2a2a2a' : '#f8fafc', 
+                    borderRadius: 12, 
+                    border: isDark ? '1px solid #444' : '1px solid #e2e8f0' 
+                  }}>
+                    <div style={{ width: 12, height: 12, borderRadius: '50%', background: isDark ? '#ccc' : '#333', flexShrink: 0 }}></div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 600, fontSize: 15, color: isDark ? '#ffffff' : '#000' }}>Flight BA123 landed</div>
+                      <div style={{ color: isDark ? '#aaa' : '#666', fontSize: 13 }}>5 guests on board • 15 minutes ago</div>
+                    </div>
+                    <div style={{ fontSize: 20 }}>
+                      <Icon name="flight" style={{ fontSize: 18, color: '#fff' }} />
+                    </div>
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 16, background: '#f8fafc', borderRadius: 12, border: '1px solid #e2e8f0' }}>
-                    <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#3b82f6', flexShrink: 0 }}></div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 600, fontSize: 15 }}>Flight BA123 landed</div>
-                      <div style={{ color: '#666', fontSize: 13 }}>5 guests on board • 15 minutes ago</div>
-                    </div>
-                    <div style={{ fontSize: 20 }}>✈️</div>
-                  </div>
-
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 16, background: '#f8fafc', borderRadius: 12, border: '1px solid #e2e8f0' }}>
-                    <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#8b5cf6', flexShrink: 0 }}></div>
+                    <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#666', flexShrink: 0 }}></div>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontWeight: 600, fontSize: 15 }}>Driver assigned to Group Alpha</div>
                       <div style={{ color: '#666', fontSize: 13 }}>Vehicle: Mercedes Sprinter • 18 minutes ago</div>
                     </div>
-                    <div style={{ fontSize: 20 }}>🚗</div>
+                    <div style={{ fontSize: 20 }}>
+                      <Icon name="pin" style={{ fontSize: 18, color: '#fff' }} />
+                    </div>
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 16, background: '#f8fafc', borderRadius: 12, border: '1px solid #e2e8f0' }}>
-                    <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#06b6d4', flexShrink: 0 }}></div>
+                    <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#888', flexShrink: 0 }}></div>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontWeight: 600, fontSize: 15 }}>Sarah Johnson checked into hotel</div>
                       <div style={{ color: '#666', fontSize: 13 }}>Grand Palace Hotel, Room 503 • 25 minutes ago</div>
                     </div>
-                    <div style={{ fontSize: 20 }}>🏨</div>
+                    <div style={{ fontSize: 20 }}>
+                      <Icon name="hotel" style={{ fontSize: 18, color: '#fff' }} />
+                    </div>
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 16, background: '#f8fafc', borderRadius: 12, border: '1px solid #e2e8f0' }}>
-                    <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#f59e0b', flexShrink: 0 }}></div>
+                    <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#aaa', flexShrink: 0 }}></div>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontWeight: 600, fontSize: 15 }}>Emergency contact updated</div>
                       <div style={{ color: '#666', fontSize: 13 }}>Guest: Mike Davis • 32 minutes ago</div>
@@ -1273,13 +1349,14 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                   background: '#fff', 
                   borderRadius: 16, 
                   padding: 32,
-                  boxShadow: '0 4px 24px rgba(0,0,0,0.08)'
+                  boxShadow: '0 4px 24px rgba(0,0,0,0.08)',
+                  border: '1px solid #e5e7eb'
                 }}>
                   <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 24 }}>Quick Actions</h3>
                   
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
                     <button style={{ 
-                      background: 'linear-gradient(135deg, #667eea, #764ba2)', 
+                      background: '#000', 
                       color: '#fff', 
                       border: 'none', 
                       borderRadius: 12, 
@@ -1291,12 +1368,12 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                       alignItems: 'center',
                       gap: 8
                     }}>
-                      <span>📊</span>
+                      <Icon name="report" style={{ fontSize: 18, color: '#fff' }} />
                       Export Report
                     </button>
                     
                     <button style={{ 
-                      background: 'linear-gradient(135deg, #4facfe, #00f2fe)', 
+                      background: '#333', 
                       color: '#fff', 
                       border: 'none', 
                       borderRadius: 12, 
@@ -1308,12 +1385,12 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                       alignItems: 'center',
                       gap: 8
                     }}>
-                      <span>📢</span>
+                      <span style={{ fontSize: 18, fontWeight: 'bold', color: '#ef4444' }}>!</span>
                       Send Announcement
                     </button>
 
                     <button style={{ 
-                      background: 'linear-gradient(135deg, #f093fb, #f5576c)', 
+                      background: '#666', 
                       color: '#fff', 
                       border: 'none', 
                       borderRadius: 12, 
@@ -1325,13 +1402,13 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                       alignItems: 'center',
                       gap: 8
                     }}>
-                      <span>🚨</span>
+                      <span style={{ fontSize: 18, fontWeight: 'bold', color: '#ef4444' }}>!</span>
                       Emergency Alert
                     </button>
 
                     <button style={{ 
-                      background: 'linear-gradient(135deg, #a8edea, #fed6e3)', 
-                      color: '#374151', 
+                      background: '#999', 
+                      color: '#fff', 
                       border: 'none', 
                       borderRadius: 12, 
                       padding: '16px 20px',
@@ -1342,7 +1419,7 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                       alignItems: 'center',
                       gap: 8
                     }}>
-                      <span>📍</span>
+                      <Icon name="pin" style={{ fontSize: 18, color: '#fff' }} />
                       Track Logistics
                     </button>
                   </div>
@@ -1353,7 +1430,8 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                   background: '#fff', 
                   borderRadius: 16, 
                   padding: 32,
-                  boxShadow: '0 4px 24px rgba(0,0,0,0.08)'
+                  boxShadow: '0 4px 24px rgba(0,0,0,0.08)',
+                  border: '1px solid #e5e7eb'
                 }}>
                   <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 24 }}>Event Settings</h3>
                   
@@ -1369,7 +1447,7 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                       fontWeight: 500,
                       textAlign: 'left'
                     }}>
-                      📧 Notification Settings
+                      ✉ Notification Settings
                     </button>
                     
                     <button style={{ 
@@ -1383,7 +1461,7 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                       fontWeight: 500,
                       textAlign: 'left'
                     }}>
-                      🔐 Privacy Settings
+                      <Icon name="padlock" style={{ fontSize: 14, color: '#374151', marginRight: 8 }} /> Privacy Settings
                     </button>
 
                     <button style={{ 
@@ -1395,22 +1473,26 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                       cursor: 'pointer',
                       fontSize: 14,
                       fontWeight: 500,
-                      textAlign: 'left'
+                      textAlign: 'left',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8
                     }}>
-                      📊 Data Export
+                      <Icon name="report" style={{ fontSize: 14, color: '#374151' }} />
+                      Data Export
                     </button>
                   </div>
 
                   {/* Danger Zone */}
-                  <div style={{ marginTop: 32, padding: 20, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 12 }}>
-                    <h4 style={{ color: '#dc2626', marginBottom: 12, fontSize: 16, fontWeight: 600 }}>Danger Zone</h4>
-                    <p style={{ color: '#991b1b', fontSize: 13, marginBottom: 16 }}>Deleting this event is permanent and cannot be undone.</p>
+                  <div style={{ marginTop: 32, padding: 20, background: '#f5f5f5', border: '1px solid #ccc', borderRadius: 12 }}>
+                    <h4 style={{ color: '#000', marginBottom: 12, fontSize: 16, fontWeight: 600 }}>Danger Zone</h4>
+                    <p style={{ color: '#333', fontSize: 13, marginBottom: 16 }}>Deleting this event is permanent and cannot be undone.</p>
               <button
                 onClick={handleDeleteEvent}
                 style={{
                   background: '#fff',
-                        color: '#dc2626',
-                        border: '2px solid #dc2626',
+                        color: '#000',
+                        border: '2px solid #000',
                   borderRadius: 8,
                         padding: '12px 20px',
                         fontSize: 14,
@@ -1511,11 +1593,12 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                                       {(act.dietary as string[]).map((diet: string, didx: number) => (
                                         <span key={didx} style={{
-                                          background: '#eef2ff',
-                                          color: '#4338ca',
+                                          background: '#f5f5f5',
+                                          color: '#000',
                                           padding: '4px 12px',
                                           borderRadius: 12,
-                                          fontSize: 13
+                                          fontSize: 13,
+                                          border: '1px solid #ccc'
                                         }}>{diet}</span>
                                       ))}
                                     </div>
@@ -1528,11 +1611,12 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                                       {(act.disabilities as string[]).map((disability: string, didx: number) => (
                                         <span key={didx} style={{
-                                          background: '#fef2f2',
-                                          color: '#b91c1c',
+                                          background: '#e5e5e5',
+                                          color: '#000',
                                           padding: '4px 12px',
                                           borderRadius: 12,
-                                          fontSize: 13
+                                          fontSize: 13,
+                                          border: '1px solid #999'
                                         }}>{disability}</span>
                                       ))}
                                     </div>
@@ -1570,11 +1654,11 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                       </div>
                     </div>
                     <div style={{ marginTop: 20, display: 'flex', alignSelf: 'flex-end', gap: 16, alignItems: 'center' }}>
-                      <button title="Edit" onClick={() => navigate(`/event/${id}/itinerary/edit/${idx}`)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="edit" /></button>
-                      <button title="Duplicate" onClick={() => handleDuplicate(idx)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="duplicate" /></button>
-                      <button title="Share" onClick={() => { setItineraryToShare(idx); setShowShareModal(true); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="share" /></button>
-                      <button title="Save as Draft" onClick={() => handleMakeDraft(idx)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="saveAsDraft" /></button>
-                      <button title="Delete" onClick={() => { setItineraryToDelete(idx); setShowDeleteConfirm(true); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="delete" /></button>
+                      <button title="Edit" onClick={() => navigate(`/event/${id}/itinerary/edit/${idx}`)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="edit" style={{ color: '#fff' }} /></button>
+                      <button title="Duplicate" onClick={() => handleDuplicate(idx)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="duplicate" style={{ color: '#fff' }} /></button>
+                      <button title="Share" onClick={() => { setItineraryToShare(idx); setShowShareModal(true); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="share" style={{ color: '#fff' }} /></button>
+                      <button title="Save as Draft" onClick={() => handleMakeDraft(idx)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="saveAsDraft" style={{ color: '#fff' }} /></button>
+                      <button title="Delete" onClick={() => { setItineraryToDelete(idx); setShowDeleteConfirm(true); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="delete" style={{ color: '#fff' }} /></button>
                     </div>
                   </div>
                 ))}
@@ -1674,11 +1758,12 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                                         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                                           {(act.dietary as string[]).map((diet: string, didx: number) => (
                                             <span key={didx} style={{
-                                              background: '#eef2ff',
-                                              color: '#4338ca',
+                                              background: '#f5f5f5',
+                                              color: '#000',
                                               padding: '4px 12px',
                                               borderRadius: 12,
-                                              fontSize: 13
+                                              fontSize: 13,
+                                              border: '1px solid #ccc'
                                             }}>{diet}</span>
                                           ))}
                                         </div>
@@ -1691,11 +1776,12 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                                         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                                           {(act.disabilities as string[]).map((disability: string, didx: number) => (
                                             <span key={didx} style={{
-                                              background: '#fef2f2',
-                                              color: '#b91c1c',
+                                              background: '#e5e5e5',
+                                              color: '#000',
                                               padding: '4px 12px',
                                               borderRadius: 12,
-                                              fontSize: 13
+                                              fontSize: 13,
+                                              border: '1px solid #999'
                                             }}>{disability}</span>
                                           ))}
                                         </div>
@@ -2024,16 +2110,16 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                     }}
                     style={{
                       padding: 24,
-                      background: '#f8f9fa',
+                      background: isDark ? '#2a2a2a' : '#f8f9fa',
                       borderRadius: 12,
-                      border: `2px dashed ${dragOverCategory === category ? '#2563eb' : '#ccc'}`,
+                      border: `2px dashed ${dragOverCategory === category ? '#2563eb' : (isDark ? '#555' : '#ccc')}`,
                       minHeight: 200,
                       transition: 'all 0.2s ease',
                       transform: dragOverCategory === category ? 'scale(1.02)' : 'scale(1)',
                       boxShadow: dragOverCategory === category ? '0 4px 12px rgba(37, 99, 235, 0.1)' : 'none'
                     }}
                   >
-                    <h3 style={{ margin: '0 0 16px 0', fontSize: 20, fontWeight: 500, color: '#444' }}>
+                    <h3 style={{ margin: '0 0 16px 0', fontSize: 20, fontWeight: 500, color: isDark ? '#fff' : '#444' }}>
                       {category.charAt(0).toUpperCase() + category.slice(1)}
                     </h3>
                     {modules.length > 0 ? (
@@ -2057,8 +2143,8 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                                 <span style={{ fontSize: 24 }}>{moduleInfo.icon}</span>
                                 <div>
-                                  <div style={{ fontWeight: 600, color: '#333' }}>{moduleInfo.label}</div>
-                                  <div style={{ fontSize: 13, color: '#777' }}>{moduleInfo.description}</div>
+                                  <div style={{ fontWeight: 600, color: isDark ? '#fff' : '#333' }}>{moduleInfo.label}</div>
+                                  <div style={{ fontSize: 13, color: isDark ? '#aaa' : '#777' }}>{moduleInfo.description}</div>
                                 </div>
                               </div>
                               <button
@@ -2066,7 +2152,7 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                                 style={{
                                   background: 'transparent',
                                   border: 'none',
-                                  color: '#aaa',
+                                  color: isDark ? '#888' : '#aaa',
                                   cursor: 'pointer',
                                   fontSize: 24,
                                   lineHeight: 1,
@@ -2080,7 +2166,7 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                         })}
                       </div>
                     ) : (
-                      <div style={{ textAlign: 'center', color: '#aaa', marginTop: 60 }}>
+                      <div style={{ textAlign: 'center', color: isDark ? '#888' : '#aaa', marginTop: 60 }}>
                         Drag and drop {category} modules here
                       </div>
                     )}
@@ -2171,13 +2257,31 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
             justifyContent: 'center', zIndex: 2000
           }}>
             <div style={{
-              background: '#fff', borderRadius: 16, padding: '0',
-              width: '100%', maxWidth: 560, boxShadow: '0 4px 24px rgba(0,0,0,0.2)',
-              display: 'flex', flexDirection: 'column', maxHeight: '80vh'
+              background: isDark ? '#2a2a2a' : '#fff', 
+              borderRadius: 16, 
+              padding: '0',
+              width: '100%', 
+              maxWidth: 560, 
+              boxShadow: '0 4px 24px rgba(0,0,0,0.2)',
+              display: 'flex', 
+              flexDirection: 'column', 
+              maxHeight: '80vh',
+              border: isDark ? '1px solid #444' : 'none'
             }}>
-              <div style={{ padding: '24px 32px', borderBottom: '2px solid #eee' }}>
-                <h3 style={{ margin: 0, fontSize: 22, fontWeight: 600 }}>Share Itinerary</h3>
-                {itineraryDetails && <p style={{ margin: '4px 0 0', color: '#666' }}>for "{itineraryDetails.title}"</p>}
+              <div style={{ 
+                padding: '24px 32px', 
+                borderBottom: isDark ? '2px solid #444' : '2px solid #eee' 
+              }}>
+                <h3 style={{ 
+                  margin: 0, 
+                  fontSize: 22, 
+                  fontWeight: 600,
+                  color: isDark ? '#fff' : '#000'
+                }}>Share Itinerary</h3>
+                {itineraryDetails && <p style={{ 
+                  margin: '4px 0 0', 
+                  color: isDark ? '#aaa' : '#666' 
+                }}>for "{itineraryDetails.title}"</p>}
               </div>
 
               <div style={{ padding: '24px 32px', flex: 1, overflowY: 'auto' }}>
@@ -2296,7 +2400,9 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
             <div style={{ padding: '32px', flex: 1, overflowY: 'auto' }}>
               {sendState === 'success' && (
                 <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 48, marginBottom: 16 }}>✅</div>
+                  <div style={{ fontSize: 48, marginBottom: 16 }}>
+                    <Icon name="clipboard" style={{ fontSize: 48, color: '#22c55e' }} />
+                  </div>
                   <p style={{ fontSize: 18, fontWeight: 500, marginBottom: 8 }}>Forms sent successfully!</p>
                   <p style={{ color: '#666', marginBottom: 24 }}>Guest forms have been sent to all recipients.</p>
                 </div>
@@ -2304,7 +2410,7 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
 
               {sendState === 'error' && (
                 <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 48, marginBottom: 16 }}>❌</div>
+                  <div style={{ fontSize: 48, marginBottom: 16, color: '#ef4444', fontWeight: 'bold' }}>!</div>
                   <p style={{ fontSize: 18, fontWeight: 500, marginBottom: 8 }}>Failed to send forms</p>
                   <p style={{ color: '#666', marginBottom: 24 }}>There was an error sending the guest forms. Please try again.</p>
                 </div>
@@ -2312,132 +2418,84 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
 
               {sendState === 'sending' && (
                 <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 48, marginBottom: 16 }}>⏳</div>
+                  <div style={{ fontSize: 48, marginBottom: 16 }}>
+                    <div style={{ 
+                      width: 48, 
+                      height: 48, 
+                      border: '4px solid #e5e7eb', 
+                      borderTop: '4px solid #3b82f6', 
+                      borderRadius: '50%', 
+                      animation: 'spin 1s linear infinite',
+                      margin: '0 auto'
+                    }}></div>
+                  </div>
                   <p style={{ fontSize: 18, fontWeight: 500, marginBottom: 8 }}>Sending forms...</p>
-                  <p style={{ color: '#666', marginBottom: 24 }}>Please wait while we send the guest forms.</p>
+                  <p style={{ color: '#666' }}>Please wait while we send the forms to your guests.</p>
                 </div>
               )}
 
-              {sendState === 'idle' && modalView === 'recipients' && (
-                <div>
-                  <div style={{ marginBottom: 24 }}>
-                    <label style={{ display: 'block', fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Add Email Recipients</label>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <input
-                        type="email"
-                        value={currentEmailInput}
-                        onChange={(e) => setCurrentEmailInput(e.target.value)}
-                        placeholder="Enter email address"
-                        style={{ flex: 1, padding: '10px 12px', border: '2px solid #e5e7eb', borderRadius: 8, fontSize: 14 }}
-                        onKeyPress={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            handleAddEmailRecipient();
-                          }
-                        }}
-                      />
-                      <button
-                        onClick={handleAddEmailRecipient}
-                        style={{ background: '#000', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 16px', fontSize: 14, fontWeight: 500, cursor: 'pointer' }}
-                      >
-                        Add
-                      </button>
-                    </div>
-                  </div>
-
-                  {sendFormRecipients.length > 0 && (
-                    <div style={{ marginBottom: 24 }}>
-                      <label style={{ display: 'block', fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Recipients ({sendFormRecipients.length})</label>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                        {sendFormRecipients.map((email, idx) => (
-                          <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f3f4f6', padding: '6px 12px', borderRadius: 20, fontSize: 14 }}>
-                            <span>{email}</span>
-                            <button
-                              onClick={() => handleRemoveEmailRecipient(idx)}
-                              style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}
-                            >
-                              ×
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {sendState === 'idle' && modalView === 'preview' && (
-                <div>
-                  <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, padding: 20, marginBottom: 24 }}>
-                    <h4 style={{ margin: '0 0 12px', fontSize: 16, fontWeight: 600 }}>Form Preview</h4>
-                    <p style={{ margin: '0 0 8px', color: '#666', fontSize: 14 }}>Subject: Complete Your Guest Information for {event?.name}</p>
-                    <p style={{ margin: 0, color: '#666', fontSize: 14 }}>Recipients: {sendFormRecipients.length} email(s)</p>
-                  </div>
-                  <div style={{ fontSize: 14, color: '#666', lineHeight: 1.6 }}>
-                    <p>The form will include fields for:</p>
-                    <ul style={{ margin: '8px 0', paddingLeft: 20 }}>
-                      <li>Personal Information (Name, Email, Phone)</li>
-                      <li>Identification Details</li>
-                      <li>Dietary Requirements & Accessibility Needs</li>
-                      <li>Emergency Contact Information</li>
-                    </ul>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Footer */}
-            <div style={{ padding: '24px 32px', borderTop: '2px solid #eee', display: 'flex', justifyContent: 'space-between' }}>
               {sendState === 'idle' && (
-                <>
+                <div style={{ display: 'flex', justifyContent: 'center', gap: 16 }}>
                   <button
-                    onClick={handleCloseModal}
-                    style={{ background: '#f5f5f5', color: '#222', border: '1px solid #ddd', borderRadius: 8, padding: '10px 24px', fontSize: 16, fontWeight: 500, cursor: 'pointer' }}
+                    onClick={() => {
+                      setShowSendFormModal(false);
+                      setSendFormRecipients([]);
+                      setModalView('recipients');
+                      setCurrentEmailInput('');
+                      setSendState('idle');
+                    }}
+                    style={{
+                      background: '#f5f5f5',
+                      color: '#222',
+                      fontWeight: 500,
+                      fontSize: 18,
+                      border: '2px solid #e5e7eb',
+                      borderRadius: 8,
+                      padding: '12px 36px',
+                      minWidth: 120,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = '#e5e7eb';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = '#f5f5f5';
+                    }}
                   >
-                    Cancel
+                    {modalView === 'preview' ? 'Back' : 'Cancel'}
                   </button>
-                  <div style={{ display: 'flex', gap: 12 }}>
-                    {modalView === 'preview' && (
                       <button
-                        onClick={() => setModalView('recipients')}
-                        style={{ background: '#fff', color: '#000', border: '2px solid #000', borderRadius: 8, padding: '10px 24px', fontSize: 16, fontWeight: 500, cursor: 'pointer' }}
-                      >
-                        Back
-                      </button>
-                    )}
-                    <button
-                      onClick={modalView === 'recipients' ? handleNextToPreview : handleSendForm}
-                      disabled={sendFormRecipients.length === 0}
+                    onClick={modalView === 'preview' ? handleSendForm : () => setModalView('preview')}
                       style={{
-                        background: sendFormRecipients.length > 0 ? '#000' : '#ccc',
+                      background: '#3b82f6',
                         color: '#fff',
+                      fontWeight: 500,
+                      fontSize: 18,
                         border: 'none',
                         borderRadius: 8,
-                        padding: '10px 24px',
-                        fontSize: 16,
-                        fontWeight: 500,
-                        cursor: sendFormRecipients.length > 0 ? 'pointer' : 'not-allowed'
-                      }}
-                    >
-                      {modalView === 'recipients' ? 'Next' : 'Send Forms'}
+                      padding: '13px 37px',
+                      minWidth: 120,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = '#2563eb';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = '#3b82f6';
+                    }}
+                  >
+                    {modalView === 'preview' ? 'Send Forms' : 'Next'}
                     </button>
                   </div>
-                </>
-              )}
-              {(sendState === 'success' || sendState === 'error') && (
-                <button
-                  onClick={handleCloseModal}
-                  style={{ background: '#000', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 24px', fontSize: 16, fontWeight: 500, cursor: 'pointer', marginLeft: 'auto' }}
-                >
-                  Close
-                </button>
               )}
             </div>
           </div>
         </div>
       )}
 
-      {/* Custom Delete Event Modal */}
+      {/* Delete Event Confirmation Modal */}
       {showDeleteEventModal && (
         <div style={{
           position: 'fixed',
@@ -2445,36 +2503,24 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
           left: 0,
           right: 0,
           bottom: 0,
-          background: 'rgba(0,0,0,0.6)',
+          background: 'rgba(0,0,0,0.5)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          zIndex: 2000,
-          backdropFilter: 'blur(5px)'
+          zIndex: 10001
         }}>
           <div style={{
             background: '#fff',
-            borderRadius: 16,
-            padding: '40px 48px',
-            minWidth: 500,
-            maxWidth: 600,
-            boxShadow: '0 4px 32px rgba(0,0,0,0.2)',
+            borderRadius: 12,
+            padding: 32,
+            minWidth: 400,
+            maxWidth: 500,
             textAlign: 'center'
           }}>
-            <div style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
-            <h2 style={{ marginTop: 0, marginBottom: 16, fontSize: 24, fontWeight: 600, color: '#ef4444' }}>
-              Delete Event
-            </h2>
-            <p style={{ color: '#666', fontSize: 16, marginBottom: 8, lineHeight: 1.6 }}>
-              Are you sure you want to delete <strong>"{event?.name}"</strong>?
-            </p>
-            <p style={{ color: '#666', fontSize: 16, marginBottom: 24, lineHeight: 1.6 }}>
-              This will permanently delete the event and all associated data including guests, itineraries, and settings. This action cannot be undone.
-            </p>
-            <div style={{ marginBottom: 32 }}>
-              <label style={{ display: 'block', fontSize: 14, fontWeight: 500, marginBottom: 8, textAlign: 'left' }}>
-                Type "delete" to confirm:
-              </label>
+            <div style={{ fontSize: 48, marginBottom: 16, color: '#ef4444', fontWeight: 'bold' }}>!</div>
+            <h2 style={{ margin: 0, marginBottom: 16, fontSize: 24, fontWeight: 600 }}>Delete Event</h2>
+            <p style={{ color: '#666', marginBottom: 24 }}>This action cannot be undone. All event data, guests, and configurations will be permanently deleted.</p>
+            <p style={{ color: '#666', marginBottom: 24 }}>Type <strong>delete</strong> to confirm:</p>
               <input
                 type="text"
                 value={deleteEventText}
@@ -2482,21 +2528,14 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                 placeholder="Type 'delete' to confirm"
                 style={{
                   width: '100%',
-                  padding: '12px 16px',
-                  fontSize: 16,
-                  borderRadius: 8,
+                padding: 12,
                   border: '2px solid #e5e7eb',
-                  outline: 'none',
+                borderRadius: 8,
+                fontSize: 16,
+                marginBottom: 24,
                   textAlign: 'center'
                 }}
-                onFocus={(e) => {
-                  e.currentTarget.style.borderColor = '#ef4444';
-                }}
-                onBlur={(e) => {
-                  e.currentTarget.style.borderColor = '#e5e7eb';
-                }}
-              />
-            </div>
+            />
             <div style={{ display: 'flex', justifyContent: 'center', gap: 16 }}>
               <button
                 onClick={() => {

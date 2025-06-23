@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import countryList from 'country-list';
 import { codes as countryCallingCodes } from 'country-calling-code';
+import { ThemeContext } from './ThemeContext';
 
 // Re-defining necessary components and data here to avoid complex imports
 
@@ -56,6 +57,8 @@ const COUNTRY_CODES = Array.from(
 );
 
 export default function GuestFormPage() {
+  const { theme } = useContext(ThemeContext);
+  const isDark = theme === 'dark';
   const { eventId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
@@ -111,7 +114,7 @@ export default function GuestFormPage() {
     // This can be expanded with more complex inputs
     return (
       <div key={key} style={{ marginBottom: 16 }}>
-        <label style={{ display: 'block', fontWeight: 500, marginBottom: 8 }}>
+        <label style={{ display: 'block', fontWeight: 500, marginBottom: 8, color: isDark ? '#ffffff' : '#000' }}>
           {fieldConfig.label} {fieldConfig.required && <span style={{ color: '#c00' }}>*</span>}
         </label>
         <input
@@ -119,7 +122,14 @@ export default function GuestFormPage() {
           value={guestData[key] || ''}
           onChange={handleInputChange}
           required={fieldConfig.required}
-          style={{ width: '100%', padding: 12, borderRadius: 8, border: '1.5px solid #d1d5db' }}
+          style={{ 
+            width: '100%', 
+            padding: 12, 
+            borderRadius: 8, 
+            border: isDark ? '1.5px solid #555' : '1.5px solid #d1d5db',
+            background: isDark ? '#2a2a2a' : '#fff',
+            color: isDark ? '#ffffff' : '#000'
+          }}
         />
       </div>
     );
@@ -139,14 +149,16 @@ export default function GuestFormPage() {
       marginBottom: 8,
       fontSize: 14,
       fontWeight: 500,
-      color: '#333'
+      color: isDark ? '#ffffff' : '#333'
     };
     const inputStyle: React.CSSProperties = {
       padding: '12px 16px',
-      border: '2px solid #ccc',
+      border: isDark ? '2px solid #555' : '2px solid #ccc',
       borderRadius: 8,
       fontSize: 16,
       outline: 'none',
+      background: isDark ? '#2a2a2a' : '#fff',
+      color: isDark ? '#ffffff' : '#000'
     };
 
     if (moduleConfig.type === 'file') {
@@ -182,19 +194,44 @@ export default function GuestFormPage() {
   };
 
   return (
-    <div style={{ background: '#f8f9fa', minHeight: '100vh', padding: '40px 20px' }}>
-      <div style={{ maxWidth: 700, margin: '0 auto', background: '#fff', padding: '40px', borderRadius: 16, boxShadow: '0 4px 24px rgba(0,0,0,0.1)' }}>
-        <h1 style={{ textAlign: 'center', margin: '0 0 16px', fontSize: 28 }}>{eventName}</h1>
-        <h2 style={{ textAlign: 'center', margin: '0 0 32px', fontSize: 20, color: '#555' }}>Guest Information Form</h2>
+    <div style={{ background: isDark ? '#121212' : '#f8f9fa', minHeight: '100vh', padding: '40px 20px' }}>
+      <div style={{ 
+        maxWidth: 700, 
+        margin: '0 auto', 
+        background: isDark ? '#1e1e1e' : '#fff', 
+        padding: '40px', 
+        borderRadius: 16, 
+        boxShadow: isDark ? '0 4px 24px rgba(0,0,0,0.3)' : '0 4px 24px rgba(0,0,0,0.1)',
+        border: isDark ? '1px solid #333' : 'none'
+      }}>
+        <h1 style={{ textAlign: 'center', margin: '0 0 16px', fontSize: 28, color: isDark ? '#ffffff' : '#000' }}>{eventName}</h1>
+        <h2 style={{ textAlign: 'center', margin: '0 0 32px', fontSize: 20, color: isDark ? '#aaa' : '#555' }}>Guest Information Form</h2>
         <form onSubmit={handleSubmit}>
           {formConfig.fields.map(renderField)}
           {formConfig.modules.length > 0 && (
             <div style={{ marginTop: 32 }}>
-              <h3 style={{ borderTop: '2px solid #eee', paddingTop: 24, margin: '0 0 24px', fontSize: 22 }}>Additional Information</h3>
+              <h3 style={{ 
+                borderTop: isDark ? '2px solid #444' : '2px solid #eee', 
+                paddingTop: 24, 
+                margin: '0 0 24px', 
+                fontSize: 22,
+                color: isDark ? '#ffffff' : '#000'
+              }}>Additional Information</h3>
               {formConfig.modules.map(renderModule)}
             </div>
           )}
-          <button type="submit" style={{ width: '100%', padding: 16, fontSize: 18, fontWeight: 600, background: '#222', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', marginTop: 32 }}>
+          <button type="submit" style={{ 
+            width: '100%', 
+            padding: 16, 
+            fontSize: 18, 
+            fontWeight: 600, 
+            background: isDark ? '#ffffff' : '#222', 
+            color: isDark ? '#000' : '#fff', 
+            border: 'none', 
+            borderRadius: 8, 
+            cursor: 'pointer', 
+            marginTop: 32 
+          }}>
             Submit Information
           </button>
         </form>

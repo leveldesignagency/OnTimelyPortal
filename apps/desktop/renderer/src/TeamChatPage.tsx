@@ -17,7 +17,8 @@ import {
   getCompanyTeams,
   searchTeams,
   createTeamChat,
-  Team as SupabaseTeam
+  Team as SupabaseTeam,
+  removeUserFromGroup
 } from './lib/chat';
 
 // Enhanced types for comprehensive chat features
@@ -1367,9 +1368,9 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
         </h4>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {[
-            { icon: '🔔', label: 'Notifications', value: !chat.isMuted, action: () => onToggleMute(chat.id) },
-            { icon: '📌', label: 'Pin Chat', value: chat.isPinned, action: () => onTogglePin(chat.id) },
-            { icon: '🗃️', label: 'Archive Chat', value: chat.isArchived, action: () => onToggleArchive(chat.id) }
+            { iconSrc: '/icons/bell.svg', label: 'Notifications', value: !chat.isMuted, action: () => onToggleMute(chat.id) },
+            { iconSrc: '/icons/pin.svg', label: 'Pin Chat', value: chat.isPinned, action: () => onTogglePin(chat.id) },
+            { iconSrc: '/icons/archive.svg', label: 'Archive Chat', value: chat.isArchived, action: () => onToggleArchive(chat.id) }
           ].map((setting, idx) => (
             <div key={idx} style={{
               display: 'flex',
@@ -1378,7 +1379,16 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
               padding: '8px 0'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <span style={{ fontSize: '16px' }}>{setting.icon}</span>
+                <img 
+                  src={setting.iconSrc} 
+                  alt={setting.label}
+                  width={16}
+                  height={16}
+                  style={{ 
+                    filter: isDark ? 'invert(1)' : 'none',
+                    opacity: 0.8
+                  }}
+                />
                 <span style={{
                   fontSize: '14px',
                   color: isDark ? '#ffffff' : '#1a1a1a'

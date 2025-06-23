@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useContext } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import CreateEventPage from './CreateEventPage';
 import EventDashboardPage from './EventDashboardPage';
@@ -13,7 +13,10 @@ import TeamChatPage from './TeamChatPage';
 import CalendarPage from './CalendarPage';
 import CanvasPage from './CanvasPage';
 import CreateTeamFlowPage from './CreateTeamFlowPage';
-import { ThemeProvider } from './ThemeContext';
+import RealtimeTestPage from './pages/realtime-test';
+import LoginPage from './pages/LoginPage';
+import ProtectedRoute from './components/ProtectedRoute';
+import { ThemeProvider, ThemeContext } from './ThemeContext';
 import { EventType } from './types';
 
 // Remove fs and path, use localStorage for persistence
@@ -37,6 +40,8 @@ function saveEventsToStorage(events: EventType[]) {
 }
 
 const AppContent = () => {
+  const { theme } = useContext(ThemeContext);
+  const isDark = theme === 'dark';
   const [events, setEvents] = React.useState<EventType[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -44,6 +49,7 @@ const AppContent = () => {
 
   const [isSidebarOpen, setSidebarOpen] = useState(true);
   const isTeamsPage = location.pathname.startsWith('/teams');
+  const isLoginPage = location.pathname === '/login';
 
   // Global styles useEffect must be before any early returns
   React.useEffect(() => {
@@ -55,7 +61,15 @@ const AppContent = () => {
       link.href = 'https://fonts.googleapis.com/css?family=Roboto:400,500,700&display=swap';
       document.head.appendChild(link);
     }
+
+    // Remove existing theme styles
+    const existingStyle = document.getElementById('app-theme-styles');
+    if (existingStyle) {
+      existingStyle.remove();
+    }
+
     const style = document.createElement('style');
+    style.id = 'app-theme-styles';
     style.innerHTML = `
       html, body, #root {
         height: 100%;
@@ -63,8 +77,8 @@ const AppContent = () => {
         padding: 0;
         font-family: 'Roboto', Arial, system-ui, sans-serif !important;
         font-weight: 400;
-        background: #f7f8fa;
-        color: #222;
+        background: ${isDark ? '#121212' : '#f7f8fa'};
+        color: ${isDark ? '#ffffff' : '#222'};
         box-sizing: border-box;
       }
       *, *::before, *::after {
@@ -80,62 +94,63 @@ const AppContent = () => {
         font-family: inherit !important;
         font-weight: 400 !important;
         border-radius: 8px;
-        border: 1.5px solid #d1d5db;
+        border: 1.5px solid ${isDark ? '#444' : '#d1d5db'};
         outline: none;
         transition: border 0.2s, box-shadow 0.2s;
       }
       button {
-        background: #222;
-        color: #fff;
+        background: ${isDark ? '#ffffff' : '#222'};
+        color: ${isDark ? '#000000' : '#fff'};
         padding: 16px 0;
         font-size: 20px;
         cursor: pointer;
         border: none;
         border-radius: 8px;
         margin: 0;
-        box-shadow: 0 2px 8px #0001;
+        box-shadow: 0 2px 8px ${isDark ? 'rgba(255,255,255,0.1)' : '#0001'};
         transition: background 0.2s, color 0.2s;
         width: 100%;
         letter-spacing: 1px;
       }
       button:hover {
-        background: #444;
-        color: #fff;
+        background: ${isDark ? '#f0f0f0' : '#444'};
+        color: ${isDark ? '#000000' : '#fff'};
       }
       input[type="date"], input[type="text"], input[type="email"] {
-        background: #fff;
-        color: #222;
+        background: ${isDark ? '#2a2a2a' : '#fff'};
+        color: ${isDark ? '#ffffff' : '#222'};
         padding: 18px 20px;
         font-size: 22px;
-        border: 1.5px solid #d1d5db;
+        border: 1.5px solid ${isDark ? '#444' : '#d1d5db'};
         margin-bottom: 28px;
         width: 100%;
-        box-shadow: 0 1px 4px #0001;
+        box-shadow: 0 1px 4px ${isDark ? 'rgba(255,255,255,0.1)' : '#0001'};
       }
       input[type="date"]::-webkit-input-placeholder, input[type="text"]::-webkit-input-placeholder {
-        color: #bbb;
+        color: ${isDark ? '#888' : '#bbb'};
         opacity: 1;
       }
       input[type="date"]:focus, input[type="text"]:focus {
-        border: 1.5px solid #888;
-        box-shadow: 0 2px 8px #0002;
+        border: 1.5px solid ${isDark ? '#666' : '#888'};
+        box-shadow: 0 2px 8px ${isDark ? 'rgba(255,255,255,0.2)' : '#0002'};
       }
       label {
         font-size: 17px;
-        color: #666;
+        color: ${isDark ? '#ccc' : '#666'};
         margin-bottom: 10px;
         display: block;
       }
       .modern-container {
         max-width: 600px;
         margin: 60px auto 0 auto;
-        background: #fff;
+        background: ${isDark ? '#1a1a1a' : '#fff'};
         border-radius: 16px;
-        box-shadow: 0 4px 32px #0002;
+        box-shadow: 0 4px 32px ${isDark ? 'rgba(0,0,0,0.5)' : '#0002'};
         padding: 48px 40px 64px 40px;
         display: flex;
         flex-direction: column;
         gap: 0;
+        border: 1px solid ${isDark ? '#333' : 'transparent'};
       }
       .modern-container form > * {
         width: 100%;
@@ -143,8 +158,13 @@ const AppContent = () => {
       }
     `;
     document.head.appendChild(style);
-    return () => { document.head.removeChild(style); };
-  }, []);
+    return () => { 
+      const styleToRemove = document.getElementById('app-theme-styles');
+      if (styleToRemove) {
+        styleToRemove.remove();
+      }
+    };
+  }, [isDark]);
 
   // Load from localStorage on mount
   React.useEffect(() => {
@@ -164,10 +184,10 @@ const AppContent = () => {
   }, [events, loading]);
 
   if (loading) {
-    return <div style={{ padding: 64, fontFamily: 'Roboto, Arial, system-ui, sans-serif' }}>Loading events...</div>;
+    return <div style={{ padding: 64, fontFamily: 'Roboto, Arial, system-ui, sans-serif', color: isDark ? '#fff' : '#222' }}>Loading events...</div>;
   }
   if (error) {
-    return <div style={{ padding: 64, color: 'red', fontFamily: 'Roboto, Arial, system-ui, sans-serif' }}>{error}</div>;
+    return <div style={{ padding: 64, color: isDark ? '#ff6b6b' : 'red', fontFamily: 'Roboto, Arial, system-ui, sans-serif' }}>{error}</div>;
   }
 
   const mainContentStyle: React.CSSProperties = {
@@ -176,52 +196,54 @@ const AppContent = () => {
     minHeight: '100vh',
     background: 'none',
     transition: 'margin-left 0.3s ease',
-    marginLeft: isTeamsPage ? '50px' : '0',
+    marginLeft: (isTeamsPage && !isLoginPage) ? '50px' : '0',
   }
 
   return (
     <div style={{ display: 'flex', position: 'relative' }}>
-      <Sidebar 
-        events={events} 
-        isOverlay={isTeamsPage} 
-        isOpen={isSidebarOpen} 
-        setOpen={setSidebarOpen} 
-      />
+      {!isLoginPage && (
+        <Sidebar 
+          events={events} 
+          isOverlay={isTeamsPage} 
+          isOpen={isSidebarOpen} 
+          setOpen={setSidebarOpen} 
+        />
+      )}
       <main style={mainContentStyle}>
         <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/create-event" element={<CreateEventPage onCreate={event => setEvents(prev => { const next = [...prev, event]; saveEventsToStorage(next); return next; })} />} />
-          <Route path="/event/:id" element={<EventDashboardPage events={events} />} />
-          <Route path="/event/:id/add-guests" element={<CreateGuests />} />
-          <Route path="/event/:eventId/guests/edit/:guestIndex" element={<CreateGuests />} />
-          <Route path="/event/:eventId/itinerary/create" element={<CreateItinerary />} />
-          <Route path="/event/:eventId/itinerary/edit/:itineraryIndex" element={<CreateItinerary />} />
-          <Route path="/event/:eventId/modules" element={<ModulesPage />} />
-          <Route path="/teams" element={<TeamsLayout />}>
-            <Route index element={<Navigate to="chat" replace />} />
+          {/* Public route - Login */}
+          <Route path="/login" element={<LoginPage />} />
+          
+          {/* Protected routes */}
+          <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+          <Route path="/create-event" element={<ProtectedRoute><CreateEventPage onCreate={event => setEvents(prev => { const next = [...prev, event]; saveEventsToStorage(next); return next; })} /></ProtectedRoute>} />
+          <Route path="/event/:id" element={<ProtectedRoute><EventDashboardPage events={events} /></ProtectedRoute>} />
+          <Route path="/event/:id/add-guests" element={<ProtectedRoute><CreateGuests /></ProtectedRoute>} />
+          <Route path="/event/:eventId/guests/edit/:guestIndex" element={<ProtectedRoute><CreateGuests /></ProtectedRoute>} />
+          <Route path="/event/:eventId/itinerary/create" element={<ProtectedRoute><CreateItinerary /></ProtectedRoute>} />
+          <Route path="/event/:eventId/itinerary/edit/:itineraryIndex" element={<ProtectedRoute><CreateItinerary /></ProtectedRoute>} />
+          <Route path="/event/:eventId/modules" element={<ProtectedRoute><ModulesPage /></ProtectedRoute>} />
+          <Route path="/realtime-test" element={<ProtectedRoute><RealtimeTestPage /></ProtectedRoute>} />
+          <Route path="/teams" element={<ProtectedRoute><TeamsLayout /></ProtectedRoute>}>
+            <Route index element={<Navigate to="/teams/chat" replace />} />
             <Route path="chat" element={<TeamChatPage />} />
             <Route path="calendar" element={<CalendarPage />} />
             <Route path="canvas" element={<CanvasPage />} />
           </Route>
-          <Route path="/teams/create" element={<CreateTeamFlowPage />} />
-          <Route path="*" element={<Dashboard />} />
+          <Route path="/teams/create" element={<ProtectedRoute><CreateTeamFlowPage /></ProtectedRoute>} />
+          <Route path="/guest-form/:eventId" element={<ProtectedRoute><GuestFormPage /></ProtectedRoute>} />
+          <Route path="/guest-form/:eventId/edit/:guestIndex" element={<ProtectedRoute><GuestFormPage /></ProtectedRoute>} />
         </Routes>
       </main>
     </div>
   );
-}
+};
 
 export default function App() {
   return (
     <ThemeProvider>
       <Router>
-        <Routes>
-          {/* The form fill page should not have the main layout */}
-          <Route path="/form/fill/:eventId" element={<GuestFormPage />} />
-          
-          {/* All other routes go through AppContent to have the sidebar */}
-          <Route path="/*" element={<AppContent />} />
-        </Routes>
+        <AppContent />
       </Router>
     </ThemeProvider>
   );

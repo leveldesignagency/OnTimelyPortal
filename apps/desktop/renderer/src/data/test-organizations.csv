@@ -1,0 +1,13 @@
+company_name,user_email,password,role,first_name,last_name
+Acme Corp,john.doe@acmecorp.com,AC2024_jd789,admin,John,Doe
+Acme Corp,jane.smith@acmecorp.com,AC2024_js456,member,Jane,Smith
+Acme Corp,mike.wilson@acmecorp.com,AC2024_mw123,member,Mike,Wilson
+TechStart Inc,sarah.johnson@techstart.com,TS2024_sj321,admin,Sarah,Johnson
+TechStart Inc,david.brown@techstart.com,TS2024_db654,member,David,Brown
+TechStart Inc,lisa.garcia@techstart.com,TS2024_lg987,member,Lisa,Garcia
+Global Solutions,robert.taylor@globalsol.com,GS2024_rt147,admin,Robert,Taylor
+Global Solutions,emily.davis@globalsol.com,GS2024_ed258,member,Emily,Davis
+Global Solutions,chris.martinez@globalsol.com,GS2024_cm369,member,Chris,Martinez
+InnovateLab,amanda.white@innovatelab.com,IL2024_aw741,admin,Amanda,White
+InnovateLab,kevin.thompson@innovatelab.com,IL2024_kt852,member,Kevin,Thompson
+InnovateLab,rachel.anderson@innovatelab.com,IL2024_ra963,member,Rachel,Anderson 
