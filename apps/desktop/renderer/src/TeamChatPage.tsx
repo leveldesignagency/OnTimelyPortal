@@ -105,6 +105,19 @@ type ConfirmationModal = {
   type: 'warning' | 'danger';
 };
 
+type MessageNotification = {
+  id: string;
+  senderId: string;
+  senderName: string;
+  senderAvatar: string;
+  chatId: string;
+  chatName: string;
+  chatType: ChatType;
+  messageText: string;
+  timestamp: number;
+  isRead: boolean;
+};
+
 // Mock data with enhanced features - REPLACED WITH REAL DATA
 let CURRENT_USER: User | null = null;
 
@@ -167,52 +180,83 @@ const MOCK_USERS: User[] = [
 ];
 
 // Enhanced components
-const UserProfileCard: React.FC<{ user: User; isDark: boolean }> = ({ user, isDark }) => (
-  <div style={{
-    display: 'flex',
-    alignItems: 'center',
-    padding: '12px',
-    borderBottom: `1px solid ${isDark ? '#333' : '#e0e0e0'}`,
+const UserProfileCard: React.FC<{ user: User; isDark: boolean; notificationCount?: number }> = ({ user, isDark, notificationCount = 0 }) => (
+  <div style={{ 
+    padding: '20px', 
+    borderBottom: `1px solid ${isDark ? '#2a2a2a' : '#e9ecef'}`,
     background: isDark ? '#1a1a1a' : '#ffffff',
+    position: 'relative'
   }}>
-    <div style={{
-      width: '40px',
-      height: '40px',
-      borderRadius: '50%',
-      background: user.avatar ? `url(${user.avatar})` : `linear-gradient(135deg, #667eea 0%, #764ba2 100%)`,
-      backgroundSize: 'cover',
-      backgroundPosition: 'center',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      color: 'white',
-      fontWeight: 'bold',
-      fontSize: '16px',
-      marginRight: '12px',
-    }}>
-      {!user.avatar && user.name.charAt(0).toUpperCase()}
-    </div>
-    <div style={{ flex: 1 }}>
+    {/* Notification Badge */}
+    {notificationCount > 0 && (
       <div style={{
-        fontWeight: '600',
-        fontSize: '14px',
-        color: isDark ? '#ffffff' : '#1a1a1a',
-        marginBottom: '2px',
-      }}>
-        {user.name}
-      </div>
-      <div style={{
-        fontSize: '12px',
-        color: isDark ? '#888' : '#666',
+        position: 'absolute',
+        top: '16px',
+        right: '16px',
+        background: '#dc3545',
+        color: '#ffffff',
+        borderRadius: '50%',
+        width: '24px',
+        height: '24px',
         display: 'flex',
         alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: '12px',
+        fontWeight: '600',
+        zIndex: 10,
+        boxShadow: '0 2px 8px rgba(220, 53, 69, 0.3)',
+        animation: notificationCount > 0 ? 'pulse 2s infinite' : 'none'
       }}>
+        {notificationCount > 99 ? '99+' : notificationCount}
+      </div>
+    )}
+    
+    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      <div style={{
+        width: '48px',
+        height: '48px',
+        borderRadius: '50%',
+        background: isDark 
+          ? 'linear-gradient(135deg, #4a4a4a, #2a2a2a)' 
+          : 'linear-gradient(135deg, #e9ecef, #dee2e6)',
+        color: isDark ? '#fff' : '#495057',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: '20px',
+        fontWeight: '600',
+        position: 'relative',
+        border: `2px solid ${isDark ? '#404040' : '#dee2e6'}`
+      }}>
+        {user.avatar}
         <StatusIndicator status={user.status} />
-        <span style={{ marginLeft: '6px' }}>
-          {user.status === 'online' ? 'Online' : 
-           user.status === 'away' ? 'Away' : 
-           user.status === 'busy' ? 'Busy' : 'Offline'}
-        </span>
+      </div>
+      <div style={{ flex: 1 }}>
+        <div style={{ 
+          fontSize: '16px', 
+          fontWeight: '600', 
+          color: isDark ? '#ffffff' : '#1a1a1a',
+          marginBottom: '2px'
+        }}>
+          {user.name}
+        </div>
+        <div style={{ 
+          fontSize: '13px', 
+          color: isDark ? '#adb5bd' : '#6c757d',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px'
+        }}>
+          <span style={{ 
+            textTransform: 'capitalize',
+            fontWeight: '500'
+          }}>
+            {user.status}
+          </span>
+          {user.lastSeen && user.status === 'offline' && (
+            <span>• Last seen {new Date(user.lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+          )}
+        </div>
       </div>
     </div>
   </div>
@@ -1837,6 +1881,238 @@ const ConfirmationModal = ({ modal, isDark }: { modal: ConfirmationModal, isDark
   );
 };
 
+const MessageNotificationToast = ({ notification, onRemove, onMarkRead, onOpenChat, isDark }: { 
+  notification: MessageNotification, 
+  onRemove: (id: string) => void,
+  onMarkRead: (id: string) => void,
+  onOpenChat: (chatId: string) => void,
+  isDark: boolean 
+}) => {
+  const [isVisible, setIsVisible] = useState(false);
+  const [isExiting, setIsExiting] = useState(false);
+
+  useEffect(() => {
+    // Fade in animation
+    const timer = setTimeout(() => setIsVisible(true), 100);
+    
+    // Auto-dismiss after 5 seconds
+    const dismissTimer = setTimeout(() => {
+      handleDismiss();
+    }, 5000);
+
+    return () => {
+      clearTimeout(timer);
+      clearTimeout(dismissTimer);
+    };
+  }, []);
+
+  const handleDismiss = () => {
+    setIsExiting(true);
+    setTimeout(() => {
+      onRemove(notification.id);
+    }, 300);
+  };
+
+  const handleClick = () => {
+    onMarkRead(notification.id);
+    onOpenChat(notification.chatId);
+    handleDismiss();
+  };
+
+  const truncateMessage = (text: string, maxLength: number = 60) => {
+    if (text.length <= maxLength) return text;
+    return text.substring(0, maxLength) + '...';
+  };
+
+  const getChatIcon = () => {
+    switch (notification.chatType) {
+      case 'direct':
+        return '💬';
+      case 'group':
+        return '👥';
+      case 'team':
+        return '🏢';
+      default:
+        return '💬';
+    }
+  };
+
+  return (
+    <div 
+      style={{
+        position: 'fixed',
+        top: '20px',
+        right: '20px',
+        width: '360px',
+        background: isDark ? '#1a1a1a' : '#ffffff',
+        borderRadius: '12px',
+        padding: '16px',
+        boxShadow: isDark 
+          ? '0 8px 32px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.1)' 
+          : '0 8px 32px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.1)',
+        border: `1px solid ${isDark ? '#2a2a2a' : '#e9ecef'}`,
+        cursor: 'pointer',
+        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        transform: isVisible && !isExiting 
+          ? 'translateX(0) scale(1)' 
+          : 'translateX(100%) scale(0.95)',
+        opacity: isVisible && !isExiting ? 1 : 0,
+        zIndex: 1000,
+        backdropFilter: 'blur(10px)',
+        WebkitBackdropFilter: 'blur(10px)'
+      }}
+      onClick={handleClick}
+      onMouseEnter={e => {
+        e.currentTarget.style.transform = 'translateX(0) scale(1.02)';
+        e.currentTarget.style.boxShadow = isDark 
+          ? '0 12px 48px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.15)' 
+          : '0 12px 48px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.15)';
+      }}
+      onMouseLeave={e => {
+        e.currentTarget.style.transform = 'translateX(0) scale(1)';
+        e.currentTarget.style.boxShadow = isDark 
+          ? '0 8px 32px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.1)' 
+          : '0 8px 32px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.1)';
+      }}
+    >
+      {/* Close button */}
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          handleDismiss();
+        }}
+        style={{
+          position: 'absolute',
+          top: '8px',
+          right: '8px',
+          background: 'transparent',
+          border: 'none',
+          color: isDark ? '#adb5bd' : '#6c757d',
+          cursor: 'pointer',
+          fontSize: '16px',
+          width: '24px',
+          height: '24px',
+          borderRadius: '50%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          transition: 'all 0.2s ease'
+        }}
+        onMouseEnter={e => {
+          e.currentTarget.style.background = isDark ? '#2a2a2a' : '#f8f9fa';
+          e.currentTarget.style.color = isDark ? '#ffffff' : '#1a1a1a';
+        }}
+        onMouseLeave={e => {
+          e.currentTarget.style.background = 'transparent';
+          e.currentTarget.style.color = isDark ? '#adb5bd' : '#6c757d';
+        }}
+      >
+        ×
+      </button>
+
+      {/* Header with sender info */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '10px',
+        marginBottom: '8px'
+      }}>
+        <div style={{
+          width: '40px',
+          height: '40px',
+          borderRadius: '50%',
+          background: isDark 
+            ? 'linear-gradient(135deg, #4a4a4a, #2a2a2a)' 
+            : 'linear-gradient(135deg, #e9ecef, #dee2e6)',
+          color: isDark ? '#fff' : '#495057',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '16px',
+          fontWeight: '600',
+          flexShrink: 0
+        }}>
+          {notification.senderAvatar}
+        </div>
+        
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            marginBottom: '2px'
+          }}>
+            <span style={{
+              fontSize: '14px',
+              fontWeight: '600',
+              color: isDark ? '#ffffff' : '#1a1a1a',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis'
+            }}>
+              {notification.senderName}
+            </span>
+            <span style={{ fontSize: '16px' }}>
+              {getChatIcon()}
+            </span>
+          </div>
+          
+          <div style={{
+            fontSize: '12px',
+            color: isDark ? '#adb5bd' : '#6c757d',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis'
+          }}>
+            {notification.chatType === 'direct' ? 'Direct message' : notification.chatName}
+          </div>
+        </div>
+
+        <div style={{
+          fontSize: '11px',
+          color: isDark ? '#6c757d' : '#adb5bd',
+          whiteSpace: 'nowrap'
+        }}>
+          {new Date(notification.timestamp).toLocaleTimeString([], { 
+            hour: '2-digit', 
+            minute: '2-digit' 
+          })}
+        </div>
+      </div>
+
+      {/* Message preview */}
+      <div style={{
+        background: isDark ? '#2a2a2a' : '#f8f9fa',
+        borderRadius: '8px',
+        padding: '10px 12px',
+        marginTop: '8px',
+        borderLeft: `3px solid #228B22`
+      }}>
+        <p style={{
+          margin: 0,
+          fontSize: '13px',
+          lineHeight: '1.4',
+          color: isDark ? '#ffffff' : '#1a1a1a',
+          fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+        }}>
+          {truncateMessage(notification.messageText)}
+        </p>
+      </div>
+
+      {/* Action hint */}
+      <div style={{
+        marginTop: '8px',
+        fontSize: '11px',
+        color: isDark ? '#6c757d' : '#adb5bd',
+        textAlign: 'center',
+        fontStyle: 'italic'
+      }}>
+        Click to open chat
+      </div>
+    </div>
+  );
+};
+
 // Main component for the enhanced Teams Chat page
 export default function TeamChatPage() {
   const navigate = useNavigate();
@@ -1859,6 +2135,7 @@ export default function TeamChatPage() {
   const [groupUserSearch, setGroupUserSearch] = useState(''); // New search field for group creation
   const [recentUsers, setRecentUsers] = useState<User[]>([]); // Track recent/frequent users
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [messageNotifications, setMessageNotifications] = useState<MessageNotification[]>([]);
   const [confirmationModal, setConfirmationModal] = useState<ConfirmationModal>({
     isOpen: false,
     title: '',
@@ -1968,6 +2245,74 @@ export default function TeamChatPage() {
     }
   };
 
+  const playNotificationSound = () => {
+    try {
+      // Create a subtle notification sound using Web Audio API
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      // Create a pleasant notification sound (C major chord)
+      oscillator.frequency.setValueAtTime(523.25, audioContext.currentTime); // C5
+      oscillator.frequency.setValueAtTime(659.25, audioContext.currentTime + 0.1); // E5
+      oscillator.frequency.setValueAtTime(783.99, audioContext.currentTime + 0.2); // G5
+      
+      gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+      gainNode.gain.linearRampToValueAtTime(0.1, audioContext.currentTime + 0.01);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+      
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + 0.3);
+    } catch (error) {
+      // Fallback for browsers that don't support Web Audio API
+      console.log('Audio notification not supported');
+    }
+  };
+
+  const requestNotificationPermission = async () => {
+    if ('Notification' in window) {
+      const permission = await Notification.requestPermission();
+      return permission === 'granted';
+    }
+    return false;
+  };
+
+  const showBrowserNotification = (sender: string, message: string, chatName: string, chatType: ChatType) => {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      const icon = chatType === 'team' ? '🏢' : chatType === 'group' ? '👥' : '💬';
+      const title = chatType === 'direct' ? `${sender}` : `${sender} in ${chatName}`;
+      const body = message.length > 100 ? message.substring(0, 100) + '...' : message;
+      
+      const notification = new Notification(title, {
+        body: body,
+        icon: '/favicon.ico', // You can customize this with your app icon
+        badge: '/favicon.ico',
+        tag: 'timely-message', // This prevents duplicate notifications
+        requireInteraction: false,
+        silent: false
+      });
+
+      // Auto-close after 5 seconds
+      setTimeout(() => {
+        notification.close();
+      }, 5000);
+
+      // Handle click to focus app
+      notification.onclick = () => {
+        window.focus();
+        notification.close();
+      };
+    }
+  };
+
+  // Initialize notification permission on component mount
+  useEffect(() => {
+    requestNotificationPermission();
+  }, []);
+
   const handleNewMessage = (message: SupabaseMessage) => {
     // Don't add message if it's from the current user (they already see it immediately)
     if (message.sender_id === CURRENT_USER?.id) {
@@ -1975,6 +2320,42 @@ export default function TeamChatPage() {
     }
     
     const convertedMessage = convertSupabaseMessage(message);
+    
+    // Find the chat and sender info for the notification
+    const chat = chats.find(c => c.id === message.chat_id);
+    const sender = companyUsers.find(u => u.id === message.sender_id) || 
+                  chat?.participants.find(p => p.id === message.sender_id);
+    
+    // Create message notification if chat is not currently active or app is not focused
+    if (chat && sender && (message.chat_id !== activeChatId || !document.hasFocus())) {
+      const messageNotification: MessageNotification = {
+        id: `msg_notification_${Date.now()}_${Math.random()}`,
+        senderId: message.sender_id,
+        senderName: sender.name,
+        senderAvatar: sender.avatar,
+        chatId: message.chat_id,
+        chatName: chat.name,
+        chatType: chat.type,
+        messageText: message.content,
+        timestamp: Date.now(),
+        isRead: false
+      };
+      
+      setMessageNotifications(prev => [...prev, messageNotification]);
+      
+      // Play notification sound
+      playNotificationSound();
+      
+      // Show browser notification if app is not focused
+      if (!document.hasFocus()) {
+        showBrowserNotification(sender.name, message.content, chat.name, chat.type);
+      }
+      
+      // Auto-remove after 5 seconds if not interacted with
+      setTimeout(() => {
+        setMessageNotifications(prev => prev.filter(n => n.id !== messageNotification.id));
+      }, 5000);
+    }
     
     setChats(prevChats => 
       prevChats.map(chat => {
@@ -2142,10 +2523,14 @@ export default function TeamChatPage() {
               : chat
           )
         );
+        
+        // Show success notification for sent message
+        addNotification('Message sent successfully', 'success');
         scrollToBottom();
       }
     } catch (error) {
       console.error('Failed to send message:', error);
+      addNotification('Failed to send message', 'error');
     }
   };
 
@@ -2348,6 +2733,25 @@ export default function TeamChatPage() {
     });
   };
 
+  const removeMessageNotification = (id: string) => {
+    setMessageNotifications(prev => prev.filter(n => n.id !== id));
+  };
+
+  const markMessageNotificationRead = (id: string) => {
+    setMessageNotifications(prev => 
+      prev.map(n => 
+        n.id === id ? { ...n, isRead: true } : n
+      )
+    );
+  };
+
+  const openChatFromNotification = (chatId: string) => {
+    setActiveChatId(chatId);
+    setSearchQuery('');
+    setShowRightPanel(false);
+    selectChat(chatId);
+  };
+
   // Add loading state check
   if (loading) {
   return (
@@ -2393,6 +2797,17 @@ export default function TeamChatPage() {
             />
           </div>
         ))}
+        {messageNotifications.map(notification => (
+          <div key={notification.id} style={{ pointerEvents: 'auto' }}>
+            <MessageNotificationToast
+              notification={notification}
+              onRemove={removeMessageNotification}
+              onMarkRead={markMessageNotificationRead}
+              onOpenChat={openChatFromNotification}
+              isDark={isDark}
+            />
+          </div>
+        ))}
       </div>
 
       {/* Left Sidebar */}
@@ -2415,7 +2830,28 @@ export default function TeamChatPage() {
             lastSeen: new Date().toISOString()
           }}
           isDark={isDark}
+          notificationCount={messageNotifications.filter(n => !n.isRead).length}
         />
+
+        {/* Add CSS animation for pulse effect */}
+        <style>
+          {`
+            @keyframes pulse {
+              0% {
+                transform: scale(1);
+                box-shadow: 0 2px 8px rgba(220, 53, 69, 0.3);
+              }
+              50% {
+                transform: scale(1.1);
+                box-shadow: 0 4px 16px rgba(220, 53, 69, 0.5);
+              }
+              100% {
+                transform: scale(1);
+                box-shadow: 0 2px 8px rgba(220, 53, 69, 0.3);
+              }
+            }
+          `}
+        </style>
 
         {/* Search */}
         <div style={{ padding: '16px 20px' }}>
