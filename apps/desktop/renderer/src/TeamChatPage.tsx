@@ -94,6 +94,17 @@ type Notification = {
   timestamp: number;
 };
 
+type ConfirmationModal = {
+  isOpen: boolean;
+  title: string;
+  message: string;
+  confirmText: string;
+  cancelText: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+  type: 'warning' | 'danger';
+};
+
 // Mock data with enhanced features - REPLACED WITH REAL DATA
 let CURRENT_USER: User | null = null;
 
@@ -634,24 +645,105 @@ const MessageBubble = ({ message, sent, isDark, onReact, onReply }: {
         display: 'flex', 
         justifyContent: sent ? 'flex-end' : 'flex-start', 
         margin: '8px 24px',
-        marginBottom: '12px',
+        marginBottom: '16px', // Increased margin to make room for hover actions
         position: 'relative'
       }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      {/* Hover Actions */}
+      <div style={{
+        background: sent 
+          ? '#228B22'
+          : isDark 
+            ? '#2a2a2a' 
+            : '#ffffff',
+        color: sent 
+          ? '#ffffff' 
+          : isDark 
+            ? '#ffffff' 
+            : '#1a1a1a',
+        padding: '12px 16px',
+        borderRadius: sent ? '20px 20px 4px 20px' : '20px 20px 20px 4px',
+        maxWidth: '70%',
+        boxShadow: isDark 
+          ? '0 2px 8px rgba(0,0,0,0.3)' 
+          : '0 2px 8px rgba(0,0,0,0.1)',
+        position: 'relative',
+        wordBreak: 'break-word'
+      }}>
+        {message.replyTo && (
+          <div style={{
+            background: sent ? 'rgba(255,255,255,0.1)' : isDark ? '#1a1a1a' : '#f8f9fa',
+            padding: '8px 12px',
+            borderRadius: '8px',
+            marginBottom: '8px',
+            fontSize: '13px',
+            borderLeft: `3px solid ${sent ? '#ffffff' : '#228B22'}`
+          }}>
+            Replying to: {message.replyTo}
+          </div>
+        )}
+        
+        <FilePreview message={message} isDark={isDark} />
+        
+        {message.text && (
+          <p style={{
+            margin: 0, 
+            whiteSpace: 'pre-wrap',
+            fontSize: '15px',
+            lineHeight: '1.4',
+            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+          }}>
+            {message.text}
+          </p>
+        )}
+        
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px' }}>
+          <p style={{
+            margin: 0, 
+            fontSize: '12px', 
+            color: sent 
+              ? 'rgba(255,255,255,0.7)' 
+              : isDark 
+                ? '#adb5bd' 
+                : '#6c757d', 
+            fontWeight: '500'
+          }}>
+            {message.timestamp}
+            {message.edited && ' (edited)'}
+          </p>
+          {sent && (
+            <span style={{
+              fontSize: '12px',
+              color: 'rgba(255,255,255,0.7)',
+              marginLeft: '8px'
+            }}>
+              ✓✓
+            </span>
+          )}
+        </div>
+        
+        {message.reactions && message.reactions.length > 0 && (
+          <MessageReactions 
+            reactions={message.reactions} 
+            onReact={(emoji) => onReact(message.id, emoji)}
+            isDark={isDark}
+          />
+        )}
+      </div>
+
+      {/* Hover Actions - Positioned below the message bubble */}
       {isHovered && (
         <div style={{
           position: 'absolute',
-          top: '-8px',
-          right: sent ? 'auto' : '100%',
-          left: sent ? '100%' : 'auto',
+          bottom: '-40px', // Position below the message bubble
+          right: sent ? '0' : 'auto',
+          left: sent ? 'auto' : '0',
           display: 'flex',
           gap: '4px',
           background: isDark ? '#2a2a2a' : '#ffffff',
           borderRadius: '20px',
-          padding: '4px 8px',
+          padding: '6px 10px',
           boxShadow: isDark ? '0 4px 12px rgba(0,0,0,0.3)' : '0 4px 12px rgba(0,0,0,0.15)',
           border: `1px solid ${isDark ? '#404040' : '#e9ecef'}`,
           zIndex: 10
@@ -733,9 +825,9 @@ const MessageBubble = ({ message, sent, isDark, onReact, onReply }: {
       {showReactionPicker && (
         <div style={{
           position: 'absolute',
-          top: '32px',
-          right: sent ? 'auto' : '100%',
-          left: sent ? '100%' : 'auto',
+          bottom: '-80px', // Position below the hover actions
+          right: sent ? '0' : 'auto',
+          left: sent ? 'auto' : '0',
           background: isDark ? '#2a2a2a' : '#ffffff',
           borderRadius: '12px',
           padding: '8px',
@@ -775,89 +867,8 @@ const MessageBubble = ({ message, sent, isDark, onReact, onReply }: {
           ))}
         </div>
       )}
-
-      <div style={{
-        background: sent 
-          ? '#228B22'
-          : isDark 
-            ? '#2a2a2a' 
-            : '#ffffff',
-        color: sent 
-          ? '#ffffff' 
-          : isDark 
-            ? '#ffffff' 
-            : '#1a1a1a',
-        padding: '12px 16px',
-        borderRadius: sent ? '20px 20px 4px 20px' : '20px 20px 20px 4px',
-        maxWidth: '70%',
-        boxShadow: isDark 
-          ? '0 2px 8px rgba(0,0,0,0.3)' 
-          : '0 2px 8px rgba(0,0,0,0.1)',
-        position: 'relative',
-        wordBreak: 'break-word'
-      }}>
-        {message.replyTo && (
-          <div style={{
-            background: sent ? 'rgba(255,255,255,0.1)' : isDark ? '#1a1a1a' : '#f8f9fa',
-            padding: '8px 12px',
-            borderRadius: '8px',
-            marginBottom: '8px',
-            fontSize: '13px',
-            borderLeft: `3px solid ${sent ? '#ffffff' : '#228B22'}`
-          }}>
-            Replying to: {message.replyTo}
-          </div>
-        )}
-        
-        <FilePreview message={message} isDark={isDark} />
-        
-        {message.text && (
-          <p style={{
-            margin: 0, 
-            whiteSpace: 'pre-wrap',
-            fontSize: '15px',
-            lineHeight: '1.4',
-            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
-          }}>
-            {message.text}
-          </p>
-        )}
-        
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px' }}>
-          <p style={{
-            margin: 0, 
-            fontSize: '12px', 
-            color: sent 
-              ? 'rgba(255,255,255,0.7)' 
-              : isDark 
-                ? '#adb5bd' 
-                : '#6c757d', 
-            fontWeight: '500'
-          }}>
-            {message.timestamp}
-            {message.edited && ' (edited)'}
-          </p>
-          {sent && (
-            <span style={{
-              fontSize: '12px',
-              color: 'rgba(255,255,255,0.7)',
-              marginLeft: '8px'
-            }}>
-              ✓✓
-            </span>
-          )}
-        </div>
-        
-        {message.reactions && message.reactions.length > 0 && (
-          <MessageReactions 
-            reactions={message.reactions} 
-            onReact={(emoji) => onReact(message.id, emoji)}
-            isDark={isDark}
-          />
-        )}
-        </div>
     </div>
-);
+  );
 };
 
 const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCancelReply }: { 
@@ -1125,14 +1136,15 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
     );
 };
 
-const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleArchive, onRemoveUser }: { 
+const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleArchive, onRemoveUser, onShowConfirmation }: { 
   chat: Chat | undefined, 
   isOpen: boolean, 
   isDark: boolean,
   onToggleMute: (chatId: string) => void,
   onTogglePin: (chatId: string) => void,
   onToggleArchive: (chatId: string) => void,
-  onRemoveUser: (userId: string, userName: string) => void
+  onRemoveUser: (userId: string, userName: string) => void,
+  onShowConfirmation: (modal: ConfirmationModal) => void
 }) => {
   if (!isOpen || !chat) return null;
 
@@ -1143,30 +1155,43 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
 
   const handleLeaveGroup = () => {
     if (chat.type === 'group') {
-      const confirmLeave = confirm(`Are you sure you want to leave "${chat.name}"?`);
-      if (confirmLeave) {
-        // TODO: Implement leave group functionality with Supabase
-        alert('Leave group functionality will be implemented');
-      }
+      onShowConfirmation({
+        isOpen: true,
+        title: 'Leave Group',
+        message: `Are you sure you want to leave "${chat.name}"? You will no longer receive messages from this group.`,
+        confirmText: 'Leave',
+        cancelText: 'Cancel',
+        type: 'warning',
+        onConfirm: () => {
+          // TODO: Implement leave group functionality with Supabase
+          alert('Leave group functionality will be implemented');
+        },
+        onCancel: () => {}
+      });
     }
   };
 
   const handleDeleteGroup = () => {
     if (chat.type === 'group') {
-      const confirmDelete = confirm(`Are you sure you want to delete "${chat.name}"? This action cannot be undone.`);
-      if (confirmDelete) {
-        // TODO: Implement delete group functionality with Supabase
-        alert('Delete group functionality will be implemented');
-      }
+      onShowConfirmation({
+        isOpen: true,
+        title: 'Delete Group',
+        message: `Are you sure you want to delete "${chat.name}"? This action cannot be undone and all messages will be permanently lost.`,
+        confirmText: 'Delete',
+        cancelText: 'Cancel',
+        type: 'danger',
+        onConfirm: () => {
+          // TODO: Implement delete group functionality with Supabase
+          alert('Delete group functionality will be implemented');
+        },
+        onCancel: () => {}
+      });
     }
   };
 
   const handleRemoveUser = (userId: string, userName: string) => {
     if (chat.type === 'group' && userId !== CURRENT_USER?.id) {
-      const confirmRemove = confirm(`Are you sure you want to remove ${userName} from "${chat.name}"?`);
-      if (confirmRemove) {
-        onRemoveUser(userId, userName);
-      }
+      onRemoveUser(userId, userName);
     }
   };
 
@@ -1352,7 +1377,7 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
                   </div>
                 </div>
                 
-                {/* Remove User Button - Only show for other users, not current user */}
+                {/* Remove User Button - Smaller and less intrusive */}
                 {participant.id !== CURRENT_USER?.id && (
                   <button
                     onClick={() => handleRemoveUser(participant.id, participant.name)}
@@ -1362,21 +1387,23 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
                       border: 'none',
                       color: '#ef4444',
                       cursor: 'pointer',
-                      fontSize: '14px',
-                      padding: '4px',
-                      borderRadius: '4px',
-                      opacity: 0.7,
+                      fontSize: '12px',
+                      padding: '2px 4px',
+                      borderRadius: '3px',
+                      opacity: 0.6,
                       transition: 'all 0.2s ease',
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'center'
+                      justifyContent: 'center',
+                      width: '20px',
+                      height: '20px'
                     }}
                     onMouseEnter={e => {
                       e.currentTarget.style.opacity = '1';
                       e.currentTarget.style.background = isDark ? '#2a1f1f' : '#fef2f2';
                     }}
                     onMouseLeave={e => {
-                      e.currentTarget.style.opacity = '0.7';
+                      e.currentTarget.style.opacity = '0.6';
                       e.currentTarget.style.background = 'transparent';
                     }}
                   >
@@ -1693,6 +1720,123 @@ const NotificationBubble = ({ notification, onRemove, isDark }: {
   );
 };
 
+const ConfirmationModal = ({ modal, isDark }: { modal: ConfirmationModal, isDark: boolean }) => {
+  if (!modal.isOpen) return null;
+
+  return (
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      background: 'rgba(0, 0, 0, 0.5)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 1000
+    }}>
+      <div style={{
+        background: isDark ? '#1a1a1a' : '#ffffff',
+        borderRadius: '12px',
+        padding: '24px',
+        maxWidth: '400px',
+        width: '90%',
+        boxShadow: isDark ? '0 20px 40px rgba(0,0,0,0.3)' : '0 20px 40px rgba(0,0,0,0.15)',
+        border: `1px solid ${isDark ? '#2a2a2a' : '#e9ecef'}`
+      }}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          marginBottom: '16px'
+        }}>
+          <div style={{
+            width: '40px',
+            height: '40px',
+            borderRadius: '50%',
+            background: modal.type === 'danger' ? '#ef4444' : '#f59e0b',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '20px'
+          }}>
+            {modal.type === 'danger' ? '⚠️' : '❗'}
+          </div>
+          <h3 style={{
+            margin: 0,
+            fontSize: '18px',
+            fontWeight: '600',
+            color: isDark ? '#ffffff' : '#1a1a1a'
+          }}>
+            {modal.title}
+          </h3>
+        </div>
+        
+        <p style={{
+          margin: '0 0 24px 0',
+          fontSize: '14px',
+          lineHeight: '1.5',
+          color: isDark ? '#adb5bd' : '#6c757d'
+        }}>
+          {modal.message}
+        </p>
+        
+        <div style={{
+          display: 'flex',
+          gap: '12px',
+          justifyContent: 'flex-end'
+        }}>
+          <button
+            onClick={modal.onCancel}
+            style={{
+              background: isDark ? '#2a2a2a' : '#f8f9fa',
+              border: `1px solid ${isDark ? '#404040' : '#dee2e6'}`,
+              borderRadius: '6px',
+              padding: '8px 16px',
+              fontSize: '14px',
+              fontWeight: '500',
+              color: isDark ? '#ffffff' : '#1a1a1a',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease'
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = isDark ? '#404040' : '#e9ecef';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = isDark ? '#2a2a2a' : '#f8f9fa';
+            }}
+          >
+            {modal.cancelText}
+          </button>
+          <button
+            onClick={modal.onConfirm}
+            style={{
+              background: modal.type === 'danger' ? '#ef4444' : '#f59e0b',
+              border: 'none',
+              borderRadius: '6px',
+              padding: '8px 16px',
+              fontSize: '14px',
+              fontWeight: '500',
+              color: '#ffffff',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease'
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = modal.type === 'danger' ? '#dc2626' : '#d97706';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = modal.type === 'danger' ? '#ef4444' : '#f59e0b';
+            }}
+          >
+            {modal.confirmText}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Main component for the enhanced Teams Chat page
 export default function TeamChatPage() {
   const navigate = useNavigate();
@@ -1715,6 +1859,16 @@ export default function TeamChatPage() {
   const [groupUserSearch, setGroupUserSearch] = useState(''); // New search field for group creation
   const [recentUsers, setRecentUsers] = useState<User[]>([]); // Track recent/frequent users
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [confirmationModal, setConfirmationModal] = useState<ConfirmationModal>({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmText: '',
+    cancelText: '',
+    onConfirm: () => {},
+    onCancel: () => {},
+    type: 'warning'
+  });
   
   const messagesEndRef = useRef<null | HTMLDivElement>(null);
   const { theme } = useContext(ThemeContext);
@@ -2154,35 +2308,44 @@ export default function TeamChatPage() {
   };
 
   const handleRemoveUserFromGroup = async (userId: string, userName: string) => {
-    if (!activeChatId || !CURRENT_USER) return;
+    if (!activeChat || !CURRENT_USER) return;
 
-    try {
-      // Call the removeUserFromGroup function with the current user as the remover
-      await removeUserFromGroup(activeChatId, userId, CURRENT_USER.id);
-      
-      // Update local state to remove user from chat participants
-      setChats(prevChats => 
-        prevChats.map(chat => {
-          if (chat.id === activeChatId) {
-            const updatedParticipants = chat.participants.filter(p => p.id !== userId);
-            return {
-              ...chat,
-              participants: updatedParticipants
-            };
+    // Show custom confirmation modal instead of browser confirm
+    setConfirmationModal({
+      isOpen: true,
+      title: 'Remove User',
+      message: `Are you sure you want to remove ${userName} from "${activeChat.name}"? This action cannot be undone.`,
+      confirmText: 'Remove',
+      cancelText: 'Cancel',
+      type: 'danger',
+      onConfirm: async () => {
+        if (!CURRENT_USER) return; // Additional null check for the async callback
+        
+        try {
+          const success = await removeUserFromGroup(activeChat.id, userId, CURRENT_USER.id);
+          if (success) {
+            // Update local state
+            setChats(prevChats => 
+              prevChats.map(chat => 
+                chat.id === activeChat.id 
+                  ? { ...chat, participants: chat.participants.filter(p => p.id !== userId) }
+                  : chat
+              )
+            );
+            addNotification(`${userName} has been removed from the group`, 'success');
+          } else {
+            addNotification('Failed to remove user from group', 'error');
           }
-          return chat;
-        })
-      );
-
-      // Show success notification
-      addNotification(`${userName} has been removed from the group`, 'success');
-      
-      // The removeUserFromGroup function already sends a system message, so we don't need to add one manually
-      scrollToBottom();
-    } catch (error) {
-      console.error('Failed to remove user from group:', error);
-      addNotification(`Failed to remove ${userName} from the group`, 'error');
-    }
+        } catch (error) {
+          console.error('Error removing user from group:', error);
+          addNotification('An error occurred while removing the user', 'error');
+        }
+        setConfirmationModal(prev => ({ ...prev, isOpen: false }));
+      },
+      onCancel: () => {
+        setConfirmationModal(prev => ({ ...prev, isOpen: false }));
+      }
+    });
   };
 
   // Add loading state check
@@ -2873,7 +3036,10 @@ export default function TeamChatPage() {
         onTogglePin={handleTogglePin}
         onToggleArchive={handleToggleArchive}
         onRemoveUser={handleRemoveUserFromGroup}
+        onShowConfirmation={setConfirmationModal}
       />
+
+      <ConfirmationModal modal={confirmationModal} isDark={isDark} />
     </div>
   );
 } 
