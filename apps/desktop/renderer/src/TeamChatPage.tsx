@@ -2208,6 +2208,12 @@ export default function TeamChatPage() {
         await selectChat(convertedChats[0].id);
       }
       
+      // Subscribe to messages for ALL user chats (not just active one)
+      convertedChats.forEach(chat => {
+        console.log(`🔔 Subscribing to messages for chat: ${chat.name} (${chat.id})`);
+        subscribeToMessages(chat.id, handleNewMessage);
+      });
+      
       // Subscribe to user status changes
       const currentAuthUser = getCurrentUser();
       if (currentAuthUser) {
@@ -2238,8 +2244,7 @@ export default function TeamChatPage() {
         )
       );
       
-      // Subscribe to real-time messages for this chat
-      subscribeToMessages(chatId, handleNewMessage);
+      // No need to subscribe here anymore - we subscribe to all chats in loadInitialData
     } catch (error) {
       console.error('Failed to load chat messages:', error);
     }
@@ -2314,8 +2319,19 @@ export default function TeamChatPage() {
   }, []);
 
   const handleNewMessage = (message: SupabaseMessage) => {
+    console.log('🔔 New message received:', {
+      messageId: message.id,
+      senderId: message.sender_id,
+      currentUserId: CURRENT_USER?.id,
+      chatId: message.chat_id,
+      activeChatId: activeChatId,
+      content: message.content,
+      isFromCurrentUser: message.sender_id === CURRENT_USER?.id
+    });
+
     // Don't add message if it's from the current user (they already see it immediately)
     if (message.sender_id === CURRENT_USER?.id) {
+      console.log('❌ Skipping notification - message is from current user');
       return;
     }
     
@@ -2326,8 +2342,20 @@ export default function TeamChatPage() {
     const sender = companyUsers.find(u => u.id === message.sender_id) || 
                   chat?.participants.find(p => p.id === message.sender_id);
     
+    console.log('🔍 Notification check:', {
+      chatFound: !!chat,
+      senderFound: !!sender,
+      chatName: chat?.name,
+      senderName: sender?.name,
+      isActiveChat: message.chat_id === activeChatId,
+      hasFocus: document.hasFocus(),
+      shouldNotify: chat && sender && (message.chat_id !== activeChatId || !document.hasFocus())
+    });
+    
     // Create message notification if chat is not currently active or app is not focused
     if (chat && sender && (message.chat_id !== activeChatId || !document.hasFocus())) {
+      console.log('✅ Creating notification for message');
+      
       const messageNotification: MessageNotification = {
         id: `msg_notification_${Date.now()}_${Math.random()}`,
         senderId: message.sender_id,
@@ -2341,13 +2369,18 @@ export default function TeamChatPage() {
         isRead: false
       };
       
-      setMessageNotifications(prev => [...prev, messageNotification]);
+      setMessageNotifications(prev => {
+        console.log('📬 Adding notification to state:', messageNotification);
+        return [...prev, messageNotification];
+      });
       
       // Play notification sound
+      console.log('🔊 Playing notification sound');
       playNotificationSound();
       
       // Show browser notification if app is not focused
       if (!document.hasFocus()) {
+        console.log('🌐 Showing browser notification');
         showBrowserNotification(sender.name, message.content, chat.name, chat.type);
       }
       
@@ -2355,6 +2388,8 @@ export default function TeamChatPage() {
       setTimeout(() => {
         setMessageNotifications(prev => prev.filter(n => n.id !== messageNotification.id));
       }, 5000);
+      } else {
+      console.log('❌ Not creating notification - conditions not met');
     }
     
     setChats(prevChats => 
@@ -2830,6 +2865,36 @@ export default function TeamChatPage() {
           isDark={isDark}
           notificationCount={messageNotifications.filter(n => !n.isRead).length}
         />
+
+        {/* Debug: Test Notification Button */}
+        <div style={{ padding: '0 20px 16px 20px' }}>
+          <button
+            onClick={testNotification}
+            style={{
+              width: '100%',
+              background: isDark ? '#2a2a2a' : '#f8f9fa',
+              color: isDark ? '#ffffff' : '#1a1a1a',
+              border: `1px solid ${isDark ? '#404040' : '#dee2e6'}`,
+              borderRadius: '8px',
+              padding: '8px 12px',
+              fontSize: '12px',
+              fontWeight: '500',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              opacity: 0.7
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.opacity = '1';
+              e.currentTarget.style.background = isDark ? '#404040' : '#e9ecef';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.opacity = '0.7';
+              e.currentTarget.style.background = isDark ? '#2a2a2a' : '#f8f9fa';
+            }}
+          >
+            🧪 Test Notification
+          </button>
+        </div>
 
         {/* Add CSS animation for pulse effect */}
         <style>
