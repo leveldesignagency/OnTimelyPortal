@@ -4,9 +4,9 @@ import { ThemeContext } from './ThemeContext';
 import ThemedIcon from './components/ThemedIcon';
 
 const teamNavLinks = [
-  { to: '/teams/chat', label: 'Chat', icon: <ThemedIcon name="chat" alt="Chat" size={28} /> },
-  { to: '/teams/calendar', label: 'Calendar', icon: <ThemedIcon name="calendar" alt="Calendar" size={28} /> },
-  { to: '/teams/canvas', label: 'Canvas', icon: <ThemedIcon name="canvas" alt="Canvas" size={28} /> },
+  { to: '/teams/chat', label: 'Chat', icon: <ThemedIcon name="chat" alt="Chat" size={60} /> },
+  { to: '/teams/calendar', label: 'Calendar', icon: <ThemedIcon name="calendar" alt="Calendar" size={60} /> },
+  { to: '/teams/canvas', label: 'Canvas', icon: <ThemedIcon name="canvas" alt="Canvas" size={60} /> },
   // Future links can be added here
 ];
 

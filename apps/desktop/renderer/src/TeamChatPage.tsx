@@ -512,99 +512,262 @@ const FilePreview = ({ message, isDark }: { message: Message, isDark: boolean })
   return null;
 };
 
-const MessageBubble = ({ message, sent, isDark, onReact }: { message: Message, sent: boolean, isDark: boolean, onReact: (messageId: string, emoji: string) => void }) => (
+const MessageBubble = ({ message, sent, isDark, onReact, onReply }: { 
+  message: Message, 
+  sent: boolean, 
+  isDark: boolean, 
+  onReact: (messageId: string, emoji: string) => void,
+  onReply: (message: Message) => void 
+}) => {
+  const [isHovered, setIsHovered] = useState(false);
+  const [showReactionPicker, setShowReactionPicker] = useState(false);
+
+  const commonEmojis = ['👍', '❤️', '😂', '😮', '😢', '😡'];
+
+  return (
+    <div 
+      style={{
+        display: 'flex', 
+        justifyContent: sent ? 'flex-end' : 'flex-start', 
+        margin: '8px 24px',
+        marginBottom: '12px',
+        position: 'relative'
+      }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      {/* Hover Actions */}
+      {isHovered && (
         <div style={{
-    display: 'flex', 
-    justifyContent: sent ? 'flex-end' : 'flex-start', 
-    margin: '8px 24px',
-    marginBottom: '12px'
-  }}>
-    <div style={{
-      background: sent 
-        ? '#228B22'
-        : isDark 
-          ? '#2a2a2a' 
-          : '#ffffff',
-      color: sent 
-        ? '#ffffff' 
-        : isDark 
-          ? '#ffffff' 
-          : '#1a1a1a',
-      padding: '12px 16px',
-      borderRadius: sent ? '20px 20px 4px 20px' : '20px 20px 20px 4px',
-      maxWidth: '70%',
-      boxShadow: isDark 
-        ? '0 2px 8px rgba(0,0,0,0.3)' 
-        : '0 2px 8px rgba(0,0,0,0.1)',
-      position: 'relative',
-      wordBreak: 'break-word'
-    }}>
-      {message.replyTo && (
-        <div style={{
-          background: sent ? 'rgba(255,255,255,0.1)' : isDark ? '#1a1a1a' : '#f8f9fa',
-            padding: '8px 12px',
-            borderRadius: '8px',
-          marginBottom: '8px',
-          fontSize: '13px',
-          borderLeft: `3px solid ${sent ? '#ffffff' : '#228B22'}`
+          position: 'absolute',
+          top: '-8px',
+          right: sent ? 'auto' : '100%',
+          left: sent ? '100%' : 'auto',
+          display: 'flex',
+          gap: '4px',
+          background: isDark ? '#2a2a2a' : '#ffffff',
+          borderRadius: '20px',
+          padding: '4px 8px',
+          boxShadow: isDark ? '0 4px 12px rgba(0,0,0,0.3)' : '0 4px 12px rgba(0,0,0,0.15)',
+          border: `1px solid ${isDark ? '#404040' : '#e9ecef'}`,
+          zIndex: 10
         }}>
-          Replying to: {message.replyTo}
+          {/* Quick Reactions */}
+          {['👍', '❤️', '😂'].map((emoji) => (
+            <button
+              key={emoji}
+              onClick={() => onReact(message.id, emoji)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                fontSize: '16px',
+                cursor: 'pointer',
+                padding: '4px',
+                borderRadius: '50%',
+                transition: 'background 0.2s ease'
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = isDark ? '#404040' : '#f8f9fa';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'transparent';
+              }}
+            >
+              {emoji}
+            </button>
+          ))}
+          
+          {/* More Reactions Button */}
+          <button
+            onClick={() => setShowReactionPicker(!showReactionPicker)}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              fontSize: '14px',
+              cursor: 'pointer',
+              padding: '4px 6px',
+              borderRadius: '12px',
+              color: isDark ? '#adb5bd' : '#6c757d',
+              transition: 'all 0.2s ease'
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = isDark ? '#404040' : '#f8f9fa';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'transparent';
+            }}
+          >
+            😀
+          </button>
+          
+          {/* Reply Button */}
+          <button
+            onClick={() => onReply(message)}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              fontSize: '14px',
+              cursor: 'pointer',
+              padding: '4px 6px',
+              borderRadius: '12px',
+              color: isDark ? '#adb5bd' : '#6c757d',
+              transition: 'all 0.2s ease'
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = isDark ? '#404040' : '#f8f9fa';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'transparent';
+            }}
+          >
+            ↩️
+          </button>
         </div>
       )}
-      
-      <FilePreview message={message} isDark={isDark} />
-      
-      {message.text && (
-        <p style={{
-          margin: 0, 
-          whiteSpace: 'pre-wrap',
-          fontSize: '15px',
-          lineHeight: '1.4',
-          fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+
+      {/* Extended Reaction Picker */}
+      {showReactionPicker && (
+        <div style={{
+          position: 'absolute',
+          top: '32px',
+          right: sent ? 'auto' : '100%',
+          left: sent ? '100%' : 'auto',
+          background: isDark ? '#2a2a2a' : '#ffffff',
+          borderRadius: '12px',
+          padding: '8px',
+          boxShadow: isDark ? '0 4px 12px rgba(0,0,0,0.3)' : '0 4px 12px rgba(0,0,0,0.15)',
+          border: `1px solid ${isDark ? '#404040' : '#e9ecef'}`,
+          zIndex: 20,
+          display: 'grid',
+          gridTemplateColumns: 'repeat(6, 1fr)',
+          gap: '4px',
+          minWidth: '200px'
         }}>
-          {message.text}
-        </p>
+          {commonEmojis.map((emoji) => (
+            <button
+              key={emoji}
+              onClick={() => {
+                onReact(message.id, emoji);
+                setShowReactionPicker(false);
+              }}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                fontSize: '20px',
+                cursor: 'pointer',
+                padding: '6px',
+                borderRadius: '6px',
+                transition: 'background 0.2s ease'
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = isDark ? '#404040' : '#f8f9fa';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'transparent';
+              }}
+            >
+              {emoji}
+            </button>
+          ))}
+        </div>
       )}
-      
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px' }}>
-        <p style={{
-          margin: 0, 
-          fontSize: '12px', 
-          color: sent 
-            ? 'rgba(255,255,255,0.7)' 
-            : isDark 
-              ? '#adb5bd' 
-              : '#6c757d', 
-          fontWeight: '500'
-        }}>
-          {message.timestamp}
-          {message.edited && ' (edited)'}
-        </p>
-        {sent && (
-          <span style={{
-            fontSize: '12px',
-            color: 'rgba(255,255,255,0.7)',
-            marginLeft: '8px'
+
+      <div style={{
+        background: sent 
+          ? '#228B22'
+          : isDark 
+            ? '#2a2a2a' 
+            : '#ffffff',
+        color: sent 
+          ? '#ffffff' 
+          : isDark 
+            ? '#ffffff' 
+            : '#1a1a1a',
+        padding: '12px 16px',
+        borderRadius: sent ? '20px 20px 4px 20px' : '20px 20px 20px 4px',
+        maxWidth: '70%',
+        boxShadow: isDark 
+          ? '0 2px 8px rgba(0,0,0,0.3)' 
+          : '0 2px 8px rgba(0,0,0,0.1)',
+        position: 'relative',
+        wordBreak: 'break-word'
+      }}>
+        {message.replyTo && (
+          <div style={{
+            background: sent ? 'rgba(255,255,255,0.1)' : isDark ? '#1a1a1a' : '#f8f9fa',
+            padding: '8px 12px',
+            borderRadius: '8px',
+            marginBottom: '8px',
+            fontSize: '13px',
+            borderLeft: `3px solid ${sent ? '#ffffff' : '#228B22'}`
           }}>
-            ✓✓
-          </span>
+            Replying to: {message.replyTo}
+          </div>
         )}
-      </div>
-      
-      {message.reactions && message.reactions.length > 0 && (
-        <MessageReactions 
-          reactions={message.reactions} 
-          onReact={(emoji) => onReact(message.id, emoji)}
-          isDark={isDark}
-        />
-      )}
+        
+        <FilePreview message={message} isDark={isDark} />
+        
+        {message.text && (
+          <p style={{
+            margin: 0, 
+            whiteSpace: 'pre-wrap',
+            fontSize: '15px',
+            lineHeight: '1.4',
+            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+          }}>
+            {message.text}
+          </p>
+        )}
+        
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px' }}>
+          <p style={{
+            margin: 0, 
+            fontSize: '12px', 
+            color: sent 
+              ? 'rgba(255,255,255,0.7)' 
+              : isDark 
+                ? '#adb5bd' 
+                : '#6c757d', 
+            fontWeight: '500'
+          }}>
+            {message.timestamp}
+            {message.edited && ' (edited)'}
+          </p>
+          {sent && (
+            <span style={{
+              fontSize: '12px',
+              color: 'rgba(255,255,255,0.7)',
+              marginLeft: '8px'
+            }}>
+              ✓✓
+            </span>
+          )}
+        </div>
+        
+        {message.reactions && message.reactions.length > 0 && (
+          <MessageReactions 
+            reactions={message.reactions} 
+            onReact={(emoji) => onReact(message.id, emoji)}
+            isDark={isDark}
+          />
+        )}
         </div>
     </div>
 );
+};
 
-const MessageInput = ({ onSendMessage, onFileUpload, isDark }: { onSendMessage: (text: string, type?: MessageType) => void, onFileUpload: (file: File) => void, isDark: boolean }) => {
+const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCancelReply }: { 
+  onSendMessage: (text: string, type?: MessageType) => void, 
+  onFileUpload: (file: File) => void, 
+  isDark: boolean,
+  replyingTo?: Message | undefined,
+  onCancelReply?: () => void
+}) => {
     const [text, setText] = useState('');
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const commonEmojis = ['😀', '😂', '😍', '🤔', '👍', '👎', '❤️', '🎉', '😢', '😡', '🔥', '💯'];
 
     const handleSend = () => {
         if (text.trim()) {
@@ -627,98 +790,233 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark }: { onSendMessage: 
     }
   };
 
+  const handleEmojiSelect = (emoji: string) => {
+    setText(prev => prev + emoji);
+    setShowEmojiPicker(false);
+    };
+
     return (
     <div style={{
-      padding: '16px 24px', 
       background: isDark ? '#1a1a1a' : '#ffffff', 
       borderTop: `1px solid ${isDark ? '#2a2a2a' : '#e9ecef'}`,
-      display: 'flex',
-      alignItems: 'center',
-      gap: '12px'
+      position: 'relative'
     }}>
-      <input
-        type="file"
-        ref={fileInputRef}
-        onChange={handleFileSelect}
-        style={{ display: 'none' }}
-        accept="image/*,.pdf,.doc,.docx,.txt"
-      />
-      
-      <div style={{ 
-        flex: 1, 
-        position: 'relative',
-        display: 'flex',
-        alignItems: 'center'
-      }}>
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          style={{
-            position: 'absolute',
-            left: '12px',
-            background: 'none',
-            border: 'none',
-            color: isDark ? '#adb5bd' : '#6c757d',
-            fontSize: '16px',
-            cursor: 'pointer',
-            padding: '6px',
-            borderRadius: '50%',
+      {/* Reply Preview */}
+      {replyingTo && (
+        <div style={{
+          padding: '12px 24px',
+          background: isDark ? '#2a2a2a' : '#f8f9fa',
+          borderBottom: `1px solid ${isDark ? '#404040' : '#dee2e6'}`,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}>
+          <div style={{
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
-            width: '28px',
-            height: '28px',
-            zIndex: 1,
-            transition: 'color 0.2s ease'
-          }}
-          onMouseEnter={e => {
-            e.currentTarget.style.color = isDark ? '#ffffff' : '#1a1a1a';
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.color = isDark ? '#adb5bd' : '#6c757d';
-          }}
-        >
-          📎
-        </button>
+            gap: '8px',
+            flex: 1
+          }}>
+            <span style={{
+              fontSize: '14px',
+              color: isDark ? '#adb5bd' : '#6c757d'
+            }}>
+              ↩️ Replying to {replyingTo.sender}:
+            </span>
+            <span style={{
+              fontSize: '14px',
+              color: isDark ? '#ffffff' : '#1a1a1a',
+              maxWidth: '200px',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap'
+            }}>
+              {replyingTo.text}
+            </span>
+          </div>
+          <button
+            onClick={onCancelReply}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: isDark ? '#adb5bd' : '#6c757d',
+              cursor: 'pointer',
+              fontSize: '16px',
+              padding: '4px'
+            }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* Emoji Picker */}
+      {showEmojiPicker && (
+        <div style={{
+          position: 'absolute',
+          bottom: '100%',
+          left: '24px',
+          background: isDark ? '#2a2a2a' : '#ffffff',
+          borderRadius: '12px',
+          padding: '12px',
+          boxShadow: isDark ? '0 4px 12px rgba(0,0,0,0.3)' : '0 4px 12px rgba(0,0,0,0.15)',
+          border: `1px solid ${isDark ? '#404040' : '#e9ecef'}`,
+          zIndex: 20,
+          display: 'grid',
+          gridTemplateColumns: 'repeat(6, 1fr)',
+          gap: '8px',
+          minWidth: '280px'
+        }}>
+          {commonEmojis.map((emoji) => (
+            <button
+              key={emoji}
+              onClick={() => handleEmojiSelect(emoji)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                fontSize: '24px',
+                cursor: 'pointer',
+                padding: '8px',
+                borderRadius: '8px',
+                transition: 'background 0.2s ease'
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = isDark ? '#404040' : '#f8f9fa';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'transparent';
+              }}
+            >
+              {emoji}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Main Input Area - Single Container */}
+      <div style={{
+        padding: '20px 24px',
+        position: 'relative'
+      }}>
+        {/* Hidden File Input */}
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleFileSelect}
+          style={{ display: 'none' }}
+          accept="image/*,.pdf,.doc,.docx,.txt"
+        />
         
+        {/* Single Input Field - Direct input with icons inside */}
             <input
                 type="text"
-          placeholder="Type a message..."
+          placeholder="Start Typing..."
                 value={text}
                 onChange={(e) => setText(e.target.value)}
           onKeyPress={handleKeyPress}
           style={{
-            width: '100%', 
-            padding: '12px 16px 12px 48px', 
-            border: `1px solid ${isDark ? '#404040' : '#dee2e6'}`, 
-            borderRadius: '24px',
-            background: isDark ? '#2a2a2a' : '#f8f9fa',
-            color: isDark ? '#ffffff' : '#1a1a1a', 
+            width: '100%',
+            border: 'none',
+            background: '#f5f5f5',
+            color: '#000000',
             outline: 'none',
-            fontSize: '15px'
+            fontSize: '15px',
+            padding: '14px 160px 14px 20px',
+            borderRadius: '12px',
+            boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.1)',
+            position: 'relative'
           }}
         />
-      </div>
-      
-      <button 
-        onClick={handleSend} 
-        disabled={!text.trim()}
-        style={{
-          background: text.trim() ? '#228B22' : (isDark ? '#404040' : '#dee2e6'),
-          color: text.trim() ? '#ffffff' : (isDark ? '#888' : '#6c757d'),
-          border: 'none', 
-          borderRadius: '50%', 
-          width: '44px', 
-          height: '44px', 
-          fontSize: '18px', 
-          cursor: text.trim() ? 'pointer' : 'not-allowed',
+
+        {/* Icons Container - positioned absolutely over the input */}
+        <div style={{
+          position: 'absolute',
+          right: '44px',
+          top: '37%',
+          transform: 'translateY(-50%)',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'center',
-          flexShrink: 0
-        }}
-      >
-        ➤
+          gap: '12px',
+          pointerEvents: 'none'
+        }}>
+          {/* Emoji Button */}
+          <button
+            onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              padding: '0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              pointerEvents: 'auto'
+            }}
+          >
+            <img 
+              src="/icons/__smiley.svg" 
+              alt="emoji"
+              width={30}
+              height={30}
+              style={{ 
+                filter: 'brightness(0)'
+              }}
+            />
+          </button>
+
+          {/* Attachment Button */}
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              padding: '0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              pointerEvents: 'auto'
+            }}
+          >
+            <img 
+              src="/icons/__attach.svg" 
+              alt="attach"
+              width={30}
+              height={30}
+              style={{ 
+                filter: 'brightness(0)'
+              }}
+            />
+          </button>
+
+          {/* Send Button */}
+          <button 
+            onClick={handleSend} 
+            disabled={!text.trim()}
+            style={{
+              background: 'none',
+              border: 'none', 
+              cursor: text.trim() ? 'pointer' : 'not-allowed',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '0',
+              opacity: text.trim() ? 1 : 0.5,
+              pointerEvents: 'auto'
+            }}
+          >
+            <img 
+              src="/icons/__send.svg" 
+              alt="send"
+              width={35}
+              height={35}
+              style={{ 
+                opacity: text.trim() ? 1 : 0.3
+              }}
+            />
             </button>
+        </div>
+      </div>
         </div>
     );
 };
@@ -1016,12 +1314,13 @@ export default function TeamChatPage() {
   const [groupName, setGroupName] = useState('');
   const [messageSearch, setMessageSearch] = useState('');
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   
   const messagesEndRef = useRef<null | HTMLDivElement>(null);
   const { theme } = useContext(ThemeContext);
 
   const isDark = theme === 'dark';
-  const activeChat = chats.find(c => c.id === activeChatId);
+  const activeChat = chats.find(chat => chat.id === activeChatId);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -1088,6 +1387,14 @@ export default function TeamChatPage() {
     }
   };
 
+  const handleReply = (message: Message) => {
+    setReplyingTo(message);
+  };
+
+  const handleCancelReply = () => {
+    setReplyingTo(null);
+  };
+
   const handleSendMessage = (text: string, type: MessageType = 'text') => {
     if (!activeChatId) return;
 
@@ -1097,7 +1404,8 @@ export default function TeamChatPage() {
       sender: CURRENT_USER.name,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       type,
-      sent: true
+      sent: true,
+      replyTo: replyingTo ? `${replyingTo.sender}: ${replyingTo.text.substring(0, 50)}${replyingTo.text.length > 50 ? '...' : ''}` : undefined
     };
 
     const updatedChats = chats.map(chat => {
@@ -1113,6 +1421,7 @@ export default function TeamChatPage() {
     });
 
     setChats(updatedChats);
+    setReplyingTo(null); // Clear reply after sending
   };
 
   const handleFileUpload = (file: File) => {
@@ -1519,13 +1828,14 @@ export default function TeamChatPage() {
           flexDirection: 'column'
         }}>
             {activeChat ? (
-                activeChat.messages.map(msg => (
+                activeChat.messages.map((message, index) => (
               <MessageBubble 
-                key={msg.id} 
-                message={msg}
-                sent={msg.sender === CURRENT_USER.name}
+                key={message.id} 
+                message={message}
+                sent={message.sender === CURRENT_USER.name}
                 isDark={isDark}
                 onReact={handleReaction}
+                onReply={handleReply}
               />
                 ))
             ) : (
@@ -1564,6 +1874,8 @@ export default function TeamChatPage() {
             onSendMessage={handleSendMessage} 
             onFileUpload={handleFileUpload}
             isDark={isDark} 
+            replyingTo={replyingTo || undefined}
+            onCancelReply={handleCancelReply}
           />
         )}
       </div>
