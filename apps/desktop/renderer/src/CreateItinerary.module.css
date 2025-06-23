@@ -1,0 +1,411 @@
+/* === Page Layout === */
+.pageContainer {
+    display: flex;
+    background-color: #f9fafb;
+    min-height: calc(100vh - 60px); /* Use min-height to allow content to grow */
+    font-family: 'Inter', sans-serif;
+}
+
+.mainContent {
+    flex: 1;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden; /* Hide overflow here */
+}
+
+.activityList {
+    flex-grow: 1; /* Takes up the remaining space */
+    overflow-y: auto; /* This is the only part that scrolls */
+    padding-right: 12px; /* For the scrollbar */
+    margin-right: -12px;
+}
+
+/* === Headers === */
+.pageHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 16px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.pageTitle {
+    margin: 0;
+    font-size: 28px;
+    font-weight: 700;
+    color: #111827;
+}
+
+.pageSubtitle {
+    font-size: 18px;
+    color: #6b7280;
+}
+
+.controlsHeader {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 12px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+}
+
+.controlsTitle {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+    color: #111827;
+}
+
+.buttonGroup {
+    display: flex;
+    gap: 12px;
+}
+
+/* === Buttons === */
+.primaryButton, .secondaryButton {
+    padding: 0 24px;
+    height: 48px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 15px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+}
+
+.primaryButton {
+    background-color: #111827;
+    color: #fff;
+    border: 2px solid #111827;
+}
+
+.primaryButton:hover {
+    background-color: #374151;
+    border-color: #374151;
+}
+
+.secondaryButton {
+    background-color: #fff;
+    color: #111827;
+    border: 2px solid #111827;
+}
+
+.secondaryButton:hover {
+    background-color: #f9fafb;
+}
+
+/* === Activity Card === */
+.activityCard {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    margin-bottom: 24px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    transition: all 0.3s ease-in-out;
+}
+
+.activityCard.expanded {
+    border-color: #d1d5db;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+
+.cardHeader {
+    padding: 16px 24px;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.cardTitle {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: #111827;
+}
+
+.deleteButton {
+    background: transparent;
+    border: none;
+    color: #9ca3af;
+    cursor: pointer;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: background-color 0.2s;
+}
+
+.deleteButton:hover {
+    background-color: #f3f4f6;
+    color: #111827;
+}
+
+.cardContent {
+    padding: 0 24px 24px 24px;
+    border-top: 1px solid #e5e7eb;
+}
+
+/* === Forms === */
+.formSection {
+    padding-top: 24px;
+}
+
+.formSectionTitle {
+    font-size: 14px;
+    font-weight: 600;
+    color: #4b5563;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+    border-bottom: 1px solid #e5e7eb;
+    padding-bottom: 8px;
+}
+
+.formRow {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.formField {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 16px;
+}
+
+.formLabel {
+    font-size: 13px;
+    font-weight: 500;
+    color: #374151;
+    margin-bottom: 6px;
+}
+
+.input, .textarea {
+    width: 100%;
+    padding: 12px;
+    font-size: 15px;
+    border-radius: 8px;
+    border: 1px solid #d1d5db;
+    background-color: #f9fafb;
+    box-sizing: border-box;
+    height: 48px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    color: #111827; /* Ensure text color is consistent */
+}
+
+/* Specific fix for date input placeholder/text */
+.input[type="date"]::-webkit-datetime-edit {
+    color: #6b7280; /* Softer color for placeholder text */
+}
+.input[type="date"]:not(:placeholder-shown)::-webkit-datetime-edit {
+    color: #111827; /* Black color for actual date */
+}
+.input[type="date"] {
+    position: relative;
+    line-height: 24px; /* Adjust line-height for better vertical alignment */
+}
+
+.textarea {
+    min-height: 80px;
+    resize: vertical;
+    height: auto;
+}
+
+.input:focus, .textarea:focus {
+    border-color: #111827;
+    box-shadow: 0 0 0 2px rgba(17, 24, 39, 0.2);
+    outline: none;
+}
+
+/* === Modules Section === */
+.moduleDropzone {
+    border: 2px dashed #d1d5db;
+    border-radius: 8px;
+    padding: 24px;
+    text-align: center;
+    color: #6b7280;
+    background-color: #fff;
+    transition: border-color 0.2s;
+}
+
+.moduleDropzone:hover {
+    border-color: #111827;
+}
+
+.moduleList {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.moduleItem {
+    position: relative; /* Needed for absolute positioning of the button */
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    background: #f9fafb;
+    padding: 16px;
+    padding-right: 40px; /* Add space for the delete button */
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+}
+
+.moduleItemContent {
+    flex-grow: 1; /* Allow content to take available space */
+}
+
+.moduleDeleteButton {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: transparent;
+    border: none;
+    color: #9ca3af;
+    cursor: pointer;
+    padding: 4px;
+    line-height: 1;
+    border-radius: 50%;
+    transition: all 0.2s ease;
+}
+
+.moduleDeleteButton:hover {
+    color: #111827;
+    background-color: #e5e7eb;
+}
+
+.moduleTitle {
+    margin: 0 0 12px 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #111827;
+}
+
+.moduleText {
+    margin: 4px 0 0 0;
+    font-size: 14px;
+    color: #6b7280;
+}
+
+/* === Sidebar === */
+.sidebar {
+    position: fixed;
+    right: 0;
+    top: 0;
+    flex-shrink: 0;
+    width: 280px;
+    height: 100vh;
+    background-color: #2d2d2d;
+    border-left: 1px solid #374151;
+    padding: 24px;
+    transition: transform 0.3s ease-in-out;
+    color: #f9fafb;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    z-index: 1000;
+}
+
+.sidebar.collapsed {
+    transform: translateX(calc(100% - 50px));
+    padding: 24px 0;
+}
+
+.sidebar.collapsed .sidebarContent {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.sidebar.collapsed::after {
+    content: 'Modules';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%) rotate(-90deg);
+    transform-origin: center;
+    background: #374151;
+    color: #fff;
+    padding: 8px 16px;
+    border-radius: 4px 4px 0 0;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.sidebarContent {
+    transition: opacity 0.3s ease-in-out;
+}
+
+.sidebarHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.sidebarToggle {
+    background: #fff;
+    border: none;
+    color: #2d2d2d;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 4px;
+    font-weight: 600;
+}
+
+.sidebarToggle:hover {
+    background: #f3f4f6;
+}
+
+.sidebarTitle {
+    font-size: 16px;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 16px;
+    margin-top: 0;
+}
+
+.moduleDraggableList {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.moduleDraggable {
+    padding: 16px;
+    text-align: left;
+    background-color: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    cursor: grab;
+    color: #2d2d2d;
+    transition: all 0.2s ease-in-out;
+}
+
+.moduleDraggable p {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.2;
+}
+
+.moduleDraggable span {
+    display: none;
+}
+
+.moduleDraggable:hover {
+    background-color: #f3f4f6;
+    border-color: #d1d5db;
+} 

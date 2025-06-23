@@ -1,0 +1,5 @@
+
+> @timely/database@0.0.1 build
+> tsc
+
+error TS18003: No inputs were found in config file '/Users/charlesmorgan/Documents/Timely/packages/database/tsconfig.json'. Specified 'include' paths were '["src/**/*"]' and 'exclude' paths were '["node_modules","dist"]'.

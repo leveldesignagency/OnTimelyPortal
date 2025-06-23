@@ -29,6 +29,7 @@ function getEventStatus(event: EventType, today: Date) {
 export default function Sidebar({ events = [], isOverlay, isOpen, setOpen }: SidebarProps) {
   const location = useLocation();
   const [selectedPage, setSelectedPage] = useState(location.pathname);
+  const [isAnimating, setIsAnimating] = useState(false);
   const today = new Date();
   const { theme, toggleTheme } = useContext(ThemeContext);
   const liveEvents = events.filter(e => getEventStatus(e, today) === 'live');
@@ -50,6 +51,14 @@ export default function Sidebar({ events = [], isOverlay, isOpen, setOpen }: Sid
           setOpen(!isOpen);
       }
   }
+
+  const handleThemeToggle = () => {
+    setIsAnimating(true);
+    toggleTheme();
+    setTimeout(() => {
+      setIsAnimating(false);
+    }, 500);
+  };
 
   return (
     <>
@@ -91,7 +100,13 @@ export default function Sidebar({ events = [], isOverlay, isOpen, setOpen }: Sid
             ))}
           </nav>
         )}
-        <div className={styles.sectionTitle}>UPCOMING EVENTS</div>
+        
+        {/* Add spacing and divider between Live and Upcoming events */}
+        <div style={{ marginTop: '24px' }}>
+          <hr className={styles.hr} />
+          <div className={styles.sectionTitle}>UPCOMING EVENTS</div>
+        </div>
+        
         {upcomingEvents.length > 0 && (
           <nav className={styles.nav}>
             {upcomingEvents.map(event => (
@@ -113,16 +128,54 @@ export default function Sidebar({ events = [], isOverlay, isOpen, setOpen }: Sid
           <div className={styles.footerItem}>Settings</div>
           <div className={styles.footerItem}>Sign Out/Switch User</div>
           <div className={styles.footerItem}>
-            <button 
-              onClick={toggleTheme} 
-              className={styles.themeToggleButton}
+            <div 
+              onClick={handleThemeToggle} 
+              className={styles.animatedToggle}
               style={{
-                background: theme === 'dark' ? '#fff' : '#222',
-                color: theme === 'dark' ? '#222' : '#fff',
+                position: 'relative',
+                width: '48px',
+                height: '24px',
+                borderRadius: '12px',
+                padding: '0 2px',
+                display: 'flex',
+                alignItems: 'center',
+                boxShadow: theme === 'dark' 
+                  ? 'inset 0 2px 8px rgba(0, 0, 0, .4), inset 2px 0 4px rgba(0, 0, 0, .3)'
+                  : 'inset 0 2px 8px rgba(0, 0, 0, .15), inset 0 2px 4px rgba(0, 0, 0, .1)',
+                backgroundColor: theme === 'dark' ? '#1a1a1a' : '#f0f0f0',
+                cursor: 'pointer',
+                transition: 'all 0.3s ease'
               }}
             >
-              {theme === 'light' ? 'Dark' : 'Light'} Mode
-            </button>
+              <div 
+                style={{
+                  position: 'absolute',
+                  width: '20px',
+                  height: '20px',
+                  borderRadius: '50%',
+                  backgroundColor: theme === 'dark' ? '#000' : '#fff',
+                  boxShadow: theme === 'dark' 
+                    ? '0 2px 6px rgba(0, 0, 0, .3)'
+                    : '0 2px 6px rgba(0, 0, 0, .2)',
+                  transform: theme === 'dark' ? 'translateX(26px)' : 'translateX(0px)',
+                  transition: 'transform 0.3s ease, background-color 0.3s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                {theme === 'dark' ? (
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2">
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                  </svg>
+                ) : (
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="2">
+                    <circle cx="12" cy="12" r="5"/>
+                    <path d="m12 1-1 2M12 21l1 2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12l2 1M21 12l2-1M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+                  </svg>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </aside>

@@ -6,7 +6,6 @@
   display: flex;
   flex-direction: column;
   height: 100vh;
-  box-shadow: 2px 0 5px rgba(0,0,0,0.1);
   transition: transform 0.3s ease, width 0.3s ease, background-color 0.2s ease, color 0.2s ease;
   z-index: 1000;
   flex-shrink: 0; /* Prevent sidebar from shrinking */
@@ -137,6 +136,28 @@
 
 .themeToggleButton:hover {
   background: #4f46e5;
+}
+
+.animatedToggle {
+  position: relative;
+  width: 48px;
+  height: 24px;
+  border-radius: 12px;
+  padding: 0 2px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.animatedToggle i.animated {
+  animation: spin 0.5s;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .backdrop {

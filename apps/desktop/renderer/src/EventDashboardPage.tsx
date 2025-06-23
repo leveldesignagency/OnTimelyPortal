@@ -136,6 +136,10 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
   const [sendFormRecipients, setSendFormRecipients] = useState<string[]>([]);
   const [currentEmailInput, setCurrentEmailInput] = useState('');
   
+  // State for delete event modal
+  const [showDeleteEventModal, setShowDeleteEventModal] = useState(false);
+  const [deleteEventText, setDeleteEventText] = useState('');
+  
   // Ref to track shift key status
   const shiftKeyRef = useRef(false);
 
@@ -813,10 +817,44 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
 
   const selectAllCheckboxRef = useRef<HTMLInputElement>(null);
 
+  // Add delete event logic
+  const handleDeleteEvent = () => {
+    setShowDeleteEventModal(true);
+  };
+
+  const handleConfirmDeleteEvent = () => {
+    if (deleteEventText !== 'delete') return;
+    
+    const updatedEvents = events.filter(e => e.id !== id);
+    localStorage.setItem('timely_events', JSON.stringify(updatedEvents));
+    navigate('/');
+  };
+
+  // Add email recipient handling functions
+  const handleAddEmailRecipient = () => {
+    if (currentEmailInput && currentEmailInput.includes('@')) {
+      setSendFormRecipients(prev => [...prev, currentEmailInput]);
+      setCurrentEmailInput('');
+    }
+  };
+
+  const handleRemoveEmailRecipient = (index: number) => {
+    setSendFormRecipients(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleNextToPreview = () => {
+    setModalView('preview');
+  };
+
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: '#f8f9fa' }}>
       <div style={{ position: 'fixed', top: 0, left: 0, width: 260, height: '100vh', background: '#222', color: '#fff', zIndex: 100, display: 'flex', flexDirection: 'column' }}>
-        <Sidebar events={events} />
+        <Sidebar 
+          events={events} 
+          isOverlay={false} 
+          isOpen={true} 
+          setOpen={() => {}} 
+        />
       </div>
 
       {activeTab === 'addons' && (
@@ -914,13 +952,485 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
           </div>
 
           <div style={{ display: 'flex', gap: 16, marginBottom: 32 }}>
+            <TabButton id="settings" label="Settings" />
             <TabButton id="itineraries" label="Itineraries" />
             <TabButton id="guests" label="Guests" />
             <TabButton id="addons" label="Add Ons" />
           </div>
 
+          {activeTab === 'settings' && (
+            <div style={{ marginBottom: 64, paddingBottom: 48 }}>
+              <h2 style={{ fontSize: 28, fontWeight: 600, margin: '0 0 32px 0', display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span style={{ fontSize: 32 }}>📊</span>
+                Event Dashboard
+              </h2>
+              
+              {/* Overview Stats Row */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 24, marginBottom: 32 }}>
+                
+                {/* Total Guests Card */}
+                <div style={{ 
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', 
+                  borderRadius: 16, 
+                  padding: 32, 
+                  color: '#fff',
+                  boxShadow: '0 8px 32px rgba(102, 126, 234, 0.3)'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                    <div style={{ fontSize: 48 }}>👥</div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: 36, fontWeight: 700 }}>{guests.length}</div>
+                      <div style={{ fontSize: 14, opacity: 0.8 }}>Total Guests</div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 16, fontSize: 14 }}>
+                    <div>
+                      <div style={{ fontWeight: 600 }}>{guests.filter(g => g.gender === 'Male').length}</div>
+                      <div style={{ opacity: 0.8 }}>Male</div>
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: 600 }}>{guests.filter(g => g.gender === 'Female').length}</div>
+                      <div style={{ opacity: 0.8 }}>Female</div>
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: 600 }}>{new Set(guests.map(g => g.groupId).filter(Boolean)).size}</div>
+                      <div style={{ opacity: 0.8 }}>Groups</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Itinerary Progress Card */}
+                <div style={{ 
+                  background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', 
+                  borderRadius: 16, 
+                  padding: 32, 
+                  color: '#fff',
+                  boxShadow: '0 8px 32px rgba(240, 147, 251, 0.3)'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                    <div style={{ fontSize: 48 }}>📋</div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: 36, fontWeight: 700 }}>{savedItineraries.length}</div>
+                      <div style={{ fontSize: 14, opacity: 0.8 }}>Active Itineraries</div>
+                    </div>
+                  </div>
+                  <div style={{ background: 'rgba(255,255,255,0.2)', borderRadius: 12, padding: 16 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <span>Completion Rate</span>
+                      <span>75%</span>
+                    </div>
+                    <div style={{ background: 'rgba(255,255,255,0.3)', borderRadius: 8, height: 8 }}>
+                      <div style={{ background: '#fff', borderRadius: 8, height: 8, width: '75%' }}></div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Event Status Card */}
+                <div style={{ 
+                  background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)', 
+                  borderRadius: 16, 
+                  padding: 32, 
+                  color: '#fff',
+                  boxShadow: '0 8px 32px rgba(79, 172, 254, 0.3)'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                    <div style={{ fontSize: 48 }}>⚡</div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: 24, fontWeight: 700 }}>{event?.status || 'Active'}</div>
+                      <div style={{ fontSize: 14, opacity: 0.8 }}>Event Status</div>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 14 }}>
+                    <div style={{ marginBottom: 8 }}>📅 Start: {event?.from}</div>
+                    <div>🏁 End: {event?.to}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Guest Journey Tracking */}
+              <div style={{ 
+                background: '#fff', 
+                borderRadius: 16, 
+                padding: 32, 
+                marginBottom: 32,
+                boxShadow: '0 4px 24px rgba(0,0,0,0.08)'
+              }}>
+                <h3 style={{ fontSize: 24, fontWeight: 600, marginBottom: 24, display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span style={{ fontSize: 28 }}>🛫</span>
+                  Guest Journey Checkpoints
+                </h3>
+                
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 20 }}>
+                  
+                  {/* Flight Status */}
+                  <div style={{ border: '2px solid #e5e7eb', borderRadius: 12, padding: 20 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                      <div style={{ 
+                        width: 40, 
+                        height: 40, 
+                        borderRadius: '50%', 
+                        background: 'linear-gradient(135deg, #667eea, #764ba2)', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center',
+                        fontSize: 18
+                      }}>✈️</div>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: 16 }}>Flight Status</div>
+                        <div style={{ color: '#666', fontSize: 14 }}>Landing & Arrival</div>
+                      </div>
+                    </div>
+                    
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: 14 }}>Flights Landed</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontWeight: 600 }}>12/15</span>
+                          <div style={{ width: 60, height: 6, background: '#e5e7eb', borderRadius: 3 }}>
+                            <div style={{ width: '80%', height: 6, background: '#10b981', borderRadius: 3 }}></div>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: 14 }}>Confirmed Arrival</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontWeight: 600 }}>10/15</span>
+                          <div style={{ width: 60, height: 6, background: '#e5e7eb', borderRadius: 3 }}>
+                            <div style={{ width: '67%', height: 6, background: '#3b82f6', borderRadius: 3 }}></div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Security Checkpoint */}
+                  <div style={{ border: '2px solid #e5e7eb', borderRadius: 12, padding: 20 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                      <div style={{ 
+                        width: 40, 
+                        height: 40, 
+                        borderRadius: '50%', 
+                        background: 'linear-gradient(135deg, #fbbf24, #f59e0b)', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center',
+                        fontSize: 18
+                      }}>🔒</div>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: 16 }}>Security</div>
+                        <div style={{ color: '#666', fontSize: 14 }}>Customs & Immigration</div>
+                      </div>
+                    </div>
+                    
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: 14 }}>Through Security</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontWeight: 600 }}>8/10</span>
+                          <div style={{ width: 60, height: 6, background: '#e5e7eb', borderRadius: 3 }}>
+                            <div style={{ width: '80%', height: 6, background: '#f59e0b', borderRadius: 3 }}></div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Transportation */}
+                  <div style={{ border: '2px solid #e5e7eb', borderRadius: 12, padding: 20 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                      <div style={{ 
+                        width: 40, 
+                        height: 40, 
+                        borderRadius: '50%', 
+                        background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center',
+                        fontSize: 18
+                      }}>🚗</div>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: 16 }}>Transportation</div>
+                        <div style={{ color: '#666', fontSize: 14 }}>Driver Assignment</div>
+                      </div>
+                    </div>
+                    
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: 14 }}>With Driver</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontWeight: 600 }}>6/8</span>
+                          <div style={{ width: 60, height: 6, background: '#e5e7eb', borderRadius: 3 }}>
+                            <div style={{ width: '75%', height: 6, background: '#8b5cf6', borderRadius: 3 }}></div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Hotel Check-in */}
+                  <div style={{ border: '2px solid #e5e7eb', borderRadius: 12, padding: 20 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                      <div style={{ 
+                        width: 40, 
+                        height: 40, 
+                        borderRadius: '50%', 
+                        background: 'linear-gradient(135deg, #06b6d4, #0891b2)', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center',
+                        fontSize: 18
+                      }}>🏨</div>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: 16 }}>Accommodation</div>
+                        <div style={{ color: '666', fontSize: 14 }}>Hotel Check-in</div>
+                      </div>
+                    </div>
+                    
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: 14 }}>Checked In</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontWeight: 600 }}>5/6</span>
+                          <div style={{ width: 60, height: 6, background: '#e5e7eb', borderRadius: 3 }}>
+                            <div style={{ width: '83%', height: 6, background: '#06b6d4', borderRadius: 3 }}></div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Real-time Activity Feed */}
+              <div style={{ 
+                background: '#fff', 
+                borderRadius: 16, 
+                padding: 32, 
+                marginBottom: 32,
+                boxShadow: '0 4px 24px rgba(0,0,0,0.08)'
+              }}>
+                <h3 style={{ fontSize: 24, fontWeight: 600, marginBottom: 24, display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span style={{ fontSize: 28 }}>📡</span>
+                  Live Activity Feed
+                </h3>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxHeight: 400, overflowY: 'auto' }}>
+                  
+                  {/* Sample activity items */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 16, background: '#f8fafc', borderRadius: 12, border: '1px solid #e2e8f0' }}>
+                    <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#10b981', flexShrink: 0 }}></div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 600, fontSize: 15 }}>John Smith confirmed arrival</div>
+                      <div style={{ color: '#666', fontSize: 13 }}>Through security checkpoint • 2 minutes ago</div>
+                    </div>
+                    <div style={{ fontSize: 20 }}>✅</div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 16, background: '#f8fafc', borderRadius: 12, border: '1px solid #e2e8f0' }}>
+                    <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#3b82f6', flexShrink: 0 }}></div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 600, fontSize: 15 }}>Flight BA123 landed</div>
+                      <div style={{ color: '#666', fontSize: 13 }}>5 guests on board • 15 minutes ago</div>
+                    </div>
+                    <div style={{ fontSize: 20 }}>✈️</div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 16, background: '#f8fafc', borderRadius: 12, border: '1px solid #e2e8f0' }}>
+                    <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#8b5cf6', flexShrink: 0 }}></div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 600, fontSize: 15 }}>Driver assigned to Group Alpha</div>
+                      <div style={{ color: '#666', fontSize: 13 }}>Vehicle: Mercedes Sprinter • 18 minutes ago</div>
+                    </div>
+                    <div style={{ fontSize: 20 }}>🚗</div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 16, background: '#f8fafc', borderRadius: 12, border: '1px solid #e2e8f0' }}>
+                    <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#06b6d4', flexShrink: 0 }}></div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 600, fontSize: 15 }}>Sarah Johnson checked into hotel</div>
+                      <div style={{ color: '#666', fontSize: 13 }}>Grand Palace Hotel, Room 503 • 25 minutes ago</div>
+                    </div>
+                    <div style={{ fontSize: 20 }}>🏨</div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 16, background: '#f8fafc', borderRadius: 12, border: '1px solid #e2e8f0' }}>
+                    <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#f59e0b', flexShrink: 0 }}></div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 600, fontSize: 15 }}>Emergency contact updated</div>
+                      <div style={{ color: '#666', fontSize: 13 }}>Guest: Mike Davis • 32 minutes ago</div>
+                    </div>
+                    <div style={{ fontSize: 20 }}>📞</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Quick Actions & Settings */}
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 32 }}>
+                
+                {/* Quick Actions */}
+                <div style={{ 
+                  background: '#fff', 
+                  borderRadius: 16, 
+                  padding: 32,
+                  boxShadow: '0 4px 24px rgba(0,0,0,0.08)'
+                }}>
+                  <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 24 }}>Quick Actions</h3>
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
+                    <button style={{ 
+                      background: 'linear-gradient(135deg, #667eea, #764ba2)', 
+                      color: '#fff', 
+                      border: 'none', 
+                      borderRadius: 12, 
+                      padding: '16px 20px',
+                      cursor: 'pointer',
+                      fontSize: 15,
+                      fontWeight: 500,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8
+                    }}>
+                      <span>📊</span>
+                      Export Report
+                    </button>
+                    
+                    <button style={{ 
+                      background: 'linear-gradient(135deg, #4facfe, #00f2fe)', 
+                      color: '#fff', 
+                      border: 'none', 
+                      borderRadius: 12, 
+                      padding: '16px 20px',
+                      cursor: 'pointer',
+                      fontSize: 15,
+                      fontWeight: 500,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8
+                    }}>
+                      <span>📢</span>
+                      Send Announcement
+                    </button>
+
+                    <button style={{ 
+                      background: 'linear-gradient(135deg, #f093fb, #f5576c)', 
+                      color: '#fff', 
+                      border: 'none', 
+                      borderRadius: 12, 
+                      padding: '16px 20px',
+                      cursor: 'pointer',
+                      fontSize: 15,
+                      fontWeight: 500,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8
+                    }}>
+                      <span>🚨</span>
+                      Emergency Alert
+                    </button>
+
+                    <button style={{ 
+                      background: 'linear-gradient(135deg, #a8edea, #fed6e3)', 
+                      color: '#374151', 
+                      border: 'none', 
+                      borderRadius: 12, 
+                      padding: '16px 20px',
+                      cursor: 'pointer',
+                      fontSize: 15,
+                      fontWeight: 500,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8
+                    }}>
+                      <span>📍</span>
+                      Track Logistics
+                    </button>
+                  </div>
+                </div>
+
+                {/* Event Settings & Danger Zone */}
+                <div style={{ 
+                  background: '#fff', 
+                  borderRadius: 16, 
+                  padding: 32,
+                  boxShadow: '0 4px 24px rgba(0,0,0,0.08)'
+                }}>
+                  <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 24 }}>Event Settings</h3>
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <button style={{ 
+                      background: '#f3f4f6', 
+                      color: '#374151', 
+                      border: '1px solid #d1d5db', 
+                      borderRadius: 8, 
+                      padding: '12px 16px',
+                      cursor: 'pointer',
+                      fontSize: 14,
+                      fontWeight: 500,
+                      textAlign: 'left'
+                    }}>
+                      📧 Notification Settings
+                    </button>
+                    
+                    <button style={{ 
+                      background: '#f3f4f6', 
+                      color: '#374151', 
+                      border: '1px solid #d1d5db', 
+                      borderRadius: 8, 
+                      padding: '12px 16px',
+                      cursor: 'pointer',
+                      fontSize: 14,
+                      fontWeight: 500,
+                      textAlign: 'left'
+                    }}>
+                      🔐 Privacy Settings
+                    </button>
+
+                    <button style={{ 
+                      background: '#f3f4f6', 
+                      color: '#374151', 
+                      border: '1px solid #d1d5db', 
+                      borderRadius: 8, 
+                      padding: '12px 16px',
+                      cursor: 'pointer',
+                      fontSize: 14,
+                      fontWeight: 500,
+                      textAlign: 'left'
+                    }}>
+                      📊 Data Export
+                    </button>
+                  </div>
+
+                  {/* Danger Zone */}
+                  <div style={{ marginTop: 32, padding: 20, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 12 }}>
+                    <h4 style={{ color: '#dc2626', marginBottom: 12, fontSize: 16, fontWeight: 600 }}>Danger Zone</h4>
+                    <p style={{ color: '#991b1b', fontSize: 13, marginBottom: 16 }}>Deleting this event is permanent and cannot be undone.</p>
+              <button
+                onClick={handleDeleteEvent}
+                style={{
+                  background: '#fff',
+                        color: '#dc2626',
+                        border: '2px solid #dc2626',
+                  borderRadius: 8,
+                        padding: '12px 20px',
+                        fontSize: 14,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                        width: '100%'
+                }}
+              >
+                Delete Event
+              </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {activeTab === 'itineraries' && (
             <div style={{ marginBottom: 64, paddingBottom: 48 }}>
+              <h2 style={{ fontSize: 28, fontWeight: 600, margin: '0 0 24px 0' }}>Itineraries</h2>
+              
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 24 }}>
                 <button 
                   onClick={() => navigate(`/event/${id}/itinerary/create`)} 
@@ -1497,7 +2007,9 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
 
           {activeTab === 'addons' && (
             <div style={{ marginBottom: 64, position: 'relative', paddingBottom: 48 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+              <h2 style={{ fontSize: 28, fontWeight: 600, margin: '0 0 24px 0' }}>Add Ons</h2>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
                 {Object.entries(activeModules).map(([category, modules]) => (
                   <div
                     key={category}
@@ -1781,132 +2293,265 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
             </div>
             
             {/* Body */}
-            <div style={{ padding: '24px 32px', flex: 1, overflowY: 'auto' }}>
-              {sendState === 'success' ? (
-                <div style={{ textAlign: 'center', padding: '40px 0' }}>
-                  <h3 style={{ fontSize: 22, color: '#28a745', margin: '0 0 8px' }}>Emails Sent!</h3>
-                  <p style={{ color: '#666' }}>The guest forms have been sent to all recipients.</p>
+            <div style={{ padding: '32px', flex: 1, overflowY: 'auto' }}>
+              {sendState === 'success' && (
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 48, marginBottom: 16 }}>✅</div>
+                  <p style={{ fontSize: 18, fontWeight: 500, marginBottom: 8 }}>Forms sent successfully!</p>
+                  <p style={{ color: '#666', marginBottom: 24 }}>Guest forms have been sent to all recipients.</p>
                 </div>
-              ) : sendState === 'error' ? (
-                <div style={{ textAlign: 'center', padding: '40px 0' }}>
-                  <h3 style={{ fontSize: 22, color: '#dc3545', margin: '0 0 8px' }}>Failed to Send</h3>
-                  <p style={{ color: '#666' }}>There was a problem sending the emails.</p>
-                  {sendError && <p style={{ marginTop: 8, fontSize: 14, color: '#666', background: '#f8f8f8', padding: '8px', borderRadius: 4 }}><strong>Details:</strong> {sendError}</p>}
+              )}
+
+              {sendState === 'error' && (
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 48, marginBottom: 16 }}>❌</div>
+                  <p style={{ fontSize: 18, fontWeight: 500, marginBottom: 8 }}>Failed to send forms</p>
+                  <p style={{ color: '#666', marginBottom: 24 }}>There was an error sending the guest forms. Please try again.</p>
                 </div>
-              ) : modalView === 'recipients' ? (
+              )}
+
+              {sendState === 'sending' && (
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 48, marginBottom: 16 }}>⏳</div>
+                  <p style={{ fontSize: 18, fontWeight: 500, marginBottom: 8 }}>Sending forms...</p>
+                  <p style={{ color: '#666', marginBottom: 24 }}>Please wait while we send the guest forms.</p>
+                </div>
+              )}
+
+              {sendState === 'idle' && modalView === 'recipients' && (
                 <div>
-                  <label style={{ fontWeight: 500, fontSize: 14, color: '#4a5568', display: 'block', marginBottom: 8 }}>To:</label>
-                  <div style={{
-                    border: '2px solid #ddd', borderRadius: 8, padding: '4px 8px',
-                    display: 'flex', flexWrap: 'wrap', gap: '8px', cursor: 'text'
-                  }} onClick={() => document.getElementById('email-input-field')?.focus()}>
-                    {sendFormRecipients.map((email, index) => (
-                      <div key={index} style={{
-                        background: '#eef2ff', color: '#4338ca', padding: '6px 12px',
-                        borderRadius: 16, fontSize: 14, display: 'flex',
-                        alignItems: 'center', gap: 8, fontWeight: 500
-                      }}>
-                        {email}
-                        <button
-                          onClick={() => setSendFormRecipients(current => current.filter((_, i) => i !== index))}
-                          style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 16, color: '#4338ca', padding: 0, lineHeight: 1 }}
-                        >&times;</button>
+                  <div style={{ marginBottom: 24 }}>
+                    <label style={{ display: 'block', fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Add Email Recipients</label>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input
+                        type="email"
+                        value={currentEmailInput}
+                        onChange={(e) => setCurrentEmailInput(e.target.value)}
+                        placeholder="Enter email address"
+                        style={{ flex: 1, padding: '10px 12px', border: '2px solid #e5e7eb', borderRadius: 8, fontSize: 14 }}
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddEmailRecipient();
+                          }
+                        }}
+                      />
+                      <button
+                        onClick={handleAddEmailRecipient}
+                        style={{ background: '#000', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 16px', fontSize: 14, fontWeight: 500, cursor: 'pointer' }}
+                      >
+                        Add
+                      </button>
+                    </div>
+                  </div>
+
+                  {sendFormRecipients.length > 0 && (
+                    <div style={{ marginBottom: 24 }}>
+                      <label style={{ display: 'block', fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Recipients ({sendFormRecipients.length})</label>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                        {sendFormRecipients.map((email, idx) => (
+                          <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f3f4f6', padding: '6px 12px', borderRadius: 20, fontSize: 14 }}>
+                            <span>{email}</span>
+                            <button
+                              onClick={() => handleRemoveEmailRecipient(idx)}
+                              style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                    <input
-                      id="email-input-field"
-                      type="email"
-                      value={currentEmailInput}
-                      onChange={(e) => setCurrentEmailInput(e.target.value)}
-                      onKeyDown={handleAddEmailOnKey}
-                      placeholder={sendFormRecipients.length === 0 ? "Enter guest emails..." : ""}
-                      style={{
-                        border: 'none', outline: 'none', padding: '8px',
-                        fontSize: 15, flexGrow: 1, minWidth: 150, background: 'transparent'
-                      }}
-                    />
-                  </div>
-                  <div style={{ textAlign: 'center', margin: '16px 0' }}>
-                      <span style={{ color: '#aaa', fontWeight: 500, fontSize: 14 }}>OR</span>
-                  </div>
-                  <label htmlFor="csv-email-upload" style={{ ...guestPageWhiteButtonStyle, width: '100%', height: 50, fontSize: 16, cursor: 'pointer' }}>
-                    Upload .CSV of Emails
-                  </label>
-                  <input
-                    type="file" id="csv-email-upload" style={{ display: 'none' }} accept=".csv"
-                    onChange={handleCsvUpload}
-                  />
+                    </div>
+                  )}
                 </div>
-              ) : ( // modalView === 'customize'
+              )}
+
+              {sendState === 'idle' && modalView === 'preview' && (
                 <div>
-                  <p style={{ marginTop: 0, marginBottom: 24, color: '#666' }}>
-                    Select the fields and modules to include in the guest form. Required fields cannot be disabled.
-                  </p>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 24px' }}>
-                    <div>
-                      <h4 style={{ margin: '0 0 12px 0', fontSize: 16, fontWeight: 600 }}>Standard Fields</h4>
-                      {formFields.map((field, index) => (
-                        <div key={field.key} style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
-                          <input
-                            type="checkbox" id={`field-${field.key}`} checked={field.enabled}
-                            onChange={() => handleCheckboxChange(index, 'fields')}
-                            disabled={field.required}
-                            style={{ width: 16, height: 16, marginRight: 12, cursor: field.required ? 'not-allowed' : 'pointer', accentColor: '#4f46e5' }}
-                          />
-                          <label htmlFor={`field-${field.key}`} style={{ fontWeight: 500, fontSize: 14, color: field.required ? '#999' : '#333', cursor: field.required ? 'not-allowed' : 'pointer' }}>
-                            {field.label} {field.required && <span style={{ color: '#999' }}>(Required)</span>}
-                          </label>
-                        </div>
-                      ))}
-                    </div>
-                    <div>
-                      <h4 style={{ margin: '0 0 12px 0', fontSize: 16, fontWeight: 600 }}>Add-on Modules</h4>
-                      {formModules.map((module, index) => (
-                        <div key={module.key} style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
-                          <input
-                            type="checkbox" id={`module-${module.key}`} checked={module.enabled}
-                            onChange={() => handleCheckboxChange(index, 'modules')}
-                            style={{ width: 16, height: 16, marginRight: 12, cursor: 'pointer', accentColor: '#4f46e5' }}
-                          />
-                          <label htmlFor={`module-${module.key}`} style={{ fontWeight: 500, fontSize: 14, color: '#333', cursor: 'pointer' }}>{module.label}</label>
-                        </div>
-                      ))}
-                    </div>
+                  <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, padding: 20, marginBottom: 24 }}>
+                    <h4 style={{ margin: '0 0 12px', fontSize: 16, fontWeight: 600 }}>Form Preview</h4>
+                    <p style={{ margin: '0 0 8px', color: '#666', fontSize: 14 }}>Subject: Complete Your Guest Information for {event?.name}</p>
+                    <p style={{ margin: 0, color: '#666', fontSize: 14 }}>Recipients: {sendFormRecipients.length} email(s)</p>
+                  </div>
+                  <div style={{ fontSize: 14, color: '#666', lineHeight: 1.6 }}>
+                    <p>The form will include fields for:</p>
+                    <ul style={{ margin: '8px 0', paddingLeft: 20 }}>
+                      <li>Personal Information (Name, Email, Phone)</li>
+                      <li>Identification Details</li>
+                      <li>Dietary Requirements & Accessibility Needs</li>
+                      <li>Emergency Contact Information</li>
+                    </ul>
                   </div>
                 </div>
               )}
             </div>
 
             {/* Footer */}
-            <div style={{ padding: '24px 32px', borderTop: '2px solid #eee', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 12 }}>
-              {sendState === 'success' || sendState === 'error' ? (
-                  <button onClick={handleCloseModal} style={{ ...guestPageBlackButtonStyle, width: 140 }}>Done</button>
-              ) : (
+            <div style={{ padding: '24px 32px', borderTop: '2px solid #eee', display: 'flex', justifyContent: 'space-between' }}>
+              {sendState === 'idle' && (
                 <>
                   <button
                     onClick={handleCloseModal}
-                    style={{ ...guestPageWhiteButtonStyle, background: '#eee', borderColor: '#eee', color: '#222', width: 140 }}
-                  >Cancel</button>
-                  
-                  {modalView === 'customize' && (
-                    <button onClick={() => setModalView('recipients')} style={{ ...guestPageWhiteButtonStyle, width: 140 }}>Back</button>
-                  )}
-                  
-                  <button
-                    onClick={modalView === 'recipients' ? () => setModalView('customize') : handleSendForm}
-                    style={{ 
-                      ...guestPageBlackButtonStyle, 
-                      width: 140, 
-                      cursor: sendFormRecipients.length === 0 || sendState === 'sending' ? 'not-allowed' : 'pointer',
-                      background: sendFormRecipients.length === 0 || sendState === 'sending' ? '#ccc' : '#000',
-                      borderColor: sendFormRecipients.length === 0 || sendState === 'sending' ? '#ccc' : '#000',
-                    }}
-                    disabled={sendFormRecipients.length === 0 || sendState === 'sending'}
+                    style={{ background: '#f5f5f5', color: '#222', border: '1px solid #ddd', borderRadius: 8, padding: '10px 24px', fontSize: 16, fontWeight: 500, cursor: 'pointer' }}
                   >
-                    {sendState === 'sending' ? 'Sending...' : (modalView === 'recipients' ? 'Next' : 'Send Form')}
+                    Cancel
                   </button>
+                  <div style={{ display: 'flex', gap: 12 }}>
+                    {modalView === 'preview' && (
+                      <button
+                        onClick={() => setModalView('recipients')}
+                        style={{ background: '#fff', color: '#000', border: '2px solid #000', borderRadius: 8, padding: '10px 24px', fontSize: 16, fontWeight: 500, cursor: 'pointer' }}
+                      >
+                        Back
+                      </button>
+                    )}
+                    <button
+                      onClick={modalView === 'recipients' ? handleNextToPreview : handleSendForm}
+                      disabled={sendFormRecipients.length === 0}
+                      style={{
+                        background: sendFormRecipients.length > 0 ? '#000' : '#ccc',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: 8,
+                        padding: '10px 24px',
+                        fontSize: 16,
+                        fontWeight: 500,
+                        cursor: sendFormRecipients.length > 0 ? 'pointer' : 'not-allowed'
+                      }}
+                    >
+                      {modalView === 'recipients' ? 'Next' : 'Send Forms'}
+                    </button>
+                  </div>
                 </>
               )}
+              {(sendState === 'success' || sendState === 'error') && (
+                <button
+                  onClick={handleCloseModal}
+                  style={{ background: '#000', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 24px', fontSize: 16, fontWeight: 500, cursor: 'pointer', marginLeft: 'auto' }}
+                >
+                  Close
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Delete Event Modal */}
+      {showDeleteEventModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.6)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 2000,
+          backdropFilter: 'blur(5px)'
+        }}>
+          <div style={{
+            background: '#fff',
+            borderRadius: 16,
+            padding: '40px 48px',
+            minWidth: 500,
+            maxWidth: 600,
+            boxShadow: '0 4px 32px rgba(0,0,0,0.2)',
+            textAlign: 'center'
+          }}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
+            <h2 style={{ marginTop: 0, marginBottom: 16, fontSize: 24, fontWeight: 600, color: '#ef4444' }}>
+              Delete Event
+            </h2>
+            <p style={{ color: '#666', fontSize: 16, marginBottom: 8, lineHeight: 1.6 }}>
+              Are you sure you want to delete <strong>"{event?.name}"</strong>?
+            </p>
+            <p style={{ color: '#666', fontSize: 16, marginBottom: 24, lineHeight: 1.6 }}>
+              This will permanently delete the event and all associated data including guests, itineraries, and settings. This action cannot be undone.
+            </p>
+            <div style={{ marginBottom: 32 }}>
+              <label style={{ display: 'block', fontSize: 14, fontWeight: 500, marginBottom: 8, textAlign: 'left' }}>
+                Type "delete" to confirm:
+              </label>
+              <input
+                type="text"
+                value={deleteEventText}
+                onChange={(e) => setDeleteEventText(e.target.value)}
+                placeholder="Type 'delete' to confirm"
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  fontSize: 16,
+                  borderRadius: 8,
+                  border: '2px solid #e5e7eb',
+                  outline: 'none',
+                  textAlign: 'center'
+                }}
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = '#ef4444';
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = '#e5e7eb';
+                }}
+              />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 16 }}>
+              <button
+                onClick={() => {
+                  setShowDeleteEventModal(false);
+                  setDeleteEventText('');
+                }}
+                style={{
+                  background: '#f5f5f5',
+                  color: '#222',
+                  fontWeight: 500,
+                  fontSize: 18,
+                  border: '2px solid #e5e7eb',
+                  borderRadius: 8,
+                  padding: '12px 36px',
+                  minWidth: 120,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = '#e5e7eb';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = '#f5f5f5';
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDeleteEvent}
+                disabled={deleteEventText !== 'delete'}
+                style={{
+                  background: deleteEventText === 'delete' ? '#ef4444' : '#fca5a5',
+                  color: '#fff',
+                  fontWeight: 500,
+                  fontSize: 18,
+                  border: 'none',
+                  borderRadius: 8,
+                  padding: '13px 37px',
+                  minWidth: 120,
+                  cursor: deleteEventText === 'delete' ? 'pointer' : 'not-allowed',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  if (deleteEventText === 'delete') {
+                    e.currentTarget.style.background = '#dc2626';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (deleteEventText === 'delete') {
+                    e.currentTarget.style.background = '#ef4444';
+                  }
+                }}
+              >
+                Delete Event
+              </button>
             </div>
           </div>
         </div>
