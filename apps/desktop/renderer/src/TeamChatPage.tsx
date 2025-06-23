@@ -2524,8 +2524,6 @@ export default function TeamChatPage() {
           )
         );
         
-        // Show success notification for sent message
-        addNotification('Message sent successfully', 'success');
         scrollToBottom();
       }
     } catch (error) {
