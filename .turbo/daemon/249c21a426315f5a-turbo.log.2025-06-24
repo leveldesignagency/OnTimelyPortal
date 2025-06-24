@@ -1,0 +1,20 @@
+2025-06-24T07:29:30.988430Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf(".turbo/cookies/.turbo-cookie"), AnchoredSystemPathBuf(".turbo/cookies/1.cookie")}
+2025-06-24T07:29:30.988440Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2025-06-24T07:33:11.587218Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("DISABLE_RLS_TEMP.sql")}
+2025-06-24T07:33:11.587252Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2025-06-24T07:33:15.487880Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("DISABLE_RLS_TEMP.sql")}
+2025-06-24T07:33:15.487916Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2025-06-24T07:33:16.487925Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("DISABLE_RLS_TEMP.sql")}
+2025-06-24T07:33:16.487954Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2025-06-24T07:33:35.687660Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("FIXED_RLS_POLICIES.sql")}
+2025-06-24T07:33:35.687669Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2025-06-24T07:33:39.488250Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("FIXED_RLS_POLICIES.sql")}
+2025-06-24T07:33:39.488278Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2025-06-24T07:33:41.487972Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("FIXED_RLS_POLICIES.sql")}
+2025-06-24T07:33:41.488004Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2025-06-24T07:33:58.086858Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("INSERT_TEST_DATA.sql")}
+2025-06-24T07:33:58.086871Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2025-06-24T07:34:01.487475Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("INSERT_TEST_DATA.sql")}
+2025-06-24T07:34:01.487502Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2025-06-24T07:34:02.487706Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("INSERT_TEST_DATA.sql")}
+2025-06-24T07:34:02.487729Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
