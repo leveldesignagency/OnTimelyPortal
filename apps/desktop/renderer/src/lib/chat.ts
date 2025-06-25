@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import { User } from './auth'
+import { User, getCurrentUser, validateCompanyAccess, getCurrentUserCompanyId } from './auth'
 
 export interface Chat {
   id: string
@@ -48,6 +48,7 @@ export interface ChatParticipant {
   id: string
   chat_id: string
   user_id: string
+  role: 'admin' | 'member'
   joined_at: string
   is_muted: boolean
   is_pinned: boolean
@@ -77,14 +78,42 @@ export interface TeamMember {
   user?: User
 }
 
-// Get all teams for a user's company
+export interface TeamInvitation {
+  id: string
+  team_id: string
+  invited_by: string
+  email: string
+  role: 'admin' | 'member'
+  status: 'pending' | 'accepted' | 'declined' | 'expired'
+  invitation_token: string
+  expires_at: string
+  accepted_at?: string
+  created_at: string
+  updated_at: string
+  team?: Team
+  invited_by_user?: User
+}
+
+// Enhanced team functions with company isolation
 export const getCompanyTeams = async (companyId: string): Promise<Team[]> => {
   try {
+    // Validate company access
+    if (!validateCompanyAccess(companyId)) {
+      console.error('❌ Access denied to company teams')
+      return []
+    }
+
     const { data, error } = await supabase
       .from('teams')
       .select(`
         *,
-        team_members(*, users(*))
+        team_members(
+          id,
+          user_id,
+          role,
+          joined_at,
+          user:users(*)
+        )
       `)
       .eq('company_id', companyId)
       .eq('is_archived', false)
@@ -94,10 +123,7 @@ export const getCompanyTeams = async (companyId: string): Promise<Team[]> => {
 
     return (data || []).map(team => ({
       ...team,
-      members: team.team_members?.map(member => ({
-        ...member,
-        user: member.users
-      })) || [],
+      members: team.team_members || [],
       member_count: team.team_members?.length || 0
     }))
   } catch (error) {
@@ -106,7 +132,7 @@ export const getCompanyTeams = async (companyId: string): Promise<Team[]> => {
   }
 }
 
-// Create a new team
+// Enhanced team creation with strict validation
 export const createTeam = async (
   creatorId: string,
   companyId: string,
@@ -114,61 +140,175 @@ export const createTeam = async (
   description?: string,
   memberIds: string[] = []
 ): Promise<Team | null> => {
-  try {
-    // Ensure creator is in the member list
-    const allMemberIds = Array.from(new Set([creatorId, ...memberIds]))
+  console.log('🚀 Starting team creation with params:', {
+    creatorId,
+    companyId,
+    teamName,
+    description,
+    memberIds
+  })
 
-    // Create the team
+  try {
+    // Validate company access
+    console.log('🔍 Validating company access for:', companyId)
+    if (!validateCompanyAccess(companyId)) {
+      console.error('❌ Company access validation failed')
+      throw new Error('Access denied: Cannot create team in this company')
+    }
+    console.log('✅ Company access validated')
+
+    // Validate creator belongs to company
+    console.log('🔍 Getting current user...')
+    const currentUser = getCurrentUser()
+    console.log('👤 Current user:', currentUser)
+    
+    if (!currentUser) {
+      console.error('❌ No current user found')
+      throw new Error('No authenticated user')
+    }
+
+    if (currentUser.id !== creatorId) {
+      console.error('❌ Creator ID mismatch:', { currentUserId: currentUser.id, creatorId })
+      throw new Error('Access denied: Creator ID does not match current user')
+    }
+
+    if (currentUser.company_id !== companyId) {
+      console.error('❌ Company ID mismatch:', { userCompanyId: currentUser.company_id, companyId })
+      throw new Error('Access denied: Creator must belong to the specified company')
+    }
+    console.log('✅ Creator validation passed')
+
+    // Create the team directly
+    console.log('🏗️ Creating team in database...')
+    
+    // Generate simple initials for avatar instead of encoded name
+    const getInitials = (name: string) => {
+      return name.split(' ').map(word => word.charAt(0).toUpperCase()).join('').slice(0, 2)
+    }
+    
+    const teamInsert = {
+      company_id: companyId,
+      name: teamName,
+      description: description,
+      avatar: getInitials(teamName),
+      created_by: creatorId,
+      is_archived: false
+    }
+    console.log('📝 Team insert data:', teamInsert)
+
     const { data: teamData, error: teamError } = await supabase
       .from('teams')
-      .insert({
-        company_id: companyId,
-        name: teamName,
-        description: description || '',
-        avatar: teamName.substring(0, 2).toUpperCase(),
-        created_by: creatorId
-      })
+      .insert(teamInsert)
       .select()
       .single()
 
-    if (teamError) throw teamError
+    if (teamError) {
+      console.error('❌ Team creation database error:', teamError)
+      console.error('❌ Error details:', {
+        message: teamError.message,
+        details: teamError.details,
+        hint: teamError.hint,
+        code: teamError.code
+      })
+      throw teamError
+    }
 
-    // Add team members
-    const memberInserts = allMemberIds.map(userId => ({
-      team_id: teamData.id,
-      user_id: userId,
-      role: userId === creatorId ? 'admin' : 'member'
-    }))
+    if (!teamData) {
+      console.error('❌ No team data returned from database')
+      throw new Error('No team data returned from database')
+    }
+
+    console.log('✅ Team created successfully:', teamData)
+
+    // Add creator as admin member
+    console.log('👥 Adding team members...')
+    const memberInserts = [
+      {
+        team_id: teamData.id,
+        user_id: creatorId,
+        role: 'admin' as const
+      }
+    ]
+
+    // Add other members as regular members
+    memberIds.forEach(memberId => {
+      if (memberId !== creatorId) {
+        memberInserts.push({
+          team_id: teamData.id,
+          user_id: memberId,
+          role: 'member' as const
+        })
+      }
+    })
+
+    console.log('📝 Member inserts:', memberInserts)
 
     const { error: membersError } = await supabase
       .from('team_members')
       .insert(memberInserts)
 
-    if (membersError) throw membersError
+    if (membersError) {
+      console.error('❌ Team members insertion error:', membersError)
+      console.error('❌ Members error details:', {
+        message: membersError.message,
+        details: membersError.details,
+        hint: membersError.hint,
+        code: membersError.code
+      })
+      
+      // Clean up the team if member insertion fails
+      console.log('🧹 Cleaning up team due to member insertion failure...')
+      await supabase.from('teams').delete().eq('id', teamData.id)
+      throw membersError
+    }
 
-    // Fetch the complete team data with members
+    console.log('✅ Team members added successfully:', memberInserts.length)
+
+    // Fetch the complete team with members
+    console.log('📊 Fetching complete team data...')
     const { data: completeTeam, error: fetchError } = await supabase
       .from('teams')
       .select(`
         *,
-        team_members(*, users(*))
+        team_members(
+          id,
+          user_id,
+          role,
+          joined_at,
+          user:users(*)
+        )
       `)
       .eq('id', teamData.id)
       .single()
 
-    if (fetchError) throw fetchError
+    if (fetchError) {
+      console.error('❌ Team fetch error:', fetchError)
+      console.error('❌ Fetch error details:', {
+        message: fetchError.message,
+        details: fetchError.details,
+        hint: fetchError.hint,
+        code: fetchError.code
+      })
+      throw fetchError
+    }
 
-    return {
+    if (!completeTeam) {
+      console.error('❌ No complete team data returned')
+      throw new Error('Failed to fetch complete team data')
+    }
+
+    const result = {
       ...completeTeam,
-      members: completeTeam.team_members?.map(member => ({
-        ...member,
-        user: member.users
-      })) || [],
+      members: completeTeam.team_members || [],
       member_count: completeTeam.team_members?.length || 0
     }
+
+    console.log('🎉 Complete team created successfully:', result)
+    return result
   } catch (error) {
-    console.error('Failed to create team:', error)
-    return null
+    console.error('💥 Team creation failed with error:', error)
+    console.error('💥 Error stack:', error instanceof Error ? error.stack : 'No stack trace')
+    throw error
   }
 }
 
@@ -245,81 +385,336 @@ export const createTeamChat = async (
   }
 }
 
-// Search teams by name
-export const searchTeams = async (companyId: string, searchQuery: string): Promise<Team[]> => {
+// Enhanced user search with company isolation
+export const searchCompanyUsersForTeam = async (companyId: string, searchQuery: string): Promise<User[]> => {
   try {
+    // Validate company access
+    if (!validateCompanyAccess(companyId)) {
+      return []
+    }
+
     const { data, error } = await supabase
-      .from('teams')
-      .select(`
-        *,
-        team_members(*, users(*))
-      `)
+      .from('users')
+      .select('*')
       .eq('company_id', companyId)
-      .eq('is_archived', false)
-      .ilike('name', `%${searchQuery}%`)
-      .order('created_at', { ascending: false })
+      .or(`name.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%`)
+      .order('name')
+      .limit(10)
 
     if (error) throw error
 
-    return (data || []).map(team => ({
-      ...team,
-      members: team.team_members?.map(member => ({
-        ...member,
-        user: member.users
-      })) || [],
-      member_count: team.team_members?.length || 0
-    }))
+    console.log(`🔍 Company user search results for "${searchQuery}":`, data)
+    return data || []
   } catch (error) {
-    console.error('Failed to search teams:', error)
+    console.error('Failed to search company users for team:', error)
     return []
   }
 }
 
-// Get all chats for a user
+// Enhanced chat creation with company validation
+export const createDirectChat = async (user1Id: string, user2Id: string, companyId: string): Promise<Chat | null> => {
+  try {
+    console.log('🔧 Creating direct chat:', { user1Id, user2Id, companyId });
+    
+    // Get current user for debugging
+    const currentUser = getCurrentUser();
+    console.log('👤 Current user:', currentUser);
+    
+    // Validate company access
+    if (!validateCompanyAccess(companyId)) {
+      const errorMsg = `Access denied: Cannot create chat in company ${companyId}`;
+      console.error('❌', errorMsg);
+      throw new Error(errorMsg);
+    }
+
+    console.log('✅ Company access validated');
+
+    // Check if a direct chat already exists between these users
+    console.log('🔍 Checking for existing direct chat...');
+    const { data: existingChat, error: existingError } = await supabase
+      .from('chats')
+      .select(`
+        *,
+        chat_participants(user_id)
+      `)
+      .eq('company_id', companyId)
+      .eq('type', 'direct')
+      .eq('is_archived', false)
+
+    if (existingError) {
+      console.error('❌ Error checking existing chats:', existingError);
+    } else {
+      console.log('📋 Existing chats found:', existingChat?.length || 0);
+    }
+
+    if (!existingError && existingChat) {
+      // Find chat where both users are participants
+      const directChat = existingChat.find(chat => {
+        const participantIds = chat.chat_participants?.map(p => p.user_id) || []
+        return participantIds.length === 2 && 
+               participantIds.includes(user1Id) && 
+               participantIds.includes(user2Id)
+      })
+
+      if (directChat) {
+        console.log('✅ Found existing direct chat:', directChat.id);
+        // Fetch complete chat data
+        const { data: completeChat, error: fetchError } = await supabase
+          .from('chats')
+          .select(`
+            *,
+            chat_participants(
+              id,
+              user_id,
+              joined_at,
+              is_muted,
+              is_pinned,
+              user:users(*)
+            )
+          `)
+          .eq('id', directChat.id)
+          .single()
+
+        if (!fetchError && completeChat) {
+          return {
+            ...completeChat,
+            participants: completeChat.chat_participants?.map(cp => cp.user).filter(Boolean) || []
+          }
+        }
+      }
+    }
+
+    // Create new direct chat
+    console.log('🆕 Creating new direct chat...');
+    const { data: chatData, error: chatError } = await supabase
+      .from('chats')
+      .insert({
+        company_id: companyId,
+        name: 'Direct Chat',
+        type: 'direct',
+        avatar: 'DC',
+        created_by: user1Id,
+        is_archived: false
+      })
+      .select()
+      .single()
+
+    if (chatError) {
+      console.error('❌ Chat creation error:', chatError)
+      throw chatError
+    }
+
+    console.log('✅ Chat created successfully:', chatData.id);
+
+    // Add participants
+    console.log('👥 Adding participants...');
+    const { error: participantsError } = await supabase
+      .from('chat_participants')
+      .insert([
+        { chat_id: chatData.id, user_id: user1Id },
+        { chat_id: chatData.id, user_id: user2Id }
+      ])
+
+    if (participantsError) {
+      console.error('❌ Chat participants error:', participantsError)
+      // Clean up chat if participants insertion fails
+      await supabase.from('chats').delete().eq('id', chatData.id)
+      throw participantsError
+    }
+
+    console.log('✅ Participants added successfully');
+
+    // Fetch the complete chat
+    console.log('📋 Fetching complete chat data...');
+    const { data: completeChat, error: fetchError } = await supabase
+      .from('chats')
+      .select(`
+        *,
+        chat_participants(
+          id,
+          user_id,
+          joined_at,
+          is_muted,
+          is_pinned,
+          user:users(*)
+        )
+      `)
+      .eq('id', chatData.id)
+      .single()
+
+    if (fetchError) {
+      console.error('❌ Chat fetch error:', fetchError)
+      throw fetchError
+    }
+
+    console.log('✅ Direct chat created successfully!');
+    return {
+      ...completeChat,
+      participants: completeChat.chat_participants?.map(cp => cp.user).filter(Boolean) || []
+    }
+  } catch (error) {
+    console.error('❌ Failed to create direct chat:', error)
+    return null
+  }
+}
+
+// Enhanced group chat creation with company validation
+export const createGroupChat = async (
+  creatorId: string, 
+  companyId: string, 
+  groupName: string, 
+  participantIds: string[]
+): Promise<Chat | null> => {
+  try {
+    console.log('🚀 createGroupChat called with:', {
+      creatorId,
+      companyId,
+      groupName,
+      participantIds
+    });
+
+    // Validate company access
+    console.log('🔍 Validating company access...');
+    if (!validateCompanyAccess(companyId)) {
+      console.error('❌ Company access validation failed');
+      throw new Error('Access denied: Cannot create group chat in this company')
+    }
+    console.log('✅ Company access validated');
+
+    // Ensure creator is in participants
+    const allParticipants = Array.from(new Set([creatorId, ...participantIds]))
+    console.log('👥 All participants (including creator):', allParticipants);
+    
+    // Generate simple initials for avatar instead of encoded name
+    const getInitials = (name: string) => {
+      return name.split(' ').map(word => word.charAt(0).toUpperCase()).join('').slice(0, 2)
+    }
+
+    const avatar = getInitials(groupName);
+    console.log('🎨 Generated avatar:', avatar);
+
+    // Create the group chat
+    console.log('🏗️ Creating group chat in database...');
+    const chatInsert = {
+      company_id: companyId,
+      name: groupName,
+      type: 'group',
+      avatar: avatar,
+      created_by: creatorId,
+      is_archived: false
+    };
+    console.log('📝 Chat insert data:', chatInsert);
+
+    const { data: chatData, error: chatError } = await supabase
+      .from('chats')
+      .insert(chatInsert)
+      .select()
+      .single()
+
+    if (chatError) {
+      console.error('❌ Group chat creation error:', chatError)
+      throw chatError
+    }
+
+    console.log('✅ Group chat created successfully:', chatData);
+
+    // Add all participants
+    console.log('👥 Adding participants to group...');
+    const participantInserts = allParticipants.map(userId => ({
+      chat_id: chatData.id,
+      user_id: userId,
+      joined_at: new Date().toISOString(),
+      is_muted: false,
+      is_pinned: false
+    }))
+
+    console.log('📝 Participant inserts:', participantInserts);
+
+    const { error: participantsError } = await supabase
+      .from('chat_participants')
+      .insert(participantInserts)
+
+    if (participantsError) {
+      console.error('❌ Group chat participants error:', participantsError)
+      console.log('🧹 Cleaning up chat due to participants error...');
+      // Clean up chat if participants insertion fails
+      await supabase.from('chats').delete().eq('id', chatData.id)
+      throw participantsError
+    }
+
+    console.log('✅ Participants added successfully');
+
+    // Fetch the complete chat
+    console.log('🔄 Fetching complete chat data...');
+    const { data: completeChat, error: fetchError } = await supabase
+      .from('chats')
+      .select(`
+        *,
+        chat_participants(
+          id,
+          user_id,
+          role,
+          joined_at,
+          is_muted,
+          is_pinned,
+          user:users(*)
+        )
+      `)
+      .eq('id', chatData.id)
+      .single()
+
+    if (fetchError) {
+      console.error('❌ Group chat fetch error:', fetchError)
+      throw fetchError
+    }
+
+    console.log('📦 Complete chat data fetched:', completeChat);
+
+    const result = {
+      ...completeChat,
+      participants: completeChat.chat_participants?.map(cp => cp.user).filter(Boolean) || []
+    };
+
+    console.log('🎉 Group chat creation completed successfully:', result);
+    return result;
+  } catch (error) {
+    console.error('💥 Failed to create group chat:', error)
+    return null
+  }
+}
+
+// Enhanced user chats with company isolation
 export const getUserChats = async (userId: string): Promise<Chat[]> => {
   try {
+    const currentUser = getCurrentUser()
+    if (!currentUser || currentUser.id !== userId) {
+      throw new Error('Access denied: Can only fetch chats for current user')
+    }
+
     const { data, error } = await supabase
       .from('chats')
       .select(`
         *,
         chat_participants!inner(
+          id,
           user_id,
+          joined_at,
           is_muted,
           is_pinned,
-          users(*)
+          user:users(*)
         )
       `)
+      .eq('company_id', currentUser.company_id) // Company isolation
       .eq('chat_participants.user_id', userId)
+      .eq('is_archived', false)
       .order('updated_at', { ascending: false })
 
     if (error) throw error
 
-    // Process the data to get participants and last message
-    const chats: Chat[] = []
-    for (const chat of data || []) {
-      // Get all participants
-      const { data: participants } = await supabase
-        .from('chat_participants')
-        .select('*, users(*)')
-        .eq('chat_id', chat.id)
-
-      // Get last message
-      const { data: lastMessage } = await supabase
-        .from('messages')
-        .select('*, users(*)')
-        .eq('chat_id', chat.id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single()
-
-      chats.push({
-        ...chat,
-        participants: participants?.map(p => p.users).filter(Boolean) || [],
-        last_message: lastMessage || undefined
-      })
-    }
-
-    return chats
+    return (data || []).map(chat => ({
+      ...chat,
+      participants: chat.chat_participants?.map(cp => cp.user).filter(Boolean) || []
+    }))
   } catch (error) {
     console.error('Failed to fetch user chats:', error)
     return []
@@ -329,26 +724,71 @@ export const getUserChats = async (userId: string): Promise<Chat[]> => {
 // Get messages for a chat
 export const getChatMessages = async (chatId: string, limit: number = 50): Promise<Message[]> => {
   try {
+    console.log('🔍 getChatMessages called for chat:', chatId);
+    
+    // Validate user has access to this chat
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      console.error('❌ No authenticated user found');
+      throw new Error('No authenticated user')
+    }
+    
+    console.log('👤 Current user in getChatMessages:', currentUser);
+
+    // Check if chat belongs to user's company and user is participant
+    console.log('🔍 Checking chat access...');
+    const { data: chat, error: chatError } = await supabase
+      .from('chats')
+      .select(`
+        company_id,
+        chat_participants!inner(user_id)
+      `)
+      .eq('id', chatId)
+      .eq('chat_participants.user_id', currentUser.id)
+      .single()
+
+    console.log('🔍 Chat access query result:', { chat, chatError });
+
+    if (chatError || !chat) {
+      console.error('❌ Chat not found or access denied:', chatError);
+      throw new Error('Chat not found or access denied')
+    }
+
+    console.log('✅ Chat found, checking company access...');
+    if (!validateCompanyAccess(chat.company_id)) {
+      console.error('❌ Company access denied for company:', chat.company_id);
+      throw new Error('Access denied: Chat not in your company')
+    }
+
+    console.log('✅ Company access validated, fetching messages...');
     const { data, error } = await supabase
       .from('messages')
       .select(`
         *,
-        users(*),
-        message_reactions(*, users(*))
+        sender:users(*),
+        reactions:message_reactions(
+          id,
+          emoji,
+          user_id,
+          created_at,
+          user:users(*)
+        )
       `)
       .eq('chat_id', chatId)
       .order('created_at', { ascending: false })
       .limit(limit)
 
-    if (error) throw error
+    console.log('📨 Messages query result:', { messageCount: data?.length || 0, error });
 
-    return (data || []).map(msg => ({
-      ...msg,
-      sender: msg.users,
-      reactions: msg.message_reactions || []
-    })).reverse() // Reverse to show oldest first
+    if (error) {
+      console.error('❌ Error fetching messages:', error);
+      throw error;
+    }
+
+    console.log('✅ Messages fetched successfully:', data?.length || 0, 'messages');
+    return (data || []).reverse()
   } catch (error) {
-    console.error('Failed to fetch chat messages:', error)
+    console.error('❌ Failed to fetch chat messages:', error)
     return []
   }
 }
@@ -362,6 +802,26 @@ export const sendMessage = async (
   replyToId?: string
 ): Promise<Message | null> => {
   try {
+    const currentUser = getCurrentUser()
+    if (!currentUser || currentUser.id !== senderId) {
+      throw new Error('Access denied: Can only send messages as current user')
+    }
+
+    // Validate chat access (same as getChatMessages)
+    const { data: chat, error: chatError } = await supabase
+      .from('chats')
+      .select(`
+        company_id,
+        chat_participants!inner(user_id)
+      `)
+      .eq('id', chatId)
+      .eq('chat_participants.user_id', currentUser.id)
+      .single()
+
+    if (chatError || !chat || !validateCompanyAccess(chat.company_id)) {
+      throw new Error('Access denied: Cannot send message to this chat')
+    }
+
     const { data, error } = await supabase
       .from('messages')
       .insert({
@@ -373,8 +833,14 @@ export const sendMessage = async (
       })
       .select(`
         *,
-        users(*),
-        message_reactions(*, users(*))
+        sender:users(*),
+        reactions:message_reactions(
+          id,
+          emoji,
+          user_id,
+          created_at,
+          user:users(*)
+        )
       `)
       .single()
 
@@ -386,66 +852,9 @@ export const sendMessage = async (
       .update({ updated_at: new Date().toISOString() })
       .eq('id', chatId)
 
-    return {
-      ...data,
-      sender: data.users,
-      reactions: data.message_reactions || []
-    }
+    return data
   } catch (error) {
     console.error('Failed to send message:', error)
-    return null
-  }
-}
-
-// Create a direct chat between two users
-export const createDirectChat = async (user1Id: string, user2Id: string, companyId: string): Promise<Chat | null> => {
-  try {
-    // Check if direct chat already exists
-    const { data: existingChat } = await supabase
-      .from('chats')
-      .select(`
-        *,
-        chat_participants!inner(user_id)
-      `)
-      .eq('type', 'direct')
-      .eq('company_id', companyId)
-
-    // Find existing direct chat between these users
-    const existing = existingChat?.find(chat => {
-      const participantIds = chat.chat_participants.map(p => p.user_id)
-      return participantIds.includes(user1Id) && participantIds.includes(user2Id) && participantIds.length === 2
-    })
-
-    if (existing) {
-      return existing as Chat
-    }
-
-    // Create new direct chat
-    const { data: newChat, error: chatError } = await supabase
-      .from('chats')
-      .insert({
-        company_id: companyId,
-        type: 'direct',
-        created_by: user1Id
-      })
-      .select()
-      .single()
-
-    if (chatError) throw chatError
-
-    // Add participants
-    const { error: participantsError } = await supabase
-      .from('chat_participants')
-      .insert([
-        { chat_id: newChat.id, user_id: user1Id },
-        { chat_id: newChat.id, user_id: user2Id }
-      ])
-
-    if (participantsError) throw participantsError
-
-    return newChat
-  } catch (error) {
-    console.error('Failed to create direct chat:', error)
     return null
   }
 }
@@ -453,6 +862,11 @@ export const createDirectChat = async (user1Id: string, user2Id: string, company
 // Add reaction to message
 export const addMessageReaction = async (messageId: string, userId: string, emoji: string): Promise<boolean> => {
   try {
+    const currentUser = getCurrentUser()
+    if (!currentUser || currentUser.id !== userId) {
+      return false
+    }
+
     const { error } = await supabase
       .from('message_reactions')
       .upsert({
@@ -463,7 +877,7 @@ export const addMessageReaction = async (messageId: string, userId: string, emoj
 
     return !error
   } catch (error) {
-    console.error('Failed to add reaction:', error)
+    console.error('Failed to add message reaction:', error)
     return false
   }
 }
@@ -471,6 +885,11 @@ export const addMessageReaction = async (messageId: string, userId: string, emoj
 // Remove reaction from message
 export const removeMessageReaction = async (messageId: string, userId: string, emoji: string): Promise<boolean> => {
   try {
+    const currentUser = getCurrentUser()
+    if (!currentUser || currentUser.id !== userId) {
+      return false
+    }
+
     const { error } = await supabase
       .from('message_reactions')
       .delete()
@@ -480,13 +899,19 @@ export const removeMessageReaction = async (messageId: string, userId: string, e
 
     return !error
   } catch (error) {
-    console.error('Failed to remove reaction:', error)
+    console.error('Failed to remove message reaction:', error)
     return false
   }
 }
 
-// Subscribe to real-time messages for a chat
+// Real-time subscriptions with company isolation
 export const subscribeToMessages = (chatId: string, onMessage: (message: Message) => void) => {
+  const currentUser = getCurrentUser()
+  if (!currentUser) {
+    console.error('No authenticated user for message subscription')
+    return null
+  }
+
   return supabase
     .channel(`messages:${chatId}`)
     .on(
@@ -498,33 +923,42 @@ export const subscribeToMessages = (chatId: string, onMessage: (message: Message
         filter: `chat_id=eq.${chatId}`
       },
       async (payload) => {
-        // Fetch the complete message with sender info
-        const { data } = await supabase
+        console.log('New message received:', payload.new)
+        
+        // Fetch complete message with relations
+        const { data, error } = await supabase
           .from('messages')
           .select(`
             *,
-            users(*),
-            message_reactions(*, users(*))
+            sender:users(*),
+            reactions:message_reactions(
+              id,
+              emoji,
+              user_id,
+              created_at,
+              user:users(*)
+            )
           `)
           .eq('id', payload.new.id)
           .single()
 
-        if (data) {
-          onMessage({
-            ...data,
-            sender: data.users,
-            reactions: data.message_reactions || []
-          })
+        if (!error && data) {
+          onMessage(data)
         }
       }
     )
     .subscribe()
 }
 
-// Subscribe to user status changes
 export const subscribeToUserStatus = (companyId: string, onStatusChange: (user: User) => void) => {
+  const currentUser = getCurrentUser()
+  if (!currentUser || !validateCompanyAccess(companyId)) {
+    console.error('Access denied for user status subscription')
+    return null
+  }
+
   return supabase
-    .channel(`users:${companyId}`)
+    .channel(`user_status:${companyId}`)
     .on(
       'postgres_changes',
       {
@@ -534,119 +968,597 @@ export const subscribeToUserStatus = (companyId: string, onStatusChange: (user: 
         filter: `company_id=eq.${companyId}`
       },
       (payload) => {
+        console.log('User status updated:', payload.new)
         onStatusChange(payload.new as User)
       }
     )
     .subscribe()
 }
 
-// Create a group chat
-export const createGroupChat = async (
-  creatorId: string, 
-  companyId: string, 
-  groupName: string, 
-  participantIds: string[]
-): Promise<Chat | null> => {
+// Team invitation functions (keeping the existing ones with validation)
+export const getTeamInvitations = async (teamId: string): Promise<TeamInvitation[]> => {
   try {
-    // Include creator in participants if not already included
-    const allParticipantIds = [...new Set([creatorId, ...participantIds])]
-    
-    // Create new group chat
-    const { data: newChat, error: chatError } = await supabase
-      .from('chats')
-      .insert({
-        company_id: companyId,
-        name: groupName,
-        type: 'group',
-        avatar: groupName.charAt(0).toUpperCase(),
-        created_by: creatorId
-      })
-      .select()
+    const currentUser = getCurrentUser()
+    if (!currentUser) return []
+
+    // Validate team access
+    const { data: team, error: teamError } = await supabase
+      .from('teams')
+      .select('company_id')
+      .eq('id', teamId)
       .single()
 
-    if (chatError) throw chatError
-
-    // Add all participants to the chat
-    const participantInserts = allParticipantIds.map(userId => ({
-      chat_id: newChat.id,
-      user_id: userId
-    }))
-
-    const { error: participantsError } = await supabase
-      .from('chat_participants')
-      .insert(participantInserts)
-
-    if (participantsError) throw participantsError
-
-    // Fetch the complete chat with participants
-    const { data: completeChat } = await supabase
-      .from('chats')
-      .select(`
-        *,
-        chat_participants(*, users(*))
-      `)
-      .eq('id', newChat.id)
-      .single()
-
-    if (completeChat) {
-      return {
-        ...completeChat,
-        participants: completeChat.chat_participants?.map(p => p.users).filter(Boolean) || []
-      }
+    if (teamError || !team || !validateCompanyAccess(team.company_id)) {
+      return []
     }
 
-    return newChat
+    const { data, error } = await supabase
+      .from('team_invitations')
+      .select(`
+        *,
+        team:teams(*),
+        invited_by_user:users!invited_by(*)
+      `)
+      .eq('team_id', teamId)
+      .order('created_at', { ascending: false })
+
+    if (error) throw error
+    return data || []
   } catch (error) {
-    console.error('Failed to create group chat:', error)
-    return null
+    console.error('Failed to fetch team invitations:', error)
+    return []
   }
 }
 
-// Remove user from group chat
+export const getUserPendingInvitations = async (email: string): Promise<TeamInvitation[]> => {
+  try {
+    const currentUser = getCurrentUser()
+    if (!currentUser) return []
+
+    const { data, error } = await supabase
+      .from('team_invitations')
+      .select(`
+        *,
+        team:teams!inner(
+          id,
+          name,
+          company_id,
+          description,
+          avatar
+        ),
+        invited_by_user:users!invited_by(*)
+      `)
+      .eq('email', email)
+      .eq('status', 'pending')
+      .eq('team.company_id', currentUser.company_id) // Only invitations from same company
+      .gt('expires_at', new Date().toISOString())
+
+    if (error) throw error
+    return data || []
+  } catch (error) {
+    console.error('Failed to fetch user pending invitations:', error)
+    return []
+  }
+}
+
+export const acceptTeamInvitation = async (
+  invitationToken: string,
+  userId: string
+): Promise<boolean> => {
+  try {
+    const currentUser = getCurrentUser()
+    if (!currentUser || currentUser.id !== userId) {
+      return false
+    }
+
+    const { data, error } = await supabase
+      .rpc('accept_team_invitation', {
+        p_invitation_token: invitationToken,
+        p_user_id: userId
+      })
+
+    return !error && data
+  } catch (error) {
+    console.error('Failed to accept team invitation:', error)
+    return false
+  }
+}
+
+export const declineTeamInvitation = async (invitationId: string): Promise<boolean> => {
+  try {
+    const { error } = await supabase
+      .from('team_invitations')
+      .update({ status: 'declined' })
+      .eq('id', invitationId)
+
+    return !error
+  } catch (error) {
+    console.error('Failed to decline team invitation:', error)
+    return false
+  }
+}
+
+export const cancelTeamInvitation = async (invitationId: string): Promise<boolean> => {
+  try {
+    const { error } = await supabase
+      .from('team_invitations')
+      .delete()
+      .eq('id', invitationId)
+
+    return !error
+  } catch (error) {
+    console.error('Failed to cancel team invitation:', error)
+    return false
+  }
+}
+
+export const resendTeamInvitation = async (invitationId: string): Promise<boolean> => {
+  try {
+    const newExpiryDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+    
+    const { error } = await supabase
+      .from('team_invitations')
+      .update({ 
+        expires_at: newExpiryDate,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', invitationId)
+
+    return !error
+  } catch (error) {
+    console.error('Failed to resend team invitation:', error)
+    return false
+  }
+}
+
 export const removeUserFromGroup = async (
   chatId: string,
   userId: string,
   removedBy: string
 ): Promise<boolean> => {
   try {
-    // Check if the chat is a group chat and if the remover is a participant
-    const { data: chat } = await supabase
+    const currentUser = getCurrentUser()
+    if (!currentUser || currentUser.id !== removedBy) {
+      return false
+    }
+
+    // Validate chat access and company isolation
+    const { data: chat, error: chatError } = await supabase
       .from('chats')
-      .select('type, created_by')
+      .select(`
+        company_id, 
+        created_by,
+        chat_participants!inner(user_id)
+      `)
       .eq('id', chatId)
+      .eq('chat_participants.user_id', removedBy)
       .single()
 
-    if (!chat || chat.type !== 'group') {
-      throw new Error('Chat is not a group chat')
+    if (chatError || !chat || !validateCompanyAccess(chat.company_id)) {
+      return false
     }
 
-    // Check if the person removing is the creator or the user themselves
-    if (chat.created_by !== removedBy && userId !== removedBy) {
-      throw new Error('Only group creator or the user themselves can remove participants')
+    // Only the creator (admin) can remove users
+    const isCreator = chat.created_by === removedBy;
+    
+    if (!isCreator) {
+      return false
     }
 
-    // Remove the user from chat_participants
+    // Check if creator is removing themselves
+    const isCreatorLeavingGroup = userId === removedBy;
+    
+    if (isCreatorLeavingGroup) {
+      // Get other participants to potentially transfer ownership
+      const otherMembers = chat.chat_participants.filter(p => p.user_id !== userId);
+      
+      if (otherMembers.length > 0) {
+        // Transfer ownership to the first other member
+        const newOwnerId = otherMembers[0].user_id;
+        
+        const { error: transferError } = await supabase
+          .from('chats')
+          .update({ created_by: newOwnerId })
+          .eq('id', chatId);
+          
+        if (transferError) {
+          console.error('Failed to transfer ownership:', transferError);
+          return false;
+        }
+        
+        console.log(`✅ Ownership transferred to user ${newOwnerId}`);
+      }
+    }
+
     const { error } = await supabase
       .from('chat_participants')
       .delete()
       .eq('chat_id', chatId)
       .eq('user_id', userId)
 
+    return !error
+  } catch (error) {
+    console.error('Failed to remove user from group:', error)
+    return false
+  }
+}
+
+// Create team invitation for email addresses
+export const createTeamInvitation = async (
+  teamId: string,
+  invitedBy: string,
+  email: string,
+  role: 'admin' | 'member' = 'member'
+): Promise<TeamInvitation | null> => {
+  try {
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      throw new Error('User must be logged in to create invitations')
+    }
+
+    // Validate that the team belongs to the user's company
+    const { data: team, error: teamError } = await supabase
+      .from('teams')
+      .select('company_id')
+      .eq('id', teamId)
+      .single()
+
+    if (teamError) throw teamError
+
+    if (!validateCompanyAccess(team.company_id)) {
+      throw new Error('Access denied: Team does not belong to your company')
+    }
+
+    // Check if user with this email already exists in the company
+    const { data: existingUser } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', email)
+      .eq('company_id', team.company_id)
+      .single()
+
+    if (existingUser) {
+      // User exists, add them directly to the team
+      const { error: memberError } = await supabase
+        .from('team_members')
+        .insert({
+          team_id: teamId,
+          user_id: existingUser.id,
+          role: role
+        })
+
+      if (memberError) throw memberError
+      return null // No invitation needed, user added directly
+    }
+
+    // Create invitation for external user
+    const invitationToken = crypto.randomUUID()
+    const expiresAt = new Date()
+    expiresAt.setDate(expiresAt.getDate() + 7) // 7 days expiry
+
+    const { data, error } = await supabase
+      .from('team_invitations')
+      .insert({
+        team_id: teamId,
+        invited_by: invitedBy,
+        email: email,
+        role: role,
+        invitation_token: invitationToken,
+        expires_at: expiresAt.toISOString(),
+        status: 'pending'
+      })
+      .select(`
+        *,
+        team:teams(*),
+        invited_by_user:users(*)
+      `)
+      .single()
+
     if (error) throw error
 
-    // Send a system message about the user being removed (optional)
-    await sendMessage(
-      chatId,
-      removedBy,
-      userId === removedBy 
-        ? `left the group` 
-        : `removed a user from the group`,
-      'text'
-    )
+    // Here you would typically send an email invitation
+    // For now, we'll just log it
+    console.log(`📧 Team invitation sent to ${email} for team ${teamId}`)
+
+    return data
+  } catch (error) {
+    console.error('Failed to create team invitation:', error)
+    return null
+  }
+}
+
+// Delete a chat (group or direct)
+export const deleteChat = async (chatId: string): Promise<boolean> => {
+  try {
+    console.log('🗑️ Deleting chat:', chatId);
+    
+    const currentUser = getCurrentUser();
+    if (!currentUser) {
+      console.error('❌ No authenticated user');
+      return false;
+    }
+
+    // Validate chat access and get chat info
+    const { data: chat, error: chatError } = await supabase
+      .from('chats')
+      .select(`
+        company_id,
+        created_by,
+        type,
+        name,
+        chat_participants!inner(user_id)
+      `)
+      .eq('id', chatId)
+      .eq('chat_participants.user_id', currentUser.id)
+      .single();
+
+    if (chatError || !chat) {
+      console.error('❌ Chat not found or access denied:', chatError);
+      return false;
+    }
+
+    console.log('📋 Chat to delete:', chat);
+
+    // Validate company access
+    if (!validateCompanyAccess(chat.company_id)) {
+      console.error('❌ Company access denied');
+      return false;
+    }
+
+    // For group chats, only the creator can delete
+    if (chat.type === 'group') {
+      const isCreator = chat.created_by === currentUser.id;
+      
+      if (!isCreator) {
+        console.error('❌ Only group creator can delete group chats');
+        return false;
+      }
+    }
+
+    console.log('✅ Permissions validated, proceeding with deletion...');
+
+    // First, get all message IDs for this chat
+    console.log('🔍 Getting message IDs...');
+    const { data: messages, error: messagesQueryError } = await supabase
+      .from('messages')
+      .select('id')
+      .eq('chat_id', chatId);
+
+    if (messagesQueryError) {
+      console.error('❌ Failed to get message IDs:', messagesQueryError);
+    } else {
+      console.log('📋 Found messages:', messages?.length || 0);
+    }
+
+    // Delete message reactions if there are messages
+    if (messages && messages.length > 0) {
+      console.log('🧹 Deleting message reactions...');
+      const messageIds = messages.map(m => m.id);
+      const { error: reactionsError } = await supabase
+        .from('message_reactions')
+        .delete()
+        .in('message_id', messageIds);
+
+      if (reactionsError) {
+        console.error('❌ Failed to delete message reactions:', reactionsError);
+      } else {
+        console.log('✅ Message reactions deleted');
+      }
+    }
+
+    console.log('🧹 Deleting messages...');
+    const { error: messagesError } = await supabase
+      .from('messages')
+      .delete()
+      .eq('chat_id', chatId);
+
+    if (messagesError) {
+      console.error('❌ Failed to delete messages:', messagesError);
+    } else {
+      console.log('✅ Messages deleted');
+    }
+
+    console.log('🧹 Deleting chat participants...');
+    const { error: participantsError } = await supabase
+      .from('chat_participants')
+      .delete()
+      .eq('chat_id', chatId);
+
+    if (participantsError) {
+      console.error('❌ Failed to delete chat participants:', participantsError);
+    } else {
+      console.log('✅ Chat participants deleted');
+    }
+
+    console.log('🧹 Deleting chat...');
+    const { error: chatDeleteError } = await supabase
+      .from('chats')
+      .delete()
+      .eq('id', chatId);
+
+    if (chatDeleteError) {
+      console.error('❌ Failed to delete chat:', chatDeleteError);
+      return false;
+    }
+
+    console.log('🎉 Chat deleted successfully!');
+    return true;
+  } catch (error) {
+    console.error('💥 Chat deletion failed:', error);
+    return false;
+  }
+};
+
+export const getGroupAdmin = async (chatId: string): Promise<User | null> => {
+  try {
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return null
+    }
+
+    // Get the chat creator (admin) from the chats table
+    const { data: chat, error: chatError } = await supabase
+      .from('chats')
+      .select(`
+        created_by,
+        users!chats_created_by_fkey(*)
+      `)
+      .eq('id', chatId)
+      .single()
+
+    if (chatError || !chat) {
+      console.error('Failed to get chat creator:', chatError);
+      return null
+    }
+
+    return chat.users || null
+  } catch (error) {
+    console.error('Failed to get group admin:', error)
+    return null
+  }
+}
+
+export const transferGroupAdmin = async (
+  chatId: string,
+  currentAdminId: string,
+  newAdminId: string
+): Promise<boolean> => {
+  try {
+    const currentUser = getCurrentUser()
+    if (!currentUser || currentUser.id !== currentAdminId) {
+      return false
+    }
+
+    // Validate chat access and get chat info
+    const { data: chat, error: chatError } = await supabase
+      .from('chats')
+      .select(`
+        company_id,
+        type,
+        created_by,
+        chat_participants!inner(user_id)
+      `)
+      .eq('id', chatId)
+      .eq('chat_participants.user_id', currentAdminId)
+      .single()
+
+    if (chatError || !chat || !validateCompanyAccess(chat.company_id)) {
+      return false
+    }
+
+    // Only allow for group chats
+    if (chat.type !== 'group') {
+      return false
+    }
+
+    // Verify current user is the creator (admin)
+    if (chat.created_by !== currentAdminId) {
+      return false
+    }
+
+    // Verify new admin is a member of the group
+    const newAdminParticipant = chat.chat_participants.find(p => p.user_id === newAdminId);
+    if (!newAdminParticipant) {
+      return false
+    }
+
+    // Transfer admin privileges by updating the created_by field
+    const { error: transferError } = await supabase
+      .from('chats')
+      .update({ created_by: newAdminId })
+      .eq('id', chatId);
+
+    if (transferError) {
+      console.error('Failed to transfer admin:', transferError)
+      return false
+    }
 
     return true
   } catch (error) {
-    console.error('Failed to remove user from group:', error)
+    console.error('Failed to transfer group admin:', error)
+    return false
+  }
+}
+
+export const leaveGroup = async (chatId: string, userId: string): Promise<boolean> => {
+  try {
+    console.log('🚪 LEAVE GROUP - Starting process for user:', userId, 'in chat:', chatId)
+
+    // First, get the chat and user info for the notification
+    const { data: chat, error: chatError } = await supabase
+      .from('chats')
+      .select('*')
+      .eq('id', chatId)
+      .single()
+
+    if (chatError || !chat) {
+      console.error('Failed to validate chat access:', chatError)
+      return false
+    }
+
+    // Get the user info for the notification
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('name')
+      .eq('id', userId)
+      .single()
+
+    if (userError || !user) {
+      console.error('Failed to get user info:', userError)
+      return false
+    }
+
+    // Only allow leaving group chats (not direct chats)
+    if (chat.type !== 'group') {
+      console.error('Cannot leave non-group chat')
+      return false
+    }
+
+    // Check if user is the creator (admin)
+    const isAdmin = chat.created_by === userId;
+    console.log('User leaving group:', { userId, isAdmin, chatCreator: chat.created_by });
+
+    // If admin is leaving, we could transfer admin privileges to another user
+    // For now, we'll just allow the admin to leave (group will remain without explicit admin)
+    if (isAdmin) {
+      console.log('Admin is leaving the group');
+    }
+
+    // Remove user from group
+    const { error } = await supabase
+      .from('chat_participants')
+      .delete()
+      .eq('chat_id', chatId)
+      .eq('user_id', userId)
+
+    if (error) {
+      console.error('Failed to remove user from chat_participants:', error)
+      return false
+    }
+
+    // Send a system message to notify other group members
+    const systemMessage = `${user.name} has left the group`;
+    const { error: messageError } = await supabase
+      .from('messages')
+      .insert({
+        chat_id: chatId,
+        sender_id: userId, // Use the leaving user's ID
+        content: systemMessage,
+        message_type: 'text',
+        is_system: true // Add system flag if your schema supports it
+      })
+
+    if (messageError) {
+      console.error('Failed to send leave notification message:', messageError)
+      // Don't fail the leave operation if message sending fails
+    } else {
+      console.log('✅ Sent leave notification message to group')
+    }
+
+    console.log('✅ User successfully left the group')
+    return true
+  } catch (error) {
+    console.error('Failed to leave group:', error)
     return false
   }
 } 

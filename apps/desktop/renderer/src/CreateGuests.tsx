@@ -3,6 +3,8 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import Tesseract from 'tesseract.js';
 import countryList from 'country-list';
 import { codes as countryCallingCodes } from 'country-calling-code';
+import { getCurrentUser } from './lib/auth';
+import { addMultipleGuests, getGuests, deleteGuest, deleteGuestsByGroupId } from './lib/supabase';
 
 const AVIATIONSTACK_API_KEY = 'bb7fd8369e323c356434d5b1ac77b437'; // 🚨 PASTE YOUR NEW AVIATIONSTACK API KEY HERE 🚨
 
@@ -60,14 +62,14 @@ interface Guest {
   nextOfKinPhone: string;
   // Additional Info
   dietary: string[];
-  disabilities: string[];
+  medical: string[];
   // Modules
   modules: Record<string, boolean[]>;
   moduleValues: Record<string, any[]>;
   moduleFlightData?: Record<string, (FlightModuleState | null)[]>;
   // UI State for Drafts
   dietaryInput?: string;
-  disabilitiesInput?: string;
+  medicalInput?: string;
   errors?: Record<string, string>;
   // Grouping
   groupId?: string | null;
@@ -242,40 +244,100 @@ export default function CreateGuests() {
   useEffect(() => {
     if (!eventId) return;
 
-    if (guestIndex !== undefined) {
-      const idx = parseInt(guestIndex, 10);
-      const allGuests = JSON.parse(localStorage.getItem(`event_guests_${eventId}`) || '[]');
-      const guestToEdit = allGuests[idx];
+    const loadGuestDataForEdit = async () => {
+      if (guestIndex !== undefined) {
+        const idx = parseInt(guestIndex, 10);
+        
+        try {
+          // Load guests from Supabase instead of localStorage
+          const supabaseGuests = await getGuests(eventId);
+          
+          // Convert Supabase guest format to local format
+          const convertedGuests = supabaseGuests.map((guest: any) => ({
+            id: guest.id, // Ensure ID is preserved
+            firstName: guest.first_name,
+            middleName: guest.middle_name,
+            lastName: guest.last_name,
+            email: guest.email,
+            contactNumber: guest.contact_number,
+            countryCode: guest.country_code,
+            idType: guest.id_type,
+            idNumber: guest.id_number,
+            idCountry: guest.id_country,
+            dob: guest.dob,
+            gender: guest.gender,
+            groupId: guest.group_id,
+            groupName: guest.group_name,
+            nextOfKinName: guest.next_of_kin_name,
+            nextOfKinEmail: guest.next_of_kin_email,
+            nextOfKinPhoneCountry: guest.next_of_kin_phone_country,
+            nextOfKinPhone: guest.next_of_kin_phone,
+            dietary: guest.dietary || [],
+            medical: guest.medical || [],
+            modules: guest.modules || {},
+            moduleValues: guest.module_values || {},
+            prefix: guest.prefix,
+            status: guest.status
+          }));
 
-      if (guestToEdit) {
-        setGuests([]); // Clear guests state to avoid rendering the summary card
-        setEditGuestIdx(idx);
+          const guestToEdit = convertedGuests[idx];
 
-        if (guestToEdit.groupId) {
-          // Editing a group
-          const groupGuests = allGuests.filter((g: Guest) => g.groupId === guestToEdit.groupId);
-          setDrafts(groupGuests);
-          setIsGroup(true);
-          setGroupName(guestToEdit.groupName || '');
-          setGroupNameConfirmed(true); // When editing a group, name is already set
-          setExpandedDraftIndex(null);
-        } else {
-          // Editing a single guest
-          setDrafts([guestToEdit]);
-          setIsGroup(false);
-          setExpandedDraftIndex(0);
+          if (guestToEdit) {
+            setGuests([]); // Clear guests state to avoid rendering the summary card
+            setEditGuestIdx(idx);
+
+            if (guestToEdit.groupId) {
+              // Editing a group
+              const groupGuests = convertedGuests.filter((g: any) => g.groupId === guestToEdit.groupId);
+              setDrafts(groupGuests);
+              setIsGroup(true);
+              setGroupName(guestToEdit.groupName || '');
+              setGroupNameConfirmed(true); // When editing a group, name is already set
+              setExpandedDraftIndex(null);
+            } else {
+              // Editing a single guest
+              setDrafts([guestToEdit]);
+              setIsGroup(false);
+              setExpandedDraftIndex(0);
+            }
+          }
+        } catch (error) {
+          console.error('Error loading guest data for edit:', error);
+          // Fallback to localStorage if Supabase fails
+          const allGuests = JSON.parse(localStorage.getItem(`event_guests_${eventId}`) || '[]');
+          const guestToEdit = allGuests[idx];
+
+          if (guestToEdit) {
+            setGuests([]);
+            setEditGuestIdx(idx);
+
+            if (guestToEdit.groupId) {
+              const groupGuests = allGuests.filter((g: any) => g.groupId === guestToEdit.groupId);
+              setDrafts(groupGuests);
+              setIsGroup(true);
+              setGroupName(guestToEdit.groupName || '');
+              setGroupNameConfirmed(true);
+              setExpandedDraftIndex(null);
+            } else {
+              setDrafts([guestToEdit]);
+              setIsGroup(false);
+              setExpandedDraftIndex(0);
+            }
+          }
         }
+      } else {
+        // Creating a new guest/group
+        setGuests([]);
+        setDrafts([]);
+        setEditGuestIdx(null);
+        setIsGroup(false);
+        setGroupName('');
+        setGroupNameConfirmed(false);
+        setExpandedDraftIndex(null);
       }
-    } else {
-      // Creating a new guest/group
-      setGuests([]);
-      setDrafts([]);
-      setEditGuestIdx(null);
-      setIsGroup(false);
-      setGroupName('');
-      setGroupNameConfirmed(false);
-      setExpandedDraftIndex(null);
-    }
+    };
+
+    loadGuestDataForEdit();
   }, [eventId, guestIndex]);
 
   useEffect(() => {
@@ -322,9 +384,9 @@ export default function CreateGuests() {
       prefix: '',
       gender: '',
       dietary: [],
-      disabilities: [],
+      medical: [],
       dietaryInput: '',
-      disabilitiesInput: '',
+      medicalInput: '',
     };
     const newDrafts = [newDraft, ...drafts];
     setDrafts(newDrafts);
@@ -466,7 +528,7 @@ export default function CreateGuests() {
                 case 'Next of Kin Country Code': entry.nextOfKinPhoneCountry = value; break;
                 case 'Next of Kin Number': entry.nextOfKinPhone = value; break;
                 case 'Dietary': entry.dietary = value ? value.split(';').map(d => d.trim()) : []; break;
-                case 'Disabilities': entry.disabilities = value ? value.split(';').map(d => d.trim()) : []; break;
+                case 'Medical': entry.medical = value ? value.split(';').map(d => d.trim()) : []; break;
               }
             });
             if (!entry.firstName || !entry.lastName) {
@@ -513,12 +575,12 @@ export default function CreateGuests() {
         nextOfKinPhoneCountry: guest.nextOfKinPhoneCountry || '+44',
         nextOfKinPhone: guest.nextOfKinPhone || '',
         dietary: guest.dietary || [],
-        disabilities: guest.disabilities || [],
+        medical: guest.medical || [],
         modules: {},
         moduleValues: {},
         errors: {},
         dietaryInput: '',
-        disabilitiesInput: '',
+        medicalInput: '',
       }));
 
       setDrafts(d => [...d, ...newDrafts]);
@@ -634,18 +696,56 @@ export default function CreateGuests() {
     );
   }
 
-  function handleRemoveGuest(idx: number) {
+  async function handleRemoveGuest(idx: number) {
     const guestToRemove = guests[idx];
 
+    // If the guest has an ID, it means it's saved in Supabase and needs to be deleted
+    if (guestToRemove.id && eventId) {
+        try {
+          // Delete from Supabase using the guest's ID
+          await deleteGuest(guestToRemove.id);
+          console.log('Guest deleted from Supabase successfully');
+          
+          // Remove from local state
+          setGuests(g => g.filter((_, i) => i !== idx));
+          
+          // If we're in edit mode, navigate back to guests tab
+          if (editGuestIdx !== null) {
+            navigate(`/event/${eventId}?tab=guests`);
+          }
+        } catch (error) {
+          console.error('Error deleting guest from Supabase:', error);
+          alert('Failed to delete guest. Please try again.');
+        }
+        return;
+    }
+
+    // If in edit mode and guest is not in Supabase yet, try to find and delete it
     if (editGuestIdx !== null && !isGroup) {
         if (!eventId) return;
-        const allGuests = JSON.parse(localStorage.getItem(`event_guests_${eventId}`) || '[]');
-        allGuests.splice(editGuestIdx, 1);
-        localStorage.setItem(`event_guests_${eventId}`, JSON.stringify(allGuests));
-        navigate(`/event/${eventId}?tab=guests`);
+        
+        try {
+          // Get all guests from Supabase to find the one to delete
+          const supabaseGuests = await getGuests(eventId);
+          const guestToDelete = supabaseGuests[editGuestIdx];
+          
+          if (guestToDelete && guestToDelete.id) {
+            // Delete from Supabase
+            await deleteGuest(guestToDelete.id);
+            console.log('Guest deleted from Supabase successfully');
+            navigate(`/event/${eventId}?tab=guests`);
+          } else {
+            console.warn('Guest not found in Supabase, navigating back');
+            navigate(`/event/${eventId}?tab=guests`);
+          }
+        } catch (error) {
+          console.error('Error deleting guest from Supabase:', error);
+          alert('Failed to delete guest. Please try again.');
+        }
         return;
     }
     
+    // If guest is not in Supabase (no ID), just remove from local state
     setGuests(g => g.filter((_, i) => i !== idx));
   }
 
@@ -655,7 +755,6 @@ export default function CreateGuests() {
         return;
     }
 
-    const allGuestsFromStorage = JSON.parse(localStorage.getItem(`event_guests_${eventId}`) || '[]');
     const guestsToProcess = [...guests, ...drafts];
 
     if (guestsToProcess.length === 0) {
@@ -664,54 +763,79 @@ export default function CreateGuests() {
         return;
     }
 
-    let finalGuests;
-
-    if (editGuestIdx !== null) {
-        // --- EDIT LOGIC ---
-        // This handles updating a guest/group that was opened for editing.
-        const originalGuest = allGuestsFromStorage[editGuestIdx];
-        if (isGroup && originalGuest?.groupId) {
-            const groupId = originalGuest.groupId;
-            const otherGuests = allGuestsFromStorage.filter((g: Guest) => g.groupId !== groupId);
-            const guestsForThisGroup = guestsToProcess.map(g => ({ ...g, groupId, groupName }));
-            finalGuests = [...otherGuests, ...guestsForThisGroup];
-        } else {
-             if (guestsToProcess[0]) {
-                allGuestsFromStorage[editGuestIdx] = guestsToProcess[0];
-            } else {
-                allGuestsFromStorage.splice(editGuestIdx, 1);
-            }
-            finalGuests = allGuestsFromStorage;
-        }
-    } else {
-        // --- ADD LOGIC ---
-        // This handles adding all new guests and drafts (from CSV or manual add).
-        const newGroupId = isGroup ? `group-${Date.now()}` : null;
-        const guestsToAdd = guestsToProcess.map(g => ({
-            ...g,
-            id: g.id || `guest-${Date.now()}-${Math.random()}`,
-            groupId: newGroupId,
-            groupName: isGroup ? groupName : null,
-        }));
-        finalGuests = [...allGuestsFromStorage, ...guestsToAdd];
+    // Check if user is logged in
+    const currentUser = getCurrentUser();
+    if (!currentUser) {
+        console.error('No user logged in');
+        alert('You must be logged in to save guests. Please log in and try again.');
+        return;
     }
 
-    localStorage.setItem(`event_guests_${eventId}`, JSON.stringify(finalGuests));
+    // Convert guests to Supabase format and save
+    const guestsForSupabase = guestsToProcess.map(guest => ({
+      event_id: eventId,
+      company_id: currentUser.company_id || '',
+      first_name: guest.firstName,
+      middle_name: guest.middleName || '',
+      last_name: guest.lastName,
+      email: guest.email,
+      contact_number: guest.contactNumber,
+      country_code: guest.countryCode,
+      id_type: guest.idType,
+      id_number: guest.idNumber,
+      id_country: guest.idCountry || '',
+      dob: guest.dob || undefined,
+      gender: guest.gender || '',
+      group_id: isGroup ? `group-${Date.now()}` : undefined,
+      group_name: isGroup ? groupName : undefined,
+      next_of_kin_name: guest.nextOfKinName || '',
+      next_of_kin_email: guest.nextOfKinEmail || '',
+      next_of_kin_phone_country: guest.nextOfKinPhoneCountry || '',
+      next_of_kin_phone: guest.nextOfKinPhone || '',
+      dietary: guest.dietary || [],
+      medical: guest.medical || [],
+      modules: guest.modules || {},
+      module_values: guest.moduleValues || {},
+      prefix: guest.prefix || '',
+      status: 'pending',
+      created_by: currentUser.id || undefined
+    }));
 
-    // Reset state and navigate
-    setGuests([]);
-    setDrafts([]);
-    navigate(`/event/${eventId}?tab=guests`, { replace: true });
+    console.log('Saving guests to Supabase:', guestsForSupabase);
+
+    // Save to Supabase
+    addMultipleGuests(guestsForSupabase)
+      .then(() => {
+        console.log('Guests saved to Supabase successfully');
+        // Reset state and navigate
+        setGuests([]);
+        setDrafts([]);
+        setIsGroup(false);
+        setGroupName('');
+        setGroupNameConfirmed(false);
+        navigate(`/event/${eventId}?tab=guests`, { replace: true });
+      })
+      .catch(error => {
+        console.error('Error saving guests to Supabase:', error);
+        alert('Failed to save guests. Please try again.');
+      });
   }
 
-  function handleDeleteGroup() {
+  async function handleDeleteGroup() {
     if (editGuestIdx !== null && guests.length > 0 && guests[0].groupId) {
         if (!eventId) return;
+        
         const groupIdToDelete = guests[0].groupId;
-        const allGuests = JSON.parse(localStorage.getItem(`event_guests_${eventId}`) || '[]');
-        const remainingGuests = allGuests.filter((g: Guest) => g.groupId !== groupIdToDelete);
-        localStorage.setItem(`event_guests_${eventId}`, JSON.stringify(remainingGuests));
-        navigate(`/event/${eventId}?tab=guests`);
+        
+        try {
+          // Delete the entire group from Supabase
+          await deleteGuestsByGroupId(groupIdToDelete);
+          console.log('Group deleted from Supabase successfully');
+          navigate(`/event/${eventId}?tab=guests`);
+        } catch (error) {
+          console.error('Error deleting group from Supabase:', error);
+          alert('Failed to delete group. Please try again.');
+        }
     } else {
         setGuests([]);
         setIsGroup(false);
@@ -734,15 +858,15 @@ export default function CreateGuests() {
     setShowDeleteConfirm(null);
   }
 
-  function handleTagInput(idx: number, key: 'dietaryInput' | 'disabilitiesInput', value: string) {
+  function handleTagInput(idx: number, key: 'dietaryInput' | 'medicalInput', value: string) {
     setDrafts(d => d.map((draft, i) => i === idx ? { ...draft, [key]: value } : draft));
   }
 
-  function handleAddTag(idx: number, key: 'dietary' | 'disabilities', tag: string) {
+  function handleAddTag(idx: number, key: 'dietary' | 'medical', tag: string) {
     setDrafts(d => d.map((draft, i) => i === idx ? { ...draft, [key]: [...(draft[key] || []), tag] } : draft));
   }
 
-  function handleRemoveTag(idx: number, key: 'dietary' | 'disabilities', tagIdx: number) {
+  function handleRemoveTag(idx: number, key: 'dietary' | 'medical', tagIdx: number) {
     setDrafts(d => d.map((draft, i) => i === idx ? { ...draft, [key]: draft[key].filter((_, j) => j !== tagIdx) } : draft));
   }
 
@@ -886,11 +1010,11 @@ export default function CreateGuests() {
     setGuests(guests.map((guest, i) => i === guestIdx ? { ...guest, [key]: value } : guest));
   }
   
-  function handleGuestTagInputChange(guestIdx: number, key: 'dietaryInput' | 'disabilitiesInput', value: string) {
+  function handleGuestTagInputChange(guestIdx: number, key: 'dietaryInput' | 'medicalInput', value: string) {
     setGuests(guests.map((guest, i) => i === guestIdx ? { ...guest, [key]: value } : guest));
   }
   
-  function handleGuestTagAdd(guestIdx: number, key: 'dietary' | 'disabilities', tag: string) {
+  function handleGuestTagAdd(guestIdx: number, key: 'dietary' | 'medical', tag: string) {
     setGuests(guests.map((guest, i) => {
       if (i === guestIdx) {
         const existingTags = guest[key] || [];
@@ -900,7 +1024,7 @@ export default function CreateGuests() {
     }));
   }
   
-  function handleGuestTagRemove(guestIdx: number, key: 'dietary' | 'disabilities', tagIndexToRemove: number) {
+  function handleGuestTagRemove(guestIdx: number, key: 'dietary' | 'medical', tagIndexToRemove: number) {
     setGuests(guests.map((guest, i) => {
       if (i === guestIdx) {
         const existingTags = guest[key] || [];
@@ -1247,20 +1371,20 @@ export default function CreateGuests() {
                       ))}
                     </div>
                   </div>
-                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 8, letterSpacing: 0.5, color: '#222' }}>DISABILITIES</div>
+                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 8, letterSpacing: 0.5, color: '#222' }}>MEDICAL</div>
                   <div style={{ marginBottom: 14 }}>
                     <input
-                      placeholder="Add disability and press Enter"
-                      value={draft.disabilitiesInput || ''}
-                      onChange={e => handleTagInput(idx, 'disabilitiesInput', e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter' && draft.disabilitiesInput?.trim()) { handleAddTag(idx, 'disabilities', draft.disabilitiesInput.trim()); handleTagInput(idx, 'disabilitiesInput', ''); e.preventDefault(); } }}
+                      placeholder="Add medical condition and press Enter"
+                      value={draft.medicalInput || ''}
+                      onChange={e => handleTagInput(idx, 'medicalInput', e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter' && draft.medicalInput?.trim()) { handleAddTag(idx, 'medical', draft.medicalInput.trim()); handleTagInput(idx, 'medicalInput', ''); e.preventDefault(); } }}
                       style={{ width: '100%', borderRadius: 8, background: '#f7f8fa', border: '1.5px solid #d1d5db', padding: 10, fontSize: 18, height: 48 }}
                     />
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
-                      {(draft.disabilities || []).map((tag: string, tagIdx: number) => (
+                      {(draft.medical || []).map((tag: string, tagIdx: number) => (
                         <span key={tagIdx} style={{ background: '#eee', borderRadius: 16, padding: '6px 16px', fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
                           {tag}
-                          <button onClick={() => handleRemoveTag(idx, 'disabilities', tagIdx)} style={{ background: 'none', border: 'none', color: '#888', fontWeight: 'bold', fontSize: 15, cursor: 'pointer', marginLeft: 4 }}>×</button>
+                          <button onClick={() => handleRemoveTag(idx, 'medical', tagIdx)} style={{ background: 'none', border: 'none', color: '#888', fontWeight: 'bold', fontSize: 15, cursor: 'pointer', marginLeft: 4 }}>×</button>
                         </span>
                       ))}
                     </div>

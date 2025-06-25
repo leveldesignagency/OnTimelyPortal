@@ -5,8 +5,13 @@ import Toolbar from './Toolbar';
 import ZoomControls from './ZoomControls';
 import PresenceLayer from './PresenceLayer';
 import styles from './canvasBoard.module.css';
+import { getCurrentUser } from '../lib/auth';
+import { getCanvasSession, saveCanvasSession } from '../lib/supabase';
 
 const CanvasBoard = () => {
+  // Get current user for company context
+  const currentUser = getCurrentUser();
+  
   // Canvas state
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -32,6 +37,42 @@ const CanvasBoard = () => {
   
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
+
+  // Load session on mount
+  useEffect(() => {
+    const loadSession = async () => {
+      if (!currentUser) return;
+      
+      try {
+        const sessionData = await getCanvasSession(sessionId, currentUser.company_id);
+        if (sessionData) {
+          setStickyNotes(sessionData.session_data?.stickyNotes || []);
+          setDrawings(sessionData.session_data?.drawings || []);
+          setPan(sessionData.session_data?.pan || { x: 0, y: 0 });
+          setZoom(sessionData.session_data?.zoom || 1);
+          setLastSaved(sessionData.updated_at);
+        }
+      } catch (error) {
+        console.error('Failed to load canvas session from Supabase:', error);
+        // Fallback to localStorage
+        try {
+          const saved = localStorage.getItem(`canvas_session_${sessionId}`);
+          if (saved) {
+            const sessionData = JSON.parse(saved);
+            setStickyNotes(sessionData.stickyNotes || []);
+            setDrawings(sessionData.drawings || []);
+            setPan(sessionData.pan || { x: 0, y: 0 });
+            setZoom(sessionData.zoom || 1);
+            setLastSaved(sessionData.lastSaved);
+          }
+        } catch (fallbackError) {
+          console.error('Fallback to localStorage also failed:', fallbackError);
+        }
+      }
+    };
+
+    loadSession();
+  }, [sessionId, currentUser]);
 
   // Autosave every 30 seconds
   useEffect(() => {
@@ -153,7 +194,9 @@ const CanvasBoard = () => {
   }, [currentDrawing]);
 
   // Session management
-  const saveSession = useCallback(() => {
+  const saveSession = useCallback(async () => {
+    if (!currentUser) return;
+    
     const sessionData = {
       sessionId,
       stickyNotes,
@@ -163,24 +206,53 @@ const CanvasBoard = () => {
       lastSaved: new Date().toISOString()
     };
     
-    localStorage.setItem(`canvas_session_${sessionId}`, JSON.stringify(sessionData));
-    setLastSaved(new Date().toISOString());
-    
-    // TODO: Send to backend via WebSocket
-    console.log('Session saved:', sessionData);
-  }, [sessionId, stickyNotes, drawings, pan, zoom]);
-
-  const loadSession = useCallback((sessionIdToLoad) => {
-    const saved = localStorage.getItem(`canvas_session_${sessionIdToLoad}`);
-    if (saved) {
-      const sessionData = JSON.parse(saved);
-      setStickyNotes(sessionData.stickyNotes || []);
-      setDrawings(sessionData.drawings || []);
-      setPan(sessionData.pan || { x: 0, y: 0 });
-      setZoom(sessionData.zoom || 1);
-      setLastSaved(sessionData.lastSaved);
+    try {
+      await saveCanvasSession(sessionId, currentUser.company_id, sessionData, currentUser.id);
+      setLastSaved(new Date().toISOString());
+      console.log('Canvas session saved to Supabase:', sessionData);
+    } catch (error) {
+      console.error('Failed to save canvas session to Supabase:', error);
+      // Fallback to localStorage
+      try {
+        localStorage.setItem(`canvas_session_${sessionId}`, JSON.stringify(sessionData));
+        setLastSaved(new Date().toISOString());
+        console.log('Canvas session saved to localStorage as fallback');
+      } catch (fallbackError) {
+        console.error('Fallback save to localStorage also failed:', fallbackError);
+      }
     }
-  }, []);
+  }, [sessionId, stickyNotes, drawings, pan, zoom, currentUser]);
+
+  const loadSession = useCallback(async (sessionIdToLoad) => {
+    if (!currentUser) return;
+    
+    try {
+      const sessionData = await getCanvasSession(sessionIdToLoad, currentUser.company_id);
+      if (sessionData) {
+        setStickyNotes(sessionData.session_data?.stickyNotes || []);
+        setDrawings(sessionData.session_data?.drawings || []);
+        setPan(sessionData.session_data?.pan || { x: 0, y: 0 });
+        setZoom(sessionData.session_data?.zoom || 1);
+        setLastSaved(sessionData.updated_at);
+      }
+    } catch (error) {
+      console.error('Failed to load canvas session from Supabase:', error);
+      // Fallback to localStorage
+      try {
+        const saved = localStorage.getItem(`canvas_session_${sessionIdToLoad}`);
+        if (saved) {
+          const sessionData = JSON.parse(saved);
+          setStickyNotes(sessionData.stickyNotes || []);
+          setDrawings(sessionData.drawings || []);
+          setPan(sessionData.pan || { x: 0, y: 0 });
+          setZoom(sessionData.zoom || 1);
+          setLastSaved(sessionData.lastSaved);
+        }
+      } catch (fallbackError) {
+        console.error('Fallback to localStorage also failed:', fallbackError);
+      }
+    }
+  }, [currentUser]);
 
   // Tool change handlers
   const handleToolChange = useCallback((tool) => {

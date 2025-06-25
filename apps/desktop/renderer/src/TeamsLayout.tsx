@@ -4,7 +4,7 @@ import { ThemeContext } from './ThemeContext';
 import ThemedIcon from './components/ThemedIcon';
 
 const teamNavLinks = [
-  { to: '/teams/list', label: 'Teams', icon: <span style={{ fontSize: '24px' }}>👥</span> },
+  { to: '/teams/create', label: 'Create Team', icon: <span style={{ fontSize: '24px' }}>➕</span> },
   { to: '/teams/chat', label: 'Chat', icon: <ThemedIcon name="chat" alt="Chat" size={60} /> },
   { to: '/teams/calendar', label: 'Calendar', icon: <ThemedIcon name="calendar" alt="Calendar" size={60} /> },
   { to: '/teams/canvas', label: 'Canvas', icon: <ThemedIcon name="canvas" alt="Canvas" size={60} /> },
@@ -56,20 +56,6 @@ export default function TeamsLayout() {
       color: isDark ? '#a0a0a0' : '#333',
   }
 
-  const createTeamButtonStyle: React.CSSProperties = {
-      width: '100%',
-      background: isDark ? '#333' : '#000',
-      color: '#fff',
-      border: 'none',
-      padding: '10px 0',
-      borderRadius: '8px',
-      cursor: 'pointer',
-      fontWeight: 500,
-      fontSize: '13px',
-      textAlign: 'center',
-      transition: 'background 0.3s',
-  }
-
   return (
     <div style={{ display: 'flex', height: '100vh' }}>
       <aside style={secondarySidebarStyle}>
@@ -88,18 +74,10 @@ export default function TeamsLayout() {
             </NavLink>
           ))}
         </nav>
-        <div style={{ marginTop: 'auto', width: '100%' }}>
-          <button
-            onClick={() => navigate('/teams/create')}
-            style={createTeamButtonStyle}
-          >
-            Create Team
-          </button>
-        </div>
       </aside>
       <main style={{ flex: 1, overflow: 'hidden' }}>
         <Outlet />
       </main>
     </div>
   );
-} 
+}

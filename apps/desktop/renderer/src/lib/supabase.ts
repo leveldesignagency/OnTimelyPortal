@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentUser } from './auth'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://ijsktwmevnqgzwwuggkf.supabase.co'
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlqc2t0d21ldm5xZ3p3d3VnZ2tmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTA3MDU4MTYsImV4cCI6MjA2NjI4MTgxNn0.w4eBL4hOZoAOo33ZXX-lSqQmIuSoP3fBEO1lBlpIRNw'
@@ -8,10 +9,14 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 // Types for your database tables
 export type Event = {
   id: string
+  company_id: string
   name: string
   from: string
   to: string
   status: string
+  description?: string
+  location?: string
+  created_by?: string
   created_at?: string
   updated_at?: string
 }
@@ -19,21 +24,42 @@ export type Event = {
 export type Guest = {
   id: string
   event_id: string
-  firstName: string
-  middleName?: string
-  lastName: string
+  company_id: string
+  first_name: string
+  middle_name?: string
+  last_name: string
   email: string
-  contactNumber: string
-  countryCode: string
-  idType: string
-  idNumber: string
+  contact_number: string
+  country_code: string
+  id_type: string
+  id_number: string
+  id_country?: string
   dob?: string
   gender?: string
-  groupId?: string
-  groupName?: string
-  modules?: Record<string, boolean>
+  group_id?: string
+  group_name?: string
+  next_of_kin_name?: string
+  next_of_kin_email?: string
+  next_of_kin_phone_country?: string
+  next_of_kin_phone?: string
+  dietary?: string[]
+  medical?: string[]
+  modules?: Record<string, any>
+  module_values?: Record<string, any>
+  prefix?: string
+  status?: string
   created_at?: string
   updated_at?: string
+  created_by?: string
+}
+
+export type TeamEvent = {
+  id: string
+  team_id: string
+  event_id: string
+  access_level: 'full' | 'read_only' | 'limited'
+  assigned_at: string
+  assigned_by?: string
 }
 
 // Real-time subscription helpers
@@ -60,16 +86,141 @@ export const subscribeToGuests = (eventId: string, callback: (payload: any) => v
     .subscribe()
 }
 
-// Database operations
-export const getEvents = async () => {
+export const subscribeToItineraries = (eventId: string, callback: (payload: any) => void) => {
+  return supabase
+    .channel('itineraries')
+    .on('postgres_changes', { 
+      event: '*', 
+      schema: 'public', 
+      table: 'itineraries',
+      filter: `event_id=eq.${eventId}`
+    }, callback)
+    .subscribe()
+}
+
+// ============================================
+// EVENT OPERATIONS
+// ============================================
+
+// Get all events for user's company
+export const getEvents = async (companyId: string) => {
   const { data, error } = await supabase
     .from('events')
     .select('*')
+    .eq('company_id', companyId)
     .order('created_at', { ascending: false })
   
   if (error) throw error
   return data
 }
+
+// Create a new event
+export const createEvent = async (event: Omit<Event, 'id' | 'created_at' | 'updated_at'>) => {
+  const { data, error } = await supabase
+    .from('events')
+    .insert([event])
+    .select()
+  
+  if (error) throw error
+  return data[0]
+}
+
+// Update an event
+export const updateEvent = async (id: string, updates: Partial<Event>) => {
+  const { data, error } = await supabase
+    .from('events')
+    .update(updates)
+    .eq('id', id)
+    .select()
+  
+  if (error) throw error
+  return data[0]
+}
+
+// Delete an event
+export const deleteEvent = async (id: string) => {
+  const { error } = await supabase
+    .from('events')
+    .delete()
+    .eq('id', id)
+  
+  if (error) throw error
+}
+
+// Get single event by ID
+export const getEvent = async (id: string) => {
+  const { data, error } = await supabase
+    .from('events')
+    .select('*')
+    .eq('id', id)
+    .single()
+  
+  if (error) throw error
+  return data
+}
+
+// ============================================
+// TEAM-EVENT OPERATIONS
+// ============================================
+
+// Assign team to event
+export const assignTeamToEvent = async (teamId: string, eventId: string, assignedBy: string, accessLevel: 'full' | 'read_only' | 'limited' = 'full') => {
+  const { data, error } = await supabase
+    .from('team_events')
+    .insert([{
+      team_id: teamId,
+      event_id: eventId,
+      assigned_by: assignedBy,
+      access_level: accessLevel
+    }])
+    .select()
+  
+  if (error) throw error
+  return data[0]
+}
+
+// Get events assigned to a team
+export const getTeamEvents = async (teamId: string) => {
+  const { data, error } = await supabase
+    .from('team_events')
+    .select(`
+      *,
+      events (*)
+    `)
+    .eq('team_id', teamId)
+  
+  if (error) throw error
+  return data
+}
+
+// Get teams assigned to an event
+export const getEventTeams = async (eventId: string) => {
+  const { data, error } = await supabase
+    .from('team_events')
+    .select(`
+      *,
+      teams (*)
+    `)
+    .eq('event_id', eventId)
+  
+  if (error) throw error
+  return data
+}
+
+// Remove team from event
+export const removeTeamFromEvent = async (teamId: string, eventId: string) => {
+  const { error } = await supabase
+    .from('team_events')
+    .delete()
+    .eq('team_id', teamId)
+    .eq('event_id', eventId)
+  
+  if (error) throw error
+}
+
+// ============================================
+// GUEST OPERATIONS (Updated)
+// ============================================
 
 export const getGuests = async (eventId: string) => {
   const { data, error } = await supabase
@@ -92,6 +243,16 @@ export const addGuest = async (guest: Omit<Guest, 'id' | 'created_at' | 'updated
   return data[0]
 }
 
+export const addMultipleGuests = async (guests: Omit<Guest, 'id' | 'created_at' | 'updated_at'>[]) => {
+  const { data, error } = await supabase
+    .from('guests')
+    .insert(guests)
+    .select()
+  
+  if (error) throw error
+  return data
+}
+
 export const updateGuest = async (id: string, updates: Partial<Guest>) => {
   const { data, error } = await supabase
     .from('guests')
@@ -110,4 +271,265 @@ export const deleteGuest = async (id: string) => {
     .eq('id', id)
   
   if (error) throw error
+}
+
+export const deleteGuestsByGroupId = async (groupId: string) => {
+  const { error } = await supabase
+    .from('guests')
+    .delete()
+    .eq('group_id', groupId)
+  
+  if (error) throw error
+}
+
+// Itinerary types and functions
+export type Itinerary = {
+  id: string
+  event_id: string
+  company_id: string
+  title: string
+  description?: string
+  arrival_time?: string
+  start_time?: string
+  end_time?: string
+  location?: string
+  is_draft: boolean
+  // Document Upload Module
+  document_file_name?: string
+  // QR Code Module
+  qrcode_url?: string
+  qrcode_image?: string
+  // Host Contact Details Module
+  contact_name?: string
+  contact_country_code?: string
+  contact_phone?: string
+  contact_email?: string
+  // Notifications Timer Module
+  notification_times?: string[]
+  // Legacy support
+  content?: any
+  created_by?: string
+  created_at?: string
+  updated_at?: string
+}
+
+export const getItineraries = async (eventId: string, companyId?: string) => {
+  let query = supabase
+    .from('itineraries')
+    .select('*')
+    .eq('event_id', eventId)
+
+  // Add company filtering for extra security
+  if (companyId) {
+    query = query.eq('company_id', companyId)
+  }
+
+  const { data, error } = await query.order('created_at', { ascending: false })
+
+  if (error) throw error
+  return data
+}
+
+export const addItinerary = async (itinerary: Omit<Itinerary, 'id' | 'created_at' | 'updated_at'>) => {
+  const { data, error } = await supabase
+    .from('itineraries')
+    .insert(itinerary)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+export const updateItinerary = async (id: string, updates: Partial<Itinerary>) => {
+  const { data, error } = await supabase
+    .from('itineraries')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+export const deleteItinerary = async (id: string) => {
+  const { error } = await supabase
+    .from('itineraries')
+    .delete()
+    .eq('id', id)
+
+  if (error) throw error
+}
+
+// Guest Drafts types and functions
+export type GuestDraft = {
+  id: string
+  event_id: string
+  company_id: string
+  draft_data: any
+  created_by?: string
+  created_at?: string
+  updated_at?: string
+}
+
+export const getGuestDrafts = async (eventId: string) => {
+  const { data, error } = await supabase
+    .from('guest_drafts')
+    .select('*')
+    .eq('event_id', eventId)
+    .order('created_at', { ascending: false })
+
+  if (error) throw error
+  return data
+}
+
+export const addGuestDraft = async (draft: Omit<GuestDraft, 'id' | 'created_at' | 'updated_at'>) => {
+  const { data, error } = await supabase
+    .from('guest_drafts')
+    .insert(draft)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+export const updateGuestDraft = async (id: string, updates: Partial<GuestDraft>) => {
+  const { data, error } = await supabase
+    .from('guest_drafts')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+export const deleteGuestDraft = async (id: string) => {
+  const { error } = await supabase
+    .from('guest_drafts')
+    .delete()
+    .eq('id', id)
+
+  if (error) throw error
+}
+
+// Event Modules types and functions
+export type EventModule = {
+  id: string
+  event_id: string
+  company_id: string
+  module_data: any
+  created_by?: string
+  created_at?: string
+  updated_at?: string
+}
+
+export const getEventModules = async (eventId: string) => {
+  const { data, error } = await supabase
+    .from('event_modules')
+    .select('*')
+    .eq('event_id', eventId)
+    .single()
+
+  if (error && error.code !== 'PGRST116') throw error // PGRST116 = no rows returned
+  return data
+}
+
+export const saveEventModules = async (eventId: string, moduleData: any, createdBy?: string) => {
+  // Get current user for company_id
+  const currentUser = await getCurrentUser()
+  if (!currentUser) {
+    throw new Error('No authenticated user found')
+  }
+
+  const { data, error } = await supabase
+    .from('event_modules')
+    .upsert({
+      event_id: eventId,
+      company_id: currentUser.company_id,
+      module_data: moduleData,
+      created_by: createdBy || currentUser.id
+    })
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+// Canvas Sessions types and functions
+export type CanvasSession = {
+  id: string
+  session_id: string
+  company_id: string
+  session_data: any
+  created_by?: string
+  created_at?: string
+  updated_at?: string
+}
+
+export const getCanvasSession = async (sessionId: string) => {
+  const { data, error } = await supabase
+    .from('canvas_sessions')
+    .select('*')
+    .eq('session_id', sessionId)
+    .single()
+
+  if (error && error.code !== 'PGRST116') throw error
+  return data
+}
+
+export const saveCanvasSession = async (sessionId: string, companyId: string, sessionData: any, createdBy?: string) => {
+  const { data, error } = await supabase
+    .from('canvas_sessions')
+    .upsert({
+      session_id: sessionId,
+      company_id: companyId,
+      session_data: sessionData,
+      created_by: createdBy
+    })
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+// ============================================
+// CSV CONVERSION UTILITY
+// ============================================
+
+// Convert CSV data to guest format for Supabase
+export const convertCsvToGuests = (csvData: any[], eventId: string, companyId: string, createdBy: string): Omit<Guest, 'id' | 'created_at' | 'updated_at'>[] => {
+  return csvData.map(row => ({
+    event_id: eventId,
+    company_id: companyId,
+    first_name: row['First Name'] || '',
+    middle_name: row['Middle Name'] || '',
+    last_name: row['Last Name'] || '',
+    email: row['Email'] || '',
+    contact_number: row['Contact Number'] || '',
+    country_code: row['Country Code'] || '+44',
+    id_type: row['ID Type'] || '',
+    id_number: row['ID Number'] || '',
+    id_country: row['Country of Origin'] || '',
+    dob: row['Date of Birth'] || undefined,
+    gender: row['Gender'] || '',
+    group_id: undefined,
+    group_name: undefined,
+    next_of_kin_name: row['Next of Kin Name'] || '',
+    next_of_kin_email: row['Next of Kin Email'] || '',
+    next_of_kin_phone_country: row['Next of Kin Country Code'] || '',
+    next_of_kin_phone: row['Next of Kin Number'] || '',
+    dietary: row['Dietary'] ? row['Dietary'].split(';').map((d: string) => d.trim()).filter(Boolean) : [],
+    medical: row['Medical/Accessibility'] ? row['Medical/Accessibility'].split(';').map((m: string) => m.trim()).filter(Boolean) : [],
+    modules: {},
+    module_values: {},
+    prefix: row['Prefix'] || '',
+    status: 'pending',
+    created_by: createdBy
+  }));
 } 

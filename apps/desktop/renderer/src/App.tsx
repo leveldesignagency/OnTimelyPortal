@@ -10,35 +10,18 @@ import { ModulesPage } from './pages/ModulesPage';
 import GuestFormPage from './GuestFormPage';
 import TeamsLayout from './TeamsLayout';
 import TeamChatPage from './TeamChatPage';
-import TeamsListPage from './TeamsListPage';
+import CreateTeamPage from './CreateTeamPage';
 import CalendarPage from './CalendarPage';
 import CanvasPage from './CanvasPage';
-import CreateTeamFlowPage from './CreateTeamFlowPage';
 import RealtimeTestPage from './pages/realtime-test';
 import LoginPage from './pages/LoginPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import { ThemeProvider, ThemeContext } from './ThemeContext';
-import { EventType } from './types';
+import { getCurrentUser } from './lib/auth';
+import { getEvents, createEvent, Event } from './lib/supabase';
 
-// Remove fs and path, use localStorage for persistence
-
-function loadEventsFromStorage(): EventType[] {
-  try {
-    const data = localStorage.getItem('timely_events');
-    if (data) return JSON.parse(data);
-  } catch (e) {
-    // ignore
-  }
-  return [];
-}
-
-function saveEventsToStorage(events: EventType[]) {
-  try {
-    localStorage.setItem('timely_events', JSON.stringify(events));
-  } catch (e) {
-    // ignore
-  }
-}
+// Update EventType to match Supabase Event type
+export type EventType = Event;
 
 const AppContent = () => {
   const { theme } = useContext(ThemeContext);
@@ -167,22 +150,52 @@ const AppContent = () => {
     };
   }, [isDark]);
 
-  // Load from localStorage on mount
+  // Load events from Supabase on mount
   React.useEffect(() => {
-    setEvents(loadEventsFromStorage());
-    setLoading(false);
+    const loadEvents = async () => {
+      try {
+        const user = getCurrentUser();
+        if (user && !isLoginPage) {
+          const supabaseEvents = await getEvents(user.company_id);
+          setEvents(supabaseEvents || []);
+        }
+        setLoading(false);
+      } catch (error) {
+        console.error('Failed to load events:', error);
+        setError('Failed to load events');
+        setLoading(false);
+      }
+    };
+
+    loadEvents();
+
     // On teams pages, the sidebar should be closed by default.
     if (isTeamsPage) {
       setSidebarOpen(false);
     }
-  }, [isTeamsPage]);
+  }, [isTeamsPage, isLoginPage]);
 
-  // Save to localStorage on change
-  React.useEffect(() => {
-    if (!loading) {
-      saveEventsToStorage(events);
+  // Event creation handler
+  const handleCreateEvent = async (eventData: Omit<EventType, 'id' | 'created_at' | 'updated_at'>) => {
+    try {
+      const user = getCurrentUser();
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+
+      const newEvent = await createEvent({
+        ...eventData,
+        company_id: user.company_id,
+        created_by: user.id
+      });
+
+      setEvents(prev => [newEvent, ...prev]);
+      return newEvent;
+    } catch (error) {
+      console.error('Failed to create event:', error);
+      throw error;
     }
-  }, [events, loading]);
+  };
 
   if (loading) {
     return <div style={{ padding: 64, fontFamily: 'Roboto, Arial, system-ui, sans-serif', color: isDark ? '#fff' : '#222' }}>Loading events...</div>;
@@ -217,7 +230,7 @@ const AppContent = () => {
           
           {/* Protected routes */}
           <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-          <Route path="/create-event" element={<ProtectedRoute><CreateEventPage onCreate={event => setEvents(prev => { const next = [...prev, event]; saveEventsToStorage(next); return next; })} /></ProtectedRoute>} />
+          <Route path="/create-event" element={<ProtectedRoute><CreateEventPage onCreate={handleCreateEvent} /></ProtectedRoute>} />
           <Route path="/event/:id" element={<ProtectedRoute><EventDashboardPage events={events} /></ProtectedRoute>} />
           <Route path="/event/:id/add-guests" element={<ProtectedRoute><CreateGuests /></ProtectedRoute>} />
           <Route path="/event/:eventId/guests/edit/:guestIndex" element={<ProtectedRoute><CreateGuests /></ProtectedRoute>} />
@@ -226,13 +239,12 @@ const AppContent = () => {
           <Route path="/event/:eventId/modules" element={<ProtectedRoute><ModulesPage /></ProtectedRoute>} />
           <Route path="/realtime-test" element={<ProtectedRoute><RealtimeTestPage /></ProtectedRoute>} />
           <Route path="/teams" element={<ProtectedRoute><TeamsLayout /></ProtectedRoute>}>
-            <Route index element={<Navigate to="/teams/list" replace />} />
+            <Route index element={<Navigate to="chat" replace />} />
             <Route path="chat" element={<TeamChatPage />} />
             <Route path="calendar" element={<CalendarPage />} />
             <Route path="canvas" element={<CanvasPage />} />
-            <Route path="list" element={<TeamsListPage />} />
+            <Route path="create" element={<CreateTeamPage />} />
           </Route>
-          <Route path="/teams/create" element={<ProtectedRoute><CreateTeamFlowPage /></ProtectedRoute>} />
           <Route path="/guest-form/:eventId" element={<ProtectedRoute><GuestFormPage /></ProtectedRoute>} />
           <Route path="/guest-form/:eventId/edit/:guestIndex" element={<ProtectedRoute><GuestFormPage /></ProtectedRoute>} />
         </Routes>
@@ -249,4 +261,4 @@ export default function App() {
       </Router>
     </ThemeProvider>
   );
-} 
+}

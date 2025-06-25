@@ -4,6 +4,21 @@ import Sidebar from './Sidebar';
 import { ModulesPage } from './pages/ModulesPage';
 import Icon from './Icon';
 import { ThemeContext } from './ThemeContext';
+import { getCurrentUser } from './lib/auth';
+import { useRealtimeGuests, useRealtimeItineraries } from './hooks/useRealtime';
+import { 
+  addMultipleGuests, 
+  convertCsvToGuests, 
+  deleteGuest, 
+  getItineraries,
+  addItinerary,
+  updateItinerary,
+  deleteItinerary,
+  getEventModules,
+  saveEventModules,
+  type Guest,
+  type Itinerary 
+} from './lib/supabase';
 
 console.log("THIS IS EVENT DASHBOARD PAGE");
 
@@ -14,6 +29,8 @@ type EventType = {
   to: string;
   status: string;
 };
+
+type ItineraryType = Itinerary;
 
 type GuestType = {
   id: string;
@@ -91,18 +108,31 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
   const isDark = theme === 'dark';
   const { id } = useParams();
   const navigate = useNavigate();
-  const location = useLocation();
+  
+  // Get current user for company context
+  const currentUser = getCurrentUser();
+  
+  // Use real-time guests hook
+  const { guests: realtimeGuests, loading: guestsLoading, error: guestsError, refetch: refetchGuests } = useRealtimeGuests(id || null);
+  
+  // Use real-time itineraries hook
+  const { itineraries: realtimeItineraries, loading: itinerariesLoading, error: itinerariesError, refetch: refetchItineraries } = useRealtimeItineraries(id || null);
+
   const event = events.find(e => e.id === id);
+  const [activeTab, setActiveTab] = useState('overview');
+  const [guests, setGuests] = useState<GuestType[]>([]);
+  const [savedItineraries, setSavedItineraries] = useState<ItineraryType[]>([]);
+  const [draftItineraries, setDraftItineraries] = useState<ItineraryType[]>([]);
+  
+  // CSV Upload states
+  const [isCsvUploading, setIsCsvUploading] = useState(false);
+  const [csvUploadError, setCsvUploadError] = useState<string | null>(null);
+  const [csvUploadSuccess, setCsvUploadSuccess] = useState<string | null>(null);
+
   const [showModules, setShowModules] = useState(true);
-  const [activeTab, setActiveTab] = useState(() => {
-    const params = new URLSearchParams(location.search);
-    return params.get('tab') || 'dashboard';
-  });
   const [itineraryToDelete, setItineraryToDelete] = useState<number | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteText, setDeleteText] = useState('');
-  const [savedItineraries, setSavedItineraries] = useState<{ title: string; items: any[] }[]>([]);
-  const [draftItineraries, setDraftItineraries] = useState<{ title: string; items: any[] }[]>([]);
   const [activeSection, setActiveSection] = useState('modules');
   const [activeModules, setActiveModules] = useState<{
     [key: string]: {
@@ -128,7 +158,6 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
   const [shareSearchQuery, setShareSearchQuery] = useState('');
 
   // New state for guest selection
-  const [guests, setGuests] = useState<GuestType[]>([]);
   const [selectedGuestIds, setSelectedGuestIds] = useState<string[]>([]);
   const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
   const [showGuestDeleteConfirm, setShowGuestDeleteConfirm] = useState(false);
@@ -174,7 +203,8 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
     { key: 'nextOfKinEmail', label: 'Next of Kin Email', enabled: true },
     { key: 'nextOfKinPhone', label: 'Next of Kin Phone', enabled: true },
     { key: 'dietary', label: 'Dietary Requirements', enabled: true },
-    { key: 'disabilities', label: 'Disabilities/Accessibility', enabled: true },
+    { key: 'medical', label: 'Medical/Accessibility', enabled: true },
+    { key: 'nextOfKin', label: 'Next of Kin Details', enabled: true },
   ]);
 
   const [formModules, setFormModules] = useState([
@@ -297,21 +327,145 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
     }
   };
 
+  // New CSV Guest Upload Handler
+  const handleGuestCsvUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !currentUser || !event) return;
+
+    setIsCsvUploading(true);
+    setCsvUploadError(null);
+    setCsvUploadSuccess(null);
+
+    try {
+      const text = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (event) => resolve(event.target?.result as string);
+        reader.onerror = () => reject(new Error('Failed to read file'));
+        reader.readAsText(file);
+      });
+
+      if (!text) throw new Error('File is empty');
+
+      const lines = text.split(/\r\n|\n/).filter(line => line.trim() !== '');
+      if (lines.length < 2) throw new Error('CSV must have a header row and at least one data row');
+
+      const headers = lines[0].split(',').map(h => h.trim());
+      const requiredHeaders = ['First Name', 'Last Name'];
+      
+      for (const requiredHeader of requiredHeaders) {
+        if (!headers.includes(requiredHeader)) {
+          throw new Error(`CSV is missing required header: ${requiredHeader}`);
+        }
+      }
+
+      const csvData = lines.slice(1).map((line, rowIndex) => {
+        const values = line.split(',').map(v => v.trim());
+        const entry: any = {};
+        
+        headers.forEach((header, index) => {
+          const value = values[index] || '';
+          entry[header] = value;
+        });
+
+        if (!entry['First Name'] || !entry['Last Name']) {
+          throw new Error(`Row ${rowIndex + 2} is missing First Name or Last Name`);
+        }
+        
+        return entry;
+      });
+
+      // Convert CSV data to guest format
+      const guestsToAdd = convertCsvToGuests(csvData, event.id, currentUser.company_id, currentUser.id);
+      
+      // Add to Supabase
+      await addMultipleGuests(guestsToAdd);
+      
+      // Refresh guests list
+      await refetchGuests();
+      
+      setCsvUploadSuccess(`Successfully uploaded ${guestsToAdd.length} guests! They are now visible to all team members.`);
+      
+      // Clear the file input
+      e.target.value = '';
+      
+    } catch (error) {
+      setCsvUploadError(error instanceof Error ? error.message : 'Failed to upload CSV');
+    } finally {
+      setIsCsvUploading(false);
+    }
+  };
+
   useEffect(() => {
     if (!event?.id) return;
-    try {
-      const saved = JSON.parse(localStorage.getItem(`event_itineraries_${event.id}`) || '[]');
-      const drafts = JSON.parse(localStorage.getItem(`event_itinerary_drafts_${event.id}`) || '[]');
+    
+    const loadEventData = async () => {
+      try {
+        // Load event modules from Supabase
+        const modules = await getEventModules(event.id);
+        if (modules) {
+          setActiveModules(modules.modules);
+        }
+      } catch (error) {
+        console.error('Error loading event modules from Supabase:', error);
+        // Fallback to localStorage for modules only
+        try {
+          const savedModules = localStorage.getItem(`event_modules_${event.id}`);
+          if (savedModules) {
+            setActiveModules(JSON.parse(savedModules));
+          }
+        } catch (localError) {
+          console.error('Error loading modules from localStorage fallback:', localError);
+        }
+      }
+    };
+
+    loadEventData();
+  }, [event?.id]);
+
+  // Update local guests state when real-time data changes
+  useEffect(() => {
+    if (realtimeGuests) {
+      // Convert Supabase guest format to local format
+      const convertedGuests = realtimeGuests.map((guest: Guest) => ({
+        id: guest.id,
+        firstName: guest.first_name,
+        middleName: guest.middle_name,
+        lastName: guest.last_name,
+        email: guest.email,
+        contactNumber: guest.contact_number,
+        countryCode: guest.country_code,
+        idType: guest.id_type,
+        idNumber: guest.id_number,
+        idCountry: guest.id_country,
+        dob: guest.dob,
+        gender: guest.gender,
+        groupId: guest.group_id,
+        groupName: guest.group_name,
+        nextOfKinName: guest.next_of_kin_name,
+        nextOfKinEmail: guest.next_of_kin_email,
+        nextOfKinPhoneCountry: guest.next_of_kin_phone_country,
+        nextOfKinPhone: guest.next_of_kin_phone,
+        dietary: guest.dietary || [],
+        medical: guest.medical || [],
+        nextOfKin: guest.next_of_kin || {},
+        modules: guest.modules || {},
+        moduleValues: guest.module_values || {},
+        prefix: guest.prefix,
+        status: guest.status
+      }));
+      setGuests(convertedGuests);
+    }
+  }, [realtimeGuests]);
+
+  // Update local itinerary state when real-time data changes
+  useEffect(() => {
+    if (realtimeItineraries) {
+      const saved = realtimeItineraries.filter(it => it.is_draft === false);
+      const drafts = realtimeItineraries.filter(it => it.is_draft === true);
       setSavedItineraries(saved);
       setDraftItineraries(drafts);
-
-      // Load guests
-      const savedGuests = JSON.parse(localStorage.getItem(`event_guests_${event.id}`) || '[]');
-      setGuests(savedGuests);
-    } catch (error) {
-      console.error('Error loading data:', error);
     }
-  }, [event?.id]);
+  }, [realtimeItineraries]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -356,6 +510,23 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
     if (!event) return;
     localStorage.setItem(`event_modules_${event.id}`, JSON.stringify(activeModules));
   }, [activeModules, event]);
+
+  // Save modules to Supabase when they change
+  useEffect(() => {
+    if (!event?.id) return;
+    
+    const saveModules = async () => {
+      try {
+        await saveEventModules(event.id, activeModules);
+      } catch (error) {
+        console.error('Error saving modules to Supabase:', error);
+        // Fallback to localStorage
+        localStorage.setItem(`event_modules_${event.id}`, JSON.stringify(activeModules));
+      }
+    };
+
+    saveModules();
+  }, [activeModules, event?.id]);
 
   const shareSearchResults = useMemo(() => {
     if (!shareSearchQuery) {
@@ -425,12 +596,98 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
 
   if (!event) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Roboto, Arial, system-ui, sans-serif', background: '#fff' }}>
-        <div style={{ fontSize: 36, fontWeight: 600, color: '#000', marginBottom: 24 }}>Event not found</div>
-        <div style={{ fontSize: 18, color: '#555', marginBottom: 40 }}>The event you are looking for does not exist or has been deleted.</div>
-        <div style={{ display: 'flex', gap: 16 }}>
-          <button onClick={() => navigate('/')} style={{ background: '#222', color: '#fff', fontWeight: 500, fontSize: 18, border: 'none', borderRadius: 8, padding: '12px 32px', minWidth: 140, minHeight: 48, cursor: 'pointer' }}>Go to Dashboard</button>
-          <button onClick={() => navigate('/create-event')} style={{ background: '#fff', color: '#222', fontWeight: 500, fontSize: 18, border: '2px solid #bbb', borderRadius: 8, padding: '12px 32px', minWidth: 140, minHeight: 48, cursor: 'pointer' }}>Create New Event</button>
+      <div style={{ 
+        minHeight: '100vh', 
+        display: 'flex', 
+        flexDirection: 'column',
+        alignItems: 'center', 
+        justifyContent: 'center', 
+        fontFamily: 'Roboto, Arial, system-ui, sans-serif', 
+        background: isDark ? '#1a1a1a' : '#fff',
+        padding: '40px 20px'
+      }}>
+        <div style={{ 
+          textAlign: 'center',
+          maxWidth: '500px',
+          width: '100%'
+        }}>
+          <div style={{ 
+            fontSize: 48, 
+            fontWeight: 700, 
+            color: isDark ? '#ffffff' : '#000', 
+            marginBottom: 16,
+            letterSpacing: '-0.02em'
+          }}>
+            Event not found
+          </div>
+          <div style={{ 
+            fontSize: 18, 
+            color: isDark ? '#aaa' : '#555', 
+            marginBottom: 48,
+            lineHeight: 1.5
+          }}>
+            The event you are looking for does not exist or has been deleted.
+          </div>
+          <div style={{ 
+            display: 'flex', 
+            gap: 16,
+            justifyContent: 'center',
+            flexWrap: 'wrap'
+          }}>
+            <button 
+              onClick={() => navigate('/')} 
+              style={{ 
+                background: isDark ? '#ffffff' : '#222', 
+                color: isDark ? '#000' : '#fff', 
+                fontWeight: 600, 
+                fontSize: 16, 
+                border: 'none', 
+                borderRadius: 8, 
+                padding: '14px 28px', 
+                minWidth: 160, 
+                minHeight: 48, 
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-1px)'
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)'
+                e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)'
+              }}
+            >
+              Go to Dashboard
+            </button>
+            <button 
+              onClick={() => navigate('/create-event')} 
+              style={{ 
+                background: 'transparent', 
+                color: isDark ? '#ffffff' : '#222', 
+                fontWeight: 600, 
+                fontSize: 16, 
+                border: `2px solid ${isDark ? '#444' : '#bbb'}`, 
+                borderRadius: 8, 
+                padding: '14px 28px', 
+                minWidth: 160, 
+                minHeight: 48, 
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = isDark ? '#666' : '#888'
+                e.currentTarget.style.transform = 'translateY(-1px)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = isDark ? '#444' : '#bbb'
+                e.currentTarget.style.transform = 'translateY(0)'
+              }}
+            >
+              Create New Event
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -449,7 +706,7 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
       'Country Code', 'Contact Number', 'Email',
       'ID Type', 'ID Number', 'Country of Origin',
       'Next of Kin Name', 'Next of Kin Email', 'Next of Kin Country Code', 'Next of Kin Number',
-      'Dietary', 'Disabilities', 'Modules'
+      'Dietary', 'Medical/Accessibility', 'Modules'
     ];
     const csvContent = headers.join(',') + '\n';
     const blob = new Blob([csvContent], { type: 'text/csv' });
@@ -601,35 +858,59 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
     </button>
   );
 
-  const handleDuplicate = (idx: number) => {
-    const itinerary = savedItineraries[idx];
-    const newItineraries = [...savedItineraries, { ...itinerary, title: `${itinerary.title} (Copy)` }];
-    setSavedItineraries(newItineraries);
-    localStorage.setItem(`event_itineraries_${event?.id}`, JSON.stringify(newItineraries));
+  const handleDuplicate = async (idx: number) => {
+    if (!event?.id) return;
+    
+    try {
+      const itinerary = savedItineraries[idx];
+      const duplicatedItinerary = {
+        ...itinerary,
+        title: `${itinerary.title} (Copy)`,
+        id: undefined // Let Supabase generate new ID
+      };
+      
+      const newItinerary = await addItinerary(duplicatedItinerary);
+      setSavedItineraries(prev => [...prev, newItinerary]);
+    } catch (error) {
+      console.error('Error duplicating itinerary:', error);
+      alert('Failed to duplicate itinerary. Please try again.');
+    }
   };
 
-  const handleMakeDraft = (idx: number) => {
-    const itinerary = savedItineraries[idx];
+  const handleMakeDraft = async (idx: number) => {
+    if (!event?.id) return;
     
-    const newDrafts = [...draftItineraries, itinerary];
-    setDraftItineraries(newDrafts);
-    localStorage.setItem(`event_itinerary_drafts_${event?.id}`, JSON.stringify(newDrafts));
-    
-    const newSaved = savedItineraries.filter((_, i) => i !== idx);
-    setSavedItineraries(newSaved);
-    localStorage.setItem(`event_itineraries_${event?.id}`, JSON.stringify(newSaved));
+    try {
+      const itinerary = savedItineraries[idx];
+      
+      // Update the itinerary to be a draft
+      const updatedItinerary = await updateItinerary(itinerary.id!, { ...itinerary, is_draft: true });
+      
+      // Update local state
+      setDraftItineraries(prev => [...prev, updatedItinerary]);
+      setSavedItineraries(prev => prev.filter((_, i) => i !== idx));
+    } catch (error) {
+      console.error('Error making itinerary draft:', error);
+      alert('Failed to make itinerary a draft. Please try again.');
+    }
   };
 
-  const handleDelete = () => {
-    if (itineraryToDelete === null || deleteText !== 'delete') return;
+  const handleDelete = async () => {
+    if (itineraryToDelete === null || deleteText !== 'delete' || !event?.id) return;
     
-    const newItineraries = savedItineraries.filter((_, idx) => idx !== itineraryToDelete);
-    setSavedItineraries(newItineraries);
-    localStorage.setItem(`event_itineraries_${event?.id}`, JSON.stringify(newItineraries));
-    
-    setShowDeleteConfirm(false);
-    setItineraryToDelete(null);
-    setDeleteText('');
+    try {
+      const itinerary = savedItineraries[itineraryToDelete];
+      await deleteItinerary(itinerary.id!);
+      
+      setSavedItineraries(prev => prev.filter((_, idx) => idx !== itineraryToDelete));
+      
+      setShowDeleteConfirm(false);
+      setItineraryToDelete(null);
+      setDeleteText('');
+    } catch (error) {
+      console.error('Error deleting itinerary:', error);
+      alert('Failed to delete itinerary. Please try again.');
+    }
   };
 
   function handleSelectGuest(guestId: string) {
@@ -671,26 +952,42 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
     }
   }
 
-  function handleDeleteSelectedGuests() {
+  async function handleDeleteSelectedGuests() {
     if (!event?.id) return;
 
-    const remainingGuests = guests.filter(g => !selectedGuestIds.includes(g.id));
-    localStorage.setItem(`event_guests_${event.id}`, JSON.stringify(remainingGuests));
-    setGuests(remainingGuests);
-    setSelectedGuestIds([]);
-    setShowGuestDeleteConfirm(false);
+    try {
+      // Delete from Supabase database
+      for (const guestId of selectedGuestIds) {
+        await deleteGuest(guestId);
+      }
+      
+      console.log(`✅ Successfully deleted ${selectedGuestIds.length} guests from database`);
+      
+      // The real-time subscription will automatically update the UI
+      setSelectedGuestIds([]);
+      setShowGuestDeleteConfirm(false);
+    } catch (error) {
+      console.error('❌ Error deleting guests:', error);
+      alert(`Failed to delete guests: ${error.message || 'Unknown error'}`);
+    }
   }
 
-  const handlePublishDraft = (draftIndex: number) => {
-    const draftToPublish = draftItineraries[draftIndex];
-    const newSaved = [...savedItineraries, draftToPublish];
+  const handlePublishDraft = async (draftIndex: number) => {
+    if (!event?.id) return;
     
-    const newDrafts = draftItineraries.filter((_, idx) => idx !== draftIndex);
-    localStorage.setItem(`event_itinerary_drafts_${event?.id}`, JSON.stringify(newDrafts));
-    setDraftItineraries(newDrafts);
-    
-    localStorage.setItem(`event_itineraries_${event?.id}`, JSON.stringify(newSaved));
-    setSavedItineraries(newSaved);
+    try {
+      const draftToPublish = draftItineraries[draftIndex];
+      
+      // Update the itinerary to not be a draft
+      const updatedItinerary = await updateItinerary(draftToPublish.id!, { ...draftToPublish, is_draft: false });
+      
+      // Update local state
+      setSavedItineraries(prev => [...prev, updatedItinerary]);
+      setDraftItineraries(prev => prev.filter((_, idx) => idx !== draftIndex));
+    } catch (error) {
+      console.error('Error publishing draft:', error);
+      alert('Failed to publish draft. Please try again.');
+    }
   };
 
   const handleDragStart = (e: React.DragEvent, moduleKey: string) => {
@@ -824,12 +1121,22 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
     setShowDeleteEventModal(true);
   };
 
-  const handleConfirmDeleteEvent = () => {
+  const handleConfirmDeleteEvent = async () => {
     if (deleteEventText !== 'delete') return;
     
-    const updatedEvents = events.filter(e => e.id !== id);
-    localStorage.setItem('timely_events', JSON.stringify(updatedEvents));
-    navigate('/');
+    try {
+      // TODO: Add Supabase event deletion when event management is implemented
+      // For now, just update localStorage
+      const updatedEvents = events.filter(e => e.id !== id);
+      localStorage.setItem('timely_events', JSON.stringify(updatedEvents));
+      navigate('/');
+    } catch (error) {
+      console.error('Error deleting event:', error);
+      // Fallback to localStorage only
+      const updatedEvents = events.filter(e => e.id !== id);
+      localStorage.setItem('timely_events', JSON.stringify(updatedEvents));
+      navigate('/');
+    }
   };
 
   // Add email recipient handling functions
@@ -847,6 +1154,45 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
   const handleNextToPreview = () => {
     setModalView('preview');
   };
+
+  // Helper function to determine if event is live (happening today)
+  const isEventLive = (event: EventType): boolean => {
+    const today = new Date().toISOString().split('T')[0] // YYYY-MM-DD format
+    const eventStart = event.from
+    const eventEnd = event.to
+    
+    return today >= eventStart && today <= eventEnd
+  }
+
+  // Get display status for event
+  const getEventDisplayStatus = (event: EventType): string => {
+    const today = new Date().toISOString().split('T')[0] // YYYY-MM-DD format
+    const eventStart = event.from
+    const eventEnd = event.to
+    
+    if (today >= eventStart && today <= eventEnd) {
+      return 'LIVE'
+    } else if (today < eventStart) {
+      return 'UPCOMING'
+    } else {
+      return 'FINISHED'
+    }
+  }
+
+  // Get status color
+  const getStatusColor = (event: EventType): string => {
+    const status = getEventDisplayStatus(event)
+    switch (status) {
+      case 'LIVE':
+        return '#22c55e' // Green
+      case 'UPCOMING':
+        return '#f59e0b' // Orange/Amber
+      case 'FINISHED':
+        return '#ef4444' // Red
+      default:
+        return '#6b7280' // Gray
+    }
+  }
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: isDark ? '#121212' : '#f8f9fa' }}>
@@ -950,8 +1296,7 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                 {currentEvent?.name || 'Event Dashboard'}
               </h1>
               <span style={{
-                background: currentEvent?.status === 'Upcoming' ? '#ef4444' : 
-                           currentEvent?.status === 'Live' ? '#f59e0b' : '#22c55e',
+                background: getStatusColor(currentEvent),
                 color: '#fff',
                 padding: '6px 12px',
                 borderRadius: 20,
@@ -960,7 +1305,7 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                 textTransform: 'uppercase',
                 letterSpacing: '0.5px'
               }}>
-                {currentEvent?.status || 'Unknown'}
+                {getEventDisplayStatus(currentEvent)}
               </span>
           </div>
             <div style={{ fontSize: 22, color: isDark ? '#b0b0b0' : '#888', fontWeight: 400, marginBottom: 0, textAlign: 'right' }}>{formatUK(event.from)} - {formatUK(event.to)}</div>
@@ -1540,125 +1885,124 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                     <div style={{ flex: 1 }}>
                       <div style={{ fontWeight: 600, fontSize: 20, marginBottom: 12 }}>{it.title}</div>
                       <div>
-                        {it.items && it.items.length > 0 ? (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                            {it.items.map((act, aidx) => (
-                              <div key={aidx} style={{
-                                background: aidx % 2 === 0 ? '#f8f9fa' : '#fff',
-                                border: '2px solid #eee',
-                                borderRadius: 10,
-                                padding: '16px',
-                                transition: 'all 0.2s ease'
-                              }}
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.background = '#f0f0f0';
-                                e.currentTarget.style.transform = 'scale(1.01)';
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.background = aidx % 2 === 0 ? '#f8f9fa' : '#fff';
-                                e.currentTarget.style.transform = 'scale(1)';
-                              }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                                  <div style={{ fontWeight: 500, fontSize: 16, color: '#222' }}>{act.activity || act.title}</div>
-                                  <div style={{ color: '#666', fontSize: 14 }}>{formatUK(act.date)}</div>
+                        {/* Display individual itinerary details */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                          <div style={{
+                            background: '#f8f9fa',
+                            border: '2px solid #eee',
+                            borderRadius: 10,
+                            padding: '16px',
+                            transition: 'all 0.2s ease'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = '#f0f0f0';
+                            e.currentTarget.style.transform = 'scale(1.01)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = '#f8f9fa';
+                            e.currentTarget.style.transform = 'scale(1)';
+                          }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                              <div style={{ fontWeight: 500, fontSize: 16, color: '#222' }}>{it.title}</div>
+                              {it.arrival_time && (
+                                <div style={{ color: '#666', fontSize: 14 }}>
+                                  Arrival: {new Date(it.arrival_time).toLocaleDateString('en-GB')}
                                 </div>
-                                
-                                <div style={{ display: 'flex', gap: 24, marginBottom: 12 }}>
-                                  <div style={{ color: '#444', fontSize: 14 }}>
-                                    <span style={{ fontWeight: 500, color: '#666' }}>Time:</span> {act.start} - {act.end}
-                                  </div>
-                                  <div style={{ color: '#444', fontSize: 14 }}>
-                                    <span style={{ fontWeight: 500, color: '#666' }}>Location:</span> {act.location}
-                                  </div>
+                              )}
+                            </div>
+                            
+                            <div style={{ display: 'flex', gap: 24, marginBottom: 12 }}>
+                              {it.start_time && it.end_time && (
+                                <div style={{ color: '#444', fontSize: 14 }}>
+                                  <span style={{ fontWeight: 500, color: '#666' }}>Time:</span> {it.start_time} - {it.end_time}
                                 </div>
+                              )}
+                              {it.location && (
+                                <div style={{ color: '#444', fontSize: 14 }}>
+                                  <span style={{ fontWeight: 500, color: '#666' }}>Location:</span> {it.location}
+                                </div>
+                              )}
+                            </div>
 
-                                {act.description && (
-                                  <div style={{ color: '#666', fontSize: 14, marginBottom: 12 }}>
-                                    {act.description}
-                                  </div>
-                                )}
-
-                                {act.nextOfKin && (
-                                  <div style={{ marginTop: 8, padding: '8px 12px', background: '#f5f5f5', borderRadius: 8 }}>
-                                    <div style={{ fontSize: 13, color: '#666', fontWeight: 500, marginBottom: 4 }}>NEXT OF KIN</div>
-                                    <div style={{ fontSize: 14, color: '#444' }}>
-                                      {act.nextOfKin.name} • {act.nextOfKin.phone} • {act.nextOfKin.email}
-                                    </div>
-                                  </div>
-                                )}
-
-                                {act.dietary && act.dietary.length > 0 && (
-                                  <div style={{ marginTop: 8 }}>
-                                    <div style={{ fontSize: 13, color: '#666', fontWeight: 500, marginBottom: 4 }}>DIETARY</div>
-                                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                                      {(act.dietary as string[]).map((diet: string, didx: number) => (
-                                        <span key={didx} style={{
-                                          background: '#f5f5f5',
-                                          color: '#000',
-                                          padding: '4px 12px',
-                                          borderRadius: 12,
-                                          fontSize: 13,
-                                          border: '1px solid #ccc'
-                                        }}>{diet}</span>
-                                      ))}
-                                    </div>
-                                  </div>
-                                )}
-
-                                {act.disabilities && act.disabilities.length > 0 && (
-                                  <div style={{ marginTop: 8 }}>
-                                    <div style={{ fontSize: 13, color: '#666', fontWeight: 500, marginBottom: 4 }}>ACCESSIBILITY</div>
-                                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                                      {(act.disabilities as string[]).map((disability: string, didx: number) => (
-                                        <span key={didx} style={{
-                                          background: '#e5e5e5',
-                                          color: '#000',
-                                          padding: '4px 12px',
-                                          borderRadius: 12,
-                                          fontSize: 13,
-                                          border: '1px solid #999'
-                                        }}>{disability}</span>
-                                      ))}
-                                    </div>
-                                  </div>
-                                )}
-
-                                {act.modules && Object.keys(act.modules).length > 0 && (
-                                  <div style={{ marginTop: 12, borderTop: '2px solid #eee', paddingTop: 12 }}>
-                                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                                      {Object.entries(act.modules as Record<string, boolean>).map(([key, value], midx) => (
-                                        value && (
-                                          <span key={midx} style={{
-                                            background: '#f3f4f6',
-                                            color: '#374151',
-                                            padding: '4px 12px',
-                                            borderRadius: 12,
-                                            fontSize: 13,
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: 4
-                                          }}>
-                                            {MODULES.find((m: ActivityModule) => m.key === key)?.label || key}
-                                          </span>
-                                        )
-                                      ))}
-                                    </div>
-                                  </div>
-                                )}
+                            {it.description && (
+                              <div style={{ color: '#666', fontSize: 14, marginBottom: 12 }}>
+                                {it.description}
                               </div>
-                            ))}
+                            )}
+
+                            {/* Display active modules */}
+                            {(it.document_file_name || it.qrcode_url || it.contact_name || (it.notification_times && it.notification_times.length > 0)) && (
+                              <div style={{ marginTop: 12, borderTop: '2px solid #eee', paddingTop: 12 }}>
+                                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                  {it.document_file_name && (
+                                    <span style={{
+                                      background: '#f3f4f6',
+                                      color: '#374151',
+                                      padding: '4px 12px',
+                                      borderRadius: 12,
+                                      fontSize: 13,
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: 4
+                                    }}>
+                                      Document Upload
+                                    </span>
+                                  )}
+                                  {it.qrcode_url && (
+                                    <span style={{
+                                      background: '#f3f4f6',
+                                      color: '#374151',
+                                      padding: '4px 12px',
+                                      borderRadius: 12,
+                                      fontSize: 13,
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: 4
+                                    }}>
+                                      QR Code
+                                    </span>
+                                  )}
+                                  {it.contact_name && (
+                                    <span style={{
+                                      background: '#f3f4f6',
+                                      color: '#374151',
+                                      padding: '4px 12px',
+                                      borderRadius: 12,
+                                      fontSize: 13,
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: 4
+                                    }}>
+                                      Host Contact Details
+                                    </span>
+                                  )}
+                                  {it.notification_times && it.notification_times.length > 0 && (
+                                    <span style={{
+                                      background: '#f3f4f6',
+                                      color: '#374151',
+                                      padding: '4px 12px',
+                                      borderRadius: 12,
+                                      fontSize: 13,
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: 4
+                                    }}>
+                                      Notifications Timer
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        ) : (
-                          <div style={{ color: '#bbb', fontSize: 15 }}>No activities in this itinerary.</div>
-                        )}
+                        </div>
                       </div>
                     </div>
                     <div style={{ marginTop: 20, display: 'flex', alignSelf: 'flex-end', gap: 16, alignItems: 'center' }}>
-                      <button title="Edit" onClick={() => navigate(`/event/${id}/itinerary/edit/${idx}`)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="edit" style={{ color: '#fff' }} /></button>
-                      <button title="Duplicate" onClick={() => handleDuplicate(idx)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="duplicate" style={{ color: '#fff' }} /></button>
-                      <button title="Share" onClick={() => { setItineraryToShare(idx); setShowShareModal(true); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="share" style={{ color: '#fff' }} /></button>
-                      <button title="Save as Draft" onClick={() => handleMakeDraft(idx)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="saveAsDraft" style={{ color: '#fff' }} /></button>
-                      <button title="Delete" onClick={() => { setItineraryToDelete(idx); setShowDeleteConfirm(true); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="delete" style={{ color: '#fff' }} /></button>
+                      <button title="Edit" onClick={() => navigate(`/event/${id}/itinerary/edit/${idx}`)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="edit" /></button>
+                      <button title="Duplicate" onClick={() => handleDuplicate(idx)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="duplicate" /></button>
+                      <button title="Share" onClick={() => { setItineraryToShare(idx); setShowShareModal(true); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="share" /></button>
+                      <button title="Save as Draft" onClick={() => handleMakeDraft(idx)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="saveAsDraft" /></button>
+                      <button title="Delete" onClick={() => { setItineraryToDelete(idx); setShowDeleteConfirm(true); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="delete" /></button>
                     </div>
                   </div>
                 ))}
@@ -1705,117 +2049,116 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                                 Publish
                               </button>
                             </div>
-                            {it.items && it.items.length > 0 ? (
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                                {it.items.map((act, aidx) => (
-                                  <div key={aidx} style={{
-                                    background: aidx % 2 === 0 ? '#f8f9fa' : '#fff',
-                                    border: '2px solid #eee',
-                                    borderRadius: 10,
-                                    padding: '16px',
-                                    transition: 'all 0.2s ease'
-                                  }}
-                                  onMouseEnter={(e) => {
-                                    e.currentTarget.style.background = '#f0f0f0';
-                                    e.currentTarget.style.transform = 'scale(1.01)';
-                                  }}
-                                  onMouseLeave={(e) => {
-                                    e.currentTarget.style.background = aidx % 2 === 0 ? '#f8f9fa' : '#fff';
-                                    e.currentTarget.style.transform = 'scale(1)';
-                                  }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                                      <div style={{ fontWeight: 500, fontSize: 16, color: '#222' }}>{act.activity || act.title}</div>
-                                      <div style={{ color: '#666', fontSize: 14 }}>{formatUK(act.date)}</div>
+                            {/* Display individual draft itinerary details */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                              <div style={{
+                                background: '#fff',
+                                border: '2px solid #eee',
+                                borderRadius: 10,
+                                padding: '16px',
+                                transition: 'all 0.2s ease'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.background = '#f0f0f0';
+                                e.currentTarget.style.transform = 'scale(1.01)';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.background = '#fff';
+                                e.currentTarget.style.transform = 'scale(1)';
+                              }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                                  <div style={{ fontWeight: 500, fontSize: 16, color: '#222' }}>{it.title}</div>
+                                  {it.arrival_time && (
+                                    <div style={{ color: '#666', fontSize: 14 }}>
+                                      Arrival: {new Date(it.arrival_time).toLocaleDateString('en-GB')}
                                     </div>
-                                    
-                                    <div style={{ display: 'flex', gap: 24, marginBottom: 12 }}>
-                                      <div style={{ color: '#444', fontSize: 14 }}>
-                                        <span style={{ fontWeight: 500, color: '#666' }}>Time:</span> {act.start} - {act.end}
-                                      </div>
-                                      <div style={{ color: '#444', fontSize: 14 }}>
-                                        <span style={{ fontWeight: 500, color: '#666' }}>Location:</span> {act.location}
-                                      </div>
+                                  )}
+                                </div>
+                                
+                                <div style={{ display: 'flex', gap: 24, marginBottom: 12 }}>
+                                  {it.start_time && it.end_time && (
+                                    <div style={{ color: '#444', fontSize: 14 }}>
+                                      <span style={{ fontWeight: 500, color: '#666' }}>Time:</span> {it.start_time} - {it.end_time}
                                     </div>
+                                  )}
+                                  {it.location && (
+                                    <div style={{ color: '#444', fontSize: 14 }}>
+                                      <span style={{ fontWeight: 500, color: '#666' }}>Location:</span> {it.location}
+                                    </div>
+                                  )}
+                                </div>
 
-                                    {act.description && (
-                                      <div style={{ color: '#666', fontSize: 14, marginBottom: 12 }}>
-                                        {act.description}
-                                      </div>
-                                    )}
-
-                                    {act.nextOfKin && (
-                                      <div style={{ marginTop: 8, padding: '8px 12px', background: '#f5f5f5', borderRadius: 8 }}>
-                                        <div style={{ fontSize: 13, color: '#666', fontWeight: 500, marginBottom: 4 }}>NEXT OF KIN</div>
-                                        <div style={{ fontSize: 14, color: '#444' }}>
-                                          {act.nextOfKin.name} • {act.nextOfKin.phone} • {act.nextOfKin.email}
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    {act.dietary && act.dietary.length > 0 && (
-                                      <div style={{ marginTop: 8 }}>
-                                        <div style={{ fontSize: 13, color: '#666', fontWeight: 500, marginBottom: 4 }}>DIETARY</div>
-                                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                                          {(act.dietary as string[]).map((diet: string, didx: number) => (
-                                            <span key={didx} style={{
-                                              background: '#f5f5f5',
-                                              color: '#000',
-                                              padding: '4px 12px',
-                                              borderRadius: 12,
-                                              fontSize: 13,
-                                              border: '1px solid #ccc'
-                                            }}>{diet}</span>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    {act.disabilities && act.disabilities.length > 0 && (
-                                      <div style={{ marginTop: 8 }}>
-                                        <div style={{ fontSize: 13, color: '#666', fontWeight: 500, marginBottom: 4 }}>ACCESSIBILITY</div>
-                                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                                          {(act.disabilities as string[]).map((disability: string, didx: number) => (
-                                            <span key={didx} style={{
-                                              background: '#e5e5e5',
-                                              color: '#000',
-                                              padding: '4px 12px',
-                                              borderRadius: 12,
-                                              fontSize: 13,
-                                              border: '1px solid #999'
-                                            }}>{disability}</span>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    {act.modules && Object.keys(act.modules).length > 0 && (
-                                      <div style={{ marginTop: 12, borderTop: '2px solid #eee', paddingTop: 12 }}>
-                                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                                          {Object.entries(act.modules as Record<string, boolean>).map(([key, value], midx) => (
-                                            value && (
-                                              <span key={midx} style={{
-                                                background: '#f3f4f6',
-                                                color: '#374151',
-                                                padding: '4px 12px',
-                                                borderRadius: 12,
-                                                fontSize: 13,
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: 4
-                                              }}>
-                                                {MODULES.find((m: ActivityModule) => m.key === key)?.label || key}
-                                              </span>
-                                            )
-                                          ))}
-                                        </div>
-                                      </div>
-                                    )}
+                                {it.description && (
+                                  <div style={{ color: '#666', fontSize: 14, marginBottom: 12 }}>
+                                    {it.description}
                                   </div>
-                                ))}
+                                )}
+
+                                {/* Display active modules */}
+                                {(it.document_file_name || it.qrcode_url || it.contact_name || (it.notification_times && it.notification_times.length > 0)) && (
+                                  <div style={{ marginTop: 12, borderTop: '2px solid #eee', paddingTop: 12 }}>
+                                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                      {it.document_file_name && (
+                                        <span style={{
+                                          background: '#f3f4f6',
+                                          color: '#374151',
+                                          padding: '4px 12px',
+                                          borderRadius: 12,
+                                          fontSize: 13,
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: 4
+                                        }}>
+                                          Document Upload
+                                        </span>
+                                      )}
+                                      {it.qrcode_url && (
+                                        <span style={{
+                                          background: '#f3f4f6',
+                                          color: '#374151',
+                                          padding: '4px 12px',
+                                          borderRadius: 12,
+                                          fontSize: 13,
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: 4
+                                        }}>
+                                          QR Code
+                                        </span>
+                                      )}
+                                      {it.contact_name && (
+                                        <span style={{
+                                          background: '#f3f4f6',
+                                          color: '#374151',
+                                          padding: '4px 12px',
+                                          borderRadius: 12,
+                                          fontSize: 13,
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: 4
+                                        }}>
+                                          Host Contact Details
+                                        </span>
+                                      )}
+                                      {it.notification_times && it.notification_times.length > 0 && (
+                                        <span style={{
+                                          background: '#f3f4f6',
+                                          color: '#374151',
+                                          padding: '4px 12px',
+                                          borderRadius: 12,
+                                          fontSize: 13,
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: 4
+                                        }}>
+                                          Notifications Timer
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
-                            ) : (
-                              <div style={{ color: '#bbb', fontSize: 15 }}>No activities in this draft.</div>
-                            )}
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -2596,5 +2939,4 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
         </div>
       )}
     </div>
-  );
-} 
+  );}

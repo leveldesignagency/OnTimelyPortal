@@ -32,7 +32,7 @@ const GUEST_FIELDS_CONFIG = [
     { key: 'nextOfKinEmail', label: 'Next of Kin Email' },
     { key: 'nextOfKinPhone', label: 'Next of Kin Phone' },
     { key: 'dietary', label: 'Dietary Requirements' },
-    { key: 'disabilities', label: 'Disabilities/Accessibility' },
+    { key: 'medical', label: 'Medical/Accessibility' },
 ];
 
 const PREFIXES = ['Mr', 'Mrs', 'Ms', 'Mx', 'Dr', 'Prof'];
@@ -238,4 +238,4 @@ export default function GuestFormPage() {
       </div>
     </div>
   );
-} 
+}

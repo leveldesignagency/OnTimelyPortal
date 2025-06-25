@@ -1,12 +1,17 @@
 import React, { useState, useEffect, useRef, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ThemeContext } from './ThemeContext';
-import { getCurrentUser, getCompanyUsers, logout, User as AuthUser } from './lib/auth';
+import { 
+  getCurrentUser, 
+  User as AuthUser,
+  getCompanyUsers,
+  logout
+} from './lib/auth';
 import { 
   getUserChats, 
   getChatMessages, 
   sendMessage, 
-  subscribeToMessages, 
+  subscribeToMessages,
   subscribeToUserStatus,
   createDirectChat,
   createGroupChat,
@@ -15,10 +20,11 @@ import {
   Chat as SupabaseChat,
   Message as SupabaseMessage,
   getCompanyTeams,
-  searchTeams,
   createTeamChat,
   Team as SupabaseTeam,
-  removeUserFromGroup
+  removeUserFromGroup,
+  deleteChat,
+  leaveGroup
 } from './lib/chat';
 
 // Enhanced types for comprehensive chat features
@@ -57,6 +63,8 @@ type User = {
   lastSeen?: string;
   email?: string;
   phone?: string;
+  role?: 'admin' | 'member';
+  company_id?: string;
 };
 
 type Team = {
@@ -80,6 +88,7 @@ type Chat = {
   avatar: string;
   messages: Message[];
   participants: User[];
+  created_by?: string;
   team_id?: string;
   isTyping?: boolean;
   isPinned?: boolean;
@@ -102,7 +111,7 @@ type ConfirmationModal = {
   cancelText: string;
   onConfirm: () => void;
   onCancel: () => void;
-  type: 'warning' | 'danger';
+  type: 'warning' | 'danger' | 'info';
 };
 
 type MessageNotification = {
@@ -121,6 +130,61 @@ type MessageNotification = {
 // Mock data with enhanced features - REPLACED WITH REAL DATA
 let CURRENT_USER: User | null = null;
 
+// Enhanced theme system inspired by calendar design
+const themes = {
+  light: {
+    bg: '#f8f9fa', // Light grey background to match calendar
+    panelBg: '#f8f9fa',
+    chatBg: 'rgba(255, 255, 255, 0.7)', // Glass effect
+    text: '#1a1a1a',
+    textSecondary: '#6c757d',
+    border: '#e9ecef',
+    accent: '#1a1a1a', // Black instead of green
+    hoverBg: 'rgba(255, 255, 255, 0.9)',
+    buttonBg: '#1a1a1a',
+    buttonText: '#ffffff',
+    messageBubble: 'rgba(255, 255, 255, 0.9)',
+    messageBubbleSent: 'rgba(26, 26, 26, 0.9)',
+    inputBg: 'rgba(255, 255, 255, 0.8)',
+    avatarBg: 'linear-gradient(135deg, #e9ecef, #dee2e6)',
+    avatarText: '#495057',
+    primary: '#228B22' // Added primary color
+  },
+  dark: {
+    bg: '#0a0a0a',
+    panelBg: 'rgba(26, 26, 26, 0.9)',
+    chatBg: 'rgba(16, 16, 16, 0.95)',
+    text: '#ffffff',
+    textSecondary: '#adb5bd',
+    border: 'rgba(255, 255, 255, 0.1)',
+    accent: '#007bff',
+    hoverBg: 'rgba(255, 255, 255, 0.05)',
+    buttonBg: '#404040',
+    buttonText: '#ffffff',
+    messageBubble: 'rgba(64, 64, 64, 0.8)',
+    messageBubbleSent: 'rgba(0, 123, 255, 0.8)',
+    inputBg: 'rgba(255, 255, 255, 0.1)',
+    avatarBg: 'linear-gradient(135deg, #4a4a4a, #2a2a2a)',
+    avatarText: '#fff',
+    primary: '#007bff'
+  }
+};
+
+// Utility function to ensure team avatars are always initials
+const getTeamInitials = (team: Team): string => {
+  // If avatar is already short initials (2-3 characters), use it
+  if (team.avatar && team.avatar.length <= 3 && !team.avatar.includes('http') && !team.avatar.includes('.')) {
+    return team.avatar;
+  }
+  
+  // Otherwise, generate initials from team name
+  return team.name
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase())
+    .join('')
+    .slice(0, 2);
+};
+
 // Helper function to convert Supabase user to local User type
 const convertSupabaseUser = (supabaseUser: AuthUser): User => ({
   id: supabaseUser.id,
@@ -128,7 +192,9 @@ const convertSupabaseUser = (supabaseUser: AuthUser): User => ({
   avatar: supabaseUser.avatar || supabaseUser.name.charAt(0).toUpperCase(),
   status: supabaseUser.status as UserStatus,
   lastSeen: supabaseUser.last_seen,
-  email: supabaseUser.email
+  email: supabaseUser.email,
+  role: (supabaseUser.role as 'admin' | 'member') || 'member',
+  company_id: supabaseUser.company_id
 });
 
 // Helper function to convert Supabase message to local Message type
@@ -163,7 +229,12 @@ const convertSupabaseChat = (supabaseChat: SupabaseChat): Chat => ({
   unread: supabaseChat.unread_count || 0,
   avatar: supabaseChat.avatar || (supabaseChat.name?.charAt(0) || 'C'),
   messages: [],
-  participants: supabaseChat.participants?.map(convertSupabaseUser) || [],
+  participants: supabaseChat.participants?.map((participant) => ({
+    ...convertSupabaseUser(participant),
+    // Assign admin role to the group creator, member role to others
+    role: participant.id === supabaseChat.created_by ? 'admin' : 'member'
+  })) || [],
+  created_by: supabaseChat.created_by,
   isPinned: false,
   isMuted: false,
   isArchived: supabaseChat.is_archived
@@ -171,100 +242,105 @@ const convertSupabaseChat = (supabaseChat: SupabaseChat): Chat => ({
 
 // Mock data with enhanced features
 const MOCK_USERS: User[] = [
-  { id: 'user_1', name: 'Leon JENKINGS!', avatar: 'LJ', status: 'online', email: 'leon@example.com' },
-  { id: 'user_2', name: 'Luis', avatar: 'L', status: 'away', email: 'luis@example.com' },
-  { id: 'user_3', name: 'Vanilla Gorilla', avatar: 'VG', status: 'offline', lastSeen: '2 hours ago' },
-  { id: 'user_4', name: 'Alice Johnson', avatar: 'AJ', status: 'online', email: 'alice@example.com' },
-  { id: 'user_5', name: 'Bob Smith', avatar: 'BS', status: 'busy', email: 'bob@example.com' },
-  { id: 'user_6', name: 'Charlie Brown', avatar: 'CB', status: 'online', email: 'charlie@example.com' },
+  { id: 'user_1', name: 'Leon JENKINGS!', avatar: 'LJ', status: 'online', email: 'leon@example.com', company_id: 'company_1', role: 'admin' },
+  { id: 'user_2', name: 'Luis', avatar: 'L', status: 'away', email: 'luis@example.com', company_id: 'company_1', role: 'member' },
+  { id: 'user_3', name: 'Vanilla Gorilla', avatar: 'VG', status: 'offline', lastSeen: '2 hours ago', company_id: 'company_1', role: 'member' },
+  { id: 'user_4', name: 'Alice Johnson', avatar: 'AJ', status: 'online', email: 'alice@example.com', company_id: 'company_1', role: 'member' },
+  { id: 'user_5', name: 'Bob Smith', avatar: 'BS', status: 'busy', email: 'bob@example.com', company_id: 'company_1', role: 'member' },
+  { id: 'user_6', name: 'Charlie Brown', avatar: 'CB', status: 'online', email: 'charlie@example.com', company_id: 'company_1', role: 'member' },
 ];
 
 // Enhanced components
-const UserProfileCard: React.FC<{ user: User; isDark: boolean; notificationCount?: number }> = ({ user, isDark, notificationCount = 0 }) => (
-  <div style={{ 
-    padding: '20px', 
-    borderBottom: `1px solid ${isDark ? '#2a2a2a' : '#e9ecef'}`,
-    background: isDark ? '#1a1a1a' : '#ffffff',
-    position: 'relative'
-  }}>
-    {/* Notification Badge */}
-    {notificationCount > 0 && (
-      <div style={{
-        position: 'absolute',
-        top: '16px',
-        right: '16px',
-        background: '#dc3545',
-        color: '#ffffff',
-        borderRadius: '50%',
-        width: '24px',
-        height: '24px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontSize: '12px',
-        fontWeight: '600',
-        zIndex: 10,
-        boxShadow: '0 2px 8px rgba(220, 53, 69, 0.3)',
-        animation: notificationCount > 0 ? 'pulse 2s infinite' : 'none'
-      }}>
-        {notificationCount > 99 ? '99+' : notificationCount}
-      </div>
-    )}
-    
-    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-      <div style={{
-        width: '48px',
-        height: '48px',
-        borderRadius: '50%',
-        background: isDark 
-          ? 'linear-gradient(135deg, #4a4a4a, #2a2a2a)' 
-          : 'linear-gradient(135deg, #e9ecef, #dee2e6)',
-        color: isDark ? '#fff' : '#495057',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontSize: '20px',
-        fontWeight: '600',
-        position: 'relative',
-        border: `2px solid ${isDark ? '#404040' : '#dee2e6'}`
-      }}>
-        {user.avatar}
-        <StatusIndicator status={user.status} />
-      </div>
-      <div style={{ flex: 1 }}>
-        <div style={{ 
-          fontSize: '16px', 
-          fontWeight: '600', 
-          color: isDark ? '#ffffff' : '#1a1a1a',
-          marginBottom: '2px'
-        }}>
-          {user.name}
-        </div>
-        <div style={{ 
-          fontSize: '13px', 
-          color: isDark ? '#adb5bd' : '#6c757d',
+const UserProfileCard: React.FC<{ user: User; isDark: boolean; notificationCount?: number }> = ({ user, isDark, notificationCount = 0 }) => {
+  const colors = themes[isDark ? 'dark' : 'light'];
+  
+  return (
+    <div style={{ 
+      padding: '24px', 
+      borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
+      background: colors.panelBg,
+      position: 'relative'
+    }}>
+      {/* Notification Badge */}
+      {notificationCount > 0 && (
+        <div style={{
+          position: 'absolute',
+          top: '20px',
+          right: '20px',
+          background: '#dc3545',
+          color: '#ffffff',
+          borderRadius: '50%',
+          width: '24px',
+          height: '24px',
           display: 'flex',
           alignItems: 'center',
-          gap: '6px'
+          justifyContent: 'center',
+          fontSize: '12px',
+          fontWeight: '600',
+          zIndex: 10,
+          boxShadow: '0 2px 8px rgba(220, 53, 69, 0.3)',
+          animation: notificationCount > 0 ? 'pulse 2s infinite' : 'none'
         }}>
-          <span style={{ 
-            textTransform: 'capitalize',
-            fontWeight: '500'
+          {notificationCount > 99 ? '99+' : notificationCount}
+        </div>
+      )}
+      
+      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+        <div style={{
+          width: '56px',
+          height: '56px',
+          borderRadius: '50%',
+          background: colors.avatarBg,
+          color: colors.avatarText,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '24px',
+          fontWeight: '600',
+          border: `2px solid ${colors.border}`,
+          boxShadow: isDark 
+            ? '0 4px 16px rgba(0,0,0,0.3)' 
+            : '0 4px 16px rgba(0,0,0,0.1)'
+        }}>
+          {user.avatar}
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ 
+            fontSize: '18px', 
+            fontWeight: '600', 
+            color: colors.text,
+            marginBottom: '4px',
+            letterSpacing: '0.3px'
           }}>
-            {user.status}
-          </span>
-          {user.lastSeen && user.status === 'offline' && (
-            <span>• Last seen {new Date(user.lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-          )}
+            {user.name}
+          </div>
+          <div style={{ 
+            fontSize: '14px', 
+            color: colors.textSecondary,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}>
+            <StatusIndicator status={user.status} />
+            <span style={{ 
+              textTransform: 'capitalize',
+              fontWeight: '500'
+            }}>
+              {user.status}
+            </span>
+            {user.lastSeen && user.status === 'offline' && (
+              <span>• Last seen {new Date(user.lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+            )}
+          </div>
         </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 const StatusIndicator = ({ status }: { status: UserStatus }) => {
   const colors = {
-    online: '#228B22',
+    online: '#10b981', // Changed from green to emerald
     away: '#f59e0b',
     busy: '#ef4444',
     offline: '#6b7280'
@@ -281,101 +357,129 @@ const StatusIndicator = ({ status }: { status: UserStatus }) => {
   );
 };
 
-const ChatListItem = ({ chat, active, onClick, isDark }: { chat: Chat, active: boolean, onClick: () => void, isDark: boolean }) => (
-  <div 
-    onClick={onClick} 
-    style={{
-    display: 'flex',
-    alignItems: 'center',
-    padding: '12px 16px',
-      cursor: 'pointer',
-      backgroundColor: active ? (isDark ? '#1f2937' : '#f5f5f5') : 'transparent',
-      borderBottom: `1px solid ${isDark ? '#2a2a2a' : '#e5e5e5'}`,
-      position: 'relative'
-    }}
-  >
-    <div
+const ChatListItem = ({ chat, active, onClick, isDark }: { chat: Chat, active: boolean, onClick: () => void, isDark: boolean }) => {
+  const colors = themes[isDark ? 'dark' : 'light'];
+  
+  return (
+    <div 
+      onClick={onClick} 
       style={{
-        width: '40px',
-        height: '40px',
-        borderRadius: '50%',
-        backgroundColor: '#228B22',
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'center',
-        color: 'white',
-        fontSize: '16px',
-        fontWeight: '600',
-        marginRight: '12px',
-        flexShrink: 0
+        padding: '16px 20px',
+        cursor: 'pointer',
+        backgroundColor: active ? colors.hoverBg : 'transparent',
+        borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}`,
+        position: 'relative',
+        transition: 'all 0.2s ease',
+        borderRadius: active ? '12px' : '0px',
+        margin: active ? '4px 12px' : '0px',
+        boxShadow: active ? (isDark 
+          ? '0 4px 16px rgba(0,0,0,0.3)' 
+          : '0 4px 16px rgba(0,0,0,0.1)') : 'none'
+      }}
+      onMouseEnter={e => {
+        if (!active) {
+          e.currentTarget.style.backgroundColor = colors.hoverBg;
+        }
+      }}
+      onMouseLeave={e => {
+        if (!active) {
+          e.currentTarget.style.backgroundColor = 'transparent';
+        }
       }}
     >
-      {chat.avatar}
-    </div>
-    <div style={{ flex: 1, minWidth: 0 }}>
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: '4px'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, minWidth: 0 }}>
-          <span style={{
-            fontWeight: '600',
-            fontSize: '15px',
-            color: isDark ? '#ffffff' : '#1f2937',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap'
-          }}>
-            {chat.name}
-          </span>
-          {chat.isPinned && (
-            <span style={{ fontSize: '12px', color: '#228B22' }}>📌</span>
-          )}
-          {chat.isMuted && (
-            <span style={{ fontSize: '12px', color: isDark ? '#6c757d' : '#9ca3af' }}>🔇</span>
-          )}
-        </div>
-        <span style={{
-          fontSize: '13px',
-          color: isDark ? '#9ca3af' : '#6b7280',
+      <div
+        style={{
+          width: '44px',
+          height: '44px',
+          borderRadius: '50%',
+          backgroundColor: colors.accent,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: isDark ? colors.bg : '#ffffff',
+          fontSize: '16px',
+          fontWeight: '600',
+          marginRight: '16px',
           flexShrink: 0,
-          marginLeft: '8px'
+          boxShadow: isDark 
+            ? '0 2px 8px rgba(0,0,0,0.3)' 
+            : '0 2px 8px rgba(0,0,0,0.1)'
+        }}
+      >
+        {chat.avatar && chat.avatar.length <= 3 ? chat.avatar : chat.name.charAt(0).toUpperCase()}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '6px'
         }}>
-          {chat.timestamp}
-        </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+            <span style={{
+              fontWeight: '600',
+              fontSize: '15px',
+              color: colors.text,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              letterSpacing: '0.3px'
+            }}>
+              {chat.name}
+            </span>
+            {chat.isPinned && (
+              <span style={{ fontSize: '12px', color: colors.accent }}>📌</span>
+            )}
+            {chat.isMuted && (
+              <span style={{ fontSize: '12px', color: colors.textSecondary }}>🔇</span>
+            )}
+          </div>
+          <span style={{
+            fontSize: '12px',
+            color: colors.textSecondary,
+            flexShrink: 0,
+            marginLeft: '8px',
+            fontWeight: '500'
+          }}>
+            {chat.timestamp}
+          </span>
+        </div>
+        <div style={{
+          fontSize: '13px',
+          color: colors.textSecondary,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap'
+        }}>
+          {chat.lastMessage}
+        </div>
       </div>
-      <div style={{
-        fontSize: '14px',
-        color: isDark ? '#9ca3af' : '#6b7280',
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-        whiteSpace: 'nowrap'
-      }}>
-        {chat.lastMessage}
-      </div>
+      {chat.unread > 0 && (
+        <div style={{
+          backgroundColor: colors.accent,
+          color: isDark ? colors.bg : '#ffffff',
+          borderRadius: '50%',
+          width: '22px',
+          height: '22px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '11px',
+          fontWeight: '600',
+          marginLeft: '12px',
+          flexShrink: 0,
+          boxShadow: isDark 
+            ? '0 2px 8px rgba(255,255,255,0.2)' 
+            : '0 2px 8px rgba(0,0,0,0.2)'
+        }}>
+          {chat.unread}
+        </div>
+      )}
     </div>
-    {chat.unread > 0 && (
-      <div style={{
-        backgroundColor: '#228B22',
-        color: 'white',
-        borderRadius: '50%',
-        width: '20px',
-        height: '20px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontSize: '12px',
-        fontWeight: '600',
-        marginLeft: '8px',
-        flexShrink: 0
-      }}>
-        {chat.unread}
-      </div>
-    )}
-  </div>
-);
+  );
+};
 
 const SearchResultItem = ({ user, onClick, isDark }: { user: User, onClick: () => void, isDark: boolean }) => (
   <div 
@@ -409,7 +513,7 @@ const SearchResultItem = ({ user, onClick, isDark }: { user: User, onClick: () =
       color: isDark ? '#ffffff' : '#495057',
       marginRight: '12px'
     }}>
-      {user.avatar}
+      {user.avatar && user.avatar.length <= 3 ? user.avatar : user.name.charAt(0).toUpperCase()}
     </div>
     <div style={{ flex: 1 }}>
       <div style={{ 
@@ -449,7 +553,7 @@ const TeamSearchResultItem = ({ team, onClick, isDark }: { team: Team, onClick: 
       e.currentTarget.style.backgroundColor = isDark ? '#1e1e1e' : '#ffffff';
     }}
   >
-    <div style={{
+        <div style={{
       width: '40px',
       height: '40px',
       borderRadius: '8px',
@@ -462,8 +566,8 @@ const TeamSearchResultItem = ({ team, onClick, isDark }: { team: Team, onClick: 
       color: isDark ? '#ffffff' : '#495057',
       marginRight: '12px'
     }}>
-      {team.avatar}
-    </div>
+      {getTeamInitials(team)}
+        </div>
     <div style={{ flex: 1 }}>
       <div style={{ 
         fontSize: '14px', 
@@ -480,7 +584,7 @@ const TeamSearchResultItem = ({ team, onClick, isDark }: { team: Team, onClick: 
         {team.member_count} members • Create team chat
       </div>
     </div>
-  </div>
+    </div>
 );
 
 const ChatHeader = ({ chat, isDark, onToggleRightPanel }: { 
@@ -494,7 +598,9 @@ const ChatHeader = ({ chat, isDark, onToggleRightPanel }: {
     borderBottom: `1px solid ${isDark ? '#2a2a2a' : '#e9ecef'}`,
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'space-between'
+    justifyContent: 'space-between',
+    margin: 0,
+    flexShrink: 0
   }}>
     <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
       {chat && (
@@ -512,8 +618,8 @@ const ChatHeader = ({ chat, isDark, onToggleRightPanel }: {
             fontWeight: '600',
             boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.1)'
           }}>
-            {chat.avatar}
-        </div>
+            {chat.avatar && chat.avatar.length <= 3 ? chat.avatar : chat.name.charAt(0).toUpperCase()}
+          </div>
           <div>
             <div style={{
               fontWeight: '600',
@@ -552,124 +658,173 @@ const ChatHeader = ({ chat, isDark, onToggleRightPanel }: {
       >
         ℹ️
       </button>
-    </div>
+        </div>
     </div>
 );
 
-const MessageReactions = ({ reactions, onReact, isDark }: { reactions: Reaction[], onReact: (emoji: string) => void, isDark: boolean }) => (
-  <div style={{ display: 'flex', gap: '4px', marginTop: '8px', flexWrap: 'wrap' }}>
-    {reactions.map((reaction, idx) => (
-      <button
-        key={idx}
-        onClick={() => onReact(reaction.emoji)}
-        style={{
-          background: isDark ? '#2a2a2a' : '#f8f9fa',
-          border: `1px solid ${isDark ? '#404040' : '#dee2e6'}`,
-          borderRadius: '12px',
-          padding: '4px 8px',
-          fontSize: '12px',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '4px',
-          transition: 'all 0.2s ease'
-        }}
-      >
-        <span>{reaction.emoji}</span>
-        <span style={{ color: isDark ? '#adb5bd' : '#6c757d' }}>{reaction.count}</span>
-      </button>
-    ))}
-    <button
-      onClick={() => onReact('👍')}
-      style={{
-        background: 'transparent',
-        border: `1px dashed ${isDark ? '#404040' : '#dee2e6'}`,
-        borderRadius: '12px',
-        padding: '4px 8px',
-        fontSize: '12px',
-        cursor: 'pointer',
-        color: isDark ? '#6c757d' : '#adb5bd',
-        transition: 'all 0.2s ease'
-      }}
-    >
-      +
-    </button>
-  </div>
-);
+const MessageReactions = ({ reactions, onReact, isDark }: { 
+  reactions: Array<{ emoji: string, count: number, users: string[] }>, 
+  onReact: (emoji: string) => void,
+  isDark: boolean 
+}) => {
+  const colors = themes[isDark ? 'dark' : 'light'];
+  
+  return (
+    <div style={{
+      display: 'flex',
+      gap: '4px',
+      marginTop: '8px',
+      flexWrap: 'wrap'
+    }}>
+      {reactions.map(reaction => (
+        <button
+          key={reaction.emoji}
+          onClick={() => onReact(reaction.emoji)}
+          style={{
+            background: colors.hoverBg,
+            border: `1px solid ${colors.border}`,
+            borderRadius: '12px',
+            padding: '4px 8px',
+            fontSize: '12px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            color: colors.text,
+            transition: 'all 0.2s ease',
+            backdropFilter: 'blur(10px)'
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.background = colors.accent;
+            e.currentTarget.style.color = isDark ? colors.bg : '#ffffff';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background = colors.hoverBg;
+            e.currentTarget.style.color = colors.text;
+          }}
+        >
+          <span>{reaction.emoji}</span>
+          <span style={{ fontWeight: '500' }}>{reaction.count}</span>
+        </button>
+      ))}
+    </div>
+  );
+};
 
 const FilePreview = ({ message, isDark }: { message: Message, isDark: boolean }) => {
-  if (message.type === 'image') {
+  const colors = themes[isDark ? 'dark' : 'light'];
+  
+  if (message.type === 'image' && message.fileUrl) {
     return (
-      <div style={{
-        maxWidth: '300px',
-        borderRadius: '12px',
-        overflow: 'hidden',
-        marginBottom: '8px'
-      }}>
+      <div style={{ marginBottom: '8px' }}>
         <img 
           src={message.fileUrl} 
-          alt={message.fileName}
-          style={{ width: '100%', height: 'auto', display: 'block' }}
+          alt="Shared image" 
+          style={{ 
+            maxWidth: '100%', 
+            borderRadius: '8px',
+            border: `1px solid ${colors.border}`,
+            boxShadow: isDark 
+              ? '0 2px 8px rgba(0,0,0,0.3)' 
+              : '0 2px 8px rgba(0,0,0,0.1)'
+          }} 
         />
-        </div>
+        {message.text && (
+          <div style={{ 
+            marginTop: '8px', 
+            fontSize: '14px',
+            color: colors.text
+          }}>
+            {message.text}
+          </div>
+        )}
+      </div>
     );
   }
 
-  if (message.type === 'file') {
+  if (message.type === 'file' && message.fileName) {
+    const isPDF = message.fileName.toLowerCase().endsWith('.pdf');
+    
+    const handleFileClick = () => {
+      if (message.fileUrl) {
+        if (isPDF) {
+          // Open PDF in new window
+          window.open(message.fileUrl, '_blank');
+        } else {
+          // Download other files
+          const link = document.createElement('a');
+          link.href = message.fileUrl;
+          link.download = message.fileName || 'download';
+          link.click();
+        }
+      }
+    };
+
     return (
-      <div style={{
-        background: isDark ? '#2a2a2a' : '#f8f9fa',
-        border: `1px solid ${isDark ? '#404040' : '#dee2e6'}`,
-        borderRadius: '12px',
-        padding: '12px',
-        marginBottom: '8px',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '12px',
-        maxWidth: '300px'
-      }}>
-        <div style={{
-          width: '40px',
-          height: '40px',
+      <div 
+        onClick={handleFileClick}
+        style={{
+          padding: '12px',
+          background: colors.hoverBg,
           borderRadius: '8px',
-          background: '#228B22',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: '16px',
-          color: '#fff'
-        }}>
-          📄
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{
-            fontWeight: '500',
-            fontSize: '14px',
-            color: isDark ? '#ffffff' : '#1a1a1a',
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis'
-          }}>
-            {message.fileName}
-          </div>
-          <div style={{
-            fontSize: '12px',
-            color: isDark ? '#adb5bd' : '#6c757d'
-          }}>
-            {message.fileSize ? `${(message.fileSize / 1024).toFixed(1)} KB` : 'File'}
-          </div>
-        </div>
-        <button style={{
-          background: 'transparent',
-          border: 'none',
-          color: isDark ? '#adb5bd' : '#6c757d',
+          marginBottom: '8px',
+          border: `1px solid ${colors.border}`,
           cursor: 'pointer',
-          fontSize: '16px'
+          transition: 'all 0.2s ease'
+        }}
+        onMouseEnter={e => {
+          e.currentTarget.style.background = colors.accent;
+          e.currentTarget.style.transform = 'scale(1.02)';
+        }}
+        onMouseLeave={e => {
+          e.currentTarget.style.background = colors.hoverBg;
+          e.currentTarget.style.transform = 'scale(1)';
+        }}
+      >
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: '8px',
+          marginBottom: message.text ? '8px' : '0px'
         }}>
-          ⬇️
-        </button>
-    </div>
-);
+          <span style={{ fontSize: '20px' }}>
+            {isPDF ? '📄' : '📎'}
+          </span>
+          <div>
+            <div style={{ 
+              fontWeight: '500',
+              color: colors.text,
+              fontSize: '14px'
+            }}>
+              {message.fileName}
+              <span style={{
+                fontSize: '12px',
+                color: colors.textSecondary,
+                marginLeft: '8px'
+              }}>
+                {isPDF ? '(Click to open)' : '(Click to download)'}
+              </span>
+            </div>
+            {message.fileSize && (
+              <div style={{ 
+                fontSize: '12px',
+                color: colors.textSecondary
+              }}>
+                {message.fileSize}
+              </div>
+            )}
+          </div>
+        </div>
+        {message.text && (
+          <div style={{ 
+            fontSize: '14px',
+            color: colors.text
+          }}>
+            {message.text}
+          </div>
+        )}
+      </div>
+    );
   }
 
   return null;
@@ -682,239 +837,195 @@ const MessageBubble = ({ message, sent, isDark, onReact, onReply }: {
   onReact: (messageId: string, emoji: string) => void,
   onReply: (message: Message) => void 
 }) => {
-  const [isHovered, setIsHovered] = useState(false);
-  const [showReactionPicker, setShowReactionPicker] = useState(false);
-
-  const commonEmojis = ['👍', '❤️', '😂', '😮', '😢', '😡'];
+  const colors = themes[isDark ? 'dark' : 'light'];
+  const [showReactions, setShowReactions] = useState(false);
+  const [showOptions, setShowOptions] = useState(false);
 
   return (
-    <div 
-      style={{
-        display: 'flex', 
-        justifyContent: sent ? 'flex-end' : 'flex-start', 
-        margin: '8px 24px',
-        marginBottom: '16px', // Increased margin to make room for hover actions
-        position: 'relative'
-      }}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-    >
+    <div style={{
+      display: 'flex',
+      justifyContent: sent ? 'flex-end' : 'flex-start',
+      marginBottom: '16px',
+      paddingLeft: sent ? '60px' : '0px',
+      paddingRight: sent ? '0px' : '60px'
+    }}>
       <div style={{
-        background: sent 
-          ? '#228B22'
-          : isDark 
-            ? '#2a2a2a' 
-            : '#ffffff',
-        color: sent 
-          ? '#ffffff' 
-          : isDark 
-            ? '#ffffff' 
-            : '#1a1a1a',
-        padding: '12px 16px',
-        borderRadius: sent ? '20px 20px 4px 20px' : '20px 20px 20px 4px',
         maxWidth: '70%',
-        boxShadow: isDark 
-          ? '0 2px 8px rgba(0,0,0,0.3)' 
-          : '0 2px 8px rgba(0,0,0,0.1)',
-        position: 'relative',
-        wordBreak: 'break-word'
+        position: 'relative'
       }}>
         {message.replyTo && (
           <div style={{
-            background: sent ? 'rgba(255,255,255,0.1)' : isDark ? '#1a1a1a' : '#f8f9fa',
+            background: sent ? 'rgba(255,255,255,0.1)' : colors.hoverBg,
             padding: '8px 12px',
-            borderRadius: '8px',
-            marginBottom: '8px',
-            fontSize: '13px',
-            borderLeft: `3px solid ${sent ? '#ffffff' : '#228B22'}`
+            borderRadius: '8px 8px 0 0',
+            fontSize: '12px',
+            color: colors.textSecondary,
+            borderLeft: `3px solid ${colors.accent}`,
+            marginBottom: '2px'
           }}>
             Replying to: {message.replyTo}
           </div>
         )}
         
-        <FilePreview message={message} isDark={isDark} />
-        
-        {message.text && (
-          <p style={{
-            margin: 0, 
-            whiteSpace: 'pre-wrap',
-            fontSize: '15px',
-            lineHeight: '1.4',
-            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
-          }}>
-            {message.text}
-          </p>
-        )}
-        
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px' }}>
-          <p style={{
-            margin: 0, 
-            fontSize: '12px', 
-            color: sent 
-              ? 'rgba(255,255,255,0.7)' 
-              : isDark 
-                ? '#adb5bd' 
-                : '#6c757d', 
-            fontWeight: '500'
-          }}>
-            {message.timestamp}
-            {message.edited && ' (edited)'}
-          </p>
-          {sent && (
-            <span style={{
-              fontSize: '12px',
-              color: 'rgba(255,255,255,0.7)',
-              marginLeft: '8px'
+        <div
+          style={{
+            background: sent ? colors.messageBubbleSent : colors.messageBubble,
+            color: sent ? (isDark ? colors.bg : '#ffffff') : colors.text,
+            padding: '12px 16px',
+            borderRadius: sent ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
+            wordWrap: 'break-word',
+            position: 'relative',
+            backdropFilter: 'blur(20px)',
+            border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
+            boxShadow: isDark 
+              ? '0 4px 16px rgba(0,0,0,0.3)' 
+              : '0 4px 16px rgba(0,0,0,0.1)'
+          }}
+          onMouseEnter={() => setShowOptions(true)}
+          onMouseLeave={() => setShowOptions(false)}
+        >
+          {/* Message content */}
+          {message.type === 'text' && (
+            <div style={{ 
+              fontSize: '14px', 
+              lineHeight: '1.4',
+              fontWeight: '400'
             }}>
-              ✓✓
-            </span>
+              {message.text}
+            </div>
+          )}
+
+          {/* File preview */}
+          {(message.type === 'file' || message.type === 'image') && (
+            <FilePreview message={message} isDark={isDark} />
+          )}
+
+          {/* Message metadata */}
+          <div style={{
+            fontSize: '11px',
+            color: sent ? (isDark ? 'rgba(26,26,26,0.6)' : 'rgba(255,255,255,0.7)') : colors.textSecondary,
+            marginTop: '4px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            justifyContent: 'flex-end'
+          }}>
+            {message.edited && <span>edited</span>}
+            <span>{message.timestamp}</span>
+            {sent && (
+              <span style={{ 
+                color: message.sent ? (isDark ? 'rgba(26,26,26,0.8)' : 'rgba(255,255,255,0.8)') : '#f59e0b' 
+              }}>
+                {message.sent ? '✓' : '⏳'}
+              </span>
+            )}
+          </div>
+
+          {/* Options menu */}
+          {showOptions && (
+            <div style={{
+              position: 'absolute',
+              top: '-40px',
+              right: sent ? '0px' : 'auto',
+              left: sent ? 'auto' : '0px',
+              background: colors.panelBg,
+              borderRadius: '8px',
+              padding: '4px',
+              display: 'flex',
+              gap: '4px',
+              boxShadow: isDark 
+                ? '0 4px 16px rgba(0,0,0,0.4)' 
+                : '0 4px 16px rgba(0,0,0,0.2)',
+              border: `1px solid ${colors.border}`,
+              zIndex: 10
+            }}>
+              <button
+                onClick={() => onReply(message)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  padding: '6px 8px',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  color: colors.text,
+                  transition: 'background 0.2s ease'
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = colors.hoverBg}
+                onMouseLeave={e => e.currentTarget.style.background = 'none'}
+              >
+                Reply
+              </button>
+              <button
+                onClick={() => setShowReactions(!showReactions)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  padding: '6px 8px',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  color: colors.text,
+                  transition: 'background 0.2s ease'
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = colors.hoverBg}
+                onMouseLeave={e => e.currentTarget.style.background = 'none'}
+              >
+                😊
+              </button>
+            </div>
           )}
         </div>
-        
+
+        {/* Reactions */}
         {message.reactions && message.reactions.length > 0 && (
-          <MessageReactions 
-            reactions={message.reactions} 
-            onReact={(emoji) => onReact(message.id, emoji)}
-            isDark={isDark}
-          />
+          <MessageReactions reactions={message.reactions} onReact={(emoji) => onReact(message.id, emoji)} isDark={isDark} />
+        )}
+
+        {/* Reaction picker */}
+        {showReactions && (
+          <div style={{
+            position: 'absolute',
+            top: '100%',
+            right: sent ? '0px' : 'auto',
+            left: sent ? 'auto' : '0px',
+            background: colors.panelBg,
+            borderRadius: '8px',
+            padding: '8px',
+            display: 'flex',
+            gap: '4px',
+            boxShadow: isDark 
+              ? '0 4px 16px rgba(0,0,0,0.4)' 
+              : '0 4px 16px rgba(0,0,0,0.2)',
+            border: `1px solid ${colors.border}`,
+            zIndex: 10,
+            marginTop: '4px'
+          }}>
+            {['👍', '❤️', '😂', '😮', '😢', '😡'].map(emoji => (
+              <button
+                key={emoji}
+                onClick={() => {
+                  onReact(message.id, emoji);
+                  setShowReactions(false);
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  padding: '4px',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                  transition: 'background 0.2s ease'
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = colors.hoverBg}
+                onMouseLeave={e => e.currentTarget.style.background = 'none'}
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
         )}
       </div>
-
-      {/* Hover Actions - Positioned below the message bubble */}
-      {isHovered && (
-        <div style={{
-          position: 'absolute',
-          bottom: '-40px', // Position below the message bubble
-          right: sent ? '0' : 'auto',
-          left: sent ? 'auto' : '0',
-          display: 'flex',
-          gap: '4px',
-          background: isDark ? '#2a2a2a' : '#ffffff',
-          borderRadius: '20px',
-          padding: '6px 10px',
-          boxShadow: isDark ? '0 4px 12px rgba(0,0,0,0.3)' : '0 4px 12px rgba(0,0,0,0.15)',
-          border: `1px solid ${isDark ? '#404040' : '#e9ecef'}`,
-          zIndex: 10
-        }}>
-          {/* Quick Reactions */}
-          {['👍', '❤️', '😂'].map((emoji) => (
-            <button
-              key={emoji}
-              onClick={() => onReact(message.id, emoji)}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                fontSize: '16px',
-                cursor: 'pointer',
-                padding: '4px',
-                borderRadius: '50%',
-                transition: 'background 0.2s ease'
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.background = isDark ? '#404040' : '#f8f9fa';
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.background = 'transparent';
-              }}
-            >
-              {emoji}
-            </button>
-          ))}
-          
-          {/* More Reactions Button */}
-          <button
-            onClick={() => setShowReactionPicker(!showReactionPicker)}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              fontSize: '14px',
-              cursor: 'pointer',
-              padding: '4px 6px',
-              borderRadius: '12px',
-              color: isDark ? '#adb5bd' : '#6c757d',
-              transition: 'all 0.2s ease'
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.background = isDark ? '#404040' : '#f8f9fa';
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.background = 'transparent';
-            }}
-          >
-            😀
-          </button>
-          
-          {/* Reply Button */}
-          <button
-            onClick={() => onReply(message)}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              fontSize: '14px',
-              cursor: 'pointer',
-              padding: '4px 6px',
-              borderRadius: '12px',
-              color: isDark ? '#adb5bd' : '#6c757d',
-              transition: 'all 0.2s ease'
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.background = isDark ? '#404040' : '#f8f9fa';
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.background = 'transparent';
-            }}
-          >
-            ↩️
-          </button>
-        </div>
-      )}
-
-      {/* Extended Reaction Picker */}
-      {showReactionPicker && (
-        <div style={{
-          position: 'absolute',
-          bottom: '-80px', // Position below the hover actions
-          right: sent ? '0' : 'auto',
-          left: sent ? 'auto' : '0',
-          background: isDark ? '#2a2a2a' : '#ffffff',
-          borderRadius: '12px',
-          padding: '8px',
-          boxShadow: isDark ? '0 4px 12px rgba(0,0,0,0.3)' : '0 4px 12px rgba(0,0,0,0.15)',
-          border: `1px solid ${isDark ? '#404040' : '#e9ecef'}`,
-          zIndex: 20,
-          display: 'grid',
-          gridTemplateColumns: 'repeat(6, 1fr)',
-          gap: '4px',
-          minWidth: '200px'
-        }}>
-          {commonEmojis.map((emoji) => (
-            <button
-              key={emoji}
-              onClick={() => {
-                onReact(message.id, emoji);
-                setShowReactionPicker(false);
-              }}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                fontSize: '20px',
-                cursor: 'pointer',
-                padding: '6px',
-                borderRadius: '6px',
-                transition: 'background 0.2s ease'
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.background = isDark ? '#404040' : '#f8f9fa';
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.background = 'transparent';
-              }}
-            >
-              {emoji}
-            </button>
-          ))}
-        </div>
-      )}
     </div>
   );
 };
@@ -1079,15 +1190,27 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
           onKeyPress={handleKeyPress}
           style={{
             width: '100%',
-            border: 'none',
-            background: '#f5f5f5',
-            color: '#000000',
+            border: `1px solid ${isDark ? '#404040' : '#dee2e6'}`,
+            background: isDark ? '#2a2a2a' : '#f8f9fa',
+            color: isDark ? '#ffffff' : '#000000',
             outline: 'none',
             fontSize: '15px',
             padding: '14px 160px 14px 20px',
             borderRadius: '12px',
-            boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.1)',
-            position: 'relative'
+            boxShadow: isDark ? 'inset 0 2px 4px rgba(0,0,0,0.3)' : 'inset 0 2px 4px rgba(0,0,0,0.1)',
+            position: 'relative',
+            backdropFilter: 'blur(10px)',
+            transition: 'all 0.2s ease'
+          }}
+          onFocus={e => {
+            e.currentTarget.style.borderColor = isDark ? '#ffffff' : '#007bff';
+            e.currentTarget.style.boxShadow = isDark 
+              ? '0 0 0 3px rgba(255,255,255,0.1), inset 0 2px 4px rgba(0,0,0,0.3)' 
+              : '0 0 0 3px rgba(0,123,255,0.1), inset 0 2px 4px rgba(0,0,0,0.1)';
+          }}
+          onBlur={e => {
+            e.currentTarget.style.borderColor = isDark ? '#404040' : '#dee2e6';
+            e.currentTarget.style.boxShadow = isDark ? 'inset 0 2px 4px rgba(0,0,0,0.3)' : 'inset 0 2px 4px rgba(0,0,0,0.1)';
           }}
         />
 
@@ -1122,7 +1245,7 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
               width={30}
               height={30}
               style={{ 
-                filter: 'brightness(0)'
+                filter: isDark ? 'invert(1)' : 'brightness(0)'
               }}
             />
           </button>
@@ -1147,7 +1270,7 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
               width={30}
               height={30}
               style={{ 
-                filter: 'brightness(0)'
+                filter: isDark ? 'invert(1)' : 'brightness(0)'
               }}
             />
           </button>
@@ -1171,20 +1294,20 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
             <img 
               src="/icons/__send.svg" 
               alt="send"
-              width={35}
-              height={35}
+              width={30}
+              height={30}
               style={{ 
-                opacity: text.trim() ? 1 : 0.3
+                filter: isDark ? 'invert(1)' : 'brightness(0)'
               }}
             />
-            </button>
+          </button>
         </div>
       </div>
         </div>
     );
 };
 
-const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleArchive, onRemoveUser, onShowConfirmation }: { 
+const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleArchive, onRemoveUser, onShowConfirmation, onDeleteChat, onUpdateChats, onSetActiveChat, onAddNotification }: { 
   chat: Chat | undefined, 
   isOpen: boolean, 
   isDark: boolean,
@@ -1192,35 +1315,139 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
   onTogglePin: (chatId: string) => void,
   onToggleArchive: (chatId: string) => void,
   onRemoveUser: (userId: string, userName: string) => void,
-  onShowConfirmation: (modal: ConfirmationModal) => void
+  onShowConfirmation: (modal: ConfirmationModal) => void,
+  onDeleteChat: (chatId: string) => Promise<boolean>,
+  onUpdateChats: (updater: (prevChats: Chat[]) => Chat[]) => void,
+  onSetActiveChat: (chatId: string) => void,
+  onAddNotification: (message: string, type: Notification['type']) => void
 }) => {
-  if (!isOpen || !chat) return null;
+  if (!chat || !isOpen) return null;
 
   const handleMediaClick = (index: number) => {
-    // Simulate opening media viewer
-    alert(`Opening media item ${index + 1}`);
+    // Handle media click
   };
 
-  const handleLeaveGroup = () => {
-    if (chat.type === 'group') {
+  const handleLeaveGroup = async () => {
+    if (chat.type === 'group' && CURRENT_USER) {
+      console.log('🚪 Starting leave group process for:', {
+        chatId: chat.id,
+        chatName: chat.name,
+        userId: CURRENT_USER.id,
+        userName: CURRENT_USER.name,
+        participants: chat.participants
+      });
+
+      // Check if current user is admin
+      const currentUserParticipant = chat.participants.find(p => p.id === CURRENT_USER!.id);
+      const isCurrentUserAdmin = currentUserParticipant?.role === 'admin';
+      
+      console.log('👤 Current user participant info:', {
+        participant: currentUserParticipant,
+        isAdmin: isCurrentUserAdmin
+      });
+      
+      const confirmMessage = isCurrentUserAdmin 
+        ? `Are you sure you want to leave "${chat.name}"? As an admin, leaving will transfer admin privileges to another member. You will no longer receive messages from this group.`
+        : `Are you sure you want to leave "${chat.name}"? You will no longer receive messages from this group.`;
+
       onShowConfirmation({
         isOpen: true,
         title: 'Leave Group',
-        message: `Are you sure you want to leave "${chat.name}"? You will no longer receive messages from this group.`,
+        message: confirmMessage,
         confirmText: 'Leave',
         cancelText: 'Cancel',
         type: 'warning',
-        onConfirm: () => {
-          // TODO: Implement leave group functionality with Supabase
-          alert('Leave group functionality will be implemented');
+        onConfirm: async () => {
+          try {
+            console.log('🚪 Attempting to leave group:', chat.id);
+            console.log('📋 Leave group parameters:', {
+              chatId: chat.id,
+              userId: CURRENT_USER!.id
+            });
+            
+            const success = await leaveGroup(chat.id, CURRENT_USER!.id);
+            console.log('📊 Leave group result:', success);
+            
+            if (success) {
+              console.log('✅ Left group successfully');
+              // Remove from local state and navigate away
+              onUpdateChats(prevChats => prevChats.filter(c => c.id !== chat.id));
+              onSetActiveChat('');
+              onAddNotification(`You have left "${chat.name}"`, 'success');
+            } else {
+              console.error('❌ Failed to leave group');
+              onAddNotification('Failed to leave group. Please try again.', 'error');
+            }
+          } catch (error) {
+            console.error('💥 Error leaving group:', error);
+            onAddNotification('An error occurred while leaving the group.', 'error');
+          }
+          // Close the modal
+          onShowConfirmation({
+            isOpen: false,
+            title: '',
+            message: '',
+            confirmText: '',
+            cancelText: '',
+            onConfirm: () => {},
+            onCancel: () => {},
+            type: 'info'
+          });
         },
-        onCancel: () => {}
+        onCancel: () => {
+          console.log('🚫 Leave group cancelled');
+          // Close the modal
+          onShowConfirmation({
+            isOpen: false,
+            title: '',
+            message: '',
+            confirmText: '',
+            cancelText: '',
+            onConfirm: () => {},
+            onCancel: () => {},
+            type: 'info'
+          });
+        }
+      });
+    } else {
+      console.warn('⚠️ Cannot leave group:', {
+        chatType: chat?.type,
+        currentUser: CURRENT_USER
       });
     }
   };
 
-  const handleDeleteGroup = () => {
-    if (chat.type === 'group') {
+  const handleDeleteGroup = async () => {
+    if (chat.type === 'group' && CURRENT_USER) {
+      console.log('🗑️ DELETE GROUP - Starting process');
+      console.log('📋 Chat info:', {
+        chatId: chat.id,
+        chatName: chat.name,
+        participants: chat.participants.map(p => ({ id: p.id, name: p.name, role: p.role }))
+      });
+      console.log('👤 Current user:', {
+        id: CURRENT_USER.id,
+        name: CURRENT_USER.name,
+        role: CURRENT_USER.role
+      });
+      
+      // Check if current user is admin
+      const currentUserParticipant = chat.participants.find(p => p.id === CURRENT_USER!.id);
+      const isCurrentUserAdmin = currentUserParticipant?.role === 'admin';
+      
+      console.log('🔍 Role check:', {
+        currentUserParticipant,
+        isCurrentUserAdmin,
+        allParticipants: chat.participants
+      });
+      
+      if (!isCurrentUserAdmin) {
+        console.log('❌ User is not admin, showing error');
+        onAddNotification('Only group admins can delete groups.', 'error');
+        return;
+      }
+
+      console.log('✅ User is admin, showing confirmation modal');
       onShowConfirmation({
         isOpen: true,
         title: 'Delete Group',
@@ -1228,11 +1455,57 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
         confirmText: 'Delete',
         cancelText: 'Cancel',
         type: 'danger',
-        onConfirm: () => {
-          // TODO: Implement delete group functionality with Supabase
-          alert('Delete group functionality will be implemented');
+        onConfirm: async () => {
+          try {
+            console.log('🗑️ User confirmed deletion, attempting to delete group:', chat.id);
+            const success = await deleteChat(chat.id);
+            console.log('🔄 Delete result:', success);
+            
+            if (success) {
+              console.log('✅ Group deleted successfully');
+              // Remove from local state and navigate away
+              onUpdateChats(prevChats => prevChats.filter(c => c.id !== chat.id));
+              onSetActiveChat('');
+              onAddNotification(`Group "${chat.name}" has been deleted`, 'success');
+    } else {
+              console.error('❌ Failed to delete group - deleteChat returned false');
+              onAddNotification('Failed to delete group. Please try again.', 'error');
+            }
+          } catch (error) {
+            console.error('💥 Error deleting group:', error);
+            onAddNotification('An error occurred while deleting the group.', 'error');
+          }
+          // Close the modal
+          onShowConfirmation({
+            isOpen: false,
+            title: '',
+            message: '',
+            confirmText: '',
+            cancelText: '',
+            onConfirm: () => {},
+            onCancel: () => {},
+            type: 'info'
+          });
         },
-        onCancel: () => {}
+        onCancel: () => {
+          console.log('❌ Delete group cancelled by user');
+          // Close the modal
+          onShowConfirmation({
+            isOpen: false,
+            title: '',
+            message: '',
+            confirmText: '',
+            cancelText: '',
+            onConfirm: () => {},
+            onCancel: () => {},
+            type: 'info'
+          });
+        }
+      });
+    } else {
+      console.log('❌ Cannot delete group:', {
+        chatType: chat?.type,
+        hasCurrentUser: !!CURRENT_USER
       });
     }
   };
@@ -1258,7 +1531,14 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
       flexDirection: 'column',
       height: '100vh',
       overflowY: 'auto',
-      flexShrink: 0
+      flexShrink: 0,
+      position: 'absolute',
+      right: 0,
+      top: 0,
+      zIndex: 100,
+      boxShadow: isDark ? '-4px 0 20px rgba(0,0,0,0.5)' : '-4px 0 20px rgba(0,0,0,0.15)',
+      transform: isOpen ? 'translateX(0)' : 'translateX(100%)',
+      transition: 'transform 0.3s ease'
     }}>
       {/* Profile/Group Info */}
       <div style={{ padding: '20px', borderBottom: `1px solid ${isDark ? '#2a2a2a' : '#e9ecef'}` }}>
@@ -1318,9 +1598,9 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
             {chat.participants.map((participant, idx) => (
               <div 
                 key={idx} 
-                style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
+            style={{
+              display: 'flex',
+              alignItems: 'center',
                   gap: '10px',
                   padding: '6px 8px',
                   borderRadius: '6px',
@@ -1343,14 +1623,14 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
                     borderRadius: '50%',
                     background: isDark ? 'linear-gradient(135deg, #4a4a4a, #2a2a2a)' : 'linear-gradient(135deg, #e9ecef, #dee2e6)',
                     color: isDark ? '#fff' : '#495057',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
                     fontSize: '12px',
                     fontWeight: '600'
                   }}>
                     {participant.avatar}
-                  </div>
+          </div>
                   <div style={{
                     position: 'absolute',
                     bottom: '-2px',
@@ -1386,14 +1666,14 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
                 
                 {/* Remove User Button - Smaller and less intrusive */}
                 {participant.id !== CURRENT_USER?.id && (
-                  <button
+        <button
                     onClick={() => handleRemoveUser(participant.id, participant.name)}
                     title={`Remove ${participant.name} from group`}
-                    style={{
+          style={{
                       background: 'transparent',
-                      border: 'none',
+            border: 'none',
                       color: '#ef4444',
-                      cursor: 'pointer',
+              cursor: 'pointer',
                       fontSize: '12px',
                       padding: '2px 4px',
                       borderRadius: '3px',
@@ -1417,9 +1697,9 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
                     ✕
                   </button>
                 )}
-              </div>
-            ))}
           </div>
+        ))}
+            </div>
         </div>
       )}
 
@@ -1438,15 +1718,15 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
             <div
               key={item}
               onClick={() => handleMediaClick(item - 1)}
-              style={{
+                  style={{
                 aspectRatio: '1',
                 background: isDark ? '#2a2a2a' : '#f8f9fa',
-                borderRadius: '6px',
+                    borderRadius: '6px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 fontSize: '16px',
-                cursor: 'pointer',
+                    cursor: 'pointer',
                 transition: 'all 0.2s ease'
               }}
               onMouseEnter={e => {
@@ -1459,8 +1739,8 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
               }}
             >
               📷
-            </div>
-          ))}
+                </div>
+              ))}
         </div>
       </div>
 
@@ -1510,7 +1790,7 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
                   width: '36px',
                   height: '18px',
                   borderRadius: '9px',
-                  background: setting.value ? '#228B22' : isDark ? '#404040' : '#dee2e6',
+                  background: setting.value ? '#007bff' : isDark ? '#404040' : '#dee2e6',
                   position: 'relative',
                   cursor: 'pointer',
                   transition: 'all 0.2s ease'
@@ -1526,7 +1806,7 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
                   left: setting.value ? '20px' : '2px',
                   transition: 'all 0.2s ease'
                 }} />
-              </div>
+            </div>
             </div>
           ))}
         </div>
@@ -1543,9 +1823,9 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
               Group Actions
             </h4>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <button
+        <button
                 onClick={handleLeaveGroup}
-                style={{
+          style={{
                   background: isDark ? '#2a2a2a' : '#f8f9fa',
                   border: `1px solid ${isDark ? '#404040' : '#dee2e6'}`,
                   borderRadius: '6px',
@@ -1569,32 +1849,35 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
                 <span>🚪</span>
                 Leave Group
               </button>
-              <button
-                onClick={handleDeleteGroup}
-                style={{
-                  background: isDark ? '#2a2a2a' : '#f8f9fa',
-                  border: `1px solid ${isDark ? '#404040' : '#dee2e6'}`,
-                  borderRadius: '6px',
-                  padding: '10px 12px',
-                  fontSize: '13px',
-                  fontWeight: '500',
-                  color: '#ef4444',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.background = isDark ? '#404040' : '#e9ecef';
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.background = isDark ? '#2a2a2a' : '#f8f9fa';
-                }}
-              >
-                <span>🗑️</span>
-                Delete Group
-              </button>
+              {/* Only show Delete button to admins */}
+              {CURRENT_USER && chat.created_by === CURRENT_USER.id && (
+                <button
+                  onClick={handleDeleteGroup}
+                  style={{
+                    background: isDark ? '#2a2a2a' : '#f8f9fa',
+                    border: `1px solid ${isDark ? '#404040' : '#dee2e6'}`,
+                    borderRadius: '6px',
+                    padding: '10px 12px',
+                    fontSize: '13px',
+                    fontWeight: '500',
+                    color: '#ef4444',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = isDark ? '#404040' : '#e9ecef';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = isDark ? '#2a2a2a' : '#f8f9fa';
+                  }}
+                >
+                  <span>🗑️</span>
+                  Delete Group
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -1609,209 +1892,439 @@ const NotificationBubble = ({ notification, onRemove, isDark }: {
   onRemove: (id: string) => void, 
   isDark: boolean 
 }) => {
-  const [isVisible, setIsVisible] = useState(true);
+  const [isVisible, setIsVisible] = useState(false);
   const [isExiting, setIsExiting] = useState(false);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsExiting(true);
-      setTimeout(() => {
-        onRemove(notification.id);
-      }, 300); // Match exit animation duration
-    }, 4000); // Show for 4 seconds
+    // Smooth entrance animation
+    const timer = setTimeout(() => setIsVisible(true), 50);
+    
+    // Auto-dismiss after 5 seconds
+    const dismissTimer = setTimeout(() => {
+      handleDismiss();
+    }, 5000);
 
-    return () => clearTimeout(timer);
-  }, [notification.id, onRemove]);
+    return () => {
+      clearTimeout(timer);
+      clearTimeout(dismissTimer);
+    };
+  }, [notification.id]);
 
-  const getNotificationColor = () => {
+  const handleDismiss = () => {
+    setIsExiting(true);
+    setTimeout(() => {
+      onRemove(notification.id);
+    }, 400);
+  };
+
+  const getNotificationConfig = () => {
     switch (notification.type) {
-      case 'success': return '#10b981';
-      case 'error': return '#ef4444';
-      case 'warning': return '#f59e0b';
-      case 'info': return '#3b82f6';
-      default: return '#6b7280';
+      case 'success': 
+        return {
+          color: '#10b981',
+          bgColor: isDark ? 'rgba(16, 185, 129, 0.1)' : 'rgba(16, 185, 129, 0.05)',
+          icon: '✓',
+          borderColor: 'rgba(16, 185, 129, 0.3)'
+        };
+      case 'error': 
+        return {
+          color: '#ef4444',
+          bgColor: isDark ? 'rgba(239, 68, 68, 0.1)' : 'rgba(239, 68, 68, 0.05)',
+          icon: '✕',
+          borderColor: 'rgba(239, 68, 68, 0.3)'
+        };
+      case 'warning': 
+        return {
+          color: '#f59e0b',
+          bgColor: isDark ? 'rgba(245, 158, 11, 0.1)' : 'rgba(245, 158, 11, 0.05)',
+          icon: '⚠',
+          borderColor: 'rgba(245, 158, 11, 0.3)'
+        };
+      case 'info': 
+        return {
+          color: '#3b82f6',
+          bgColor: isDark ? 'rgba(59, 130, 246, 0.1)' : 'rgba(59, 130, 246, 0.05)',
+          icon: 'ℹ',
+          borderColor: 'rgba(59, 130, 246, 0.3)'
+        };
+      default: 
+        return {
+          color: '#6b7280',
+          bgColor: isDark ? 'rgba(107, 114, 128, 0.1)' : 'rgba(107, 114, 128, 0.05)',
+          icon: '•',
+          borderColor: 'rgba(107, 114, 128, 0.3)'
+        };
     }
   };
 
-  const getNotificationIcon = () => {
-    switch (notification.type) {
-      case 'success': return '✓';
-      case 'error': return '✕';
-      case 'warning': return '⚠';
-      case 'info': return 'ℹ';
-      default: return '•';
-    }
-  };
+  const config = getNotificationConfig();
 
   return (
     <div
       style={{
         position: 'fixed',
-        top: '20px',
-        right: '20px',
-        background: isDark ? '#2a2a2a' : '#ffffff',
-        border: `1px solid ${getNotificationColor()}`,
-        borderRadius: '12px',
+        top: '24px',
+        right: '24px',
+        background: isDark 
+          ? `linear-gradient(135deg, rgba(26, 26, 26, 0.95) 0%, rgba(42, 42, 42, 0.95) 100%)`
+          : `linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.95) 100%)`,
+        backdropFilter: 'blur(20px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+        border: `1px solid ${config.borderColor}`,
+            borderRadius: '16px',
         padding: '16px 20px',
         boxShadow: isDark 
-          ? '0 8px 32px rgba(0,0,0,0.4)' 
-          : '0 8px 32px rgba(0,0,0,0.15)',
+          ? `0 20px 40px rgba(0, 0, 0, 0.4), 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 0 0 1px ${config.borderColor}`
+          : `0 20px 40px rgba(0, 0, 0, 0.1), 0 1px 0 rgba(255, 255, 255, 0.8) inset, 0 0 0 1px ${config.borderColor}`,
         zIndex: 1000,
-        minWidth: '300px',
-        maxWidth: '400px',
+        minWidth: '320px',
+        maxWidth: '420px',
         transform: isExiting 
-          ? 'translateX(100%) scale(0.9)' 
-          : isVisible ? 'translateX(0) scale(1)' : 'translateX(100%) scale(0.9)',
+          ? 'translateX(100%) scale(0.8) rotateY(15deg)' 
+          : isVisible 
+            ? 'translateX(0) scale(1) rotateY(0deg)' 
+            : 'translateX(100%) scale(0.8) rotateY(15deg)',
         opacity: isExiting ? 0 : isVisible ? 1 : 0,
-        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        transition: 'all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)',
         display: 'flex',
-        alignItems: 'center',
-        gap: '12px'
+        alignItems: 'flex-start',
+        gap: '14px',
+        overflow: 'hidden'
       }}
     >
+      {/* Animated background gradient */}
       <div
         style={{
-          width: '24px',
-          height: '24px',
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: `linear-gradient(135deg, ${config.bgColor} 0%, transparent 100%)`,
+          borderRadius: '16px',
+          opacity: 0.6
+        }}
+      />
+      
+      {/* Icon with pulsing animation */}
+      <div
+        style={{
+          width: '32px',
+          height: '32px',
           borderRadius: '50%',
-          background: getNotificationColor(),
+          background: `linear-gradient(135deg, ${config.color} 0%, ${config.color}dd 100%)`,
           color: '#ffffff',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          fontSize: '14px',
+          fontSize: '16px',
           fontWeight: 'bold',
-          flexShrink: 0
+          flexShrink: 0,
+          boxShadow: `0 4px 12px ${config.color}40, 0 0 0 3px ${config.color}20`,
+          animation: 'pulse 2s infinite',
+          zIndex: 1
         }}
       >
-        {getNotificationIcon()}
+        {config.icon}
       </div>
-      <div style={{ flex: 1 }}>
+      
+      {/* Content */}
+      <div style={{ flex: 1, zIndex: 1 }}>
         <div
           style={{
-            fontSize: '14px',
-            fontWeight: '500',
-            color: isDark ? '#ffffff' : '#1a1a1a',
-            lineHeight: '1.4'
+            fontSize: '15px',
+            fontWeight: '600',
+            color: isDark ? '#ffffff' : '#1f2937',
+            lineHeight: '1.4',
+            marginBottom: '2px',
+            letterSpacing: '-0.01em'
           }}
         >
           {notification.message}
         </div>
+        <div
+          style={{
+            fontSize: '12px',
+            color: isDark ? '#9ca3af' : '#6b7280',
+            fontWeight: '500'
+          }}
+        >
+          {new Date(notification.timestamp).toLocaleTimeString([], { 
+            hour: '2-digit', 
+            minute: '2-digit' 
+          })}
+        </div>
       </div>
+      
+      {/* Close button with hover effects */}
       <button
-        onClick={() => {
-          setIsExiting(true);
-          setTimeout(() => onRemove(notification.id), 300);
-        }}
+        onClick={handleDismiss}
         style={{
           background: 'transparent',
-          border: 'none',
-          color: isDark ? '#adb5bd' : '#6c757d',
+            border: 'none',
+          color: isDark ? '#9ca3af' : '#6b7280',
           cursor: 'pointer',
-          fontSize: '16px',
+          fontSize: '18px',
           padding: '4px',
-          borderRadius: '4px',
+          borderRadius: '8px',
           flexShrink: 0,
-          transition: 'color 0.2s ease'
+          transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+          zIndex: 1,
+          width: '28px',
+          height: '28px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
         }}
         onMouseEnter={e => {
-          e.currentTarget.style.color = getNotificationColor();
+          e.currentTarget.style.background = isDark ? 'rgba(239, 68, 68, 0.1)' : 'rgba(239, 68, 68, 0.05)';
+          e.currentTarget.style.color = '#ef4444';
+          e.currentTarget.style.transform = 'scale(1.1)';
         }}
         onMouseLeave={e => {
-          e.currentTarget.style.color = isDark ? '#adb5bd' : '#6c757d';
+          e.currentTarget.style.background = 'transparent';
+          e.currentTarget.style.color = isDark ? '#9ca3af' : '#6b7280';
+          e.currentTarget.style.transform = 'scale(1)';
         }}
       >
-        ✕
+        ×
       </button>
-    </div>
+      
+      {/* Progress bar */}
+      <div
+        style={{
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          height: '2px',
+          background: `linear-gradient(90deg, ${config.color} 0%, ${config.color}80 100%)`,
+          borderRadius: '0 0 16px 16px',
+          animation: 'progress 5s linear',
+          transformOrigin: 'left'
+        }}
+      />
+      
+      {/* Add keyframes for animations */}
+      <style>
+        {`
+          @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+          }
+          @keyframes progress {
+            0% { width: 100%; }
+            100% { width: 0%; }
+          }
+        `}
+      </style>
+      </div>
   );
 };
 
-const ConfirmationModal = ({ modal, isDark }: { modal: ConfirmationModal, isDark: boolean }) => {
+// Add confirmation modal component
+const ConfirmationModal = ({ modal, isDark }: { 
+  modal: ConfirmationModal, 
+  isDark: boolean 
+}) => {
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    if (modal.isOpen) {
+      const timer = setTimeout(() => setIsVisible(true), 50);
+      return () => clearTimeout(timer);
+    } else {
+      setIsVisible(false);
+    }
+  }, [modal.isOpen]);
+
   if (!modal.isOpen) return null;
 
+  const getModalConfig = () => {
+    switch (modal.type) {
+      case 'danger':
+        return {
+          color: '#ef4444',
+          bgColor: isDark ? 'rgba(239, 68, 68, 0.1)' : 'rgba(239, 68, 68, 0.05)',
+          icon: '⚠',
+          borderColor: 'rgba(239, 68, 68, 0.3)',
+          buttonColor: '#ef4444'
+        };
+      case 'warning':
+        return {
+          color: '#f59e0b',
+          bgColor: isDark ? 'rgba(245, 158, 11, 0.1)' : 'rgba(245, 158, 11, 0.05)',
+          icon: '⚠',
+          borderColor: 'rgba(245, 158, 11, 0.3)',
+          buttonColor: '#f59e0b'
+        };
+      case 'info':
+        return {
+          color: '#3b82f6',
+          bgColor: isDark ? 'rgba(59, 130, 246, 0.1)' : 'rgba(59, 130, 246, 0.05)',
+          icon: 'ℹ',
+          borderColor: 'rgba(59, 130, 246, 0.3)',
+          buttonColor: '#3b82f6'
+        };
+      default:
+        return {
+          color: '#6b7280',
+          bgColor: isDark ? 'rgba(107, 114, 128, 0.1)' : 'rgba(107, 114, 128, 0.05)',
+          icon: '?',
+          borderColor: 'rgba(107, 114, 128, 0.3)',
+          buttonColor: '#6b7280'
+        };
+    }
+  };
+
+  const config = getModalConfig();
+
   return (
-    <div style={{
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      background: 'rgba(0, 0, 0, 0.5)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 1000
-    }}>
-      <div style={{
-        background: isDark ? '#1a1a1a' : '#ffffff',
-        borderRadius: '12px',
-        padding: '24px',
-        maxWidth: '400px',
-        width: '90%',
-        boxShadow: isDark ? '0 20px 40px rgba(0,0,0,0.3)' : '0 20px 40px rgba(0,0,0,0.15)',
-        border: `1px solid ${isDark ? '#2a2a2a' : '#e9ecef'}`
-      }}>
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px',
-          marginBottom: '16px'
+    <div
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: 'rgba(0, 0, 0, 0.6)',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
+        zIndex: 2000,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '20px',
+        opacity: isVisible ? 1 : 0,
+        transition: 'opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          modal.onCancel?.();
+        }
+      }}
+    >
+      <div
+        style={{
+          background: isDark 
+            ? `linear-gradient(135deg, rgba(26, 26, 26, 0.98) 0%, rgba(42, 42, 42, 0.98) 100%)`
+            : `linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.98) 100%)`,
+          backdropFilter: 'blur(20px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+          border: `1px solid ${config.borderColor}`,
+          borderRadius: '20px',
+          padding: '32px',
+          maxWidth: '480px',
+          width: '100%',
+          boxShadow: isDark 
+            ? `0 32px 64px rgba(0, 0, 0, 0.5), 0 1px 0 rgba(255, 255, 255, 0.05) inset`
+            : `0 32px 64px rgba(0, 0, 0, 0.15), 0 1px 0 rgba(255, 255, 255, 0.8) inset`,
+          transform: isVisible ? 'scale(1) translateY(0)' : 'scale(0.9) translateY(20px)',
+          transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+          overflow: 'hidden'
+        }}
+      >
+        {/* Background gradient overlay */}
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: `linear-gradient(135deg, ${config.bgColor} 0%, transparent 100%)`,
+            borderRadius: '20px',
+            opacity: 0.4
+          }}
+        />
+
+        {/* Header with icon */}
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: '16px', 
+          marginBottom: '24px',
+          position: 'relative',
+          zIndex: 1
         }}>
-          <div style={{
-            width: '40px',
-            height: '40px',
-            borderRadius: '50%',
-            background: modal.type === 'danger' ? '#ef4444' : '#f59e0b',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '20px'
-          }}>
-            {modal.type === 'danger' ? '⚠️' : '❗'}
+          <div
+            style={{
+              width: '48px',
+              height: '48px',
+              borderRadius: '50%',
+              background: `linear-gradient(135deg, ${config.color} 0%, ${config.color}dd 100%)`,
+              color: '#ffffff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '20px',
+              fontWeight: 'bold',
+              boxShadow: `0 8px 16px ${config.color}40, 0 0 0 4px ${config.color}20`,
+              animation: 'pulse 2s infinite'
+            }}
+          >
+            {config.icon}
+            </div>
+          <div>
+            <h2
+              style={{
+                margin: 0,
+                fontSize: '20px',
+                fontWeight: '700',
+                color: isDark ? '#ffffff' : '#1f2937',
+                letterSpacing: '-0.02em'
+              }}
+            >
+              {modal.title}
+            </h2>
           </div>
-          <h3 style={{
-            margin: 0,
-            fontSize: '18px',
-            fontWeight: '600',
-            color: isDark ? '#ffffff' : '#1a1a1a'
-          }}>
-            {modal.title}
-          </h3>
         </div>
-        
-        <p style={{
-          margin: '0 0 24px 0',
-          fontSize: '14px',
-          lineHeight: '1.5',
-          color: isDark ? '#adb5bd' : '#6c757d'
-        }}>
+
+        {/* Message */}
+        <div
+                  style={{
+            fontSize: '16px',
+            lineHeight: '1.6',
+            color: isDark ? '#d1d5db' : '#4b5563',
+            marginBottom: '32px',
+            position: 'relative',
+            zIndex: 1
+          }}
+        >
           {modal.message}
-        </p>
-        
-        <div style={{
-          display: 'flex',
-          gap: '12px',
-          justifyContent: 'flex-end'
+        </div>
+
+        {/* Buttons */}
+        <div style={{ 
+          display: 'flex', 
+          gap: '12px', 
+          justifyContent: 'flex-end',
+          position: 'relative',
+          zIndex: 1
         }}>
           <button
             onClick={modal.onCancel}
             style={{
-              background: isDark ? '#2a2a2a' : '#f8f9fa',
-              border: `1px solid ${isDark ? '#404040' : '#dee2e6'}`,
-              borderRadius: '6px',
-              padding: '8px 16px',
+              background: isDark ? 'rgba(75, 85, 99, 0.2)' : 'rgba(243, 244, 246, 0.8)',
+              border: `1px solid ${isDark ? 'rgba(75, 85, 99, 0.3)' : 'rgba(209, 213, 219, 0.6)'}`,
+              borderRadius: '12px',
+              padding: '12px 24px',
               fontSize: '14px',
-              fontWeight: '500',
-              color: isDark ? '#ffffff' : '#1a1a1a',
-              cursor: 'pointer',
-              transition: 'all 0.2s ease'
+              fontWeight: '600',
+              color: isDark ? '#d1d5db' : '#374151',
+                    cursor: 'pointer',
+              transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+              backdropFilter: 'blur(10px)',
+              WebkitBackdropFilter: 'blur(10px)'
             }}
             onMouseEnter={e => {
-              e.currentTarget.style.background = isDark ? '#404040' : '#e9ecef';
+              e.currentTarget.style.background = isDark ? 'rgba(75, 85, 99, 0.3)' : 'rgba(243, 244, 246, 1)';
+              e.currentTarget.style.transform = 'translateY(-1px)';
+              e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
             }}
             onMouseLeave={e => {
-              e.currentTarget.style.background = isDark ? '#2a2a2a' : '#f8f9fa';
+              e.currentTarget.style.background = isDark ? 'rgba(75, 85, 99, 0.2)' : 'rgba(243, 244, 246, 0.8)';
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = 'none';
             }}
           >
             {modal.cancelText}
@@ -1819,26 +2332,29 @@ const ConfirmationModal = ({ modal, isDark }: { modal: ConfirmationModal, isDark
           <button
             onClick={modal.onConfirm}
             style={{
-              background: modal.type === 'danger' ? '#ef4444' : '#f59e0b',
+              background: `linear-gradient(135deg, ${config.buttonColor} 0%, ${config.buttonColor}dd 100%)`,
               border: 'none',
-              borderRadius: '6px',
-              padding: '8px 16px',
+              borderRadius: '12px',
+              padding: '12px 24px',
               fontSize: '14px',
-              fontWeight: '500',
+              fontWeight: '600',
               color: '#ffffff',
               cursor: 'pointer',
-              transition: 'all 0.2s ease'
+              transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+              boxShadow: `0 4px 12px ${config.buttonColor}40`
             }}
             onMouseEnter={e => {
-              e.currentTarget.style.background = modal.type === 'danger' ? '#dc2626' : '#d97706';
+              e.currentTarget.style.transform = 'translateY(-1px)';
+              e.currentTarget.style.boxShadow = `0 8px 20px ${config.buttonColor}50`;
             }}
             onMouseLeave={e => {
-              e.currentTarget.style.background = modal.type === 'danger' ? '#ef4444' : '#f59e0b';
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = `0 4px 12px ${config.buttonColor}40`;
             }}
           >
             {modal.confirmText}
           </button>
-        </div>
+                </div>
       </div>
     </div>
   );
@@ -1855,13 +2371,13 @@ const MessageNotificationToast = ({ notification, onRemove, onMarkRead, onOpenCh
   const [isExiting, setIsExiting] = useState(false);
 
   useEffect(() => {
-    // Fade in animation
+    // Smooth entrance animation
     const timer = setTimeout(() => setIsVisible(true), 100);
     
-    // Auto-dismiss after 5 seconds
+    // Auto-dismiss after 6 seconds
     const dismissTimer = setTimeout(() => {
       handleDismiss();
-    }, 5000);
+    }, 6000);
 
     return () => {
       clearTimeout(timer);
@@ -1873,7 +2389,7 @@ const MessageNotificationToast = ({ notification, onRemove, onMarkRead, onOpenCh
     setIsExiting(true);
     setTimeout(() => {
       onRemove(notification.id);
-    }, 300);
+    }, 400);
   };
 
   const handleClick = () => {
@@ -1900,45 +2416,77 @@ const MessageNotificationToast = ({ notification, onRemove, onMarkRead, onOpenCh
     }
   };
 
+  const getChatTypeColor = () => {
+    switch (notification.chatType) {
+      case 'direct':
+        return '#3b82f6'; // Blue
+      case 'group':
+        return '#10b981'; // Green
+      case 'team':
+        return '#8b5cf6'; // Purple
+      default:
+        return '#6b7280'; // Gray
+    }
+  };
+
+  const chatColor = getChatTypeColor();
+
   return (
     <div 
       style={{
         position: 'fixed',
         top: '20px',
         right: '20px',
-        width: '360px',
-        background: isDark ? '#1a1a1a' : '#ffffff',
-        borderRadius: '12px',
-        padding: '16px',
+        width: '380px',
+        background: isDark 
+          ? `linear-gradient(135deg, rgba(26, 26, 26, 0.95) 0%, rgba(42, 42, 42, 0.95) 100%)`
+          : `linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.95) 100%)`,
+        backdropFilter: 'blur(20px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+        borderRadius: '16px',
+        padding: '16px 20px',
         boxShadow: isDark 
-          ? '0 8px 32px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.1)' 
-          : '0 8px 32px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.1)',
-        border: `1px solid ${isDark ? '#2a2a2a' : '#e9ecef'}`,
+          ? `0 20px 40px rgba(0, 0, 0, 0.4), 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 0 0 1px ${chatColor}40`
+          : `0 20px 40px rgba(0, 0, 0, 0.1), 0 1px 0 rgba(255, 255, 255, 0.8) inset, 0 0 0 1px ${chatColor}40`,
+        border: `1px solid ${chatColor}30`,
         cursor: 'pointer',
-        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        transition: 'all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)',
         transform: isVisible && !isExiting 
-          ? 'translateX(0) scale(1)' 
-          : 'translateX(100%) scale(0.95)',
+          ? 'translateX(0) scale(1) rotateY(0deg)' 
+          : 'translateX(100%) scale(0.9) rotateY(10deg)',
         opacity: isVisible && !isExiting ? 1 : 0,
-        zIndex: 1000,
-        backdropFilter: 'blur(10px)',
-        WebkitBackdropFilter: 'blur(10px)'
+        zIndex: 1001,
+        overflow: 'hidden'
       }}
       onClick={handleClick}
       onMouseEnter={e => {
-        e.currentTarget.style.transform = 'translateX(0) scale(1.02)';
+        e.currentTarget.style.transform = 'translateX(0) scale(1.02) rotateY(0deg)';
         e.currentTarget.style.boxShadow = isDark 
-          ? '0 12px 48px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.15)' 
-          : '0 12px 48px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.15)';
+          ? `0 24px 48px rgba(0, 0, 0, 0.5), 0 1px 0 rgba(255, 255, 255, 0.1) inset, 0 0 0 1px ${chatColor}60`
+          : `0 24px 48px rgba(0, 0, 0, 0.15), 0 1px 0 rgba(255, 255, 255, 1) inset, 0 0 0 1px ${chatColor}60`;
       }}
       onMouseLeave={e => {
-        e.currentTarget.style.transform = 'translateX(0) scale(1)';
+        e.currentTarget.style.transform = 'translateX(0) scale(1) rotateY(0deg)';
         e.currentTarget.style.boxShadow = isDark 
-          ? '0 8px 32px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.1)' 
-          : '0 8px 32px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.1)';
+          ? `0 20px 40px rgba(0, 0, 0, 0.4), 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 0 0 1px ${chatColor}40`
+          : `0 20px 40px rgba(0, 0, 0, 0.1), 0 1px 0 rgba(255, 255, 255, 0.8) inset, 0 0 0 1px ${chatColor}40`;
       }}
     >
-      {/* Close button */}
+      {/* Background gradient overlay */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: `linear-gradient(135deg, ${chatColor}10 0%, transparent 100%)`,
+          borderRadius: '16px',
+          opacity: 0.6
+        }}
+      />
+
+      {/* Close button with modern styling */}
       <button
         onClick={(e) => {
           e.stopPropagation();
@@ -1946,28 +2494,31 @@ const MessageNotificationToast = ({ notification, onRemove, onMarkRead, onOpenCh
         }}
         style={{
           position: 'absolute',
-          top: '8px',
-          right: '8px',
+          top: '12px',
+          right: '12px',
           background: 'transparent',
           border: 'none',
-          color: isDark ? '#adb5bd' : '#6c757d',
+          color: isDark ? '#9ca3af' : '#6b7280',
           cursor: 'pointer',
-          fontSize: '16px',
-          width: '24px',
-          height: '24px',
-          borderRadius: '50%',
+          fontSize: '18px',
+          width: '28px',
+          height: '28px',
+          borderRadius: '8px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          transition: 'all 0.2s ease'
+          transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+          zIndex: 2
         }}
         onMouseEnter={e => {
-          e.currentTarget.style.background = isDark ? '#2a2a2a' : '#f8f9fa';
-          e.currentTarget.style.color = isDark ? '#ffffff' : '#1a1a1a';
+          e.currentTarget.style.background = isDark ? 'rgba(239, 68, 68, 0.1)' : 'rgba(239, 68, 68, 0.05)';
+          e.currentTarget.style.color = '#ef4444';
+          e.currentTarget.style.transform = 'scale(1.1)';
         }}
         onMouseLeave={e => {
           e.currentTarget.style.background = 'transparent';
-          e.currentTarget.style.color = isDark ? '#adb5bd' : '#6c757d';
+          e.currentTarget.style.color = isDark ? '#9ca3af' : '#6b7280';
+          e.currentTarget.style.transform = 'scale(1)';
         }}
       >
         ×
@@ -1977,64 +2528,48 @@ const MessageNotificationToast = ({ notification, onRemove, onMarkRead, onOpenCh
       <div style={{
         display: 'flex',
         alignItems: 'center',
-        gap: '10px',
-        marginBottom: '8px'
+        gap: '12px',
+        marginBottom: '12px',
+        position: 'relative',
+        zIndex: 1
       }}>
         <div style={{
-          width: '40px',
-          height: '40px',
+          width: '44px',
+          height: '44px',
           borderRadius: '50%',
-          background: isDark 
-            ? 'linear-gradient(135deg, #4a4a4a, #2a2a2a)' 
-            : 'linear-gradient(135deg, #e9ecef, #dee2e6)',
-          color: isDark ? '#fff' : '#495057',
+          background: `linear-gradient(135deg, ${chatColor} 0%, ${chatColor}dd 100%)`,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          fontSize: '16px',
-          fontWeight: '600',
-          flexShrink: 0
+          fontSize: '18px',
+          boxShadow: `0 4px 12px ${chatColor}40, 0 0 0 3px ${chatColor}20`,
+          flexShrink: 0,
+          animation: 'pulse 2s infinite'
         }}>
-          {notification.senderAvatar}
-        </div>
-        
+          {getChatIcon()}
+              </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            marginBottom: '2px'
+            fontSize: '15px',
+            fontWeight: '600',
+            color: isDark ? '#ffffff' : '#1f2937',
+            marginBottom: '2px',
+            letterSpacing: '-0.01em'
           }}>
-            <span style={{
-              fontSize: '14px',
-              fontWeight: '600',
-              color: isDark ? '#ffffff' : '#1a1a1a',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis'
-            }}>
-              {notification.senderName}
-            </span>
-            <span style={{ fontSize: '16px' }}>
-              {getChatIcon()}
-            </span>
-          </div>
-          
+            {notification.senderName}
+            </div>
           <div style={{
-            fontSize: '12px',
-            color: isDark ? '#adb5bd' : '#6c757d',
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis'
+            fontSize: '13px',
+            color: isDark ? '#9ca3af' : '#6b7280',
+            fontWeight: '500'
           }}>
-            {notification.chatType === 'direct' ? 'Direct message' : notification.chatName}
+            in {notification.chatName}
           </div>
         </div>
-
         <div style={{
           fontSize: '11px',
-          color: isDark ? '#6c757d' : '#adb5bd',
-          whiteSpace: 'nowrap'
+          color: isDark ? '#9ca3af' : '#6b7280',
+          fontWeight: '500'
         }}>
           {new Date(notification.timestamp).toLocaleTimeString([], { 
             hour: '2-digit', 
@@ -2043,36 +2578,52 @@ const MessageNotificationToast = ({ notification, onRemove, onMarkRead, onOpenCh
         </div>
       </div>
 
-      {/* Message preview */}
+      {/* Message content */}
       <div style={{
-        background: isDark ? '#2a2a2a' : '#f8f9fa',
-        borderRadius: '8px',
-        padding: '10px 12px',
-        marginTop: '8px',
-        borderLeft: `3px solid #228B22`
+        fontSize: '14px',
+        lineHeight: '1.5',
+        color: isDark ? '#d1d5db' : '#4b5563',
+        background: isDark ? 'rgba(55, 65, 81, 0.3)' : 'rgba(243, 244, 246, 0.5)',
+        borderRadius: '12px',
+        padding: '12px 16px',
+        border: `1px solid ${isDark ? 'rgba(75, 85, 99, 0.2)' : 'rgba(209, 213, 219, 0.3)'}`,
+        backdropFilter: 'blur(10px)',
+        WebkitBackdropFilter: 'blur(10px)',
+        position: 'relative',
+        zIndex: 1
       }}>
-        <p style={{
-          margin: 0,
-          fontSize: '13px',
-          lineHeight: '1.4',
-          color: isDark ? '#ffffff' : '#1a1a1a',
-          fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
-        }}>
-          {truncateMessage(notification.messageText)}
-        </p>
-      </div>
+        {truncateMessage(notification.messageText)}
+            </div>
 
-      {/* Action hint */}
-      <div style={{
-        marginTop: '8px',
-        fontSize: '11px',
-        color: isDark ? '#6c757d' : '#adb5bd',
-        textAlign: 'center',
-        fontStyle: 'italic'
-      }}>
-        Click to open chat
-      </div>
-    </div>
+      {/* Progress bar */}
+      <div
+        style={{
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          height: '3px',
+          background: `linear-gradient(90deg, ${chatColor} 0%, ${chatColor}80 100%)`,
+          borderRadius: '0 0 16px 16px',
+          animation: 'messageProgress 6s linear',
+          transformOrigin: 'left',
+          zIndex: 1
+        }}
+      />
+
+      {/* Add keyframes for animations */}
+      <style>
+        {`
+          @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+          }
+          @keyframes messageProgress {
+            0% { width: 100%; }
+            100% { width: 0%; }
+          }
+        `}
+      </style>
+                  </div>
   );
 };
 
@@ -2115,6 +2666,7 @@ export default function TeamChatPage() {
 
   const isDark = theme === 'dark';
   const activeChat = chats.find(chat => chat.id === activeChatId);
+  const colors = themes[isDark ? 'dark' : 'light'];
 
   // Initialize data on component mount
   useEffect(() => {
@@ -2126,7 +2678,10 @@ export default function TeamChatPage() {
         return;
       }
       
+      console.log('🔍 Raw user from getCurrentUser():', user);
       CURRENT_USER = convertSupabaseUser(user);
+      console.log('👤 CURRENT_USER after conversion:', CURRENT_USER);
+      console.log('🏢 CURRENT_USER company_id:', CURRENT_USER?.company_id);
       await loadInitialData();
     };
 
@@ -2147,9 +2702,12 @@ export default function TeamChatPage() {
       // Load company users and teams
       const authUser = getCurrentUser();
       if (authUser) {
+        console.log('🔍 Loading company users for company:', authUser.company_id);
         try {
           const users = await getCompanyUsers(authUser.company_id);
+          console.log('👥 Raw company users from database:', users);
           const convertedUsers = users.filter(u => u.id !== CURRENT_USER?.id).map(convertSupabaseUser);
+          console.log('👥 Converted company users:', convertedUsers);
           setCompanyUsers(convertedUsers);
         } catch (error) {
           console.error('Failed to fetch company users:', error);
@@ -2233,13 +2791,20 @@ export default function TeamChatPage() {
   }, [chats.length, CURRENT_USER?.id]); // Only re-run when chats change or user changes
 
   const selectChat = async (chatId: string) => {
+    console.log('🎯 selectChat called for:', chatId);
+    console.log('👤 Current user in selectChat:', CURRENT_USER);
+    
     setActiveChatId(chatId);
     setSearchQuery('');
     setShowRightPanel(false);
     
     try {
+      console.log('📨 Fetching messages for chat:', chatId);
       const chatMessages = await getChatMessages(chatId);
+      console.log('📨 Messages received:', chatMessages?.length || 0);
+      
       const convertedMessages = chatMessages.map(convertSupabaseMessage);
+      console.log('📨 Converted messages:', convertedMessages?.length || 0);
       
       // Update the specific chat with its messages
       setChats(prevChats => 
@@ -2250,9 +2815,11 @@ export default function TeamChatPage() {
         )
       );
       
+      console.log('✅ Chat messages updated successfully');
+      
       // No need to subscribe here anymore - we subscribe to all chats in loadInitialData
     } catch (error) {
-      console.error('Failed to load chat messages:', error);
+      console.error('❌ Failed to load chat messages:', error);
     }
   };
 
@@ -2445,18 +3012,23 @@ export default function TeamChatPage() {
         return;
     }
     
+    console.log('🔍 Searching with query:', searchQuery);
+    console.log('👥 Available company users:', companyUsers);
+    
     // Search users
     const existingChatNames = chats.map(c => c.name.toLowerCase());
     const userResults = companyUsers.filter(user =>
         user.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
         !existingChatNames.includes(user.name.toLowerCase())
     );
+    console.log('🔍 User search results:', userResults);
     setSearchResults(userResults);
     
     // Search teams
     const teamResults = companyTeams.filter(team =>
         team.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
+    console.log('🔍 Team search results:', teamResults);
     setTeamSearchResults(teamResults);
   }, [searchQuery, chats, companyUsers, companyTeams]);
 
@@ -2467,53 +3039,120 @@ export default function TeamChatPage() {
   };
 
   const handleStartNewChat = async (user: User) => {
-    if (!CURRENT_USER) return;
+    if (!CURRENT_USER) {
+      console.error('No current user found')
+      return
+    }
+
+    const authUser = getCurrentUser()
+    if (!authUser) {
+      console.error('No authenticated user found')
+      return
+    }
 
     try {
-      const authUser = getCurrentUser();
-      if (!authUser) return;
-
-      const chat = await createDirectChat(CURRENT_USER.id, user.id, authUser.company_id);
-      if (chat) {
-        const convertedChat = convertSupabaseChat(chat);
-        setChats(prevChats => [convertedChat, ...prevChats.filter(c => c.id !== convertedChat.id)]);
-        setActiveChatId(convertedChat.id);
-        setSearchQuery('');
+      const newChat = await createDirectChat(CURRENT_USER.id, user.id, authUser.company_id)
+      
+      if (newChat) {
+        const convertedChat = convertSupabaseChat(newChat)
+        setChats(prev => {
+          const exists = prev.find(c => c.id === convertedChat.id)
+          if (exists) return prev
+          return [convertedChat, ...prev]
+        })
+        setActiveChatId(convertedChat.id)
+        setSearchQuery('')
+        console.log(`✅ Started chat with ${user.name}`)
+      } else {
+        console.error('Failed to create chat - null response')
       }
     } catch (error) {
-      console.error('Failed to create direct chat:', error);
+      console.error('Error creating direct chat:', error)
     }
-  };
+  }
 
   const handleStartTeamChat = async (team: Team) => {
-    if (!CURRENT_USER) return;
+    if (!CURRENT_USER) {
+      console.error('No current user found')
+      return
+    }
+
+    const authUser = getCurrentUser()
+    if (!authUser) {
+      console.error('No authenticated user found')
+      return
+    }
 
     try {
-      const authUser = getCurrentUser();
-      if (!authUser) return;
-
-      const chat = await createTeamChat(CURRENT_USER.id, authUser.company_id, team.id);
-      if (chat) {
-        const convertedChat = convertSupabaseChat(chat);
-        setChats(prevChats => [convertedChat, ...prevChats.filter(c => c.id !== convertedChat.id)]);
-        setActiveChatId(convertedChat.id);
-        setSearchQuery('');
+      const newChat = await createTeamChat(CURRENT_USER.id, authUser.company_id, team.id, `${team.name} Chat`)
+      
+      if (newChat) {
+        const convertedChat = convertSupabaseChat(newChat)
+        setChats(prev => {
+          const exists = prev.find(c => c.id === convertedChat.id)
+          if (exists) return prev
+          return [convertedChat, ...prev]
+        })
+        setActiveChatId(convertedChat.id)
+        setSearchQuery('')
+        console.log(`✅ Started team chat for ${team.name}`)
+      } else {
+        console.error('Failed to create team chat - null response')
       }
     } catch (error) {
-      console.error('Failed to create team chat:', error);
+      console.error('Error creating team chat:', error)
     }
-  };
+  }
 
   const handleCreateGroup = async () => {
-    if (!groupName.trim() || selectedUsers.length === 0 || !CURRENT_USER) return;
+    console.log('🚀 CREATE GROUP - Starting process');
+    console.log('📋 Group creation parameters:', {
+      groupName: groupName.trim(),
+      selectedUsers: selectedUsers.map(u => ({ id: u.id, name: u.name })),
+      selectedUsersLength: selectedUsers.length,
+      currentUser: CURRENT_USER ? { id: CURRENT_USER.id, name: CURRENT_USER.name } : null
+    });
+
+    if (!groupName.trim()) {
+      console.log('❌ Group name is empty');
+      addNotification('Please enter a group name', 'error');
+      return;
+    }
+
+    if (selectedUsers.length === 0) {
+      console.log('❌ No users selected');
+      addNotification('Please select at least one user', 'error');
+      return;
+    }
+
+    if (!CURRENT_USER) {
+      console.log('❌ No current user');
+      addNotification('Authentication error', 'error');
+      return;
+    }
 
     try {
+      console.log('🔍 Getting authenticated user...');
       const authUser = getCurrentUser();
-      if (!authUser) return;
+      console.log('👤 Auth user:', authUser);
+      
+      if (!authUser) {
+        console.log('❌ No authenticated user found');
+        addNotification('Authentication error', 'error');
+        return;
+      }
 
       // Get participant IDs
       const participantIds = selectedUsers.map(user => user.id);
+      console.log('👥 Participant IDs:', participantIds);
       
+      console.log('🏗️ Creating group chat with parameters:', {
+        creatorId: CURRENT_USER.id,
+        companyId: authUser.company_id,
+        groupName: groupName.trim(),
+        participantIds
+      });
+
       // Create group chat in Supabase
       const chat = await createGroupChat(
         CURRENT_USER.id, 
@@ -2522,17 +3161,33 @@ export default function TeamChatPage() {
         participantIds
       );
 
+      console.log('📦 Create group chat result:', chat);
+
       if (chat) {
+        console.log('✅ Group chat created successfully, converting...');
         const convertedChat = convertSupabaseChat(chat);
-        setChats(prevChats => [convertedChat, ...prevChats]);
+        console.log('🔄 Converted chat:', convertedChat);
+        
+        setChats(prevChats => {
+          console.log('📝 Adding to chat list, previous count:', prevChats.length);
+          return [convertedChat, ...prevChats];
+        });
+        
         setActiveChatId(convertedChat.id);
         setShowCreateGroup(false);
         setGroupName('');
         setSelectedUsers([]);
         setGroupUserSearch('');
+        
+        console.log('🎉 Group creation completed successfully!');
+        addNotification(`Group "${convertedChat.name}" created successfully`, 'success');
+      } else {
+        console.error('❌ Create group chat returned null/undefined');
+        addNotification('Failed to create group chat', 'error');
       }
     } catch (error) {
-      console.error('Failed to create group chat:', error);
+      console.error('💥 Failed to create group chat:', error);
+      addNotification('Failed to create group chat: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
     }
   };
 
@@ -2645,10 +3300,12 @@ export default function TeamChatPage() {
       )
     );
     
-    // Close the chat if it's currently active and being archived
-    if (activeChatId === chatId) {
-      setActiveChatId(null);
-      setShowRightPanel(false);
+    const chat = chats.find(c => c.id === chatId);
+    if (chat) {
+      addNotification(
+        `Chat "${chat.name}" ${chat.isArchived ? 'unarchived' : 'archived'}`,
+        'info'
+      );
     }
   };
 
@@ -2668,7 +3325,9 @@ export default function TeamChatPage() {
 
   const handleCreateGroupClick = () => {
     setShowCreateGroup(!showCreateGroup);
-    setSearchQuery('');
+    setSelectedUsers([]);
+    setGroupName('');
+    setGroupUserSearch('');
   };
 
   // Get top 3 suggested users (most recent chats or frequently contacted)
@@ -2758,7 +3417,7 @@ export default function TeamChatPage() {
               )
             );
             addNotification(`${userName} has been removed from the group`, 'success');
-          } else {
+    } else {
             addNotification('Failed to remove user from group', 'error');
           }
         } catch (error) {
@@ -2796,8 +3455,8 @@ export default function TeamChatPage() {
   if (loading) {
   return (
       <div style={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
+              display: 'flex',
+              justifyContent: 'center',
         alignItems: 'center', 
         height: '100vh',
         fontSize: '18px',
@@ -2805,7 +3464,7 @@ export default function TeamChatPage() {
         background: isDark ? '#0f0f0f' : '#f8f9fa'
       }}>
         Loading...
-      </div>
+                    </div>
     );
   }
 
@@ -2813,9 +3472,13 @@ export default function TeamChatPage() {
     <div style={{ 
       display: 'flex', 
       height: '100vh', 
-      background: isDark ? '#0f0f0f' : '#f8f9fa',
+      background: colors.bg,
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-      position: 'relative'
+      position: 'relative',
+      transition: 'background 0.2s ease',
+      margin: 0,
+      padding: 0,
+      overflow: 'hidden'
     }}>
       {/* Notifications */}
       <div style={{
@@ -2835,7 +3498,7 @@ export default function TeamChatPage() {
               onRemove={removeNotification}
               isDark={isDark}
             />
-          </div>
+                  </div>
         ))}
         {messageNotifications.map(notification => (
           <div key={notification.id} style={{ pointerEvents: 'auto' }}>
@@ -2846,594 +3509,694 @@ export default function TeamChatPage() {
               onOpenChat={openChatFromNotification}
               isDark={isDark}
             />
-          </div>
-        ))}
-      </div>
-
-      {/* Left Sidebar */}
-      <div style={{ 
-        width: '380px', 
-        background: isDark ? '#1a1a1a' : '#ffffff',
-        borderRight: `1px solid ${isDark ? '#2a2a2a' : '#e9ecef'}`, 
-        display: 'flex', 
-        flexDirection: 'column',
-        boxShadow: isDark ? '2px 0 8px rgba(0,0,0,0.3)' : '2px 0 8px rgba(0,0,0,0.1)'
-      }}>
-        {/* User Profile */}
-        <UserProfileCard 
-          user={CURRENT_USER || {
-            id: 'unknown',
-            name: 'Unknown User',
-            email: 'unknown@example.com',
-            avatar: '',
-            status: 'offline' as const,
-            lastSeen: new Date().toISOString()
-          }}
-          isDark={isDark}
-          notificationCount={messageNotifications.filter(n => !n.isRead).length}
-        />
-
-        {/* Search */}
-        <div style={{ padding: '16px 20px' }}>
-          <div style={{
-            position: 'relative',
-            display: 'flex',
-            alignItems: 'center'
-          }}>
-                <input
-                type="search"
-              placeholder="Search conversations..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              style={{ 
-                width: '100%', 
-                padding: '12px 16px 12px 44px', 
-                borderRadius: '12px', 
-                border: 'none', 
-                background: isDark ? '#2a2a2a' : '#f8f9fa', 
-                color: isDark ? '#ffffff' : '#1a1a1a',
-                outline: 'none',
-                fontSize: '15px',
-                boxShadow: isDark ? 'inset 0 1px 3px rgba(0,0,0,0.3)' : 'inset 0 1px 3px rgba(0,0,0,0.1)',
-                transition: 'all 0.2s ease'
-              }}
-            />
-            <div style={{
-              position: 'absolute',
-              left: '16px',
-              color: isDark ? '#adb5bd' : '#6c757d',
-              fontSize: '16px'
-            }}>
-              🔍
-              </div>
-          </div>
-        </div>
-
-        {/* Tabs */}
-        <div style={{ 
-          display: 'flex', 
-          padding: '0 20px 16px 20px',
-          gap: '8px'
-        }}>
-          {[
-            { id: 'chats', label: 'Chats' },
-            { id: 'groups', label: 'Groups' },
-            { id: 'archived', label: 'Archived' }
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
-              style={{
-                background: activeTab === tab.id ? '#228B22' : 'transparent',
-                border: activeTab === tab.id ? '1px solid #228B22' : '1px solid #228B22',
-                padding: '8px 16px',
-                fontSize: '13px',
-                fontWeight: '500',
-                color: activeTab === tab.id ? '#ffffff' : '#228B22',
-                cursor: 'pointer',
-                borderRadius: '20px',
-                transition: 'all 0.2s ease',
-                minWidth: '70px'
-              }}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Action Buttons */}
-        {activeTab !== 'archived' && (
-          <div style={{ padding: '0 20px 16px 20px', display: 'flex', gap: '8px' }}>
-            <button
-              onClick={handleNewChatClick}
-              style={{
-                flex: 1,
-                background: '#228B22',
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: '8px',
-                padding: '10px 16px',
-                fontSize: '14px',
-                fontWeight: '600',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease'
-              }}
-            >
-              + New Chat
-            </button>
-            <button
-              onClick={handleCreateGroupClick}
-              style={{
-                flex: 1,
-                background: showCreateGroup ? '#228B22' : (isDark ? '#2a2a2a' : '#f8f9fa'),
-                color: showCreateGroup ? '#ffffff' : (isDark ? '#ffffff' : '#1a1a1a'),
-                border: `1px solid ${showCreateGroup ? '#228B22' : (isDark ? '#404040' : '#dee2e6')}`,
-                borderRadius: '8px',
-                padding: '10px 16px',
-                fontSize: '14px',
-                fontWeight: '600',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease'
-              }}
-            >
-              Create Group
-            </button>
-          </div>
-        )}
-
-        {/* Create Group Form */}
-        {showCreateGroup && (
-          <div style={{ padding: '0 20px 16px 20px' }}>
-            <input
-              type="text"
-              placeholder="Group name..."
-              value={groupName}
-              onChange={(e) => setGroupName(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '12px 16px',
-                borderRadius: '8px',
-                border: `1px solid ${isDark ? '#404040' : '#dee2e6'}`,
-                background: isDark ? '#2a2a2a' : '#f8f9fa',
-                color: isDark ? '#ffffff' : '#1a1a1a',
-                outline: 'none',
-                fontSize: '14px',
-                marginBottom: '12px',
-                boxSizing: 'border-box'
-              }}
-            />
-
-            {/* Search field for users */}
-            <input
-              type="text"
-              placeholder="Search users..."
-              value={groupUserSearch}
-              onChange={(e) => setGroupUserSearch(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '12px 16px',
-                borderRadius: '8px',
-                border: `1px solid ${isDark ? '#404040' : '#dee2e6'}`,
-                background: isDark ? '#2a2a2a' : '#f8f9fa',
-                color: isDark ? '#ffffff' : '#1a1a1a',
-                outline: 'none',
-                fontSize: '14px',
-                marginBottom: '12px',
-                boxSizing: 'border-box'
-              }}
-            />
-
-            {/* Quick suggestions */}
-            {groupUserSearch.trim() === '' && (
-              <div style={{ marginBottom: '12px' }}>
-                <div style={{
-                  fontSize: '12px',
-                  fontWeight: '600',
-                  color: isDark ? '#adb5bd' : '#6c757d',
-                  marginBottom: '8px',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px'
-                }}>
-                  Quick Add (Recent/Frequent)
-                </div>
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  {getSuggestedUsers().map(user => (
-                    <button
-                      key={user.id}
-                      onClick={() => {
-                        if (!selectedUsers.some(u => u.id === user.id)) {
-                          setSelectedUsers(prev => [...prev, user]);
-                        }
-                      }}
-                      disabled={selectedUsers.some(u => u.id === user.id)}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        padding: '6px 10px',
-                        borderRadius: '16px',
-                        border: 'none',
-                        background: selectedUsers.some(u => u.id === user.id) 
-                          ? isDark ? '#404040' : '#e9ecef'
-                          : '#228B22',
-                        color: selectedUsers.some(u => u.id === user.id)
-                          ? isDark ? '#888' : '#6c757d'
-                          : 'white',
-                        fontSize: '12px',
-                        fontWeight: '500',
-                        cursor: selectedUsers.some(u => u.id === user.id) ? 'not-allowed' : 'pointer',
-                        opacity: selectedUsers.some(u => u.id === user.id) ? 0.5 : 1,
-                        transition: 'all 0.2s ease'
-                      }}
-                    >
-                      <div style={{
-                        width: '20px',
-                        height: '20px',
-                        borderRadius: '50%',
-                        background: isDark ? 'linear-gradient(135deg, #4a4a4a, #2a2a2a)' : 'linear-gradient(135deg, #e9ecef, #dee2e6)',
-                        color: isDark ? '#fff' : '#495057',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '10px',
-                        fontWeight: '600'
-                      }}>
-                        {user.avatar}
-                      </div>
-                      {user.name}
-                      {selectedUsers.some(u => u.id === user.id) && ' ✓'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-            
-            {/* User Selection */}
-            <div style={{
-              maxHeight: '200px',
-              overflowY: 'auto',
-              border: `1px solid ${isDark ? '#404040' : '#dee2e6'}`,
-              borderRadius: '8px',
-              background: isDark ? '#2a2a2a' : '#f8f9fa',
-              marginBottom: '12px'
-            }}>
-              <div style={{
-                padding: '8px 12px',
-                borderBottom: `1px solid ${isDark ? '#404040' : '#dee2e6'}`,
-                fontSize: '12px',
-                fontWeight: '600',
-                color: isDark ? '#adb5bd' : '#6c757d',
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px'
-              }}>
-                Select Members ({selectedUsers.length} selected)
-              </div>
-              {filteredGroupUsers.map(user => (
-                <div
-                  key={user.id}
-                  onClick={() => {
-                    setSelectedUsers(prev => {
-                      const isSelected = prev.some(u => u.id === user.id);
-                      if (isSelected) {
-                        return prev.filter(u => u.id !== user.id);
-                      } else {
-                        return [...prev, user];
-                      }
-                    });
-                  }}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    padding: '8px 12px',
-                    cursor: 'pointer',
-                    borderBottom: `1px solid ${isDark ? '#333' : '#f0f0f0'}`,
-                    transition: 'background 0.2s ease'
-                  }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.background = isDark ? '#333' : '#f0f0f0';
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.background = 'transparent';
-                  }}
-                >
-                  <div style={{
-                    width: '16px',
-                    height: '16px',
-                    borderRadius: '3px',
-                    border: `2px solid ${selectedUsers.some(u => u.id === user.id) ? '#228B22' : (isDark ? '#666' : '#ccc')}`,
-                    background: selectedUsers.some(u => u.id === user.id) ? '#228B22' : 'transparent',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    marginRight: '12px',
-                    flexShrink: 0
-                  }}>
-                    {selectedUsers.some(u => u.id === user.id) && (
-                      <span style={{ color: 'white', fontSize: '10px', fontWeight: 'bold' }}>✓</span>
-                    )}
-                  </div>
-                  <div style={{
-                    width: '32px',
-                    height: '32px',
-                    borderRadius: '50%',
-                    background: isDark ? 'linear-gradient(135deg, #4a4a4a, #2a2a2a)' : 'linear-gradient(135deg, #e9ecef, #dee2e6)',
-                    color: isDark ? '#fff' : '#495057',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '12px',
-                    fontWeight: '600',
-                    marginRight: '12px',
-                    flexShrink: 0
-                  }}>
-                    {user.avatar}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{
-                      fontSize: '14px',
-                      fontWeight: '500',
-                      color: isDark ? '#ffffff' : '#1a1a1a',
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis'
-                    }}>
-                      {user.name}
-                    </div>
-                    <div style={{
-                      fontSize: '12px',
-                      color: isDark ? '#adb5bd' : '#6c757d'
-                    }}>
-                      {user.email}
-                    </div>
-                  </div>
-                  <StatusIndicator status={user.status} />
                 </div>
               ))}
-              {filteredGroupUsers.length === 0 && (
-                <div style={{
-                  padding: '20px',
-                  textAlign: 'center',
-                  color: isDark ? '#6c757d' : '#adb5bd',
-                  fontSize: '14px'
-                }}>
-                  {groupUserSearch.trim() ? 'No users found' : 'No users available'}
-                </div>
-              )}
             </div>
 
-            {/* Selected Users Preview */}
-            {selectedUsers.length > 0 && (
-              <div style={{
-                marginBottom: '12px',
-                padding: '8px',
-                background: isDark ? '#1a1a1a' : '#f8f9fa',
-                borderRadius: '6px',
-                border: `1px solid ${isDark ? '#333' : '#e0e0e0'}`
-              }}>
-                <div style={{
-                  fontSize: '12px',
-                  fontWeight: '600',
-                  color: isDark ? '#adb5bd' : '#6c757d',
-                  marginBottom: '6px'
-                }}>
-                  Selected Members:
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                  {selectedUsers.map(user => (
-                    <span
-                      key={user.id}
-                      style={{
-                        background: '#228B22',
-                        color: 'white',
-                        padding: '2px 8px',
-                        borderRadius: '12px',
-                        fontSize: '11px',
-                        fontWeight: '500',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '4px'
-                      }}
-                    >
-                      {user.name}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedUsers(prev => prev.filter(u => u.id !== user.id));
-                        }}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          color: 'white',
-                          cursor: 'pointer',
-                          fontSize: '12px',
-                          fontWeight: 'bold',
-                          padding: '0',
-                          margin: '0',
-                          lineHeight: '1',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}
-                      >
-                        ×
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button
-                onClick={handleCreateGroup}
-                disabled={!groupName.trim() || selectedUsers.length === 0}
-                style={{
-                  width: '50%',
-                  background: (groupName.trim() && selectedUsers.length > 0) ? '#228B22' : (isDark ? '#404040' : '#dee2e6'),
-                  color: (groupName.trim() && selectedUsers.length > 0) ? '#ffffff' : (isDark ? '#888' : '#6c757d'),
-                  border: 'none',
-                  borderRadius: '6px',
-                  padding: '10px 12px',
-                  fontSize: '13px',
-                  fontWeight: '600',
-                  cursor: (groupName.trim() && selectedUsers.length > 0) ? 'pointer' : 'not-allowed',
-                  transition: 'all 0.2s ease'
-                }}
-              >
-                Create Group
-              </button>
-              <button
-                onClick={() => {
-                  setShowCreateGroup(false);
-                  setGroupName('');
-                  setSelectedUsers([]);
-                  setGroupUserSearch('');
-                }}
-                style={{
-                  width: '50%',
-                  background: 'transparent',
-                  color: isDark ? '#adb5bd' : '#6c757d',
-                  border: `1px solid ${isDark ? '#404040' : '#dee2e6'}`,
-                  borderRadius: '6px',
-                  padding: '10px 12px',
-                  fontSize: '13px',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease'
-                }}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Chat List */}
-        <div style={{ flex: 1, overflowY: 'auto' }}>
-          {searchQuery.trim() !== '' ? (
-            <>
-              {/* User Search Results */}
-              {searchResults.length > 0 && (
-                <>
-                  <div style={{
-                    padding: '12px 20px',
-                    fontSize: '13px',
-                    fontWeight: '600',
-                    color: isDark ? '#adb5bd' : '#6c757d',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px'
-                  }}>
-                    Users
-                  </div>
-                  {searchResults.map(user => 
-                    <SearchResultItem 
-                      key={user.id} 
-                      user={user} 
-                      onClick={() => handleStartNewChat(user)} 
-                      isDark={isDark} 
-                    />
-                  )}
-                </>
-              )}
-              
-              {/* Team Search Results */}
-              {teamSearchResults.length > 0 && (
-                <>
-                  <div style={{
-                    padding: '12px 20px',
-                    fontSize: '13px',
-                    fontWeight: '600',
-                    color: isDark ? '#adb5bd' : '#6c757d',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px'
-                  }}>
-                    Teams
-                  </div>
-                  {teamSearchResults.map(team => 
-                    <TeamSearchResultItem 
-                      key={team.id} 
-                      team={team} 
-                      onClick={() => handleStartTeamChat(team)} 
-                      isDark={isDark} 
-                    />
-                  )}
-                </>
-              )}
-              
-              {/* No Results */}
-              {searchResults.length === 0 && teamSearchResults.length === 0 && (
-                <div style={{
-                  textAlign: 'center',
-                  color: isDark ? '#6c757d' : '#adb5bd',
-                  padding: '40px 20px',
-                  fontSize: '14px'
-                }}>
-                  No users or teams found for "{searchQuery}"
-                </div>
-              )}
-            </>
-          ) : (
-            <>
-              <div style={{
-                padding: '12px 20px',
-                fontSize: '13px',
-                fontWeight: '600',
-                color: isDark ? '#adb5bd' : '#6c757d',
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px'
-              }}>
-                {activeTab === 'archived' ? 'Archived Chats' : `Recent ${activeTab}`}
-              </div>
-              {filteredChats.map(chat => 
-                <ChatListItem 
-                  key={chat.id} 
-                  chat={chat} 
-                  active={chat.id === activeChatId} 
-                  onClick={() => handleSelectChat(chat.id)} 
-                  isDark={isDark} 
-                />
-              )}
-              {filteredChats.length === 0 && (
-                <div style={{
-                  textAlign: 'center',
-                  color: isDark ? '#6c757d' : '#adb5bd',
-                  padding: '40px 20px',
-                  fontSize: '14px'
-                }}>
-                  {activeTab === 'archived' ? 'No archived chats' : `No ${activeTab} found`}
-                </div>
-              )}
-            </>
-            )}
-          </div>
-      </div>
-
-      {/* Main Chat Area */}
+      {/* Main Content with Glass Effect */}
       <div style={{ 
         flex: 1, 
         display: 'flex', 
-        flexDirection: 'column', 
-        background: isDark ? '#0f0f0f' : '#f8f9fa'
+        height: '100%',
+        background: colors.bg,
+        transition: 'background 0.2s, color 0.2s',
+        overflow: 'hidden'
       }}>
-        <ChatHeader 
-          chat={activeChat} 
-          isDark={isDark} 
+        
+        {/* Left Sidebar with Glass Effect */}
+        <div style={{ 
+          width: '320px', 
+          display: 'flex', 
+          flexDirection: 'column',
+          background: colors.chatBg,
+          backdropFilter: 'blur(20px)',
+          boxShadow: isDark 
+            ? '2px 0 8px rgba(0,0,0,0.2)' 
+            : '2px 0 8px rgba(0,0,0,0.08)',
+          flexShrink: 0,
+          borderRight: `1px solid ${isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}`
+        }}>
+          
+          {/* User Profile */}
+          <UserProfileCard 
+            user={CURRENT_USER || { 
+              id: '1', 
+              name: 'Admin User', 
+              avatar: 'AU', 
+              status: 'online' as UserStatus 
+            }} 
+            isDark={isDark} 
+            notificationCount={messageNotifications.length}
+          />
+
+          {/* Search Bar with Glass Effect */}
+          <div style={{ padding: '20px', borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}` }}>
+            <div style={{ position: 'relative' }}>
+                <input
+                  type="text"
+                placeholder="Search conversations..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '12px 16px 12px 44px',
+                  borderRadius: '12px',
+                  border: `1px solid ${colors.border}`,
+                  background: colors.inputBg,
+                  color: colors.text,
+                  outline: 'none',
+                  fontSize: '14px',
+                  backdropFilter: 'blur(20px)',
+                  boxSizing: 'border-box',
+                  transition: 'all 0.2s ease'
+                }}
+                onFocus={e => {
+                  e.currentTarget.style.borderColor = colors.accent;
+                  e.currentTarget.style.boxShadow = isDark 
+                    ? '0 0 0 3px rgba(255,255,255,0.1)' 
+                    : '0 0 0 3px rgba(0,0,0,0.1)';
+                }}
+                onBlur={e => {
+                  e.currentTarget.style.borderColor = colors.border;
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+              />
+              <div style={{
+                position: 'absolute',
+                left: '16px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                color: colors.textSecondary,
+                fontSize: '16px'
+              }}>
+                🔍
+              </div>
+            </div>
+          </div>
+
+          {/* Tabs with Glass Effect */}
+          <div style={{ 
+            display: 'flex', 
+            padding: '0 20px 16px 20px',
+            gap: '8px'
+          }}>
+            {[
+              { id: 'chats', label: 'Chats' },
+              { id: 'groups', label: 'Groups' },
+              { id: 'archived', label: 'Archived' }
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                style={{
+                  background: activeTab === tab.id ? colors.accent : 'transparent',
+                  border: `1px solid ${colors.accent}`,
+                  padding: '8px 16px',
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  color: activeTab === tab.id ? (isDark ? colors.bg : '#ffffff') : colors.accent,
+                  cursor: 'pointer',
+                  borderRadius: '20px',
+                  transition: 'all 0.2s ease',
+                  minWidth: '70px',
+                  backdropFilter: 'blur(10px)',
+                  boxShadow: activeTab === tab.id ? (isDark 
+                    ? '0 2px 8px rgba(255,255,255,0.2)' 
+                    : '0 2px 8px rgba(0,0,0,0.2)') : 'none'
+                }}
+                onMouseEnter={e => {
+                  if (activeTab !== tab.id) {
+                    e.currentTarget.style.backgroundColor = colors.hoverBg;
+                  }
+                }}
+                onMouseLeave={e => {
+                  if (activeTab !== tab.id) {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                  }
+                }}
+              >
+                {tab.label}
+              </button>
+            ))}
+      </div>
+      
+          {/* Remove the New Chat button section and keep only Create Group */}
+          {activeTab !== 'archived' && (
+            <div style={{ padding: '0 20px 16px 20px' }}>
+              <button
+                onClick={handleCreateGroupClick}
+                style={{
+                  width: '100%',
+                  background: showCreateGroup ? colors.accent : colors.inputBg,
+                  color: showCreateGroup ? (isDark ? colors.bg : '#ffffff') : colors.text,
+                  border: `1px solid ${showCreateGroup ? colors.accent : colors.border}`,
+                  borderRadius: '12px',
+                  padding: '12px 20px',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  backdropFilter: 'blur(20px)',
+                  boxShadow: showCreateGroup ? (isDark 
+                    ? '0 4px 16px rgba(255,255,255,0.2)' 
+                    : '0 4px 16px rgba(0,0,0,0.2)') : 'none'
+                }}
+                onMouseEnter={e => {
+                  if (!showCreateGroup) {
+                    e.currentTarget.style.backgroundColor = colors.hoverBg;
+                  }
+                }}
+                onMouseLeave={e => {
+                  if (!showCreateGroup) {
+                    e.currentTarget.style.backgroundColor = colors.inputBg;
+                  }
+                }}
+              >
+                + Create Group
+              </button>
+            </div>
+          )}
+
+          {/* Create Group Form with Glass Effect */}
+          {showCreateGroup && (
+            <div style={{ padding: '0 20px 16px 20px' }}>
+            <input
+              type="text"
+                placeholder="Group name..."
+                value={groupName}
+                onChange={(e) => setGroupName(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  borderRadius: '12px',
+                  border: `1px solid ${colors.border}`,
+                  background: colors.inputBg,
+                  color: colors.text,
+                  outline: 'none',
+                  fontSize: '14px',
+                  marginBottom: '12px',
+                  boxSizing: 'border-box',
+                  backdropFilter: 'blur(20px)',
+                  transition: 'all 0.2s ease'
+                }}
+                onFocus={e => {
+                  e.currentTarget.style.borderColor = colors.accent;
+                  e.currentTarget.style.boxShadow = isDark 
+                    ? '0 0 0 3px rgba(255,255,255,0.1)' 
+                    : '0 0 0 3px rgba(0,0,0,0.1)';
+                }}
+                onBlur={e => {
+                  e.currentTarget.style.borderColor = colors.border;
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+              />
+
+              {/* Search field for users */}
+              <input
+                type="text"
+                placeholder="Search users..."
+                value={groupUserSearch}
+                onChange={(e) => setGroupUserSearch(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  borderRadius: '12px',
+                  border: `1px solid ${colors.border}`,
+                  background: colors.inputBg,
+                  color: colors.text,
+                  outline: 'none',
+                  fontSize: '14px',
+                  marginBottom: '12px',
+                  boxSizing: 'border-box',
+                  backdropFilter: 'blur(20px)',
+                  transition: 'all 0.2s ease'
+                }}
+                onFocus={e => {
+                  e.currentTarget.style.borderColor = colors.accent;
+                  e.currentTarget.style.boxShadow = isDark 
+                    ? '0 0 0 3px rgba(255,255,255,0.1)' 
+                    : '0 0 0 3px rgba(0,0,0,0.1)';
+                }}
+                onBlur={e => {
+                  e.currentTarget.style.borderColor = colors.border;
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+              />
+
+              {/* Quick suggestions with Glass Effect */}
+              {groupUserSearch.trim() === '' && (
+                <div style={{ marginBottom: '12px' }}>
+                  <div style={{
+                    fontSize: '12px',
+                    fontWeight: '600',
+                    color: colors.textSecondary,
+                    marginBottom: '8px',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px'
+                  }}>
+                    Quick Add (Recent/Frequent)
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    {getSuggestedUsers().map(user => (
+              <button
+                        key={user.id}
+                        onClick={() => {
+                          if (!selectedUsers.some(u => u.id === user.id)) {
+                            setSelectedUsers(prev => [...prev, user]);
+                          }
+                        }}
+                        disabled={selectedUsers.some(u => u.id === user.id)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '6px 10px',
+                          borderRadius: '16px',
+                          border: 'none',
+                          background: selectedUsers.some(u => u.id === user.id) 
+                            ? colors.hoverBg
+                            : colors.accent,
+                          color: selectedUsers.some(u => u.id === user.id)
+                            ? colors.textSecondary
+                            : (isDark ? colors.bg : '#ffffff'),
+                          fontSize: '12px',
+                          fontWeight: '500',
+                          cursor: selectedUsers.some(u => u.id === user.id) ? 'not-allowed' : 'pointer',
+                          opacity: selectedUsers.some(u => u.id === user.id) ? 0.5 : 1,
+                          transition: 'all 0.2s ease',
+                          backdropFilter: 'blur(10px)'
+                        }}
+                      >
+                        <div style={{
+                          width: '20px',
+                          height: '20px',
+                          borderRadius: '50%',
+                          background: colors.avatarBg,
+                          color: colors.avatarText,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '10px',
+                          fontWeight: '600'
+                        }}>
+                          {user.avatar}
+                        </div>
+                        {user.name}
+                        {selectedUsers.some(u => u.id === user.id) && ' ✓'}
+              </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {/* User Selection with Glass Effect */}
+              <div style={{
+                maxHeight: '200px',
+                overflowY: 'auto',
+                border: `1px solid ${colors.border}`,
+                borderRadius: '12px',
+                background: colors.inputBg,
+                marginBottom: '12px',
+                backdropFilter: 'blur(20px)'
+              }}>
+                <div style={{
+                  padding: '8px 12px',
+                  borderBottom: `1px solid ${colors.border}`,
+                  fontSize: '12px',
+                  fontWeight: '600',
+                  color: colors.textSecondary,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px'
+                }}>
+                  Select Users ({selectedUsers.length} selected)
+                </div>
+                {filteredGroupUsers.map(user => (
+                  <div
+                    key={user.id}
+                    onClick={() => {
+                      setSelectedUsers(prev => {
+                        const isSelected = prev.some(u => u.id === user.id);
+                        if (isSelected) {
+                          return prev.filter(u => u.id !== user.id);
+                        } else {
+                          return [...prev, user];
+                        }
+                      });
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: '8px 12px',
+                      cursor: 'pointer',
+                      borderBottom: `1px solid ${isDark ? '#333' : '#f0f0f0'}`,
+                      transition: 'background 0.2s ease'
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.background = isDark ? '#333' : '#f0f0f0';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.background = 'transparent';
+                    }}
+                  >
+                    <div style={{
+                      width: '16px',
+                      height: '16px',
+                      borderRadius: '3px',
+                      border: `2px solid ${selectedUsers.some(u => u.id === user.id) ? colors.accent : (isDark ? '#666' : '#ccc')}`,
+                      background: selectedUsers.some(u => u.id === user.id) ? colors.accent : 'transparent',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      marginRight: '12px',
+                      flexShrink: 0
+                    }}>
+                      {selectedUsers.some(u => u.id === user.id) && (
+                        <span style={{ color: 'white', fontSize: '10px', fontWeight: 'bold' }}>✓</span>
+                      )}
+                    </div>
+                    <div style={{
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '50%',
+                      background: isDark ? 'linear-gradient(135deg, #4a4a4a, #2a2a2a)' : 'linear-gradient(135deg, #e9ecef, #dee2e6)',
+                      color: isDark ? '#fff' : '#495057',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '12px',
+                      fontWeight: '600',
+                      marginRight: '12px',
+                      flexShrink: 0
+                    }}>
+                      {user.avatar}
+                </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{
+                        fontSize: '14px',
+                        fontWeight: '500',
+                        color: isDark ? '#ffffff' : '#1a1a1a',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis'
+                      }}>
+                        {user.name}
+              </div>
+                      <div style={{
+                        fontSize: '12px',
+                        color: isDark ? '#adb5bd' : '#6c757d'
+                      }}>
+                        {user.email}
+                      </div>
+                    </div>
+                    <StatusIndicator status={user.status} />
+                  </div>
+                ))}
+                {filteredGroupUsers.length === 0 && (
+                  <div style={{
+                    padding: '20px',
+                    textAlign: 'center',
+                    color: isDark ? '#6c757d' : '#adb5bd',
+                    fontSize: '14px'
+                  }}>
+                    {groupUserSearch.trim() ? 'No users found' : 'No users available'}
+                  </div>
+          )}
+        </div>
+
+                {/* Selected Users Preview */}
+                {selectedUsers.length > 0 && (
+                  <div style={{
+                    marginBottom: '12px',
+                    padding: '8px',
+                    background: isDark ? '#1a1a1a' : '#f8f9fa',
+                    borderRadius: '6px',
+                    border: `1px solid ${isDark ? '#333' : '#e0e0e0'}`
+                  }}>
+                    <div style={{
+                      fontSize: '12px',
+                      fontWeight: '600',
+                      color: isDark ? '#adb5bd' : '#6c757d',
+                      marginBottom: '6px'
+                    }}>
+                      Selected Members:
+              </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                      {selectedUsers.map(user => (
+                        <span
+                          key={user.id}
+                          style={{
+                            background: colors.accent,
+                            color: '#ffffff',
+                            padding: '6px 12px',
+                            borderRadius: '20px',
+                            fontSize: '13px',
+                            fontWeight: '600',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            whiteSpace: 'nowrap',
+                            maxWidth: '160px',
+                            minWidth: 'fit-content',
+                            boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.1)'
+                          }}
+                        >
+                          <span style={{ 
+                            overflow: 'hidden', 
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            minWidth: '50px',
+                            fontSize: '13px',
+                            fontWeight: '600'
+                          }}>
+                            {user.name}
+                          </span>
+              <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedUsers(prev => prev.filter(u => u.id !== user.id));
+                            }}
+                            style={{
+                              background: 'rgba(255,255,255,0.2)',
+                              border: 'none',
+                              color: '#ffffff',
+                              cursor: 'pointer',
+                              fontSize: '16px',
+                              fontWeight: 'bold',
+                              padding: '0',
+                              margin: '0',
+                              lineHeight: '1',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexShrink: 0,
+                              width: '18px',
+                              height: '18px',
+                              borderRadius: '50%',
+                              transition: 'all 0.2s ease'
+                            }}
+                            onMouseEnter={e => {
+                              e.currentTarget.style.background = 'rgba(255,255,255,0.3)';
+                              e.currentTarget.style.transform = 'scale(1.1)';
+                            }}
+                            onMouseLeave={e => {
+                              e.currentTarget.style.background = 'rgba(255,255,255,0.2)';
+                              e.currentTarget.style.transform = 'scale(1)';
+                            }}
+                          >
+                            ×
+              </button>
+                        </span>
+                      ))}
+            </div>
+                        </div>
+                )}
+
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    onClick={handleCreateGroup}
+                    disabled={!groupName.trim() || selectedUsers.length === 0}
+                    style={{
+                      width: '50%',
+                      background: (groupName.trim() && selectedUsers.length > 0) ? colors.primary : (isDark ? '#404040' : '#dee2e6'),
+                      color: (groupName.trim() && selectedUsers.length > 0) ? (isDark ? '#000' : '#fff') : (isDark ? '#888' : '#6c757d'),
+                      border: 'none',
+                      borderRadius: '6px',
+                      padding: '10px 12px',
+                      fontSize: '13px',
+                      fontWeight: '600',
+                      cursor: (groupName.trim() && selectedUsers.length > 0) ? 'pointer' : 'not-allowed',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    Create Group
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowCreateGroup(false);
+                      setGroupName('');
+                      setSelectedUsers([]);
+                      setGroupUserSearch('');
+                    }}
+                    style={{
+                      width: '50%',
+                      background: 'transparent',
+                      color: isDark ? '#adb5bd' : '#6c757d',
+                      border: `1px solid ${isDark ? '#404040' : '#dee2e6'}`,
+                      borderRadius: '6px',
+                      padding: '10px 12px',
+                      fontSize: '13px',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    Cancel
+                  </button>
+          </div>
+        </div>
+      )}
+
+            {/* Chat List */}
+            <div style={{ flex: 1, overflowY: 'auto' }}>
+              {searchQuery.trim() !== '' ? (
+                <>
+                  {/* User Search Results */}
+                  {searchResults.length > 0 && (
+                    <>
+                      <div style={{
+                        padding: '12px 20px',
+                        fontSize: '13px',
+                        fontWeight: '600',
+                        color: isDark ? '#adb5bd' : '#6c757d',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.5px'
+                      }}>
+                        Users
+                </div>
+                      {searchResults.map(user => 
+                        <SearchResultItem 
+                          key={user.id} 
+                          user={user} 
+                          onClick={() => handleStartNewChat(user)} 
+                          isDark={isDark} 
+                        />
+                      )}
+                    </>
+                  )}
+                  
+                  {/* Team Search Results */}
+                  {teamSearchResults.length > 0 && (
+                    <>
+                      <div style={{
+                        padding: '12px 20px',
+                        fontSize: '13px',
+                        fontWeight: '600',
+                        color: isDark ? '#adb5bd' : '#6c757d',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.5px'
+                      }}>
+                        Teams
+                    </div>
+                      {teamSearchResults.map(team => 
+                        <TeamSearchResultItem 
+                          key={team.id} 
+                          team={team} 
+                          onClick={() => handleStartTeamChat(team)} 
+                          isDark={isDark} 
+                        />
+                      )}
+                    </>
+                  )}
+                  
+                  {/* No Results */}
+                  {searchResults.length === 0 && teamSearchResults.length === 0 && (
+                    <div style={{
+                      textAlign: 'center',
+                      color: isDark ? '#6c757d' : '#adb5bd',
+                      padding: '40px 20px',
+                      fontSize: '14px'
+                    }}>
+                      {searchQuery.trim() === '' ? (
+                        <div>
+                          <div style={{ fontSize: '48px', marginBottom: '16px' }}>👥</div>
+                          <div style={{ fontWeight: '600', marginBottom: '8px' }}>No team members found</div>
+                          <div style={{ fontSize: '13px', opacity: 0.8 }}>
+                            Add team members to your company to start chatting
+                  </div>
+                </div>
+                      ) : (
+                        `No users or teams found for "${searchQuery}"`
+                      )}
+                    </div>
+                  )}
+              </>
+            ) : (
+                <>
+                  <div style={{
+                    padding: '12px 20px',
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    color: isDark ? '#adb5bd' : '#6c757d',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px'
+                  }}>
+                    {activeTab === 'archived' ? 'Archived Chats' : `Recent ${activeTab}`}
+            </div>
+                  {filteredChats.map(chat => 
+                    <ChatListItem 
+                      key={chat.id} 
+                      chat={chat} 
+                      active={chat.id === activeChatId} 
+                      onClick={() => handleSelectChat(chat.id)} 
+                      isDark={isDark} 
+                    />
+                  )}
+                  {filteredChats.length === 0 && (
+                    <div style={{
+                      textAlign: 'center',
+                      color: isDark ? '#6c757d' : '#adb5bd',
+                      padding: '40px 20px',
+                      fontSize: '14px'
+                    }}>
+                      {activeTab === 'archived' ? 'No archived chats' : `No ${activeTab} found`}
+            </div>
+                  )}
+                </>
+                )}
+          </div>
+        </div>
+      </div>
+      
+      {/* Main Chat Area */}
+      <div style={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        background: isDark ? '#1a1a1a' : '#ffffff',
+        minWidth: 0,
+        position: 'relative',
+        margin: 0,
+        padding: 0
+      }}>
+        <ChatHeader
+          chat={activeChat}
+          isDark={isDark}
           onToggleRightPanel={() => setShowRightPanel(!showRightPanel)}
         />
-        
+
         {/* Messages Area */}
-        <div style={{ 
-          flex: 1, 
-          overflowY: 'auto', 
-          paddingTop: '16px',
-          paddingBottom: '16px',
-          display: 'flex', 
-          flexDirection: 'column'
+        <div style={{
+          flex: 1,
+          overflowY: 'auto',
+          padding: '8px 12px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '6px'
         }}>
             {activeChat ? (
                 activeChat.messages.map((message, index) => (
-              <MessageBubble 
-                key={message.id} 
+              <MessageBubble
+                key={message.id}
                 message={message}
                 sent={message.sender === CURRENT_USER?.name}
                 isDark={isDark}
@@ -3443,40 +4206,42 @@ export default function TeamChatPage() {
                 ))
             ) : (
             <div style={{
-              flex: 1, 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center', 
+              flex: 1,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
               flexDirection: 'column',
-              color: isDark ? '#6c757d' : '#adb5bd'
+              color: isDark ? '#6c757d' : '#adb5bd',
+              minHeight: '200px'
             }}>
-              <div style={{ fontSize: '64px', marginBottom: '24px' }}>💬</div>
-              <h3 style={{ 
-                fontSize: '20px', 
-                fontWeight: '600', 
-                margin: '0 0 8px 0',
+              <div style={{ fontSize: '48px', marginBottom: '16px', opacity: 0.6 }}>💬</div>
+              <h3 style={{
+                fontSize: '18px',
+                fontWeight: '600',
+                margin: '0 0 6px 0',
                 color: isDark ? '#adb5bd' : '#6c757d'
               }}>
                 No chat selected
               </h3>
-              <p style={{ 
-                fontSize: '16px', 
+              <p style={{
+                fontSize: '14px',
                 margin: 0,
-                color: isDark ? '#6c757d' : '#adb5bd'
+                color: isDark ? '#6c757d' : '#adb5bd',
+                opacity: 0.8
               }}>
                 Choose a conversation to start messaging
               </p>
             </div>
             )}
             <div ref={messagesEndRef} />
-        </div>
-        
+          </div>
+
         {/* Message Input */}
         {activeChat && (
-          <MessageInput 
-            onSendMessage={handleSendMessage} 
+          <MessageInput
+            onSendMessage={handleSendMessage}
             onFileUpload={handleFileUpload}
-            isDark={isDark} 
+            isDark={isDark}
             replyingTo={replyingTo || undefined}
             onCancelReply={handleCancelReply}
           />
@@ -3484,18 +4249,39 @@ export default function TeamChatPage() {
       </div>
 
       {/* Right Panel */}
-      <RightPanel 
-        chat={activeChat} 
-        isOpen={showRightPanel} 
+      <RightPanel
+        chat={activeChat}
+        isOpen={showRightPanel}
         isDark={isDark}
         onToggleMute={handleToggleMute}
         onTogglePin={handleTogglePin}
         onToggleArchive={handleToggleArchive}
         onRemoveUser={handleRemoveUserFromGroup}
         onShowConfirmation={setConfirmationModal}
+        onDeleteChat={deleteChat}
+        onUpdateChats={setChats}
+        onSetActiveChat={setActiveChatId}
+        onAddNotification={addNotification}
       />
 
       <ConfirmationModal modal={confirmationModal} isDark={isDark} />
+
+      {/* Right Panel Backdrop */}
+      {showRightPanel && (
+        <div 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.3)',
+            zIndex: 99,
+            backdropFilter: 'blur(2px)'
+          }}
+          onClick={() => setShowRightPanel(false)}
+        />
+      )}
     </div>
   );
 } 

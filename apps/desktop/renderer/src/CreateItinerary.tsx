@@ -1,5 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { getCurrentUser } from './lib/auth';
+import { useRealtimeEvents } from './hooks/useRealtime';
+import { 
+  getItineraries, 
+  addItinerary, 
+  updateItinerary, 
+  type Itinerary 
+} from './lib/supabase';
 // import styles from './CreateItinerary.module.css';
 
 // --- MODULE COMPONENTS ---
@@ -53,6 +61,12 @@ const ITINERARY_MODULES = [
 export default function CreateItinerary() {
   const { eventId, itineraryIndex } = useParams();
   const navigate = useNavigate();
+  
+  // Get current user for company context
+  const currentUser = getCurrentUser();
+  
+  // Use real-time events hook
+  const { events: realtimeEvents } = useRealtimeEvents(currentUser?.company_id || null);
 
   // State variables
   const [eventDetails, setEventDetails] = useState<any>(null);
@@ -65,40 +79,86 @@ export default function CreateItinerary() {
   const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
   const [isModuleSidebarCollapsed, setIsModuleSidebarCollapsed] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
-  const [originalItinerary, setOriginalItinerary] = useState<any>(null);
+  const [originalItinerary, setOriginalItinerary] = useState<Itinerary | null>(null);
   
   useEffect(() => {
-    try {
-        const events: EventType[] = JSON.parse(localStorage.getItem('timely_events') || '[]');
-        const currentEvent = events.find(e => e.id === eventId);
-        if (currentEvent) {
+    const loadEventAndItinerary = async () => {
+      try {
+        // Find current event from real-time events
+        if (realtimeEvents) {
+          const currentEvent = realtimeEvents.find(e => e.id === eventId);
+          if (currentEvent) {
             setEventDetails(currentEvent);
+          }
         }
 
         // Check if we're editing an existing itinerary
-        if (itineraryIndex !== undefined) {
+        if (itineraryIndex !== undefined && eventId) {
           setIsEditMode(true);
-          const existingItineraries = JSON.parse(localStorage.getItem(`event_itineraries_${eventId}`) || '[]');
-          const itineraryToEdit = existingItineraries[parseInt(itineraryIndex)];
+          
+          // Load itineraries from Supabase
+          const itineraries = await getItineraries(eventId, currentUser?.company_id);
+          const itineraryToEdit = itineraries[parseInt(itineraryIndex)];
           
           if (itineraryToEdit) {
             setOriginalItinerary(itineraryToEdit);
-            // Load existing items as drafts for editing
-            const existingDrafts = itineraryToEdit.items.map((item: ItineraryItem) => ({
-              ...item,
-              id: `edit_${Date.now()}_${Math.random()}` // Generate new IDs for editing
-            }));
-            setDrafts(existingDrafts);
-            // Expand the first draft by default
-            if (existingDrafts.length > 0) {
-              setExpandedDraftIndex(0);
+            
+            // Convert database fields back to draft format
+            const draftItem: ItineraryItem = {
+              id: `edit_${Date.now()}_${Math.random()}`,
+              title: itineraryToEdit.title,
+              arrivalTime: itineraryToEdit.arrival_time || '',
+              startTime: itineraryToEdit.start_time || '',
+              endTime: itineraryToEdit.end_time || '',
+              location: itineraryToEdit.location || '',
+              details: itineraryToEdit.description || '',
+              modules: {},
+              moduleValues: {}
+            };
+
+            // Reconstruct modules from database fields
+            if (itineraryToEdit.document_file_name) {
+              draftItem.modules.document = true;
+              draftItem.moduleValues.document = itineraryToEdit.document_file_name;
             }
+
+            if (itineraryToEdit.qrcode_url || itineraryToEdit.qrcode_image) {
+              draftItem.modules.qrcode = true;
+              draftItem.moduleValues.qrcode = {
+                url: itineraryToEdit.qrcode_url || '',
+                image: itineraryToEdit.qrcode_image || ''
+              };
+            }
+
+            if (itineraryToEdit.contact_name || itineraryToEdit.contact_phone || itineraryToEdit.contact_email) {
+              draftItem.modules.contact = true;
+              draftItem.moduleValues.contact = {
+                name: itineraryToEdit.contact_name || '',
+                countryCode: itineraryToEdit.contact_country_code || '',
+                phone: itineraryToEdit.contact_phone || '',
+                email: itineraryToEdit.contact_email || ''
+              };
+            }
+
+            if (itineraryToEdit.notification_times && itineraryToEdit.notification_times.length > 0) {
+              draftItem.modules.notifications = true;
+              draftItem.moduleValues.notifications = itineraryToEdit.notification_times;
+            }
+
+            setDrafts([draftItem]);
+            
+            // Expand the first draft by default
+            setExpandedDraftIndex(0);
           }
         }
-    } catch (e) {
-        console.error("Failed to load event details", e);
-    }
-  }, [eventId, itineraryIndex]);
+      } catch (error) {
+        console.error("Failed to load event details or itinerary:", error);
+        alert('Failed to load event data. Please check your connection and try again.');
+      }
+    };
+
+    loadEventAndItinerary();
+  }, [eventId, itineraryIndex, realtimeEvents]);
 
   const formatDateRange = (from: string, to: string) => {
       if (!from || !to) return '';
@@ -186,47 +246,119 @@ export default function CreateItinerary() {
     ));
   };
 
-  const handleSaveItinerary = () => {
-    if (items.length === 0) {
+  const handleSaveItinerary = async () => {
+    // Check if we have any drafts or items to save
+    const allItemsToSave = [...drafts, ...items];
+    
+    if (allItemsToSave.length === 0) {
       alert('Please add at least one itinerary item before saving.');
       return;
     }
 
+    if (!eventId || !currentUser) {
+      alert('Missing event or user information.');
+      return;
+    }
+
     try {
-      // Load existing itineraries
-      const existingItineraries = JSON.parse(localStorage.getItem(`event_itineraries_${eventId}`) || '[]');
+      // Validate that all items have required fields
+      const invalidItems = allItemsToSave.filter(item => 
+        !item.title.trim() || !item.startTime.trim() || !item.endTime.trim()
+      );
       
-      if (isEditMode && itineraryIndex !== undefined) {
-        // Update existing itinerary
-        const updatedItinerary = {
-          ...originalItinerary,
-          items: items,
-          updatedAt: new Date().toISOString()
+      if (invalidItems.length > 0) {
+        alert('Please fill in Title, Start Time, and End Time for all items before saving.');
+        return;
+      }
+
+      // If we're in edit mode, update the existing itinerary
+      if (isEditMode && originalItinerary?.id) {
+        const firstItem = allItemsToSave[0];
+        
+        // Extract module values
+        const documentModule = firstItem.modules?.document ? firstItem.moduleValues?.document : null;
+        const qrcodeModule = firstItem.modules?.qrcode ? firstItem.moduleValues?.qrcode : null;
+        const contactModule = firstItem.modules?.contact ? firstItem.moduleValues?.contact : null;
+        const notificationsModule = firstItem.modules?.notifications ? firstItem.moduleValues?.notifications : null;
+
+        const itineraryData = {
+          title: firstItem.title,
+          description: firstItem.details || '',
+          arrival_time: firstItem.arrivalTime || null,
+          start_time: firstItem.startTime,
+          end_time: firstItem.endTime,
+          location: firstItem.location || null,
+          is_draft: false,
+          // Document Upload Module
+          document_file_name: documentModule || null,
+          // QR Code Module
+          qrcode_url: qrcodeModule?.url || null,
+          qrcode_image: qrcodeModule?.image || null,
+          // Host Contact Details Module
+          contact_name: contactModule?.name || null,
+          contact_country_code: contactModule?.countryCode || null,
+          contact_phone: contactModule?.phone || null,
+          contact_email: contactModule?.email || null,
+          // Notifications Timer Module
+          notification_times: notificationsModule || [],
+          // Legacy content field for backward compatibility
+          content: {
+            items: allItemsToSave
+          }
         };
-        
-        existingItineraries[parseInt(itineraryIndex)] = updatedItinerary;
-        localStorage.setItem(`event_itineraries_${eventId}`, JSON.stringify(existingItineraries));
-        
-        // Navigate back to EventDashboard itinerary tab
+
+        const updatedItinerary = await updateItinerary(originalItinerary.id, itineraryData);
+        console.log('Itinerary updated successfully:', updatedItinerary);
         navigate(`/event/${eventId}?tab=itineraries`);
       } else {
-        // Create new itinerary
-        const itinerary = {
-          title: eventDetails?.name ? `${eventDetails.name} Itinerary` : 'New Itinerary',
-          items: items,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        };
+        // Create new itineraries (one for each item)
+        const createdItineraries = [];
         
-        // Add new itinerary
-        const updatedItineraries = [...existingItineraries, itinerary];
-        localStorage.setItem(`event_itineraries_${eventId}`, JSON.stringify(updatedItineraries));
+        for (const item of allItemsToSave) {
+          // Extract module values for each item
+          const documentModule = item.modules?.document ? item.moduleValues?.document : null;
+          const qrcodeModule = item.modules?.qrcode ? item.moduleValues?.qrcode : null;
+          const contactModule = item.modules?.contact ? item.moduleValues?.contact : null;
+          const notificationsModule = item.modules?.notifications ? item.moduleValues?.notifications : null;
+
+          const itineraryData = {
+            event_id: eventId,
+            company_id: currentUser.company_id,
+            created_by: currentUser.id,
+            title: item.title,
+            description: item.details || '',
+            arrival_time: item.arrivalTime || null,
+            start_time: item.startTime,
+            end_time: item.endTime,
+            location: item.location || null,
+            is_draft: false,
+            // Document Upload Module
+            document_file_name: documentModule || null,
+            // QR Code Module
+            qrcode_url: qrcodeModule?.url || null,
+            qrcode_image: qrcodeModule?.image || null,
+            // Host Contact Details Module
+            contact_name: contactModule?.name || null,
+            contact_country_code: contactModule?.countryCode || null,
+            contact_phone: contactModule?.phone || null,
+            contact_email: contactModule?.email || null,
+            // Notifications Timer Module
+            notification_times: notificationsModule || [],
+            // Legacy content field for backward compatibility
+            content: {
+              originalItem: item
+            }
+          };
+
+          const newItinerary = await addItinerary(itineraryData);
+          createdItineraries.push(newItinerary);
+        }
         
-        // Navigate to EventDashboard itinerary tab
+        console.log(`${createdItineraries.length} itinerary items created successfully:`, createdItineraries);
         navigate(`/event/${eventId}?tab=itineraries`);
       }
     } catch (error) {
-      console.error('Error saving itinerary:', error);
+      console.error('Error saving itinerary to Supabase:', error);
       alert('Failed to save itinerary. Please try again.');
     }
   };
@@ -370,7 +502,7 @@ export default function CreateItinerary() {
         <hr style={{ margin: '12px 0 8px 0', border: 'none', borderTop: '2px solid #bbb' }} />
         <div style={{ fontSize: 26, fontWeight: 500, marginBottom: 24, marginTop: 0, textAlign: 'left' }}>
           {isEditMode ? 'Edit Itinerary' : 'Create Itinerary'}
-        </div>
+      </div>
 
         {/* Action Buttons */}
         <div style={{ maxWidth: 1100, marginLeft: 'auto', marginRight: 'auto', marginBottom: 24 }}>
@@ -407,7 +539,7 @@ export default function CreateItinerary() {
             >
               Upload CSV
             </button>
-          </div>
+      </div>
         </div>
 
         {/* Draft Items */}
@@ -716,11 +848,11 @@ export default function CreateItinerary() {
                                   fontWeight: 500
                                 }}>
                                   Selected: {draft.moduleValues[moduleKey]}
-                                </div>
-                              )}
+        </div>
+      )}
                             </div>
-                          </div>
-                        )}
+        </div>
+      )}
                         
                         {/* QR Code Module */}
                         {module.type === 'qrcode' && (
@@ -1108,9 +1240,9 @@ export default function CreateItinerary() {
                               )}
                             </div>
                           </div>
-                        )}
-                      </div>
-                    );
+      )}
+    </div>
+  );
                   })}
 
                   {/* Action Buttons */}
@@ -1579,7 +1711,7 @@ export default function CreateItinerary() {
           </button>
           <button
             style={{ 
-              background: items.length > 0 ? '#222' : '#ccc', 
+              background: (drafts.length + items.length) > 0 ? '#222' : '#ccc', 
               color: '#fff', 
               fontWeight: 500, 
               fontSize: 18, 
@@ -1587,13 +1719,13 @@ export default function CreateItinerary() {
               borderRadius: 8, 
               padding: '11px 37px',
               minWidth: '155px',
-              opacity: items.length > 0 ? 1 : 0.5,
-              cursor: items.length > 0 ? 'pointer' : 'not-allowed'
+              opacity: (drafts.length + items.length) > 0 ? 1 : 0.5,
+              cursor: (drafts.length + items.length) > 0 ? 'pointer' : 'not-allowed'
             }}
             onClick={handleSaveItinerary}
-            disabled={items.length === 0}
+            disabled={(drafts.length + items.length) === 0}
           >
-            {isEditMode ? 'Update Itinerary' : 'Publish Itinerary'}
+            {isEditMode ? 'Update Itinerary' : `Publish ${drafts.length + items.length} Item${(drafts.length + items.length) !== 1 ? 's' : ''}`}
           </button>
         </div>
       </div>
@@ -1610,7 +1742,7 @@ const ModuleSidebar = ({ isCollapsed, onToggle }: { isCollapsed: boolean, onTogg
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>, moduleKey: string) => {
     e.dataTransfer.setData('text/plain', moduleKey);
   };
-  
+
   return (
       <div style={{ 
         width: isCollapsed ? 32 : 280, 
@@ -1662,12 +1794,12 @@ const ModuleSidebar = ({ isCollapsed, onToggle }: { isCollapsed: boolean, onTogg
                 >
                   <div style={{ color: '#222', fontWeight: 500 }}>
                     {module.label}
-                  </div>
-                </div>
+      </div>
+          </div>
               ))}
-            </div>
+        </div>
           </>
         )}
-      </div>
+    </div>
   );
 }; 

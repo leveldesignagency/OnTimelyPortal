@@ -2,22 +2,64 @@ import React, { useState, useEffect } from 'react';
 import { ModuleGrid } from '../modules/ModuleGrid';
 import { ActiveModules } from '../modules/ActiveModules';
 import { ModuleType } from '../modules/types';
+import { getCurrentUser } from '../lib/auth';
+import { getEventModules, saveEventModules } from '../lib/supabase';
 
 export const ModulesPage: React.FC = () => {
   const [activeModules, setActiveModules] = useState<ModuleType[]>([]);
+  
+  // Get current user for company context
+  const currentUser = getCurrentUser();
 
-  // Load active modules from localStorage on mount
+  // Load active modules from Supabase on mount
   useEffect(() => {
-    const savedModules = localStorage.getItem('activeModules');
-    if (savedModules) {
-      setActiveModules(JSON.parse(savedModules));
-    }
-  }, []);
+    const loadModules = async () => {
+      if (!currentUser) return;
+      
+      try {
+        const modules = await getEventModules(currentUser.company_id);
+        if (modules && modules.modules) {
+          setActiveModules(modules.modules);
+        }
+      } catch (error) {
+        console.error('Failed to load modules from Supabase:', error);
+        // Fallback to localStorage
+        try {
+          const savedModules = localStorage.getItem('activeModules');
+          if (savedModules) {
+            setActiveModules(JSON.parse(savedModules));
+          }
+        } catch (fallbackError) {
+          console.error('Fallback to localStorage also failed:', fallbackError);
+        }
+      }
+    };
 
-  // Save active modules to localStorage whenever they change
+    loadModules();
+  }, [currentUser]);
+
+  // Save active modules to Supabase whenever they change
   useEffect(() => {
-    localStorage.setItem('activeModules', JSON.stringify(activeModules));
-  }, [activeModules]);
+    const saveModules = async () => {
+      if (!currentUser || activeModules.length === 0) return;
+      
+      try {
+        await saveEventModules(currentUser.company_id, activeModules, currentUser.id);
+        console.log('Modules saved to Supabase');
+      } catch (error) {
+        console.error('Failed to save modules to Supabase:', error);
+        // Fallback to localStorage
+        try {
+          localStorage.setItem('activeModules', JSON.stringify(activeModules));
+          console.log('Modules saved to localStorage as fallback');
+        } catch (fallbackError) {
+          console.error('Fallback save to localStorage also failed:', fallbackError);
+        }
+      }
+    };
+
+    saveModules();
+  }, [activeModules, currentUser]);
 
   const handleAddModule = (module: ModuleType) => {
     if (!activeModules.some(m => m.id === module.id)) {

@@ -775,4 +775,4 @@ export default function CalendarPage() {
       {isModalOpen && modalDate && <AddEventModal date={modalDate} onClose={() => setIsModalOpen(false)} onAddEvent={handleAddEvent} theme={theme as ThemeName} />}
     </div>
   );
-} 
+}

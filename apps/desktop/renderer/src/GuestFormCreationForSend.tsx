@@ -3,6 +3,8 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import Tesseract from 'tesseract.js';
 import countryList from 'country-list';
 import { codes as countryCallingCodes } from 'country-calling-code';
+import { getCurrentUser } from './lib/auth';
+import { addMultipleGuests, deleteGuest, deleteGuestsByGroupId } from './lib/supabase';
 
 const AVIATIONSTACK_API_KEY = 'bb7fd8369e323c356434d5b1ac77b437'; // 🚨 PASTE YOUR NEW AVIATIONSTACK API KEY HERE 🚨
 
@@ -60,14 +62,14 @@ interface Guest {
   nextOfKinPhone: string;
   // Additional Info
   dietary: string[];
-  disabilities: string[];
+  medical: string[];
   // Modules
   modules: Record<string, boolean[]>;
   moduleValues: Record<string, any[]>;
   moduleFlightData?: Record<string, (FlightModuleState | null)[]>;
   // UI State for Drafts
   dietaryInput?: string;
-  disabilitiesInput?: string;
+  medicalInput?: string;
   errors?: Record<string, string>;
   // Grouping
   groupId?: string | null;
@@ -320,9 +322,9 @@ export default function GuestFormCreationForSend() {
       prefix: '',
       gender: '',
       dietary: [],
-      disabilities: [],
+      medical: [],
       dietaryInput: '',
-      disabilitiesInput: '',
+      medicalInput: '',
     };
     const newDrafts = [newDraft, ...drafts];
     setDrafts(newDrafts);
@@ -464,7 +466,7 @@ export default function GuestFormCreationForSend() {
                 case 'Next of Kin Country Code': entry.nextOfKinPhoneCountry = value; break;
                 case 'Next of Kin Number': entry.nextOfKinPhone = value; break;
                 case 'Dietary': entry.dietary = value ? value.split(';').map(d => d.trim()) : []; break;
-                case 'Disabilities': entry.disabilities = value ? value.split(';').map(d => d.trim()) : []; break;
+                case 'Medical': entry.medical = value ? value.split(';').map(d => d.trim()) : []; break;
               }
             });
             if (!entry.firstName || !entry.lastName) {
@@ -511,13 +513,13 @@ export default function GuestFormCreationForSend() {
         nextOfKinPhoneCountry: guest.nextOfKinPhoneCountry || '+44',
         nextOfKinPhone: guest.nextOfKinPhone || '',
         dietary: guest.dietary || [],
-        disabilities: guest.disabilities || [],
+        medical: guest.medical || [],
         modules: {},
         moduleValues: {},
         moduleFlightData: {},
         errors: {},
         dietaryInput: '',
-        disabilitiesInput: '',
+        medicalInput: '',
       }));
       setDrafts(prevDrafts => [...prevDrafts, ...newDrafts].filter(d => d.firstName)); // Add new and filter out empty ones
       setIsCsvModalOpen(false);
@@ -630,15 +632,36 @@ export default function GuestFormCreationForSend() {
     );
   }
 
-  function handleRemoveGuest(idx: number) {
+  async function handleRemoveGuest(idx: number) {
     const guestToRemove = guests[idx];
 
     if (editGuestIdx !== null && !isGroup) {
         if (!eventId) return;
+        
+        // Get the guest from localStorage to get their ID
         const allGuests = JSON.parse(localStorage.getItem(`event_guests_${eventId}`) || '[]');
-        allGuests.splice(editGuestIdx, 1);
-        localStorage.setItem(`event_guests_${eventId}`, JSON.stringify(allGuests));
-        navigate(`/event/${eventId}?tab=guests`);
+        const guestToDelete = allGuests[editGuestIdx];
+        
+        if (guestToDelete && guestToDelete.id) {
+          try {
+            // Delete from Supabase
+            await deleteGuest(guestToDelete.id);
+            console.log('Guest deleted from Supabase successfully');
+            
+            // Remove from localStorage
+            allGuests.splice(editGuestIdx, 1);
+            localStorage.setItem(`event_guests_${eventId}`, JSON.stringify(allGuests));
+            navigate(`/event/${eventId}?tab=guests`);
+          } catch (error) {
+            console.error('Error deleting guest from Supabase:', error);
+            alert('Failed to delete guest. Please try again.');
+          }
+        } else {
+          // Fallback: just remove from localStorage if no ID
+          allGuests.splice(editGuestIdx, 1);
+          localStorage.setItem(`event_guests_${eventId}`, JSON.stringify(allGuests));
+          navigate(`/event/${eventId}?tab=guests`);
+        }
         return;
     }
     
@@ -651,7 +674,6 @@ export default function GuestFormCreationForSend() {
         return;
     }
 
-    const allGuestsFromStorage = JSON.parse(localStorage.getItem(`event_guests_${eventId}`) || '[]');
     const guestsToProcess = [...guests, ...drafts];
 
     if (guestsToProcess.length === 0) {
@@ -660,54 +682,91 @@ export default function GuestFormCreationForSend() {
         return;
     }
 
-    let finalGuests;
-
-    if (editGuestIdx !== null) {
-        // --- EDIT LOGIC ---
-        // This handles updating a guest/group that was opened for editing.
-        const originalGuest = allGuestsFromStorage[editGuestIdx];
-        if (isGroup && originalGuest?.groupId) {
-            const groupId = originalGuest.groupId;
-            const otherGuests = allGuestsFromStorage.filter((g: Guest) => g.groupId !== groupId);
-            const guestsForThisGroup = guestsToProcess.map(g => ({ ...g, groupId, groupName }));
-            finalGuests = [...otherGuests, ...guestsForThisGroup];
-        } else {
-             if (guestsToProcess[0]) {
-                allGuestsFromStorage[editGuestIdx] = guestsToProcess[0];
-            } else {
-                allGuestsFromStorage.splice(editGuestIdx, 1);
-            }
-            finalGuests = allGuestsFromStorage;
-        }
-    } else {
-        // --- ADD LOGIC ---
-        // This handles adding all new guests and drafts (from CSV or manual add).
-        const newGroupId = isGroup ? `group-${Date.now()}` : null;
-        const guestsToAdd = guestsToProcess.map(g => ({
-            ...g,
-            id: g.id || `guest-${Date.now()}-${Math.random()}`,
-            groupId: newGroupId,
-            groupName: isGroup ? groupName : null,
-        }));
-        finalGuests = [...allGuestsFromStorage, ...guestsToAdd];
+    // Check if user is logged in
+    const currentUser = getCurrentUser();
+    if (!currentUser) {
+        console.error('No user logged in');
+        alert('You must be logged in to save guests. Please log in and try again.');
+        return;
     }
 
-    localStorage.setItem(`event_guests_${eventId}`, JSON.stringify(finalGuests));
+    // Convert guests to Supabase format and save
+    const guestsForSupabase = guestsToProcess.map(guest => ({
+      event_id: eventId,
+      company_id: currentUser.company_id || '',
+      first_name: guest.firstName,
+      middle_name: guest.middleName || '',
+      last_name: guest.lastName,
+      email: guest.email,
+      contact_number: guest.contactNumber,
+      country_code: guest.countryCode,
+      id_type: guest.idType,
+      id_number: guest.idNumber,
+      id_country: guest.idCountry || '',
+      dob: guest.dob || undefined,
+      gender: guest.gender || '',
+      group_id: isGroup ? `group-${Date.now()}` : undefined,
+      group_name: isGroup ? groupName : undefined,
+      next_of_kin_name: guest.nextOfKinName || '',
+      next_of_kin_email: guest.nextOfKinEmail || '',
+      next_of_kin_phone_country: guest.nextOfKinPhoneCountry || '',
+      next_of_kin_phone: guest.nextOfKinPhone || '',
+      dietary: guest.dietary || [],
+      medical: guest.medical || [],
+      modules: guest.modules || {},
+      module_values: guest.moduleValues || {},
+      prefix: guest.prefix || '',
+      status: 'pending',
+      created_by: currentUser.id || undefined
+    }));
 
-    // Reset state and navigate
-    setGuests([]);
-    setDrafts([]);
-    navigate(`/event/${eventId}?tab=guests`, { replace: true });
+    console.log('Saving guests to Supabase:', guestsForSupabase);
+
+    // Save to Supabase
+    addMultipleGuests(guestsForSupabase)
+      .then(() => {
+        console.log('Guests saved to Supabase successfully');
+        // Reset state and navigate
+        setGuests([]);
+        setDrafts([]);
+        setIsGroup(false);
+        setGroupName('');
+        setGroupNameConfirmed(false);
+        navigate(`/event/${eventId}?tab=guests`, { replace: true });
+      })
+      .catch(error => {
+        console.error('Error saving guests to Supabase:', error);
+        console.error('Error details:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        });
+        alert(`Failed to save guests. Error: ${error.message || 'Unknown error'}`);
+      });
   }
 
-  function handleDeleteGroup() {
+  async function handleDeleteGroup() {
     if (editGuestIdx !== null && guests.length > 0 && guests[0].groupId) {
         if (!eventId) return;
+        
         const groupIdToDelete = guests[0].groupId;
         const allGuests = JSON.parse(localStorage.getItem(`event_guests_${eventId}`) || '[]');
-        const remainingGuests = allGuests.filter((g: Guest) => g.groupId !== groupIdToDelete);
-        localStorage.setItem(`event_guests_${eventId}`, JSON.stringify(remainingGuests));
-        navigate(`/event/${eventId}?tab=guests`);
+        const guestsInGroup = allGuests.filter((g: Guest) => g.groupId === groupIdToDelete);
+        
+        try {
+          // Delete the entire group from Supabase
+          await deleteGuestsByGroupId(groupIdToDelete);
+          console.log('Group deleted from Supabase successfully');
+          
+          // Remove from localStorage
+          const remainingGuests = allGuests.filter((g: Guest) => g.groupId !== groupIdToDelete);
+          localStorage.setItem(`event_guests_${eventId}`, JSON.stringify(remainingGuests));
+          navigate(`/event/${eventId}?tab=guests`);
+        } catch (error) {
+          console.error('Error deleting group from Supabase:', error);
+          alert('Failed to delete group. Please try again.');
+        }
     } else {
         setGuests([]);
         setIsGroup(false);
@@ -730,16 +789,16 @@ export default function GuestFormCreationForSend() {
     setShowDeleteConfirm(null);
   }
 
-  function handleTagInput(idx: number, key: 'dietaryInput' | 'disabilitiesInput', value: string) {
+  function handleTagInput(idx: number, key: 'dietaryInput' | 'medicalInput', value: string) {
     setDrafts(d => d.map((draft, i) => i === idx ? { ...draft, [key]: value } : draft));
   }
 
-  function handleAddTag(idx: number, key: 'dietary' | 'disabilities', tag: string) {
+  function handleAddTag(idx: number, key: 'dietary' | 'medical', tag: string) {
     setDrafts(d => d.map((draft, i) => i === idx ? { ...draft, [key]: [...(draft[key] || []), tag] } : draft));
   }
 
-  function handleRemoveTag(idx: number, key: 'dietary' | 'disabilities', tagIdx: number) {
-    setDrafts(d => d.map((draft, i) => i === idx ? { ...draft, [key]: draft[key].filter((_, j) => j !== tagIdx) } : draft));
+  function handleRemoveTag(idx: number, key: 'dietary' | 'medical', tagIdx: number) {
+    setDrafts(d => d.map((draft, i) => i === idx ? { ...draft, [key]: draft[key].filter((_: any, j: number) => j !== tagIdx) } : draft));
   }
 
   function handleDownloadCSVTemplate() {
@@ -748,9 +807,8 @@ export default function GuestFormCreationForSend() {
       'Country Code', 'Contact Number', 'Email',
       'ID Type', 'ID Number', 'Country of Origin',
       'Next of Kin Name', 'Next of Kin Email', 'Next of Kin Country Code', 'Next of Kin Number',
-      'Dietary', 'Disabilities', 'Modules'
+      'Dietary', 'Medical', 'Modules'
     ];
-
     const csvContent = headers.join(',') + '\n';
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -883,25 +941,23 @@ export default function GuestFormCreationForSend() {
     setGuests(guests.map((guest, i) => i === guestIdx ? { ...guest, [key]: value } : guest));
   }
   
-  function handleGuestTagInputChange(guestIdx: number, key: 'dietaryInput' | 'disabilitiesInput', value: string) {
+  function handleGuestTagInputChange(guestIdx: number, key: 'dietaryInput' | 'medicalInput', value: string) {
     setGuests(guests.map((guest, i) => i === guestIdx ? { ...guest, [key]: value } : guest));
   }
   
-  function handleGuestTagAdd(guestIdx: number, key: 'dietary' | 'disabilities', tag: string) {
+  function handleGuestTagAdd(guestIdx: number, key: 'dietary' | 'medical', tag: string) {
     setGuests(guests.map((guest, i) => {
       if (i === guestIdx) {
-        const existingTags = guest[key] || [];
-        return { ...guest, [key]: [...existingTags, tag], [`${key}Input`]: '' };
+        return { ...guest, [key]: [...(guest[key] || []), tag] };
       }
       return guest;
     }));
   }
   
-  function handleGuestTagRemove(guestIdx: number, key: 'dietary' | 'disabilities', tagIndexToRemove: number) {
+  function handleGuestTagRemove(guestIdx: number, key: 'dietary' | 'medical', tagIndexToRemove: number) {
     setGuests(guests.map((guest, i) => {
       if (i === guestIdx) {
-        const existingTags = guest[key] || [];
-        return { ...guest, [key]: existingTags.filter((_, tagIdx) => tagIdx !== tagIndexToRemove) };
+        return { ...guest, [key]: guest[key].filter((_: any, j: number) => j !== tagIndexToRemove) };
       }
       return guest;
     }));
@@ -980,65 +1036,52 @@ export default function GuestFormCreationForSend() {
   }
 
   return (
-    <div style={{ display: 'flex', background: '#fff', minHeight: '100vh' }}>
+    <div className="flex bg-white dark:bg-gray-900 min-h-screen">
       {/* Main Content */}
-      <div style={{ flex: 1, maxWidth: 1200, margin: '0 auto', padding: 40, fontFamily: 'Roboto, Arial, system-ui, sans-serif', color: '#222', position: 'relative', height: '100vh', overflowY: 'auto' }}>
-        <div style={{ fontSize: 36, fontWeight: 500, marginBottom: 0 }}>{eventName}</div>
-        <hr style={{ margin: '12px 0 8px 0', border: 'none', borderTop: '2px solid #bbb' }} />
-        <div style={{ fontSize: 26, fontWeight: 500, marginBottom: 24, marginTop: 0, textAlign: 'left' }}>Add Guests</div>
+      <div className="flex-1 max-w-6xl mx-auto p-10 font-sans text-gray-900 dark:text-gray-100 relative h-screen overflow-y-auto">
+        <div className="text-4xl font-medium mb-0">{eventName}</div>
+        <hr className="my-3 border-none border-t-2 border-gray-400 dark:border-gray-600" />
+        <div className="text-2xl font-medium mb-6 mt-0 text-left">Add Guests</div>
 
         {/* Action Buttons */}
         {!editGuestIdx ? (
-          <div style={{ maxWidth: 1100, marginLeft: 'auto', marginRight: 'auto', marginBottom: 24 }}>
-            <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+          <div className="max-w-1100 mx-auto mb-24">
+            <div className="flex gap-16 items-center">
                 <button
                     onClick={() => setIsGroup(!isGroup)}
-                    style={{
-                        background: isGroup ? '#222' : '#fff',
-                        color: isGroup ? '#fff' : '#222',
-                        border: '2px solid #222',
-                        padding: '10px 24px',
-                        borderRadius: 8,
-                        fontSize: 16,
-                        fontWeight: 500,
-                        cursor: 'pointer',
-                        width: 'auto'
-                    }}
+                    className={`${
+                        isGroup 
+                            ? 'bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900' 
+                            : 'bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100'
+                    } border-2 border-gray-900 dark:border-gray-100 px-6 py-2 rounded-lg text-base font-medium cursor-pointer w-auto`}
                 >
                     {isGroup ? '✓ Group' : 'Create Group'}
                 </button>
                 {isGroup && (
-                    <div style={{ display: 'flex', alignItems: 'center', flexGrow: 1 }}>
+                    <div className="flex items-center flex-grow">
                         <input
                             type="text"
                             value={groupName}
                             onChange={(e) => setGroupName(e.target.value)}
                             placeholder="Enter Group Name"
                             disabled={groupNameConfirmed}
-                            style={{ ...inputStyle, height: 44, flexGrow: 1, borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRight: 'none' }}
+                            className="h-11 flex-grow rounded-l-lg border-r-0 border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3"
                         />
                         <button
                             onClick={handleConfirmGroupName}
                             disabled={groupNameConfirmed || !groupName.trim()}
-                            style={{
-                                height: 44,
-                                background: '#222',
-                                color: 'white',
-                                border: '2px solid #222',
-                                borderTopLeftRadius: 0,
-                                borderBottomLeftRadius: 0,
-                                padding: '0 24px',
-                                fontSize: 16,
-                                cursor: (groupNameConfirmed || !groupName.trim()) ? 'not-allowed' : 'pointer',
-                                opacity: (groupNameConfirmed || !groupName.trim()) ? 0.6 : 1
-                            }}
+                            className={`h-11 bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 border-2 border-gray-900 dark:border-gray-100 rounded-r-lg px-6 text-base ${
+                                (groupNameConfirmed || !groupName.trim()) 
+                                    ? 'cursor-not-allowed opacity-60' 
+                                    : 'cursor-pointer opacity-100'
+                            }`}
                         >
                             Confirm
                         </button>
                     </div>
                 )}
             </div>
-            <hr style={{ margin: '24px 0', border: 'none', borderTop: '1.5px solid #eee' }} />
+            <hr className="my-24 border-none border-t-1.5 border-gray-400 dark:border-gray-600" />
           </div>
         ) : null}
 

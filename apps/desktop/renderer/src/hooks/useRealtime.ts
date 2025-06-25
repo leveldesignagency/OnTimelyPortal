@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
-import { supabase, subscribeToEvents, subscribeToGuests, type Event, type Guest } from '../lib/supabase'
+import { supabase, subscribeToEvents, subscribeToGuests, subscribeToItineraries, getItineraries, type Event, type Guest, type Itinerary } from '../lib/supabase'
+import { getCurrentUser } from '../lib/auth'
 
 // Hook for real-time events
 export const useRealtimeEvents = () => {
@@ -51,7 +52,7 @@ export const useRealtimeEvents = () => {
 }
 
 // Hook for real-time guests
-export const useRealtimeGuests = (eventId: string) => {
+export const useRealtimeGuests = (eventId: string | null) => {
   const [guests, setGuests] = useState<Guest[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -102,6 +103,61 @@ export const useRealtimeGuests = (eventId: string) => {
   }, [eventId, fetchGuests])
 
   return { guests, loading, error, refetch: fetchGuests }
+}
+
+// Hook for real-time itineraries
+export const useRealtimeItineraries = (eventId: string | null) => {
+  const [itineraries, setItineraries] = useState<Itinerary[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const fetchItineraries = useCallback(async () => {
+    if (!eventId) return
+    
+    try {
+      setLoading(true)
+      const currentUser = getCurrentUser()
+      const data = await getItineraries(eventId, currentUser?.company_id)
+      setItineraries(data || [])
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred')
+    } finally {
+      setLoading(false)
+    }
+  }, [eventId])
+
+  useEffect(() => {
+    if (!eventId) return
+    
+    fetchItineraries()
+
+    // Set up real-time subscription
+    const subscription = subscribeToItineraries(eventId, (payload) => {
+      console.log('Real-time itinerary update:', payload)
+      
+      // Additional security check: only process updates for the current user's company
+      const currentUser = getCurrentUser()
+      if (currentUser && payload.new?.company_id !== currentUser.company_id) {
+        return // Ignore updates from other companies
+      }
+      
+      if (payload.eventType === 'INSERT') {
+        setItineraries(prev => [payload.new, ...prev])
+      } else if (payload.eventType === 'UPDATE') {
+        setItineraries(prev => prev.map(itinerary => 
+          itinerary.id === payload.new.id ? payload.new : itinerary
+        ))
+      } else if (payload.eventType === 'DELETE') {
+        setItineraries(prev => prev.filter(itinerary => itinerary.id !== payload.old.id))
+      }
+    })
+
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [eventId, fetchItineraries])
+
+  return { itineraries, loading, error, refetch: fetchItineraries }
 }
 
 // Hook for connection status
