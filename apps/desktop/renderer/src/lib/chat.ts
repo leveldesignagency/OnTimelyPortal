@@ -320,67 +320,173 @@ export const createTeamChat = async (
   chatName?: string
 ): Promise<Chat | null> => {
   try {
+    console.log('🚀 Creating team chat:', { creatorId, companyId, teamId, chatName });
+
+    // Validate company access
+    if (!validateCompanyAccess(companyId)) {
+      console.error('❌ Company access denied for company:', companyId);
+      throw new Error('Access denied: Cannot create team chat in this company');
+    }
+    console.log('✅ Company access validated');
+
     // Get team info and members
+    console.log('🔍 Fetching team data...');
     const { data: teamData, error: teamError } = await supabase
       .from('teams')
       .select(`
         *,
-        team_members(user_id)
+        team_members(user_id, user:users(*))
       `)
       .eq('id', teamId)
+      .eq('company_id', companyId)
       .single()
 
-    if (teamError) throw teamError
+    if (teamError) {
+      console.error('❌ Failed to fetch team data:', teamError);
+      throw teamError;
+    }
+
+    if (!teamData) {
+      console.error('❌ Team not found:', teamId);
+      throw new Error('Team not found');
+    }
+
+    console.log('✅ Team data fetched:', teamData.name, 'with', teamData.team_members?.length || 0, 'members');
+
+    // Check if team chat already exists
+    console.log('🔍 Checking for existing team chat...');
+    const { data: existingChat, error: existingError } = await supabase
+      .from('chats')
+      .select('*')
+      .eq('team_id', teamId)
+      .eq('company_id', companyId)
+      .eq('type', 'team')
+      .eq('is_archived', false)
+      .single()
+
+    if (!existingError && existingChat) {
+      console.log('✅ Found existing team chat:', existingChat.id);
+      // Fetch complete chat data
+      const { data: completeChat, error: fetchError } = await supabase
+        .from('chats')
+        .select(`
+          *,
+          chat_participants(
+            id,
+            user_id,
+            role,
+            joined_at,
+            is_muted,
+            is_pinned,
+            user:users(*)
+          )
+        `)
+        .eq('id', existingChat.id)
+        .single()
+
+      if (!fetchError && completeChat) {
+        return {
+          ...completeChat,
+          participants: completeChat.chat_participants?.map(cp => cp.user).filter(Boolean) || []
+        }
+      }
+    }
 
     const participantIds = teamData.team_members?.map(member => member.user_id) || []
+    
+    // Ensure creator is included in participants
+    if (!participantIds.includes(creatorId)) {
+      participantIds.push(creatorId);
+    }
+
+    console.log('👥 Team participants:', participantIds);
+
     const finalChatName = chatName || `${teamData.name} Chat`
+    console.log('📝 Creating chat with name:', finalChatName);
 
     // Create the chat
+    const chatInsert = {
+      company_id: companyId,
+      name: finalChatName,
+      type: 'team' as const,
+      avatar: teamData.avatar || teamData.name.substring(0, 2).toUpperCase(),
+      created_by: creatorId,
+      team_id: teamId,
+      is_archived: false
+    };
+
+    console.log('📝 Chat insert data:', chatInsert);
+
     const { data: chatData, error: chatError } = await supabase
       .from('chats')
-      .insert({
-        company_id: companyId,
-        name: finalChatName,
-        type: 'team',
-        avatar: teamData.avatar,
-        created_by: creatorId,
-        team_id: teamId
-      })
+      .insert(chatInsert)
       .select()
       .single()
 
-    if (chatError) throw chatError
+    if (chatError) {
+      console.error('❌ Failed to create chat:', chatError);
+      throw chatError;
+    }
+
+    console.log('✅ Chat created successfully:', chatData.id);
 
     // Add all team members as chat participants
     const participantInserts = participantIds.map(userId => ({
       chat_id: chatData.id,
-      user_id: userId
+      user_id: userId,
+      role: "member" as const,
+      joined_at: new Date().toISOString(),
+      is_muted: false,
+      is_pinned: false
     }))
+
+    console.log('👥 Adding participants:', participantInserts.length, 'participants');
 
     const { error: participantsError } = await supabase
       .from('chat_participants')
       .insert(participantInserts)
 
-    if (participantsError) throw participantsError
+    if (participantsError) {
+      console.error('❌ Failed to add participants:', participantsError);
+      // Clean up chat if participants insertion fails
+      await supabase.from('chats').delete().eq('id', chatData.id);
+      throw participantsError;
+    }
+
+    console.log('✅ Participants added successfully');
 
     // Fetch the complete chat data with participants
+    console.log('📋 Fetching complete chat data...');
     const { data: completeChat, error: fetchError } = await supabase
       .from('chats')
       .select(`
         *,
-        chat_participants(*, users(*))
+        chat_participants(
+          id,
+          user_id,
+          role,
+          joined_at,
+          is_muted,
+          is_pinned,
+          user:users(*)
+        )
       `)
       .eq('id', chatData.id)
       .single()
 
-    if (fetchError) throw fetchError
+    if (fetchError) {
+      console.error('❌ Failed to fetch complete chat:', fetchError);
+      throw fetchError;
+    }
+
+    console.log('🎉 Team chat created successfully:', completeChat.id);
 
     return {
       ...completeChat,
-      participants: completeChat.chat_participants?.map(p => p.users).filter(Boolean) || []
+      participants: completeChat.chat_participants?.map(cp => cp.user).filter(Boolean) || []
     }
   } catch (error) {
-    console.error('Failed to create team chat:', error)
+    console.error('💥 Failed to create team chat:', error)
     return null
   }
 }
@@ -511,8 +617,8 @@ export const createDirectChat = async (user1Id: string, user2Id: string, company
     const { error: participantsError } = await supabase
       .from('chat_participants')
       .insert([
-        { chat_id: chatData.id, user_id: user1Id },
-        { chat_id: chatData.id, user_id: user2Id }
+        { chat_id: chatData.id, user_id: user1Id, role: "member" as const },
+        { chat_id: chatData.id, user_id: user2Id, role: "member" as const }
       ])
 
     if (participantsError) {
@@ -625,7 +731,8 @@ export const createGroupChat = async (
       user_id: userId,
       joined_at: new Date().toISOString(),
       is_muted: false,
-      is_pinned: false
+      is_pinned: false,
+      role: "member" as const
     }))
 
     console.log('📝 Participant inserts:', participantInserts);
@@ -686,37 +793,81 @@ export const createGroupChat = async (
 // Enhanced user chats with company isolation
 export const getUserChats = async (userId: string): Promise<Chat[]> => {
   try {
+    console.log('🔍 getUserChats called for user:', userId);
+    
     const currentUser = getCurrentUser()
     if (!currentUser || currentUser.id !== userId) {
+      console.error('❌ Access denied: Can only fetch chats for current user');
       throw new Error('Access denied: Can only fetch chats for current user')
     }
 
+    console.log('👤 Current user validated:', currentUser.id);
+    console.log('🏢 Company ID:', currentUser.company_id);
+
+    // First, get all chat IDs where the user is a participant
+    console.log('🔍 Step 1: Finding chats where user is participant...');
+    const { data: participantChats, error: participantError } = await supabase
+      .from('chat_participants')
+      .select('chat_id')
+      .eq('user_id', userId)
+
+    if (participantError) {
+      console.error('❌ Error finding participant chats:', participantError);
+      throw participantError;
+    }
+
+    console.log('📋 Found participant chats:', participantChats?.length || 0);
+    
+    if (!participantChats || participantChats.length === 0) {
+      console.log('⚠️ No chats found for user');
+      return [];
+    }
+
+    const chatIds = participantChats.map(pc => pc.chat_id);
+    console.log('🎯 Chat IDs to fetch:', chatIds);
+
+    // Now get the full chat data for these chats
+    console.log('🔍 Step 2: Fetching full chat data...');
     const { data, error } = await supabase
       .from('chats')
       .select(`
         *,
-        chat_participants!inner(
+        chat_participants(
           id,
           user_id,
           joined_at,
           is_muted,
           is_pinned,
+          role,
           user:users(*)
         )
       `)
+      .in('id', chatIds)
       .eq('company_id', currentUser.company_id) // Company isolation
-      .eq('chat_participants.user_id', userId)
       .eq('is_archived', false)
       .order('updated_at', { ascending: false })
 
-    if (error) throw error
+    if (error) {
+      console.error('❌ Error fetching chats:', error);
+      throw error;
+    }
 
-    return (data || []).map(chat => ({
-      ...chat,
-      participants: chat.chat_participants?.map(cp => cp.user).filter(Boolean) || []
-    }))
+    console.log('✅ Successfully fetched chats:', data?.length || 0);
+    
+    const processedChats = (data || []).map(chat => {
+      const participants = chat.chat_participants?.map(cp => cp.user).filter(Boolean) || [];
+      console.log(`📋 Chat "${chat.name}" has ${participants.length} participants:`, participants.map(p => p.name));
+      
+      return {
+        ...chat,
+        participants
+      };
+    });
+
+    console.log('✅ Processed chats:', processedChats.length);
+    return processedChats;
   } catch (error) {
-    console.error('Failed to fetch user chats:', error)
+    console.error('❌ Failed to fetch user chats:', error)
     return []
   }
 }
@@ -1054,7 +1205,8 @@ export const acceptTeamInvitation = async (
     const { data, error } = await supabase
       .rpc('accept_team_invitation', {
         p_invitation_token: invitationToken,
-        p_user_id: userId
+        p_user_id: userId,
+      role: "member" as const
       })
 
     return !error && data

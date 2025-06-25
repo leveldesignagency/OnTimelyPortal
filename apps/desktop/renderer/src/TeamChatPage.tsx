@@ -157,16 +157,16 @@ const themes = {
     text: '#ffffff',
     textSecondary: '#adb5bd',
     border: 'rgba(255, 255, 255, 0.1)',
-    accent: '#007bff',
+    accent: '#ffffff',
     hoverBg: 'rgba(255, 255, 255, 0.05)',
     buttonBg: '#404040',
     buttonText: '#ffffff',
     messageBubble: 'rgba(64, 64, 64, 0.8)',
-    messageBubbleSent: 'rgba(0, 123, 255, 0.8)',
+    messageBubbleSent: 'rgba(255, 255, 255, 0.8)',
     inputBg: 'rgba(255, 255, 255, 0.1)',
     avatarBg: 'linear-gradient(135deg, #4a4a4a, #2a2a2a)',
     avatarText: '#fff',
-    primary: '#007bff'
+    primary: '#ffffff'
   }
 };
 
@@ -656,7 +656,20 @@ const ChatHeader = ({ chat, isDark, onToggleRightPanel }: {
           transition: 'all 0.2s ease'
         }}
       >
-        ℹ️
+        <svg 
+          width="16" 
+          height="16" 
+          viewBox="0 0 24 24" 
+          fill="none" 
+          stroke="currentColor" 
+          strokeWidth="2" 
+          strokeLinecap="round" 
+          strokeLinejoin="round"
+        >
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M12 16v-4"/>
+          <path d="M12 8h.01"/>
+        </svg>
       </button>
         </div>
     </div>
@@ -841,14 +854,42 @@ const MessageBubble = ({ message, sent, isDark, onReact, onReply }: {
   const [showReactions, setShowReactions] = useState(false);
   const [showOptions, setShowOptions] = useState(false);
 
+  // Get sender initials for avatar
+  const getSenderInitials = (senderName: string) => {
+    return senderName.split(' ').map(name => name[0]).join('').toUpperCase().slice(0, 2);
+  };
+
   return (
     <div style={{
       display: 'flex',
       justifyContent: sent ? 'flex-end' : 'flex-start',
       marginBottom: '16px',
       paddingLeft: sent ? '60px' : '0px',
-      paddingRight: sent ? '0px' : '60px'
+      paddingRight: sent ? '0px' : '60px',
+      alignItems: 'flex-end',
+      gap: '8px'
     }}>
+      {/* Avatar for received messages */}
+      {!sent && (
+        <div style={{
+          width: '32px',
+          height: '32px',
+          borderRadius: '50%',
+          background: isDark ? 'linear-gradient(135deg, #4a4a4a, #2a2a2a)' : 'linear-gradient(135deg, #e9ecef, #dee2e6)',
+          color: isDark ? '#fff' : '#495057',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '12px',
+          fontWeight: '600',
+          flexShrink: 0,
+          border: `2px solid ${isDark ? '#333' : '#fff'}`,
+          boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.1)'
+        }}>
+          {getSenderInitials(message.sender)}
+        </div>
+      )}
+
       <div style={{
         maxWidth: '70%',
         position: 'relative'
@@ -899,27 +940,6 @@ const MessageBubble = ({ message, sent, isDark, onReact, onReply }: {
           {(message.type === 'file' || message.type === 'image') && (
             <FilePreview message={message} isDark={isDark} />
           )}
-
-          {/* Message metadata */}
-          <div style={{
-            fontSize: '11px',
-            color: sent ? (isDark ? 'rgba(26,26,26,0.6)' : 'rgba(255,255,255,0.7)') : colors.textSecondary,
-            marginTop: '4px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '4px',
-            justifyContent: 'flex-end'
-          }}>
-            {message.edited && <span>edited</span>}
-            <span>{message.timestamp}</span>
-            {sent && (
-              <span style={{ 
-                color: message.sent ? (isDark ? 'rgba(26,26,26,0.8)' : 'rgba(255,255,255,0.8)') : '#f59e0b' 
-              }}>
-                {message.sent ? '✓' : '⏳'}
-              </span>
-            )}
-          </div>
 
           {/* Options menu */}
           {showOptions && (
@@ -977,6 +997,27 @@ const MessageBubble = ({ message, sent, isDark, onReact, onReply }: {
           )}
         </div>
 
+        {/* Delivery status rendered underneath the bubble */}
+        {sent && (
+          <div style={{
+            fontSize: '11px',
+            color: colors.textSecondary,
+            marginTop: '4px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            justifyContent: 'flex-end'
+          }}>
+            {message.edited && <span>edited</span>}
+            <span>{message.timestamp}</span>
+            <span style={{ 
+              color: message.sent ? colors.textSecondary : '#f59e0b' 
+            }}>
+              {message.sent ? '✓' : '⏳'}
+            </span>
+          </div>
+        )}
+
         {/* Reactions */}
         {message.reactions && message.reactions.length > 0 && (
           <MessageReactions reactions={message.reactions} onReact={(emoji) => onReact(message.id, emoji)} isDark={isDark} />
@@ -1026,6 +1067,27 @@ const MessageBubble = ({ message, sent, isDark, onReact, onReply }: {
           </div>
         )}
       </div>
+
+      {/* Avatar for sent messages */}
+      {sent && (
+        <div style={{
+          width: '32px',
+          height: '32px',
+          borderRadius: '50%',
+          background: colors.accent,
+          color: isDark ? '#000000' : '#ffffff',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '12px',
+          fontWeight: '600',
+          flexShrink: 0,
+          border: `2px solid ${isDark ? '#333' : '#fff'}`,
+          boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.1)'
+        }}>
+          {getSenderInitials(message.sender)}
+        </div>
+      )}
     </div>
   );
 };
@@ -2419,7 +2481,7 @@ const MessageNotificationToast = ({ notification, onRemove, onMarkRead, onOpenCh
   const getChatTypeColor = () => {
     switch (notification.chatType) {
       case 'direct':
-        return '#3b82f6'; // Blue
+        return '#ffffff'; // White instead of blue
       case 'group':
         return '#10b981'; // Green
       case 'team':
@@ -3072,37 +3134,79 @@ export default function TeamChatPage() {
   }
 
   const handleStartTeamChat = async (team: Team) => {
+    console.log('🏢 Starting team chat for:', team.name);
+    
     if (!CURRENT_USER) {
-      console.error('No current user found')
-      return
+      console.error('❌ No current user found');
+      addNotification('Authentication error: Please log in again', 'error');
+      return;
     }
 
-    const authUser = getCurrentUser()
+    const authUser = getCurrentUser();
     if (!authUser) {
-      console.error('No authenticated user found')
-      return
+      console.error('❌ No authenticated user found');
+      addNotification('Authentication error: Please log in again', 'error');
+      return;
     }
+
+    console.log('👤 Current user:', CURRENT_USER.name);
+    console.log('🏢 Team details:', { id: team.id, name: team.name, members: team.member_count });
 
     try {
-      const newChat = await createTeamChat(CURRENT_USER.id, authUser.company_id, team.id, `${team.name} Chat`)
+      // Check if team chat already exists
+      const existingChat = chats.find(chat => 
+        chat.type === 'team' && 
+        chat.team_id === team.id
+      );
+
+      if (existingChat) {
+        console.log('✅ Team chat already exists, opening:', existingChat.name);
+        setActiveChatId(existingChat.id);
+        setSearchQuery('');
+        addNotification(`Opened ${team.name} chat`, 'success');
+        return;
+      }
+
+      console.log('🔄 Creating new team chat...');
+      const newChat = await createTeamChat(
+        CURRENT_USER.id, 
+        authUser.company_id, 
+        team.id, 
+        `${team.name} Team Chat`
+      );
       
       if (newChat) {
-        const convertedChat = convertSupabaseChat(newChat)
+        console.log('✅ Team chat created successfully:', newChat);
+        const convertedChat = convertSupabaseChat(newChat);
+        
+        // Ensure it's marked as a team chat with additional properties
+        const enhancedChat = {
+          ...convertedChat,
+          type: 'team' as ChatType,
+          team_id: team.id,
+          name: `${team.name} Team Chat`,
+          avatar: getTeamInitials(team)
+        };
+
         setChats(prev => {
-          const exists = prev.find(c => c.id === convertedChat.id)
-          if (exists) return prev
-          return [convertedChat, ...prev]
-        })
-        setActiveChatId(convertedChat.id)
-        setSearchQuery('')
-        console.log(`✅ Started team chat for ${team.name}`)
+          const exists = prev.find(c => c.id === enhancedChat.id);
+          if (exists) return prev;
+          return [enhancedChat, ...prev];
+        });
+        
+        setActiveChatId(enhancedChat.id);
+        setSearchQuery('');
+        console.log(`🎉 Team chat for ${team.name} opened successfully!`);
+        addNotification(`${team.name} team chat created successfully`, 'success');
       } else {
-        console.error('Failed to create team chat - null response')
+        console.error('❌ Failed to create team chat - null response');
+        addNotification(`Failed to create team chat for ${team.name}`, 'error');
       }
     } catch (error) {
-      console.error('Error creating team chat:', error)
+      console.error('💥 Error creating team chat:', error);
+      addNotification(`Error creating team chat: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
     }
-  }
+  };
 
   const handleCreateGroup = async () => {
     console.log('🚀 CREATE GROUP - Starting process');
@@ -3550,7 +3654,11 @@ export default function TeamChatPage() {
           />
 
           {/* Search Bar with Glass Effect */}
-          <div style={{ padding: '20px', borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}` }}>
+          <div style={{ 
+            padding: '20px', 
+            borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
+            marginBottom: '16px'
+          }}>
             <div style={{ position: 'relative' }}>
                 <input
                   type="text"
@@ -3586,10 +3694,27 @@ export default function TeamChatPage() {
                 left: '16px',
                 top: '50%',
                 transform: 'translateY(-50%)',
-                color: colors.textSecondary,
-                fontSize: '16px'
+                pointerEvents: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
               }}>
-                🔍
+                <svg 
+                  width="16" 
+                  height="16" 
+                  viewBox="0 0 24 24" 
+                  fill="none" 
+                  stroke={colors.textSecondary}
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  style={{
+                    opacity: 0.6
+                  }}
+                >
+                  <circle cx="11" cy="11" r="8"/>
+                  <path d="m21 21-4.35-4.35"/>
+                </svg>
               </div>
             </div>
           </div>
@@ -3597,8 +3722,9 @@ export default function TeamChatPage() {
           {/* Tabs with Glass Effect */}
           <div style={{ 
             display: 'flex', 
-            padding: '0 20px 16px 20px',
-            gap: '8px'
+            padding: '0 20px 20px 20px',
+            gap: '8px',
+            marginTop: '10px'
           }}>
             {[
               { id: 'chats', label: 'Chats' },
@@ -3642,7 +3768,7 @@ export default function TeamChatPage() {
       
           {/* Remove the New Chat button section and keep only Create Group */}
           {activeTab !== 'archived' && (
-            <div style={{ padding: '0 20px 16px 20px' }}>
+            <div style={{ padding: '10px 20px 20px 20px' }}>
               <button
                 onClick={handleCreateGroupClick}
                 style={{
@@ -3672,7 +3798,20 @@ export default function TeamChatPage() {
                   }
                 }}
               >
-                + Create Group
+                <svg 
+                  width="16" 
+                  height="16" 
+                  viewBox="0 0 24 24" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  strokeWidth="2" 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round"
+                >
+                  <path d="M12 5v14"/>
+                  <path d="M5 12h14"/>
+                </svg>
+                Create Group
               </button>
             </div>
           )}
@@ -4165,87 +4304,87 @@ export default function TeamChatPage() {
                 )}
           </div>
         </div>
-      </div>
-      
-      {/* Main Chat Area */}
-      <div style={{
-        flex: 1,
-        display: 'flex',
-        flexDirection: 'column',
-        background: isDark ? '#1a1a1a' : '#ffffff',
-        minWidth: 0,
-        position: 'relative',
-        margin: 0,
-        padding: 0
-      }}>
-        <ChatHeader
-          chat={activeChat}
-          isDark={isDark}
-          onToggleRightPanel={() => setShowRightPanel(!showRightPanel)}
-        />
 
-        {/* Messages Area */}
+        {/* Main Chat Area */}
         <div style={{
           flex: 1,
-          overflowY: 'auto',
-          padding: '8px 12px',
           display: 'flex',
           flexDirection: 'column',
-          gap: '6px'
+          background: isDark ? '#1a1a1a' : '#ffffff',
+          minWidth: 0,
+          position: 'relative',
+          margin: 0,
+          padding: 0
         }}>
-            {activeChat ? (
-                activeChat.messages.map((message, index) => (
-              <MessageBubble
-                key={message.id}
-                message={message}
-                sent={message.sender === CURRENT_USER?.name}
-                isDark={isDark}
-                onReact={handleReaction}
-                onReply={handleReply}
-              />
-                ))
-            ) : (
-            <div style={{
-              flex: 1,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexDirection: 'column',
-              color: isDark ? '#6c757d' : '#adb5bd',
-              minHeight: '200px'
-            }}>
-              <div style={{ fontSize: '48px', marginBottom: '16px', opacity: 0.6 }}>💬</div>
-              <h3 style={{
-                fontSize: '18px',
-                fontWeight: '600',
-                margin: '0 0 6px 0',
-                color: isDark ? '#adb5bd' : '#6c757d'
-              }}>
-                No chat selected
-              </h3>
-              <p style={{
-                fontSize: '14px',
-                margin: 0,
-                color: isDark ? '#6c757d' : '#adb5bd',
-                opacity: 0.8
-              }}>
-                Choose a conversation to start messaging
-              </p>
-            </div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
-
-        {/* Message Input */}
-        {activeChat && (
-          <MessageInput
-            onSendMessage={handleSendMessage}
-            onFileUpload={handleFileUpload}
+          <ChatHeader
+            chat={activeChat}
             isDark={isDark}
-            replyingTo={replyingTo || undefined}
-            onCancelReply={handleCancelReply}
+            onToggleRightPanel={() => setShowRightPanel(!showRightPanel)}
           />
-        )}
+
+          {/* Messages Area */}
+          <div style={{
+            flex: 1,
+            overflowY: 'auto',
+            padding: '16px 24px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px'
+          }}>
+              {activeChat ? (
+                  activeChat.messages.map((message, index) => (
+                <MessageBubble
+                  key={message.id}
+                  message={message}
+                  sent={message.sender === CURRENT_USER?.name}
+                  isDark={isDark}
+                  onReact={handleReaction}
+                  onReply={handleReply}
+                />
+                  ))
+              ) : (
+              <div style={{
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexDirection: 'column',
+                color: isDark ? '#6c757d' : '#adb5bd',
+                minHeight: '200px'
+              }}>
+                <div style={{ fontSize: '48px', marginBottom: '16px', opacity: 0.6 }}>💬</div>
+                <h3 style={{
+                  fontSize: '18px',
+                  fontWeight: '600',
+                  margin: '0 0 6px 0',
+                  color: isDark ? '#adb5bd' : '#6c757d'
+                }}>
+                  No chat selected
+                </h3>
+                <p style={{
+                  fontSize: '14px',
+                  margin: 0,
+                  color: isDark ? '#6c757d' : '#adb5bd',
+                  opacity: 0.8
+                }}>
+                  Choose a conversation to start messaging
+                </p>
+              </div>
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+
+          {/* Message Input */}
+          {activeChat && (
+            <MessageInput
+              onSendMessage={handleSendMessage}
+              onFileUpload={handleFileUpload}
+              isDark={isDark}
+              replyingTo={replyingTo || undefined}
+              onCancelReply={handleCancelReply}
+            />
+          )}
+        </div>
       </div>
 
       {/* Right Panel */}
