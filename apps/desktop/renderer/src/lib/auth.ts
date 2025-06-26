@@ -19,43 +19,33 @@ export interface AuthState {
   error: string | null
 }
 
-// Enhanced login with proper Supabase Auth
+// Enhanced login with custom authentication (matching existing database structure)
 export const login = async (email: string, password: string): Promise<{ user: User | null; error: string | null }> => {
   try {
-    // First, sign in with Supabase Auth
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-      email,
-      password
+    // Use a custom function to verify password against password_hash
+    const { data: loginResult, error: loginError } = await supabase.rpc('login_user', {
+      user_email: email,
+      user_password: password
     })
 
-    if (authError) {
-      console.error('Supabase auth error:', authError)
-      return { user: null, error: authError.message }
+    if (loginError) {
+      console.error('Login error:', loginError)
+      return { user: null, error: 'Invalid login credentials' }
     }
 
-    if (!authData.user) {
-      return { user: null, error: 'Authentication failed' }
+    if (!loginResult || loginResult.length === 0) {
+      return { user: null, error: 'Invalid login credentials' }
     }
 
-    // Now fetch the user profile from our users table
-    const { data: userProfile, error: profileError } = await supabase
-      .from('users')
-      .select(`
-        *,
-        companies(id, name)
-      `)
-      .eq('email', email)
-      .single()
-
-    if (profileError || !userProfile) {
-      console.error('Profile fetch error:', profileError)
-      return { user: null, error: 'User profile not found' }
-    }
+    const userProfile = loginResult[0]
 
     // Update user status to online
     await updateUserStatus(userProfile.id, 'online')
 
-    console.log(`✅ User logged in successfully to company: ${userProfile.companies?.name}`)
+    // Store user in localStorage for session management
+    localStorage.setItem('currentUser', JSON.stringify(userProfile))
+
+    console.log(`✅ User logged in successfully to company: ${userProfile.company_name}`)
     return { user: userProfile, error: null }
 
   } catch (error) {
@@ -72,14 +62,14 @@ export const logout = async (): Promise<void> => {
       await updateUserStatus(currentUser.id, 'offline')
     }
     
-    // Sign out from Supabase Auth
-    await supabase.auth.signOut()
+    // Clear localStorage session
+    localStorage.removeItem('currentUser')
     
     console.log('✅ User logged out successfully')
   } catch (error) {
     console.error('Logout error:', error)
-    // Still sign out even if status update fails
-    await supabase.auth.signOut()
+    // Still clear session even if status update fails
+    localStorage.removeItem('currentUser')
   }
 }
 
