@@ -77,7 +77,7 @@ export const ModuleGrid: React.FC<ModuleGridProps> = ({ onModuleAdd, activeModul
               }}
             >
               <div className="flex items-center gap-2 mb-2">
-                <span className="text-2xl">{module.icon}</span>
+                {/* <span className="text-2xl">{module.icon}</span> */}
                 <h3 className="font-semibold">{module.name}</h3>
               </div>
               <p className="text-gray-600 text-sm mb-2">{module.description}</p>

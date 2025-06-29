@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getCurrentUser } from './lib/auth';
 import { useRealtimeEvents } from './hooks/useRealtime';
@@ -8,7 +8,98 @@ import {
   updateItinerary, 
   type Itinerary 
 } from './lib/supabase';
+import { ThemeContext } from './ThemeContext';
+import ThemedIcon from './components/ThemedIcon';
 // import styles from './CreateItinerary.module.css';
+
+// --- GLASSMORPHIC STYLE HELPERS ---
+const getGlassStyles = (isDark: boolean) => ({
+  background: isDark 
+    ? 'rgba(30, 30, 30, 0.8)' 
+    : 'rgba(255, 255, 255, 0.8)',
+  backdropFilter: 'blur(20px)',
+  WebkitBackdropFilter: 'blur(20px)',
+  border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
+  borderRadius: '16px',
+  boxShadow: isDark 
+    ? '0 8px 32px rgba(0, 0, 0, 0.3)' 
+    : '0 8px 32px rgba(0, 0, 0, 0.1)',
+});
+
+const getInputStyles = (isDark: boolean) => ({
+  background: isDark 
+    ? 'rgba(255, 255, 255, 0.05)' 
+    : 'rgba(255, 255, 255, 0.9)',
+  backdropFilter: 'blur(10px)',
+  WebkitBackdropFilter: 'blur(10px)',
+  border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
+  borderRadius: '8px',
+  color: isDark ? '#ffffff' : '#000000',
+  outline: 'none',
+  transition: 'all 0.2s ease'
+});
+
+const getButtonStyles = (isDark: boolean, variant: 'primary' | 'secondary' | 'danger' | 'success') => {
+  const baseStyles = {
+    border: 'none',
+    borderRadius: '8px',
+    padding: '12px 24px',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    backdropFilter: 'blur(10px)',
+    WebkitBackdropFilter: 'blur(10px)'
+  };
+
+  switch (variant) {
+    case 'primary':
+      return {
+        ...baseStyles,
+        background: isDark 
+          ? 'linear-gradient(135deg, #ffffff 0%, #f0f0f0 100%)' 
+          : 'linear-gradient(135deg, #000000 0%, #333333 100%)',
+        color: isDark ? '#000000' : '#ffffff',
+        boxShadow: '0 4px 16px rgba(0, 0, 0, 0.2)'
+      };
+    case 'secondary':
+      return {
+        ...baseStyles,
+        background: isDark 
+          ? 'rgba(255, 255, 255, 0.1)' 
+          : 'rgba(0, 0, 0, 0.05)',
+        color: isDark ? '#ffffff' : '#000000',
+        border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)'}`
+      };
+    case 'danger':
+      return {
+        ...baseStyles,
+        background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+        color: '#ffffff',
+        boxShadow: '0 4px 16px rgba(239, 68, 68, 0.3)'
+      };
+    case 'success':
+      return {
+        ...baseStyles,
+        background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+        color: '#ffffff',
+        boxShadow: '0 4px 16px rgba(16, 185, 129, 0.3)'
+      };
+    default:
+      return baseStyles;
+  }
+};
+
+const getColors = (isDark: boolean) => ({
+  bg: isDark ? '#0f0f0f' : '#f8fafc',
+  text: isDark ? '#ffffff' : '#000000',
+  textSecondary: isDark ? '#a1a1aa' : '#666666',
+  border: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
+  accent: isDark ? '#ffffff' : '#000000',
+  hoverBg: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)',
+  inputBg: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(255, 255, 255, 0.9)',
+  cardBg: isDark ? 'rgba(30, 30, 30, 0.8)' : 'rgba(255, 255, 255, 0.8)',
+});
 
 // --- MODULE COMPONENTS ---
 // These components are not currently used but kept for future reference
@@ -39,6 +130,9 @@ type ItineraryItem = {
   details: string;
   modules: Record<string, boolean>;
   moduleValues: Record<string, any>;
+  date: string;
+  group_id?: string;
+  group_name?: string;
 };
 
 type Draft = ItineraryItem;
@@ -61,6 +155,9 @@ const ITINERARY_MODULES = [
 export default function CreateItinerary() {
   const { eventId, itineraryIndex } = useParams();
   const navigate = useNavigate();
+  const { theme } = useContext(ThemeContext);
+  const isDark = theme === 'dark';
+  const colors = getColors(isDark);
   
   // Get current user for company context
   const currentUser = getCurrentUser();
@@ -80,7 +177,29 @@ export default function CreateItinerary() {
   const [isModuleSidebarCollapsed, setIsModuleSidebarCollapsed] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [originalItinerary, setOriginalItinerary] = useState<Itinerary | null>(null);
+  const [groupId, setGroupId] = useState<string | null>(null);
+  const [groupName, setGroupName] = useState<string>('');
   
+  // Group modal state
+  const [showGroupModal, setShowGroupModal] = useState(false);
+  const [tempGroupName, setTempGroupName] = useState('');
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Element;
+      if (openDropdown && !target.closest('[data-dropdown]')) {
+        setOpenDropdown(null);
+      }
+    };
+
+    if (openDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [openDropdown]);
+
   useEffect(() => {
     const loadEventAndItinerary = async () => {
       try {
@@ -113,7 +232,10 @@ export default function CreateItinerary() {
               location: itineraryToEdit.location || '',
               details: itineraryToEdit.description || '',
               modules: {},
-              moduleValues: {}
+              moduleValues: {},
+              date: itineraryToEdit.date || '',
+              group_id: itineraryToEdit.group_id || undefined,
+              group_name: itineraryToEdit.group_name || undefined,
             };
 
             // Reconstruct modules from database fields
@@ -168,6 +290,14 @@ export default function CreateItinerary() {
   }
 
   const handleAddDraft = () => {
+    // If this is the second draft, enable grouping
+    if (drafts.length === 1 && !groupId) {
+      const newGroupId = `group_${Date.now()}_${Math.random()}`;
+      setGroupId(newGroupId);
+      setTempGroupName(''); // Reset temp group name
+      setShowGroupModal(true); // Show modal for user to enter group name
+      return; // Don't add the draft yet, wait for modal confirmation
+    }
     const newDraft: ItineraryItem = {
       id: `item_${Date.now()}_${Math.random()}`,
       title: '',
@@ -178,9 +308,74 @@ export default function CreateItinerary() {
       details: '',
       modules: {},
       moduleValues: {},
+        date: '',
+      group_id: groupId || undefined,
+      group_name: groupName || undefined,
+    };
+    setDrafts([newDraft, ...drafts.map(d => groupId ? { ...d, group_id: groupId, group_name: groupName } : d)]);
+    setExpandedDraftIndex(0);
+  };
+
+  // Group modal handlers
+  const handleConfirmGroup = () => {
+    if (!tempGroupName.trim()) {
+      alert('Please enter a group name');
+      return;
+    }
+    
+    setGroupName(tempGroupName.trim());
+    
+    // Update existing draft with group info
+    setDrafts(d => d.map(draft => ({ ...draft, group_id: groupId || undefined, group_name: tempGroupName.trim() })));
+    
+    // Add the new draft
+    const newDraft: ItineraryItem = {
+      id: `item_${Date.now()}_${Math.random()}`,
+      title: '',
+      arrivalTime: '',
+      startTime: '',
+      endTime: '',
+      location: '',
+      details: '',
+      modules: {},
+      moduleValues: {},
+        date: '',
+      group_id: groupId || undefined,
+      group_name: tempGroupName.trim(),
     };
     setDrafts([newDraft, ...drafts]);
     setExpandedDraftIndex(0);
+    
+    // Close modal
+    setShowGroupModal(false);
+    setTempGroupName('');
+  };
+
+  const handleCancelGroup = () => {
+    // Remove the group ID and reset to individual items
+    setGroupId(null);
+    setGroupName('');
+    setDrafts(d => d.map(draft => ({ ...draft, group_id: undefined, group_name: undefined })));
+    
+    // Add the new draft without grouping
+    const newDraft: ItineraryItem = {
+      id: `item_${Date.now()}_${Math.random()}`,
+      title: '',
+      arrivalTime: '',
+      startTime: '',
+      endTime: '',
+      location: '',
+      details: '',
+      modules: {},
+      moduleValues: {},
+      date: '',
+    };
+    setDrafts([newDraft, ...drafts]);
+    setExpandedDraftIndex(0);
+    
+    // Close modal
+    setShowGroupModal(false);
+    setTempGroupName('');
   };
 
   const handleDraftChange = (idx: number, key: keyof ItineraryItem, value: any) => {
@@ -276,31 +471,34 @@ export default function CreateItinerary() {
         const firstItem = allItemsToSave[0];
         
         // Extract module values
-        const documentModule = firstItem.modules?.document ? firstItem.moduleValues?.document : null;
-        const qrcodeModule = firstItem.modules?.qrcode ? firstItem.moduleValues?.qrcode : null;
-        const contactModule = firstItem.modules?.contact ? firstItem.moduleValues?.contact : null;
-        const notificationsModule = firstItem.modules?.notifications ? firstItem.moduleValues?.notifications : null;
+        const documentModule = firstItem.modules?.document ? firstItem.moduleValues?.document : undefined;
+        const qrcodeModule = firstItem.modules?.qrcode ? firstItem.moduleValues?.qrcode : undefined;
+        const contactModule = firstItem.modules?.contact ? firstItem.moduleValues?.contact : undefined;
+        const notificationsModule = firstItem.modules?.notifications ? firstItem.moduleValues?.notifications : undefined;
 
         const itineraryData = {
           title: firstItem.title,
           description: firstItem.details || '',
-          arrival_time: firstItem.arrivalTime || null,
+          arrival_time: firstItem.arrivalTime || undefined,
           start_time: firstItem.startTime,
           end_time: firstItem.endTime,
-          location: firstItem.location || null,
+          location: firstItem.location || undefined,
           is_draft: false,
           // Document Upload Module
-          document_file_name: documentModule || null,
+          document_file_name: documentModule || undefined,
           // QR Code Module
-          qrcode_url: qrcodeModule?.url || null,
-          qrcode_image: qrcodeModule?.image || null,
+          qrcode_url: qrcodeModule?.url || undefined,
+          qrcode_image: qrcodeModule?.image || undefined,
           // Host Contact Details Module
-          contact_name: contactModule?.name || null,
-          contact_country_code: contactModule?.countryCode || null,
-          contact_phone: contactModule?.phone || null,
-          contact_email: contactModule?.email || null,
+          contact_name: contactModule?.name || undefined,
+          contact_country_code: contactModule?.countryCode || undefined,
+          contact_phone: contactModule?.phone || undefined,
+          contact_email: contactModule?.email || undefined,
           // Notifications Timer Module
           notification_times: notificationsModule || [],
+          group_id: firstItem.group_id,
+          group_name: firstItem.group_name,
+          date: firstItem.date, // <-- FIX: Save the date field
           // Legacy content field for backward compatibility
           content: {
             items: allItemsToSave
@@ -316,10 +514,10 @@ export default function CreateItinerary() {
         
         for (const item of allItemsToSave) {
           // Extract module values for each item
-          const documentModule = item.modules?.document ? item.moduleValues?.document : null;
-          const qrcodeModule = item.modules?.qrcode ? item.moduleValues?.qrcode : null;
-          const contactModule = item.modules?.contact ? item.moduleValues?.contact : null;
-          const notificationsModule = item.modules?.notifications ? item.moduleValues?.notifications : null;
+          const documentModule = item.modules?.document ? item.moduleValues?.document : undefined;
+          const qrcodeModule = item.modules?.qrcode ? item.moduleValues?.qrcode : undefined;
+          const contactModule = item.modules?.contact ? item.moduleValues?.contact : undefined;
+          const notificationsModule = item.modules?.notifications ? item.moduleValues?.notifications : undefined;
 
           const itineraryData = {
             event_id: eventId,
@@ -327,23 +525,26 @@ export default function CreateItinerary() {
             created_by: currentUser.id,
             title: item.title,
             description: item.details || '',
-            arrival_time: item.arrivalTime || null,
+            arrival_time: item.arrivalTime || undefined,
             start_time: item.startTime,
             end_time: item.endTime,
-            location: item.location || null,
+            location: item.location || undefined,
             is_draft: false,
             // Document Upload Module
-            document_file_name: documentModule || null,
+            document_file_name: documentModule || undefined,
             // QR Code Module
-            qrcode_url: qrcodeModule?.url || null,
-            qrcode_image: qrcodeModule?.image || null,
+            qrcode_url: qrcodeModule?.url || undefined,
+            qrcode_image: qrcodeModule?.image || undefined,
             // Host Contact Details Module
-            contact_name: contactModule?.name || null,
-            contact_country_code: contactModule?.countryCode || null,
-            contact_phone: contactModule?.phone || null,
-            contact_email: contactModule?.email || null,
+            contact_name: contactModule?.name || undefined,
+            contact_country_code: contactModule?.countryCode || undefined,
+            contact_phone: contactModule?.phone || undefined,
+            contact_email: contactModule?.email || undefined,
             // Notifications Timer Module
             notification_times: notificationsModule || [],
+            group_id: item.group_id,
+            group_name: item.group_name,
+            date: item.date, // <-- FIX: Save the date field
             // Legacy content field for backward compatibility
             content: {
               originalItem: item
@@ -471,6 +672,9 @@ export default function CreateItinerary() {
         details: item.details || '',
         modules: item.modules || {},
         moduleValues: item.moduleValues || {},
+        date: item.date || '',
+        group_id: item.group_id || undefined,
+        group_name: item.group_name || undefined,
       }));
 
       setDrafts(d => [...d, ...newDrafts]);
@@ -489,35 +693,89 @@ export default function CreateItinerary() {
     };
     setDrafts(d => [newDraft, ...d]);
     setItems(g => g.filter((_, i) => i !== idx));
-    setExpandedDraftIndex(0);
+    setExpandedDraftIndex(null);
     setEditingItemIndex(null);
   };
 
+  // When groupName changes, update all drafts
+  useEffect(() => {
+    if (groupId && drafts.length > 1) {
+      setDrafts(d => d.map(draft => ({ ...draft, group_id: groupId, group_name: groupName })));
+    }
+  }, [groupName, groupId, drafts.length]);
+
   // --- RENDER ---
   return (
-    <div style={{ display: 'flex', background: '#fff', minHeight: '100vh' }}>
+    <div style={{ 
+      display: 'flex', 
+      background: colors.bg, 
+      minHeight: '100vh',
+      color: colors.text,
+      transition: 'background 0.3s, color 0.3s'
+    }}>
       {/* Main Content */}
-      <div style={{ flex: 1, maxWidth: 1200, margin: '0 auto', padding: 40, fontFamily: 'Roboto, Arial, system-ui, sans-serif', color: '#222', position: 'relative', height: '100vh', overflowY: 'auto' }}>
-        <div style={{ fontSize: 36, fontWeight: 500, marginBottom: 0 }}>{eventDetails?.name}</div>
-        <hr style={{ margin: '12px 0 8px 0', border: 'none', borderTop: '2px solid #bbb' }} />
-        <div style={{ fontSize: 26, fontWeight: 500, marginBottom: 24, marginTop: 0, textAlign: 'left' }}>
-          {isEditMode ? 'Edit Itinerary' : 'Create Itinerary'}
+      <div style={{ 
+        flex: 1, 
+        maxWidth: 1200, 
+        margin: '0 auto', 
+        padding: 40, 
+        fontFamily: 'Roboto, Arial, system-ui, sans-serif', 
+        position: 'relative', 
+        height: '100vh', 
+        overflowY: 'auto' 
+      }}>
+        {/* Header with Glass Effect */}
+        <div style={{
+          ...getGlassStyles(isDark),
+          padding: '32px',
+          marginBottom: '32px',
+          position: 'sticky',
+          top: '0',
+          zIndex: 10
+        }}>
+          <div style={{ 
+            fontSize: 36, 
+            fontWeight: 500, 
+            marginBottom: 8,
+            color: colors.text
+          }}>
+            {eventDetails?.name}
       </div>
+          <hr style={{ 
+            margin: '12px 0 8px 0', 
+            border: 'none', 
+            borderTop: `2px solid ${colors.border}` 
+          }} />
+          <div style={{ 
+            fontSize: 26, 
+            fontWeight: 500, 
+            marginBottom: 0, 
+            marginTop: 0, 
+            textAlign: 'left',
+            color: colors.textSecondary
+          }}>
+            {isEditMode ? 'Edit Itinerary' : 'Create Itinerary'}
+      </div>
+        </div>
 
-        {/* Action Buttons */}
-        <div style={{ maxWidth: 1100, marginLeft: 'auto', marginRight: 'auto', marginBottom: 24 }}>
-          <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+        {/* Action Buttons with Glass Effect */}
+        <div style={{ 
+          maxWidth: 1100, 
+          marginLeft: 'auto', 
+          marginRight: 'auto', 
+          marginBottom: 24 
+        }}>
+          <div style={{ 
+            display: 'flex', 
+            gap: 16, 
+            alignItems: 'center' 
+          }}>
             <button
               onClick={handleAddDraft}
               style={{ 
-                background: '#222', 
-                color: '#fff', 
-                border: 'none', 
-                borderRadius: 8, 
-                fontWeight: 500, 
+                ...getButtonStyles(isDark, 'primary'),
                 fontSize: 18, 
                 padding: '14px 34px', 
-                cursor: 'pointer',
                 minWidth: '165px'
               }}
             >
@@ -526,30 +784,57 @@ export default function CreateItinerary() {
             <button
               onClick={() => setIsCsvModalOpen(true)}
               style={{ 
-                background: '#fff', 
-                color: '#222', 
-                border: '2px solid #222', 
-                borderRadius: 8, 
-                fontWeight: 500, 
+                ...getButtonStyles(isDark, 'secondary'),
                 fontSize: 18, 
                 padding: '12px 32px', 
-                cursor: 'pointer',
                 minWidth: '145px'
               }}
             >
               Upload CSV
             </button>
-      </div>
+          </div>
         </div>
 
-        {/* Draft Items */}
+        {/* Group Name Input (if grouping) with Glass Effect */}
+        {groupId && drafts.length > 1 && (
+          <div style={{ 
+            marginBottom: 24, 
+            maxWidth: 500 
+          }}>
+            <label style={{ 
+              fontWeight: 600, 
+              fontSize: 16, 
+              color: colors.text, 
+              marginBottom: 8, 
+              display: 'block' 
+            }}>
+              Group Name
+            </label>
+            <input
+              type="text"
+              value={groupName}
+              onChange={e => setGroupName(e.target.value)}
+              placeholder="Enter group name (e.g. Morning Activities)"
+              style={{
+                ...getInputStyles(isDark),
+                width: '100%',
+                padding: '12px 16px',
+                fontSize: 18,
+                height: 48,
+                marginBottom: 8
+              }}
+            />
+        </div>
+      )}
+
+        {/* Draft Items with Glass Effect */}
         {drafts.map((draft, idx) => (
           <div key={`draft-${idx}`} style={{
-            background: '#fff',
-            border: expandedDraftIndex === idx ? '2px solid #4f46e5' : '2px solid #bbb',
-            borderRadius: 14,
+            ...getGlassStyles(isDark),
+            border: expandedDraftIndex === idx 
+              ? `2px solid ${isDark ? '#ffffff' : '#000000'}` 
+              : `2px solid ${colors.border}`,
             marginBottom: 32,
-            boxShadow: expandedDraftIndex === idx ? '0 4px 16px rgba(0,0,0,0.1)' : '0 2px 8px #0001',
             display: 'flex',
             flexDirection: 'column',
             maxWidth: 1100,
@@ -567,7 +852,7 @@ export default function CreateItinerary() {
                     position: 'absolute',
                     top: 24,
                     right: 76,
-                    background: '#f1f5f9',
+                    background: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)',
                     border: 'none',
                     borderRadius: '50%',
                     width: 44,
@@ -577,126 +862,128 @@ export default function CreateItinerary() {
                     alignItems: 'center',
                     justifyContent: 'center',
                     zIndex: 10,
-                    color: '#475569',
+                    color: colors.textSecondary,
                     fontSize: 24,
+                    backdropFilter: 'blur(10px)',
+                    transition: 'all 0.2s ease'
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = '#e2e8f0'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = '#f1f5f9'; }}
+                  onMouseEnter={(e) => { 
+                    e.currentTarget.style.background = isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)'; 
+                  }}
+                  onMouseLeave={(e) => { 
+                    e.currentTarget.style.background = isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)'; 
+                  }}
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                 </button>
                 <button
-                  onClick={() => handleRemoveDraft(idx)}
-                  title="Delete Draft"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleRemoveDraft(idx);
+                  }}
                   style={{
                     position: 'absolute',
                     top: 24,
                     right: 24,
-                    background: '#ef4444',
-                    border: 'none',
+                    ...getButtonStyles(isDark, 'danger'),
                     borderRadius: '50%',
                     width: 44,
                     height: 44,
-                    cursor: 'pointer',
+                    padding: 0,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    transition: 'all 0.2s ease',
                     zIndex: 10,
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = '#dc2626'; e.currentTarget.style.transform = 'scale(1.1)'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = '#ef4444'; e.currentTarget.style.transform = 'scale(1)'; }}
+                  onMouseEnter={(e) => { 
+                    e.currentTarget.style.transform = 'scale(1.1)'; 
+                  }}
+                  onMouseLeave={(e) => { 
+                    e.currentTarget.style.transform = 'scale(1)'; 
+                  }}
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3,6 5,6 21,6"></polyline><path d="m19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2"></path></svg>
                 </button>
 
                 <div style={{ paddingTop: '40px' }}>
                   {/* Title Field */}
-                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 8, letterSpacing: 0.5, color: '#222' }}>TITLE</div>
+                  <div style={{ 
+                    fontWeight: 700, 
+                    fontSize: 15, 
+                    marginBottom: 8, 
+                    letterSpacing: 0.5, 
+                    color: colors.text 
+                  }}>
+                    TITLE
+                  </div>
                   <input
                     placeholder="Event Title"
                     value={draft.title}
                     onChange={(e) => handleDraftChange(idx, 'title', e.target.value)}
                     style={{
+                      ...getInputStyles(isDark),
                       width: '100%',
-                      borderRadius: 8,
-                      background: '#f7f8fa',
-                      border: '1.5px solid #d1d5db',
-                      padding: 10,
+                      padding: '12px 16px',
                       fontSize: 18,
                       height: 48,
                       marginBottom: 14
                     }}
                   />
 
-                  {/* Time Fields */}
-                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 8, letterSpacing: 0.5, color: '#222' }}>TIME</div>
-                  <div style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>Arrival Time</div>
-                      <input
-                        type="time"
-                        value={draft.arrivalTime}
-                        onChange={(e) => handleDraftChange(idx, 'arrivalTime', e.target.value)}
-                        style={{
-                          width: '100%',
-                          borderRadius: 8,
-                          background: '#f7f8fa',
-                          border: '1.5px solid #d1d5db',
-                          padding: 10,
-                          fontSize: 18,
-                          height: 48
-                        }}
-                      />
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>Start Time</div>
-                      <input
-                        type="time"
-                        value={draft.startTime}
-                        onChange={(e) => handleDraftChange(idx, 'startTime', e.target.value)}
-                        style={{
-                          width: '100%',
-                          borderRadius: 8,
-                          background: '#f7f8fa',
-                          border: '1.5px solid #d1d5db',
-                          padding: 10,
-                          fontSize: 18,
-                          height: 48
-                        }}
-                      />
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>End Time</div>
-                      <input
-                        type="time"
-                        value={draft.endTime}
-                        onChange={(e) => handleDraftChange(idx, 'endTime', e.target.value)}
-                        style={{
-                          width: '100%',
-                          borderRadius: 8,
-                          background: '#f7f8fa',
-                          border: '1.5px solid #d1d5db',
-                          padding: 10,
-                          fontSize: 18,
-                          height: 48
-                        }}
-                      />
-                    </div>
+                  {/* Date & Time Fields */}
+                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 8, letterSpacing: 0.5, color: colors.text }}>
+                    DATE & TIME
                   </div>
+                  <div style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
+                    {/* Date Field */}
+                    <div style={{ flex: 1, position: 'relative' }}>
+                      <CustomDatePicker
+                        value={draft.date}
+                        onChange={(value) => handleDraftChange(idx, 'date', value)}
+                        placeholder="Date (DD/MM/YYYY)"
+                        isDark={isDark}
+                        colors={colors}
+                        id={`date-picker-${idx}`}
+                        openDropdown={openDropdown}
+                        setOpenDropdown={setOpenDropdown}
+                      />
+                    </div>
+                    {/* Time Fields */}
+                    {([
+                      ['arrivalTime', 'Arrival Time'],
+                      ['startTime', 'Start Time'],
+                      ['endTime', 'End Time']
+                    ] as [keyof ItineraryItem, string][]).map(([key, label]) => (
+                      <div style={{ flex: 1, position: 'relative' }} key={key}>
+                        <CustomGlassTimePicker
+                          value={draft[key] as string}
+                          onChange={value => handleDraftChange(idx, key, value)}
+                          placeholder={label}
+                          isDark={isDark}
+                          colors={colors}
+                        />
+                      </div>
+        ))}
+      </div>
 
                   {/* Location Field */}
-                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 8, letterSpacing: 0.5, color: '#222' }}>LOCATION</div>
+                  <div style={{ 
+                    fontWeight: 700, 
+                    fontSize: 15, 
+                    marginBottom: 8, 
+                    letterSpacing: 0.5, 
+                    color: colors.text 
+                  }}>
+                    LOCATION
+                  </div>
                   <input
                     placeholder="Event Location"
                     value={draft.location}
                     onChange={(e) => handleDraftChange(idx, 'location', e.target.value)}
                     style={{
+                      ...getInputStyles(isDark),
                       width: '100%',
-                      borderRadius: 8,
-                      background: '#f7f8fa',
-                      border: '1.5px solid #d1d5db',
-                      padding: 10,
+                      padding: '12px 16px',
                       fontSize: 18,
                       height: 48,
                       marginBottom: 14
@@ -704,17 +991,23 @@ export default function CreateItinerary() {
                   />
 
                   {/* Description Field */}
-                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 8, letterSpacing: 0.5, color: '#222' }}>DESCRIPTION</div>
+                  <div style={{ 
+                    fontWeight: 700, 
+                    fontSize: 15, 
+                    marginBottom: 8, 
+                    letterSpacing: 0.5, 
+                    color: colors.text 
+                  }}>
+                    DESCRIPTION
+                  </div>
                   <textarea
                     placeholder="Event Description"
                     value={draft.details}
                     onChange={(e) => handleDraftChange(idx, 'details', e.target.value)}
                     style={{
+                      ...getInputStyles(isDark),
                       width: '100%',
-                      borderRadius: 8,
-                      background: '#f7f8fa',
-                      border: '1.5px solid #d1d5db',
-                      padding: 10,
+                      padding: '12px 16px',
                       fontSize: 18,
                       minHeight: 100,
                       marginBottom: 14,
@@ -722,545 +1015,271 @@ export default function CreateItinerary() {
                     }}
                   />
 
-                  {/* Module Drop Zone */}
+                  {/* Module Drop Zone with Glass Effect */}
                   <div
                     style={{ 
-                      border: '2px dashed #d1d5db', 
-                      borderRadius: 8, 
-                      background: '#fff', 
+                      ...getGlassStyles(isDark),
                       padding: 24, 
                       minHeight: 60, 
                       display: 'flex', 
                       justifyContent: 'center', 
                       alignItems: 'center', 
                       cursor: 'copy', 
-                      marginTop: 24 
+                      marginTop: 24,
+                      border: `2px dashed ${colors.border}`,
+                      background: isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'
                     }}
                     onDrop={e => handleModuleDrop(idx, e)}
                     onDragOver={e => e.preventDefault()}
                   >
-                    <span style={{ color: '#9ca3af', fontSize: 16, fontWeight: 500 }}>Drag modules here</span>
+                    <span style={{ 
+                      color: colors.textSecondary, 
+                      fontSize: 16, 
+                      fontWeight: 500 
+                    }}>
+                      Drag modules here
+                    </span>
                   </div>
 
-                  {/* Display Added Modules */}
+                  {/* Display Added Modules with Glass Effect */}
                   {Object.entries(draft.modules || {}).filter(([_, isActive]) => isActive).map(([moduleKey, _]) => {
                     const module = ITINERARY_MODULES.find(m => m.key === moduleKey);
                     if (!module) return null;
-                    
                     return (
                       <div key={moduleKey} style={{
-                        background: '#ffffff',
-                        border: '2px solid #e5e7eb',
-                        borderRadius: 8,
+                        background: isDark ? 'rgba(30,30,30,0.75)' : '#fff',
+                        border: `2px solid ${isDark ? 'rgba(255,255,255,0.10)' : '#e5e7eb'}`,
+                        borderRadius: 16,
                         padding: 20,
                         marginTop: 16,
-                        position: 'relative'
+                        position: 'relative',
+                        boxShadow: isDark ? '0 2px 12px #0006' : '0 1px 4px #0001',
+                        color: isDark ? '#fff' : '#111',
+                        backdropFilter: 'blur(16px)',
+                        WebkitBackdropFilter: 'blur(16px)'
                       }}>
                         <button
                           onClick={() => handleRemoveModule(idx, moduleKey)}
                           style={{
                             position: 'absolute',
-                            top: 12,
-                            right: 12,
-                            background: '#000000',
-                            color: '#ffffff',
-                            border: 'none',
+                            top: 10,
+                            right: 10,
+                            background: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.06)',
+                            color: isDark ? '#fff' : '#222',
+                            border: `1px solid ${isDark ? 'rgba(255,255,255,0.18)' : '#bbb'}`,
                             borderRadius: '50%',
-                            width: 24,
-                            height: 24,
-                            cursor: 'pointer',
+                            width: 28,
+                            height: 28,
+                            minWidth: 28,
+                            minHeight: 28,
+                            padding: 0,
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            fontSize: 14,
-                            fontWeight: 600
+                            fontSize: 18,
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            boxShadow: isDark ? '0 2px 8px #0003' : '0 1px 4px #0001',
+                            transition: 'background 0.2s, color 0.2s',
+                            outline: 'none',
                           }}
+                          title="Remove module"
                         >
                           ×
                         </button>
-                        
-                        {/* Document Upload Module */}
-                        {module.type === 'file' && (
+                        <div style={{ fontSize: 16, fontWeight: 600, color: isDark ? '#fff' : '#000', marginBottom: 4 }}>{module.label}</div>
+                        {moduleKey === 'document' ? (
                           <div>
-                            <div style={{ 
-                              marginBottom: 16,
-                              paddingRight: 40
-                            }}>
-                              <div style={{ 
-                                fontSize: 16, 
-                                fontWeight: 600, 
-                                color: '#000000',
-                                marginBottom: 4
-                              }}>
-                                {module.label}
-                              </div>
-                              <div style={{ 
-                                fontSize: 14, 
-                                color: '#6b7280',
-                                fontWeight: 400
-                              }}>
-                                Upload PNG, JPG, or PDF files
-                              </div>
-                            </div>
-                            <div style={{
-                              border: '2px dashed #d1d5db',
-                              borderRadius: 6,
-                              padding: 24,
-                              textAlign: 'center',
-                              background: '#f9fafb',
-                              position: 'relative',
-                              cursor: 'pointer'
-                            }}>
-                              <input
-                                type="file"
-                                accept=".png,.jpg,.jpeg,.pdf"
-                                onChange={(e) => {
-                                  const file = e.target.files?.[0];
-                                  if (file) {
-                                    handleModuleValueChange(idx, moduleKey, file.name);
-                                  }
-                                }}
-                                style={{
-                                  position: 'absolute',
-                                  top: 0,
-                                  left: 0,
-                                  width: '100%',
-                                  height: '100%',
-                                  opacity: 0,
-                                  cursor: 'pointer'
-                                }}
-                              />
-                              <div style={{ fontSize: 14, fontWeight: 500, color: '#374151', marginBottom: 4 }}>
-                                Drop files here or click to browse
-                              </div>
-                              <div style={{ fontSize: 12, color: '#6b7280' }}>
-                                Supports PNG, JPG, and PDF files
-                              </div>
-                              {draft.moduleValues?.[moduleKey] && (
-                                <div style={{
-                                  marginTop: 12,
-                                  padding: 8,
-                                  background: '#f3f4f6',
-                                  border: '1px solid #d1d5db',
-                                  borderRadius: 4,
-                                  fontSize: 12,
-                                  color: '#374151',
-                                  fontWeight: 500
-                                }}>
-                                  Selected: {draft.moduleValues[moduleKey]}
+                            <input
+                              type="file"
+                              accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.xls,.xlsx,.csv,.txt"
+                              onChange={e => {
+                                const file = e.target.files?.[0];
+                                handleModuleValueChange(idx, moduleKey, file ? file.name : '');
+                              }}
+                              style={{
+                                marginBottom: 8,
+                                color: isDark ? '#fff' : '#111',
+                                background: 'transparent',
+                                border: 'none',
+                                fontSize: 14
+                              }}
+                            />
+                            {draft.moduleValues?.[moduleKey] && (
+                              <div style={{ fontSize: 14, marginTop: 4 }}>
+                                Uploaded: <b>{draft.moduleValues[moduleKey]}</b>
+                                <button
+                                  onClick={() => handleModuleValueChange(idx, moduleKey, '')}
+                                  style={{ marginLeft: 12, color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13 }}
+                                >Remove</button>
         </div>
       )}
-                            </div>
+                          </div>
+                        ) : moduleKey === 'qrcode' ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            <input
+                              type="text"
+                              placeholder="QR Code URL (optional)"
+                              value={draft.moduleValues?.[moduleKey]?.url || ''}
+                              onChange={e => handleModuleValueChange(idx, moduleKey, { ...draft.moduleValues?.[moduleKey], url: e.target.value })}
+                              style={{
+                                width: '100%',
+                                borderRadius: 8,
+                                background: isDark ? 'rgba(255,255,255,0.07)' : '#f9fafb',
+                                border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.13)' : '#d1d5db'}`,
+                                color: isDark ? '#fff' : '#111',
+                                padding: '10px 12px',
+                                fontSize: 14,
+                                outline: 'none',
+                              }}
+                            />
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={e => {
+                                const file = e.target.files?.[0];
+                                handleModuleValueChange(idx, moduleKey, { ...draft.moduleValues?.[moduleKey], image: file ? file.name : '' });
+                              }}
+                              style={{ color: isDark ? '#fff' : '#111', background: 'transparent', border: 'none', fontSize: 14 }}
+                            />
+                            {(draft.moduleValues?.[moduleKey]?.url || draft.moduleValues?.[moduleKey]?.image) && (
+        <div style={{ marginTop: 8 }}>
+                                {draft.moduleValues?.[moduleKey]?.url && (
+                                  <div style={{ fontSize: 13, marginBottom: 4 }}>URL: <b>{draft.moduleValues[moduleKey].url}</b></div>
+                                )}
+                                {draft.moduleValues?.[moduleKey]?.image && (
+                                  <div style={{ fontSize: 13 }}>Image: <b>{draft.moduleValues[moduleKey].image}</b></div>
+                                )}
         </div>
       )}
-                        
-                        {/* QR Code Module */}
-                        {module.type === 'qrcode' && (
-                          <div>
-                            <div style={{ 
-                              marginBottom: 16,
-                              paddingRight: 40
-                            }}>
-                              <div style={{ 
-                                fontSize: 16, 
-                                fontWeight: 600, 
-                                color: '#000000',
-                                marginBottom: 4
-                              }}>
-                                {module.label}
-                              </div>
-                              <div style={{ 
-                                fontSize: 14, 
-                                color: '#6b7280',
-                                fontWeight: 400
-                              }}>
-                                Generate QR code from URL or upload image
-                              </div>
-                            </div>
-                            
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                              <div>
-                                <label style={{ 
-                                  display: 'block', 
-                                  fontSize: 14, 
-                                  fontWeight: 500, 
-                                  color: '#374151', 
-                                  marginBottom: 6 
-                                }}>
-                                  Enter URL
-                                </label>
-                                <input
-                                  type="url"
-                                  placeholder="https://example.com"
-                                  value={draft.moduleValues?.[moduleKey]?.url || ''}
-                                  onChange={(e) => handleModuleValueChange(idx, moduleKey, { 
-                                    ...draft.moduleValues?.[moduleKey], 
-                                    url: e.target.value 
-                                  })}
-                                  style={{
-                                    width: '100%',
-                                    borderRadius: 6,
-                                    background: '#ffffff',
-                                    border: '1px solid #d1d5db',
-                                    padding: '10px 12px',
-                                    fontSize: 14,
-                                    outline: 'none'
-                                  }}
-                                />
-                              </div>
-                              
-                              <div style={{ 
-                                display: 'flex', 
-                                alignItems: 'center', 
-                                gap: 12,
-                                margin: '4px 0'
-                              }}>
-                                <div style={{ height: '1px', background: '#d1d5db', flex: 1 }}></div>
-                                <div style={{ 
-                                  fontSize: 12, 
-                                  color: '#6b7280', 
-                                  fontWeight: 500
-                                }}>
-                                  OR
-                                </div>
-                                <div style={{ height: '1px', background: '#d1d5db', flex: 1 }}></div>
-                              </div>
-                              
-                              <div>
-                                <label style={{ 
-                                  display: 'block', 
-                                  fontSize: 14, 
-                                  fontWeight: 500, 
-                                  color: '#374151', 
-                                  marginBottom: 6 
-                                }}>
-                                  Upload QR Code Image
-                                </label>
-                                <div style={{
-                                  border: '2px dashed #d1d5db',
-                                  borderRadius: 6,
-                                  padding: 16,
-                                  textAlign: 'center',
-                                  background: '#f9fafb',
-                                  position: 'relative',
-                                  cursor: 'pointer'
-                                }}>
-                                  <input
-                                    type="file"
-                                    accept="image/*"
-                                    onChange={(e) => {
-                                      const file = e.target.files?.[0];
-                                      if (file) {
-                                        handleModuleValueChange(idx, moduleKey, { 
-                                          ...draft.moduleValues?.[moduleKey], 
-                                          image: file.name 
-                                        });
-                                      }
-                                    }}
-                                    style={{
-                                      position: 'absolute',
-                                      top: 0,
-                                      left: 0,
-                                      width: '100%',
-                                      height: '100%',
-                                      opacity: 0,
-                                      cursor: 'pointer'
-                                    }}
-                                  />
-                                  <div style={{ fontSize: 12, fontWeight: 500, color: '#6b7280' }}>
-                                    Click to upload QR code image
-                                  </div>
-                                  {draft.moduleValues?.[moduleKey]?.image && (
-                                    <div style={{
-                                      marginTop: 8,
-                                      padding: 6,
-                                      background: '#f3f4f6',
-                                      border: '1px solid #d1d5db',
-                                      borderRadius: 4,
-                                      fontSize: 12,
-                                      color: '#374151',
-                                      fontWeight: 500
-                                    }}>
-                                      Selected: {draft.moduleValues[moduleKey].image}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
                           </div>
-                        )}
-                        
-                        {/* Host Contact Details Module */}
-                        {module.type === 'contact' && (
-                          <div>
-                            <div style={{ 
-                              marginBottom: 16,
-                              paddingRight: 40
-                            }}>
-                              <div style={{ 
-                                fontSize: 16, 
-                                fontWeight: 600, 
-                                color: '#000000',
-                                marginBottom: 4
-                              }}>
-                                {module.label}
-                              </div>
-                              <div style={{ 
-                                fontSize: 14, 
-                                color: '#6b7280',
-                                fontWeight: 400
-                              }}>
-                                Contact information for event host
-                              </div>
-                            </div>
-                            
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                              <div>
-                                <label style={{ 
-                                  display: 'block', 
-                                  fontSize: 14, 
-                                  fontWeight: 500, 
-                                  color: '#374151', 
-                                  marginBottom: 6 
-                                }}>
-                                  Host Name
-                                </label>
-                                <input
-                                  type="text"
-                                  placeholder="Enter host name"
-                                  value={draft.moduleValues?.[moduleKey]?.name || ''}
-                                  onChange={(e) => handleModuleValueChange(idx, moduleKey, { 
-                                    ...draft.moduleValues?.[moduleKey], 
-                                    name: e.target.value 
-                                  })}
-                                  style={{
-                                    width: '100%',
-                                    borderRadius: 6,
-                                    background: '#ffffff',
-                                    border: '1px solid #d1d5db',
-                                    padding: '10px 12px',
-                                    fontSize: 14,
-                                    outline: 'none'
-                                  }}
-                                />
-                              </div>
-                              
-                              <div style={{ display: 'flex', gap: 12 }}>
-                                <div style={{ flex: 1 }}>
-                                  <label style={{ 
-                                    display: 'block', 
-                                    fontSize: 14, 
-                                    fontWeight: 500, 
-                                    color: '#374151', 
-                                    marginBottom: 6 
-                                  }}>
-                                    Phone Number
-                                  </label>
-                                  <div style={{ display: 'flex', gap: 8 }}>
+                        ) : moduleKey === 'contact' ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            <input
+                              type="text"
+                              placeholder="Contact Name"
+                              value={draft.moduleValues?.[moduleKey]?.name || ''}
+                              onChange={e => handleModuleValueChange(idx, moduleKey, { ...draft.moduleValues?.[moduleKey], name: e.target.value })}
+                              style={{ width: '100%', borderRadius: 8, background: isDark ? 'rgba(255,255,255,0.07)' : '#f9fafb', border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.13)' : '#d1d5db'}`, color: isDark ? '#fff' : '#111', padding: '10px 12px', fontSize: 14, outline: 'none' }}
+                            />
+                            <input
+                              type="text"
+                              placeholder="Phone"
+                              value={draft.moduleValues?.[moduleKey]?.phone || ''}
+                              onChange={e => handleModuleValueChange(idx, moduleKey, { ...draft.moduleValues?.[moduleKey], phone: e.target.value })}
+                              style={{ width: '100%', borderRadius: 8, background: isDark ? 'rgba(255,255,255,0.07)' : '#f9fafb', border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.13)' : '#d1d5db'}`, color: isDark ? '#fff' : '#111', padding: '10px 12px', fontSize: 14, outline: 'none' }}
+                            />
+                            <input
+                              type="email"
+                              placeholder="Email"
+                              value={draft.moduleValues?.[moduleKey]?.email || ''}
+                              onChange={e => handleModuleValueChange(idx, moduleKey, { ...draft.moduleValues?.[moduleKey], email: e.target.value })}
+                              style={{ width: '100%', borderRadius: 8, background: isDark ? 'rgba(255,255,255,0.07)' : '#f9fafb', border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.13)' : '#d1d5db'}`, color: isDark ? '#fff' : '#111', padding: '10px 12px', fontSize: 14, outline: 'none' }}
+                            />
+                          </div>
+                        ) : moduleKey === 'notifications' ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+                              {[
+                                { label: '24 hours', value: '24h' },
+                                { label: '8 hours', value: '8h' },
+                                { label: '6 hours', value: '6h' },
+                                { label: '4 hours', value: '4h' },
+                                { label: '3 hours', value: '3h' },
+                                { label: '2 hours', value: '2h' },
+                                { label: '1 hour', value: '1h' },
+                                { label: '50 minutes', value: '50m' },
+                                { label: '45 minutes', value: '45m' },
+                                { label: '30 minutes', value: '30m' },
+                                { label: '15 minutes', value: '15m' },
+                              ].map(opt => {
+                                const selected = Array.isArray(draft.moduleValues?.[moduleKey]) && draft.moduleValues[moduleKey].includes(opt.value);
+                                return (
+                                  <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, cursor: 'pointer', background: selected ? (isDark ? '#222' : '#e0e7ef') : 'transparent', borderRadius: 6, padding: '4px 6px', border: selected ? `1.5px solid ${isDark ? '#fff' : '#222'}` : '1.5px solid transparent' }}>
                                     <input
-                                      type="text"
-                                      placeholder="+1"
-                                      value={draft.moduleValues?.[moduleKey]?.countryCode || ''}
-                                      onChange={(e) => handleModuleValueChange(idx, moduleKey, { 
-                                        ...draft.moduleValues?.[moduleKey], 
-                                        countryCode: e.target.value 
-                                      })}
-                                      style={{
-                                        width: '60px',
-                                        borderRadius: 6,
-                                        background: '#ffffff',
-                                        border: '1px solid #d1d5db',
-                                        padding: '10px 8px',
-                                        fontSize: 14,
-                                        textAlign: 'center',
-                                        outline: 'none'
+                                      type="checkbox"
+                                      checked={selected}
+                                      onChange={e => {
+                                        let arr = Array.isArray(draft.moduleValues?.[moduleKey]) ? [...draft.moduleValues[moduleKey]] : [];
+                                        if (e.target.checked) {
+                                          arr.push(opt.value);
+                                        } else {
+                                          arr = arr.filter((t: string) => t !== opt.value);
+                                        }
+                                        handleModuleValueChange(idx, moduleKey, arr);
                                       }}
+                                      style={{ accentColor: isDark ? '#fff' : '#222', marginRight: 4 }}
                                     />
-                                    <input
-                                      type="tel"
-                                      placeholder="Enter phone number"
-                                      value={draft.moduleValues?.[moduleKey]?.phone || ''}
-                                      onChange={(e) => handleModuleValueChange(idx, moduleKey, { 
-                                        ...draft.moduleValues?.[moduleKey], 
-                                        phone: e.target.value 
-                                      })}
-                                      style={{
-                                        flex: 1,
-                                        borderRadius: 6,
-                                        background: '#ffffff',
-                                        border: '1px solid #d1d5db',
-                                        padding: '10px 12px',
-                                        fontSize: 14,
-                                        outline: 'none'
-                                      }}
-                                    />
-                                  </div>
-                                </div>
-                                
-                                <div style={{ flex: 1 }}>
-                                  <label style={{ 
-                                    display: 'block', 
-                                    fontSize: 14, 
-                                    fontWeight: 500, 
-                                    color: '#374151', 
-                                    marginBottom: 6 
-                                  }}>
-                                    Email Address
+                                    {opt.label}
                                   </label>
-                                  <input
-                                    type="email"
-                                    placeholder="host@example.com"
-                                    value={draft.moduleValues?.[moduleKey]?.email || ''}
-                                    onChange={(e) => handleModuleValueChange(idx, moduleKey, { 
-                                      ...draft.moduleValues?.[moduleKey], 
-                                      email: e.target.value 
-                                    })}
-                                    style={{
-                                      width: '100%',
-                                      borderRadius: 6,
-                                      background: '#ffffff',
-                                      border: '1px solid #d1d5db',
-                                      padding: '10px 12px',
-                                      fontSize: 14,
-                                      outline: 'none'
-                                    }}
-                                  />
-                                </div>
-                              </div>
+                                );
+                              })}
                             </div>
                           </div>
+                        ) : (
+                          <input
+                            type="text"
+                            value={draft.moduleValues?.[moduleKey] || ''}
+                            onChange={e => handleModuleValueChange(idx, moduleKey, e.target.value)}
+                            style={{
+                              width: '100%',
+                              borderRadius: 8,
+                              background: isDark ? 'rgba(255,255,255,0.07)' : '#f9fafb',
+                              border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.13)' : '#d1d5db'}`,
+                              color: isDark ? '#fff' : '#111',
+                              padding: '10px 12px',
+                              fontSize: 14,
+                              outline: 'none',
+                              marginBottom: 4
+                            }}
+                            placeholder={module.label}
+                          />
                         )}
-                        
-                        {/* Notifications Timer Module */}
-                        {module.type === 'notifications' && (
-                          <div>
-                            <div style={{ 
-                              marginBottom: 16,
-                              paddingRight: 40
-                            }}>
-                              <div style={{ 
-                                fontSize: 16, 
-                                fontWeight: 600, 
-                                color: '#000000',
-                                marginBottom: 4
-                              }}>
-                                {module.label}
-                              </div>
-                              <div style={{ 
-                                fontSize: 14, 
-                                color: '#6b7280',
-                                fontWeight: 400
-                              }}>
-                                Set reminder notifications for this event
-                              </div>
-                            </div>
-                            
-                            <div>
-                              <div style={{ 
-                                fontSize: 14, 
-                                fontWeight: 500, 
-                                color: '#374151', 
-                                marginBottom: 12,
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 8
-                              }}>
-                                Select notification times:
-                                <span style={{
-                                  fontSize: 12,
-                                  color: '#6b7280',
-                                  fontWeight: 400,
-                                  background: '#f3f4f6',
-                                  padding: '2px 6px',
-                                  borderRadius: 4
-                                }}>
-                                  {(draft.moduleValues?.[moduleKey] || []).length} selected
-                                </span>
-                              </div>
-                              <div style={{ 
-                                display: 'grid', 
-                                gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', 
-                                gap: 8 
-                              }}>
-                                {[
-                                  { value: '24h', label: '24 hours' },
-                                  { value: '8h', label: '8 hours' },
-                                  { value: '4h', label: '4 hours' },
-                                  { value: '3h', label: '3 hours' },
-                                  { value: '2h', label: '2 hours' },
-                                  { value: '1h', label: '1 hour' },
-                                  { value: '45m', label: '45 min' },
-                                  { value: '30m', label: '30 min' },
-                                  { value: '15m', label: '15 min' }
-                                ].map(time => {
-                                  const selectedTimes = draft.moduleValues?.[moduleKey] || [];
-                                  const isSelected = selectedTimes.includes(time.value);
-                                  return (
-                                    <button
-                                      key={time.value}
-                                      type="button"
-                                      onClick={() => {
-                                        const currentTimes = draft.moduleValues?.[moduleKey] || [];
-                                        const newTimes = isSelected
-                                          ? currentTimes.filter((t: string) => t !== time.value)
-                                          : [...currentTimes, time.value];
-                                        handleModuleValueChange(idx, moduleKey, newTimes);
-                                      }}
-                                      style={{
-                                        background: isSelected ? '#000000' : '#ffffff',
-                                        color: isSelected ? '#ffffff' : '#374151',
-                                        border: '1px solid #d1d5db',
-                                        borderRadius: 6,
-                                        padding: '8px 12px',
-                                        fontSize: 12,
-                                        fontWeight: 500,
-                                        cursor: 'pointer',
-                                        textAlign: 'center'
-                                      }}
-                                    >
-                                      {time.label}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                              
-                              {(draft.moduleValues?.[moduleKey] || []).length > 0 && (
-                                <div style={{
-                                  marginTop: 12,
-                                  padding: 12,
-                                  background: '#f9fafb',
-                                  border: '1px solid #d1d5db',
-                                  borderRadius: 6,
-                                  fontSize: 12,
-                                  color: '#374151',
-                                  fontWeight: 500
-                                }}>
-                                  {(draft.moduleValues[moduleKey] || []).length} notification{(draft.moduleValues[moduleKey] || []).length !== 1 ? 's' : ''} will be sent before this event
-                                </div>
-                              )}
-                            </div>
-                          </div>
-      )}
-    </div>
-  );
+                      </div>
+                    );
                   })}
 
                   {/* Action Buttons */}
                   <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 24 }}>
                     <button
-                      onClick={() => handleRemoveDraft(idx)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRemoveDraft(idx);
+                      }}
                       style={{
-                        background: '#fef2f2',
-                        color: '#ef4444',
-                        border: 'none',
-                        borderRadius: 8,
-                        fontWeight: 500,
-                        fontSize: 16,
+                        background: isDark
+                          ? 'rgba(30, 30, 40, 0.35)'
+                          : 'rgba(255, 255, 255, 0.55)',
+                        color: isDark ? '#fff' : '#ef4444',
+                        border: isDark ? '1.5px solid rgba(255,255,255,0.18)' : '1.5px solid #ef4444',
+                        borderRadius: 12,
+                        fontWeight: 600,
+                        fontSize: 15,
                         padding: '10px 24px',
                         cursor: 'pointer',
-                        minWidth: '110px'
+                        minWidth: '100px',
+                        boxShadow: isDark
+                          ? '0 4px 24px 0 rgba(0,0,0,0.25)'
+                          : '0 4px 24px 0 rgba(239,68,68,0.08)',
+                        backdropFilter: 'blur(10px)',
+                        WebkitBackdropFilter: 'blur(10px)',
+                        transition: 'all 0.2s',
+                        outline: 'none',
+                        marginTop: 8,
+                        marginBottom: 8,
+                        letterSpacing: 0.2,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
                       }}
                     >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{marginRight: 6}}>
+                        <rect x="3" y="6" width="18" height="14" rx="2" fill={isDark ? 'rgba(255,255,255,0.12)' : '#fff'} stroke={isDark ? '#fff' : '#ef4444'} strokeWidth="1.5"/>
+                        <path d="M8 10V16" stroke={isDark ? '#fff' : '#ef4444'} strokeWidth="1.5" strokeLinecap="round"/>
+                        <path d="M12 10V16" stroke={isDark ? '#fff' : '#ef4444'} strokeWidth="1.5" strokeLinecap="round"/>
+                        <path d="M16 10V16" stroke={isDark ? '#fff' : '#ef4444'} strokeWidth="1.5" strokeLinecap="round"/>
+                        <rect x="1" y="3" width="22" height="3" rx="1.5" fill={isDark ? 'rgba(255,255,255,0.18)' : '#ef4444'} />
+                      </svg>
                       Delete
                     </button>
                     <button
@@ -1275,7 +1294,8 @@ export default function CreateItinerary() {
                         fontSize: 16,
                         padding: '10px 24px',
                         cursor: draft.title && draft.arrivalTime && draft.startTime && draft.endTime ? 'pointer' : 'not-allowed',
-                        minWidth: '110px'
+                        minWidth: '110px',
+                        height: 48, // Match Delete button height
                       }}
                     >
                       Save Item
@@ -1295,7 +1315,7 @@ export default function CreateItinerary() {
                       {draft.title || 'Untitled Event'}
                     </div>
                     <div style={{ fontSize: 14, color: '#666' }}>
-                      {draft.arrivalTime && draft.startTime && draft.endTime ? `${draft.arrivalTime} - ${draft.startTime} - ${draft.endTime}` : 'Time not set'}
+                      {draft.arrivalTime} - {draft.startTime} - {draft.endTime}
                       {draft.location && ` • ${draft.location}`}
                     </div>
                   </div>
@@ -1315,7 +1335,8 @@ export default function CreateItinerary() {
                         fontSize: 14,
                         padding: '8px 16px',
                         cursor: draft.title && draft.arrivalTime && draft.startTime && draft.endTime ? 'pointer' : 'not-allowed',
-                        minWidth: '85px'
+                        minWidth: '85px',
+                        height: 48, // Match Delete button height
                       }}
                     >
                       Save
@@ -1326,31 +1347,56 @@ export default function CreateItinerary() {
                         handleRemoveDraft(idx);
                       }}
                       style={{
-                        background: '#fef2f2',
-                        color: '#ef4444',
-                        border: 'none',
-                        borderRadius: 6,
-                        fontWeight: 500,
-                        fontSize: 14,
-                        padding: '8px 16px',
+                        background: isDark
+                          ? 'rgba(30, 30, 40, 0.35)'
+                          : 'rgba(255, 255, 255, 0.55)',
+                        color: isDark ? '#fff' : '#ef4444',
+                        border: isDark ? '1.5px solid rgba(255,255,255,0.18)' : '1.5px solid #ef4444',
+                        borderRadius: 12,
+                        fontWeight: 600,
+                        fontSize: 15,
+                        padding: '10px 24px',
                         cursor: 'pointer',
-                        minWidth: '85px'
+                        minWidth: '100px',
+                        boxShadow: isDark
+                          ? '0 4px 24px 0 rgba(0,0,0,0.25)'
+                          : '0 4px 24px 0 rgba(239,68,68,0.08)',
+                        backdropFilter: 'blur(10px)',
+                        WebkitBackdropFilter: 'blur(10px)',
+                        transition: 'all 0.2s',
+                        outline: 'none',
+                        marginTop: 8,
+                        marginBottom: 8,
+                        letterSpacing: 0.2,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
                       }}
                     >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{marginRight: 6}}>
+                        <rect x="3" y="6" width="18" height="14" rx="2" fill={isDark ? 'rgba(255,255,255,0.12)' : '#fff'} stroke={isDark ? '#fff' : '#ef4444'} strokeWidth="1.5"/>
+                        <path d="M8 10V16" stroke={isDark ? '#fff' : '#ef4444'} strokeWidth="1.5" strokeLinecap="round"/>
+                        <path d="M12 10V16" stroke={isDark ? '#fff' : '#ef4444'} strokeWidth="1.5" strokeLinecap="round"/>
+                        <path d="M16 10V16" stroke={isDark ? '#fff' : '#ef4444'} strokeWidth="1.5" strokeLinecap="round"/>
+                        <rect x="1" y="3" width="22" height="3" rx="1.5" fill={isDark ? 'rgba(255,255,255,0.18)' : '#ef4444'} />
+                      </svg>
                       Delete
                     </button>
                   </div>
                 </div>
-              </div>
-            )}
+        </div>
+      )}
           </div>
         ))}
 
         {/* Saved Items */}
         {items.map((item, idx) => (
           <div key={`item-${idx}`} style={{
-            background: '#fff',
-            border: expandedItemIndex === idx ? '2px solid #10b981' : '2px solid #d1d5db',
+            ...getGlassStyles(isDark),
+            color: colors.text,
+            border: expandedItemIndex === idx 
+              ? `2px solid ${isDark ? '#10b981' : '#10b981'}` 
+              : `2px solid ${colors.border}`,
             borderRadius: 14,
             marginBottom: 32,
             boxShadow: expandedItemIndex === idx ? '0 4px 16px rgba(0,0,0,0.1)' : '0 2px 8px #0001',
@@ -1441,8 +1487,8 @@ export default function CreateItinerary() {
                   {item.details && (
                     <div style={{ fontSize: 16, color: '#666', lineHeight: 1.5, marginBottom: 16 }}>
                       {item.details}
-                    </div>
-                  )}
+        </div>
+      )}
 
                   <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 24 }}>
                     <button
@@ -1528,7 +1574,8 @@ export default function CreateItinerary() {
                         fontSize: 14,
                         padding: '8px 16px',
                         cursor: 'pointer',
-                        minWidth: '65px'
+                        minWidth: '65px',
+                        height: 48, // Match Delete button height
                       }}
                     >
                       Edit
@@ -1539,24 +1586,46 @@ export default function CreateItinerary() {
                         handleRemoveItem(idx);
                       }}
                       style={{
-                        background: '#fef2f2',
-                        color: '#ef4444',
-                        border: 'none',
-                        borderRadius: 6,
-                        fontWeight: 500,
-                        fontSize: 14,
-                        padding: '8px 16px',
+                        background: isDark
+                          ? 'rgba(30, 30, 40, 0.35)'
+                          : 'rgba(255, 255, 255, 0.55)',
+                        color: isDark ? '#fff' : '#ef4444',
+                        border: isDark ? '1.5px solid rgba(255,255,255,0.18)' : '1.5px solid #ef4444',
+                        borderRadius: 12,
+                        fontWeight: 600,
+                        fontSize: 15,
+                        padding: '10px 24px',
                         cursor: 'pointer',
-                        minWidth: '75px'
+                        minWidth: '100px',
+                        boxShadow: isDark
+                          ? '0 4px 24px 0 rgba(0,0,0,0.25)'
+                          : '0 4px 24px 0 rgba(239,68,68,0.08)',
+                        backdropFilter: 'blur(10px)',
+                        WebkitBackdropFilter: 'blur(10px)',
+                        transition: 'all 0.2s',
+                        outline: 'none',
+                        marginTop: 8,
+                        marginBottom: 8,
+                        letterSpacing: 0.2,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
                       }}
                     >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{marginRight: 6}}>
+                        <rect x="3" y="6" width="18" height="14" rx="2" fill={isDark ? 'rgba(255,255,255,0.12)' : '#fff'} stroke={isDark ? '#fff' : '#ef4444'} strokeWidth="1.5"/>
+                        <path d="M8 10V16" stroke={isDark ? '#fff' : '#ef4444'} strokeWidth="1.5" strokeLinecap="round"/>
+                        <path d="M12 10V16" stroke={isDark ? '#fff' : '#ef4444'} strokeWidth="1.5" strokeLinecap="round"/>
+                        <path d="M16 10V16" stroke={isDark ? '#fff' : '#ef4444'} strokeWidth="1.5" strokeLinecap="round"/>
+                        <rect x="1" y="3" width="22" height="3" rx="1.5" fill={isDark ? 'rgba(255,255,255,0.18)' : '#ef4444'} />
+                      </svg>
                       Delete
                     </button>
                   </div>
                 </div>
               </div>
-            )}
-          </div>
+      )}
+    </div>
         ))}
 
         {/* No Items Message */}
@@ -1576,7 +1645,7 @@ export default function CreateItinerary() {
           </div>
         )}
 
-        {/* CSV Upload Modal */}
+        {/* CSV Upload Modal with Glass Effect */}
         {isCsvModalOpen && (
           <div style={{
             position: 'fixed',
@@ -1584,7 +1653,7 @@ export default function CreateItinerary() {
             left: 0,
             width: '100vw',
             height: '100vh',
-            background: 'rgba(0,0,0,0.6)',
+            background: isDark ? 'rgba(0, 0, 0, 0.8)' : 'rgba(0, 0, 0, 0.6)',
             zIndex: 1000,
             display: 'flex',
             alignItems: 'center',
@@ -1592,17 +1661,29 @@ export default function CreateItinerary() {
             backdropFilter: 'blur(5px)'
           }}>
             <div style={{
-              background: '#fff',
-              borderRadius: 16,
+              ...getGlassStyles(isDark),
               width: 'clamp(500px, 60vw, 800px)',
-              boxShadow: '0 4px 32px rgba(0,0,0,0.2)',
               overflow: 'hidden'
             }}>
-              <div style={{ padding: '24px 32px', borderBottom: '1px solid #eee' }}>
-                <h2 style={{ margin: 0, fontSize: 22, fontWeight: 600 }}>Upload Itinerary CSV</h2>
-              </div>
+              <div style={{ 
+                padding: '24px 32px', 
+                borderBottom: `1px solid ${colors.border}` 
+              }}>
+                <h2 style={{ 
+                  margin: 0, 
+                  fontSize: 22, 
+                  fontWeight: 600,
+                  color: colors.text
+                }}>
+                  Upload Itinerary CSV
+                </h2>
+    </div>
               <div style={{ padding: 32 }}>
-                <p style={{ marginBottom: 24, color: '#666', lineHeight: 1.6 }}>
+                <p style={{ 
+                  marginBottom: 24, 
+                  color: colors.textSecondary, 
+                  lineHeight: 1.6 
+                }}>
                   Upload a CSV file with your itinerary items. The file should include columns for title, arrival time, start time, end time, location, and description.
                   <br /><br />
                   <strong>Module Support:</strong> The template includes columns for all available modules (Time Slot, Location, Notes, Attendees, Resources). 
@@ -1613,14 +1694,7 @@ export default function CreateItinerary() {
                   <button
                     onClick={handleDownloadCSVTemplate}
                     style={{
-                      background: '#f8f9fa',
-                      border: '2px solid #6c757d',
-                      color: '#6c757d',
-                      padding: '10px 20px',
-                      borderRadius: 8,
-                      cursor: 'pointer',
-                      fontSize: 14,
-                      fontWeight: 500,
+                      ...getButtonStyles(isDark, 'secondary'),
                       width: '100%',
                       marginBottom: 16
                     }}
@@ -1641,23 +1715,24 @@ export default function CreateItinerary() {
                   style={{
                     width: '100%',
                     padding: 12,
-                    border: '2px dashed #d1d5db',
+                    border: `2px dashed ${colors.border}`,
                     borderRadius: 8,
-                    background: '#f9fafb',
-                    marginBottom: 24
+                    background: isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)',
+                    marginBottom: 24,
+                    color: colors.text
                   }}
                 />
               </div>
-              <div style={{ padding: '0 32px 32px 32px', display: 'flex', justifyContent: 'flex-end', gap: 16 }}>
+              <div style={{ 
+                padding: '0 32px 32px 32px', 
+                display: 'flex', 
+                justifyContent: 'flex-end', 
+                gap: 16 
+              }}>
                 <button
                   onClick={() => setIsCsvModalOpen(false)}
                   style={{
-                    background: '#fff',
-                    border: '1px solid #222',
-                    color: '#222',
-                    padding: '10px 24px',
-                    borderRadius: 8,
-                    cursor: 'pointer',
+                    ...getButtonStyles(isDark, 'secondary'),
                     minWidth: '100px'
                   }}
                 >
@@ -1665,12 +1740,7 @@ export default function CreateItinerary() {
                 </button>
                 <button
                   style={{
-                    background: '#222',
-                    color: '#fff',
-                    border: 'none',
-                    padding: '10px 24px',
-                    borderRadius: 8,
-                    cursor: 'pointer',
+                    ...getButtonStyles(isDark, 'primary'),
                     minWidth: '100px'
                   }}
                 >
@@ -1681,29 +1751,130 @@ export default function CreateItinerary() {
           </div>
         )}
 
-        {/* Footer */}
+        {/* Group Creation Modal with Glass Effect */}
+        {showGroupModal && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            background: isDark ? 'rgba(0, 0, 0, 0.8)' : 'rgba(0, 0, 0, 0.6)',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backdropFilter: 'blur(5px)'
+          }}>
+            <div style={{
+              ...getGlassStyles(isDark),
+              width: 'clamp(400px, 50vw, 600px)',
+              overflow: 'hidden'
+            }}>
+              <div style={{ 
+                padding: '24px 32px', 
+                borderBottom: `1px solid ${colors.border}` 
+              }}>
+                <h2 style={{ 
+                  margin: 0, 
+                  fontSize: 22, 
+                  fontWeight: 600,
+                  color: colors.text
+                }}>
+                  Create Itinerary Group
+                </h2>
+              </div>
+              <div style={{ padding: 32 }}>
+                <p style={{ 
+                  marginBottom: 24, 
+                  color: colors.textSecondary, 
+                  lineHeight: 1.6 
+                }}>
+                  You're creating a group with multiple itinerary items. Please enter a name for this group to help organize your itineraries.
+                </p>
+                
+                <div style={{ marginBottom: 24 }}>
+                  <label style={{ 
+                    fontWeight: 600, 
+                    fontSize: 16, 
+                    color: colors.text, 
+                    marginBottom: 8, 
+                    display: 'block' 
+                  }}>
+                    Group Name
+                  </label>
+                  <input
+                    type="text"
+                    value={tempGroupName}
+                    onChange={(e) => setTempGroupName(e.target.value)}
+                    placeholder="e.g. Morning Activities, Welcome Session, etc."
+                    style={{
+                      ...getInputStyles(isDark),
+                      width: '100%',
+                      padding: '12px 16px',
+                      fontSize: 16,
+                      height: 48,
+                      boxSizing: 'border-box'
+                    }}
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') {
+                        handleConfirmGroup();
+                      }
+                    }}
+                    autoFocus
+                  />
+                </div>
+                
+                <div style={{ 
+                  display: 'flex', 
+                  justifyContent: 'flex-end', 
+                  gap: 12 
+                }}>
+                  <button
+                    onClick={handleCancelGroup}
+                    style={{
+                      ...getButtonStyles(isDark, 'secondary'),
+                      minWidth: '100px'
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleConfirmGroup}
+                    disabled={!tempGroupName.trim()}
+                    style={{
+                      ...getButtonStyles(isDark, tempGroupName.trim() ? 'primary' : 'secondary'),
+                      minWidth: '100px',
+                      opacity: tempGroupName.trim() ? 1 : 0.5,
+                      cursor: tempGroupName.trim() ? 'pointer' : 'not-allowed'
+                    }}
+                  >
+                    Create Group
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Footer with Glass Effect */}
         <div style={{
+          ...getGlassStyles(isDark),
           display: 'flex',
           justifyContent: 'space-between',
           gap: 16,
           marginTop: 48,
-          paddingTop: 24,
-          borderTop: '1px solid #e5e7eb',
+          padding: '24px 32px',
           maxWidth: 1100,
           marginLeft: 'auto',
           marginRight: 'auto',
         }}>
           <button 
             style={{ 
-              background: '#eee', 
-              color: '#222', 
-              fontWeight: 500, 
+              ...getButtonStyles(isDark, 'secondary'),
               fontSize: 18, 
-              border: '1px solid #ccc', 
-              borderRadius: 8, 
               padding: '10px 36px', 
-              minWidth: '125px', 
-              cursor: 'pointer' 
+              minWidth: '125px'
             }} 
             onClick={() => navigate(`/event/${eventId}?tab=dashboard`)}
           >
@@ -1711,14 +1882,11 @@ export default function CreateItinerary() {
           </button>
           <button
             style={{ 
-              background: (drafts.length + items.length) > 0 ? '#222' : '#ccc', 
-              color: '#fff', 
-              fontWeight: 500, 
-              fontSize: 18, 
-              border: 'none', 
-              borderRadius: 8, 
+              ...getButtonStyles(isDark, (drafts.length + items.length) > 0 ? 'primary' : 'secondary'),
+              fontSize: 18,
               padding: '11px 37px',
               minWidth: '155px',
+              height: 48, // Match Delete button height
               opacity: (drafts.length + items.length) > 0 ? 1 : 0.5,
               cursor: (drafts.length + items.length) > 0 ? 'pointer' : 'not-allowed'
             }}
@@ -1730,14 +1898,17 @@ export default function CreateItinerary() {
         </div>
       </div>
 
-      {/* Module Sidebar */}
+      {/* Module Sidebar with Glass Effect */}
       <ModuleSidebar isCollapsed={isModuleSidebarCollapsed} onToggle={() => setIsModuleSidebarCollapsed(!isModuleSidebarCollapsed)} />
     </div>
   );
-} 
+}
 
 // --- SIDEBAR COMPONENT ---
 const ModuleSidebar = ({ isCollapsed, onToggle }: { isCollapsed: boolean, onToggle: () => void }) => {
+  const { theme } = useContext(ThemeContext);
+  const isDark = theme === 'dark';
+  const colors = getColors(isDark);
 
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>, moduleKey: string) => {
     e.dataTransfer.setData('text/plain', moduleKey);
@@ -1746,26 +1917,33 @@ const ModuleSidebar = ({ isCollapsed, onToggle }: { isCollapsed: boolean, onTogg
   return (
       <div style={{ 
         width: isCollapsed ? 32 : 280, 
-        background: '#222', 
-        color: '#fff', 
+        background: isDark ? 'rgba(30, 30, 30, 0.9)' : 'rgba(255, 255, 255, 0.9)', 
+        color: colors.text, 
         transition: 'width 0.2s', 
         position: 'relative', 
         display: 'flex', 
         flexDirection: 'column', 
         alignItems: isCollapsed ? 'center' : 'flex-start', 
         padding: isCollapsed ? '40px 0' : '40px 24px', 
-        minHeight: '100vh' 
+        minHeight: '100vh',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        borderLeft: `1px solid ${colors.border}`,
+        boxShadow: isDark 
+          ? '2px 0 8px rgba(0,0,0,0.2)' 
+          : '2px 0 8px rgba(0,0,0,0.08)'
       }}>
         <button 
           onClick={onToggle} 
           style={{ 
             background: 'none', 
             border: 'none', 
-            color: '#fff', 
+            color: colors.text, 
             fontSize: 22, 
             cursor: 'pointer', 
             alignSelf: isCollapsed ? 'center' : 'flex-end', 
-            marginBottom: 24 
+            marginBottom: 24,
+            transition: 'all 0.2s ease'
           }} 
           title={isCollapsed ? 'Show Modules' : 'Hide Modules'}
         >
@@ -1773,7 +1951,15 @@ const ModuleSidebar = ({ isCollapsed, onToggle }: { isCollapsed: boolean, onTogg
         </button>
         {!isCollapsed && (
           <>
-            <div style={{ fontSize: 13, color: '#bbb', marginBottom: 24, letterSpacing: 1, textTransform: 'uppercase' }}>Modules</div>
+            <div style={{ 
+              fontSize: 13, 
+              color: colors.textSecondary, 
+              marginBottom: 24, 
+              letterSpacing: 1, 
+              textTransform: 'uppercase' 
+            }}>
+              Modules
+      </div>
             
             <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 12 }}>
               {ITINERARY_MODULES.map(module => (
@@ -1782,9 +1968,7 @@ const ModuleSidebar = ({ isCollapsed, onToggle }: { isCollapsed: boolean, onTogg
                   draggable
                   onDragStart={e => handleDragStart(e, module.key)}
                   style={{
-                    background: '#fff',
-                    border: '1px solid #bbb',
-                    borderRadius: 8,
+                    ...getGlassStyles(isDark),
                     padding: '12px 16px',
                     cursor: 'grab',
                     userSelect: 'none',
@@ -1792,14 +1976,331 @@ const ModuleSidebar = ({ isCollapsed, onToggle }: { isCollapsed: boolean, onTogg
                     width: '100%'
                   }}
                 >
-                  <div style={{ color: '#222', fontWeight: 500 }}>
+                  <div style={{ 
+                    color: isDark ? '#fff' : '#111', 
+                    fontWeight: 700, 
+                    fontSize: 16, 
+                    letterSpacing: 0.2, 
+                    textShadow: isDark ? '0 1px 4px #000a' : '0 1px 4px #fff8',
+                    transition: 'color 0.2s'
+                  }}>
                     {module.label}
-      </div>
           </div>
-              ))}
         </div>
+      ))}
+      </div>
           </>
         )}
     </div>
   );
 }; 
+
+// Clean Date Picker Component
+function CustomDatePicker({ value, onChange, placeholder, isDark, colors, id, openDropdown, setOpenDropdown }: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  isDark: boolean;
+  colors: any;
+  id: string;
+  openDropdown: string | null;
+  setOpenDropdown: (value: string | null) => void;
+}) {
+  const [month, setMonth] = useState(() => new Date().getMonth());
+  const [year, setYear] = useState(() => new Date().getFullYear());
+  const today = new Date();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const firstDay = new Date(year, month, 1).getDay();
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+  const isOpen = openDropdown === id;
+  function selectDate(day: number) {
+    const mm = String(month + 1).padStart(2, '0');
+    const dd = String(day).padStart(2, '0');
+    onChange(`${year}-${mm}-${dd}`);
+    setOpenDropdown(null);
+  }
+  // Format value as dd/MM/yyyy for display
+  let displayValue = value;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [yyyy, mm, dd] = value.split('-');
+    displayValue = `${dd}/${mm}/${yyyy}`;
+  }
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Accept both dd/MM/yyyy and yyyy-MM-dd
+    let val = e.target.value;
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(val)) {
+      const [dd, mm, yyyy] = val.split('/');
+      val = `${yyyy}-${mm}-${dd}`;
+    }
+    onChange(val);
+  };
+  const toggleDropdown = () => {
+    setOpenDropdown(isOpen ? null : id);
+  };
+  return (
+    <div style={{ position: 'relative', width: '100%' }} data-dropdown>
+      <input
+        type="text"
+        value={displayValue}
+        onChange={handleInputChange}
+        placeholder={placeholder}
+        onFocus={() => setOpenDropdown(id)}
+        style={{
+          width: '100%',
+          padding: '12px 16px',
+          borderRadius: '12px',
+          border: `2px solid ${colors.border}`,
+          background: colors.inputBg,
+          color: colors.text,
+          fontSize: '16px',
+          transition: 'all 0.2s ease',
+          height: '48px',
+          boxSizing: 'border-box',
+          outline: 'none',
+          boxShadow: 'none',
+        }}
+      />
+      {isOpen && (
+        <div style={{
+          position: 'absolute',
+          left: '50%',
+          top: '100%',
+          transform: 'translate(-50%, 8px)',
+          zIndex: 1000,
+          width: 300,
+          ...getGlassStyles(isDark),
+          padding: 20,
+          boxSizing: 'border-box',
+          borderRadius: 16,
+          boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.3)' : '0 8px 32px rgba(0,0,0,0.1)',
+          border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.18)' : '#e5e7eb'}`,
+          background: isDark ? 'rgba(30, 30, 30, 0.95)' : 'rgba(255,255,255,0.95)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <button 
+              type="button" 
+              onClick={() => {
+                if (month === 0) {
+                  setMonth(11);
+                  setYear(year - 1);
+                } else {
+                  setMonth(month - 1);
+                }
+              }} 
+              style={{ 
+                background: 'none', 
+                border: 'none', 
+                color: colors.text, 
+                fontSize: 18, 
+                cursor: 'pointer', 
+                padding: '4px 8px',
+                borderRadius: '4px',
+                boxShadow: 'none',
+              }}
+            >
+              ←
+            </button>
+            <span style={{ fontWeight: 600, fontSize: 16, color: colors.text }}>
+              {monthNames[month]} {year}
+            </span>
+            <button 
+              type="button" 
+              onClick={() => {
+                if (month === 11) {
+                  setMonth(0);
+                  setYear(year + 1);
+                } else {
+                  setMonth(month + 1);
+                }
+              }} 
+              style={{ 
+                background: 'none', 
+                border: 'none', 
+                color: colors.text, 
+                fontSize: 18, 
+                cursor: 'pointer', 
+                padding: '4px 8px',
+                borderRadius: '4px',
+                boxShadow: 'none',
+              }}
+            >
+              →
+            </button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, marginBottom: 8 }}>
+            {['S','M','T','W','T','F','S'].map((day, i) => (
+              <div key={i} style={{ 
+                textAlign: 'center', 
+                fontWeight: 600, 
+                color: colors.textSecondary, 
+                fontSize: 12,
+                padding: '4px 0'
+              }}>
+                {day}
+              </div>
+            ))}
+            {Array(firstDay).fill(null).map((_, i) => <div key={'empty'+i} />)}
+            {Array(daysInMonth).fill(null).map((_, i) => {
+              const day = i + 1;
+              const isToday = year === today.getFullYear() && month === today.getMonth() && day === today.getDate();
+              const isSelected = value && new Date(value).getDate() === day && new Date(value).getMonth() === month && new Date(value).getFullYear() === year;
+              return (
+                <button
+                  key={day}
+                  type="button"
+                  onClick={() => selectDate(day)}
+                  style={{
+                    width: 32, 
+                    height: 32, 
+                    borderRadius: '6px', 
+                    border: isToday ? '2px solid #fff' : 'none',
+                    background: isSelected ? colors.accent : 'transparent',
+                    color: isSelected ? '#000' : colors.text,
+                    fontWeight: isSelected || isToday ? 600 : 400,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    fontSize: '14px',
+                  }}
+                >
+                  {day}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// --- Custom Glassmorphic Time Picker ---
+function CustomGlassTimePicker({ value, onChange, placeholder, isDark, colors }: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  isDark: boolean;
+  colors: any;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const [hour, setHour] = React.useState('');
+  const [minute, setMinute] = React.useState('');
+  React.useEffect(() => {
+    if (value && /^\d{2}:\d{2}$/.test(value)) {
+      const [h, m] = value.split(':');
+      setHour(h);
+      setMinute(m);
+    }
+  }, [value]);
+  const handleSelect = (h: string, m: string) => {
+    setHour(h);
+    setMinute(m);
+    onChange(`${h}:${m}`);
+    setOpen(false);
+  };
+  const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
+  const minutes = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'));
+  return (
+    <div style={{ position: 'relative', width: '100%' }}>
+      <input
+        type="text"
+        value={value}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        onChange={e => {
+          const val = e.target.value;
+          if (/^\d{2}:\d{2}$/.test(val)) {
+            const [h, m] = val.split(':');
+            setHour(h);
+            setMinute(m);
+            onChange(val);
+          } else {
+            setHour('');
+            setMinute('');
+            onChange(val);
+          }
+        }}
+        placeholder={placeholder}
+        style={{
+          background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.9)',
+          backdropFilter: 'blur(10px)',
+          WebkitBackdropFilter: 'blur(10px)',
+          border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.13)' : '#d1d5db'}`,
+          borderRadius: '12px',
+          color: isDark ? '#fff' : '#000',
+          width: '100%',
+          fontSize: 16,
+          height: 48,
+          padding: '12px 16px',
+          boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.3)' : '0 8px 32px rgba(0,0,0,0.1)',
+          outline: 'none',
+          transition: 'all 0.2s',
+        }}
+        maxLength={5}
+      />
+      {open && (
+        <div style={{
+          position: 'absolute',
+          left: 0,
+          top: '100%',
+          marginTop: 8,
+          width: '100%',
+          display: 'flex',
+          gap: 8,
+          ...getGlassStyles(isDark),
+          borderRadius: 16,
+          boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.3)' : '0 8px 32px rgba(0,0,0,0.1)',
+          border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.18)' : '#e5e7eb'}`,
+          zIndex: 1000,
+          maxHeight: 220,
+          overflow: 'hidden',
+        }}>
+          <div style={{ flex: 1, overflowY: 'auto', maxHeight: 220 }}>
+            {hours.map(h => (
+              <div
+                key={h}
+                onMouseDown={() => handleSelect(h, minute || '00')}
+                style={{
+                  padding: '8px 0',
+                  textAlign: 'center',
+                  background: h === hour ? colors.accent : 'transparent',
+                  color: h === hour ? '#000' : colors.text,
+                  fontWeight: h === hour ? 700 : 400,
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  fontSize: 16,
+                  transition: 'all 0.2s',
+                }}
+              >
+                {h}
+        </div>
+      ))}
+      </div>
+          <div style={{ flex: 1, overflowY: 'auto', maxHeight: 220 }}>
+            {minutes.map(m => (
+              <div
+                key={m}
+                onMouseDown={() => handleSelect(hour || '00', m)}
+                style={{
+                  padding: '8px 0',
+                  textAlign: 'center',
+                  background: m === minute ? colors.accent : 'transparent',
+                  color: m === minute ? '#000' : colors.text,
+                  fontWeight: m === minute ? 700 : 400,
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  fontSize: 16,
+                  transition: 'all 0.2s',
+                }}
+              >
+                {m}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+} 

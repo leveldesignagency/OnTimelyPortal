@@ -1,10 +1,12 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useContext } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import Tesseract from 'tesseract.js';
 import countryList from 'country-list';
 import { codes as countryCallingCodes } from 'country-calling-code';
 import { getCurrentUser } from './lib/auth';
 import { addMultipleGuests, getGuests, deleteGuest, deleteGuestsByGroupId } from './lib/supabase';
+import { ThemeContext } from './ThemeContext';
+import { useRealtimeEvents } from './hooks/useRealtime';
 
 const AVIATIONSTACK_API_KEY = 'bb7fd8369e323c356434d5b1ac77b437'; // 🚨 PASTE YOUR NEW AVIATIONSTACK API KEY HERE 🚨
 
@@ -75,6 +77,8 @@ interface Guest {
   groupId?: string | null;
   groupName?: string | null;
   flightData?: FlightData;
+  hotelAddress?: string;
+  hotelBookingNumber?: string;
 }
 
 type Draft = Guest;
@@ -168,11 +172,13 @@ function getFlagEmoji(isoCode2: string) {
     .replace(/./g, (char: string) => String.fromCodePoint(127397 + char.charCodeAt(0)));
 }
 
+type CountryCodeObj = { countryCodes: string[]; isoCode2: string; country: string };
+
 const COUNTRY_CODES = Array.from(
   new Map(
     countryCallingCodes
       .filter(c => c.countryCodes[0] && c.isoCode2)
-      .map(c => [`+${c.countryCodes[0]}`, {
+      .map((c: CountryCodeObj) => [`+${c.countryCodes[0]}`, {
         code: `+${c.countryCodes[0]}`,
         label: c.country,
         flag: getFlagEmoji(c.isoCode2)
@@ -190,10 +196,93 @@ function countryCodeSelector(value: string, onChange: (val: string) => void) {
   );
 }
 
+// Glassmorphic style helper functions
+const getGlassStyles = (isDark: boolean) => ({
+  background: isDark 
+    ? 'rgba(255, 255, 255, 0.05)' 
+    : 'rgba(255, 255, 255, 0.8)',
+  backdropFilter: 'blur(20px)',
+  WebkitBackdropFilter: 'blur(20px)',
+  border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.2)'}`,
+  borderRadius: '16px',
+  boxShadow: isDark 
+    ? '0 8px 32px rgba(0, 0, 0, 0.3)' 
+    : '0 8px 32px rgba(0, 0, 0, 0.1)'
+});
+
+const getInputStyles = (isDark: boolean) => ({
+  background: isDark ? 'rgba(0,0,0,0)' : 'rgba(255,255,255,0.9)',
+  backdropFilter: 'blur(10px)',
+  WebkitBackdropFilter: 'blur(10px)',
+  border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
+  borderRadius: '8px',
+  color: isDark ? '#fff' : '#000',
+  outline: 'none',
+  transition: 'all 0.2s ease'
+});
+
+const getButtonStyles = (isDark: boolean, variant: 'primary' | 'secondary' | 'danger') => {
+  const baseStyles = {
+    border: 'none',
+    borderRadius: '8px',
+    padding: '12px 24px',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    backdropFilter: 'blur(10px)',
+    WebkitBackdropFilter: 'blur(10px)'
+  };
+
+  switch (variant) {
+    case 'primary':
+      return {
+        ...baseStyles,
+        background: isDark 
+          ? 'linear-gradient(135deg, #ffffff 0%, #f0f0f0 100%)' 
+          : 'linear-gradient(135deg, #000000 0%, #333333 100%)',
+        color: isDark ? '#000000' : '#ffffff',
+        boxShadow: '0 4px 16px rgba(0, 0, 0, 0.2)'
+      };
+    case 'secondary':
+      return {
+        ...baseStyles,
+        background: isDark 
+          ? 'rgba(255, 255, 255, 0.1)' 
+          : 'rgba(0, 0, 0, 0.05)',
+        color: isDark ? '#ffffff' : '#000000',
+        border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)'}`
+      };
+    case 'danger':
+      return {
+        ...baseStyles,
+        background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+        color: '#ffffff',
+        boxShadow: '0 4px 16px rgba(239, 68, 68, 0.3)'
+      };
+    default:
+      return baseStyles;
+  }
+};
+
+const getColors = (isDark: boolean) => ({
+  bg: isDark ? '#0f0f0f' : '#f8fafc',
+  text: isDark ? '#ffffff' : '#000000',
+  textSecondary: isDark ? '#a1a1aa' : '#666666',
+  border: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
+  accent: isDark ? '#ffffff' : '#000000',
+  hoverBg: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)',
+  inputBg: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(255, 255, 255, 0.9)',
+  cardBg: isDark ? 'rgba(30, 30, 30, 0.8)' : 'rgba(255, 255, 255, 0.8)'
+});
+
 export default function CreateGuests() {
   const { eventId: eventIdFromParams, guestIndex } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
+  const { theme } = useContext(ThemeContext);
+  const isDark = theme === 'dark';
+  const colors = getColors(isDark);
 
   // This is a failsafe against development server (Vite HMR) issues where useParams might return stale data.
   // It ensures eventId is reliably extracted from the URL, fixing save/load actions.
@@ -237,23 +326,45 @@ export default function CreateGuests() {
   const [isCsvProcessing, setIsCsvProcessing] = useState(false);
   const [csvError, setCsvError] = useState<string | null>('');
   const [expandedDraftIndex, setExpandedDraftIndex] = useState<number | null>(null);
+  const [countryDropdownOpen, setCountryDropdownOpen] = useState<number | null>(null);
+  const countryDropdownRef = useRef<HTMLDivElement>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  const currentUser = getCurrentUser();
+  const { events: realtimeEvents } = useRealtimeEvents(currentUser?.company_id || null);
+  const [eventDetails, setEventDetails] = useState<any>(null);
+  const [dateRange, setDateRange] = useState('');
+
+  useEffect(() => {
+    if (!eventId || !realtimeEvents) return;
+    const currentEvent = realtimeEvents.find(e => e.id === eventId);
+    if (currentEvent) {
+      setEventDetails(currentEvent);
+      if (currentEvent.from && currentEvent.to) {
+        const fromDate = new Date(currentEvent.from).toLocaleDateString('en-GB');
+        const toDate = new Date(currentEvent.to).toLocaleDateString('en-GB');
+        setDateRange(`${fromDate} - ${toDate}`);
+      }
+    }
+  }, [eventId, realtimeEvents]);
 
   useEffect(() => {
     if (!eventId) return;
 
     const loadGuestDataForEdit = async () => {
       if (guestIndex !== undefined) {
-        const idx = parseInt(guestIndex, 10);
-        
+        console.log('[CreateGuests] guestIndex param:', guestIndex);
+        // Check if guestIndex is a UUID (contains hyphens) or a number
+        const isUUID = typeof guestIndex === 'string' && guestIndex.includes('-');
+        const idx = isUUID ? NaN : parseInt(guestIndex, 10);
+        let guestToEdit: Guest | undefined;
+        let convertedGuests: Guest[] = [];
         try {
           // Load guests from Supabase instead of localStorage
           const supabaseGuests = await getGuests(eventId);
-          
-          // Convert Supabase guest format to local format
-          const convertedGuests = supabaseGuests.map((guest: any) => ({
+          convertedGuests = supabaseGuests.map((guest: any) => ({
             id: guest.id, // Ensure ID is preserved
             firstName: guest.first_name,
             middleName: guest.middle_name,
@@ -279,12 +390,26 @@ export default function CreateGuests() {
             prefix: guest.prefix,
             status: guest.status
           }));
+          console.log('[CreateGuests] Loaded guests IDs:', convertedGuests.map(g => g.id));
+          console.log('[CreateGuests] Types of loaded guest IDs:', convertedGuests.map(g => typeof g.id));
+          console.log('[CreateGuests] guestIndex:', guestIndex, 'type:', typeof guestIndex, 'isUUID:', isUUID);
 
-          const guestToEdit = convertedGuests[idx];
+          if (!isNaN(idx)) {
+            console.log('[CreateGuests] Using index lookup:', idx);
+            guestToEdit = convertedGuests[idx];
+          } else {
+            console.log('[CreateGuests] Using ID lookup for:', guestIndex);
+            guestToEdit = convertedGuests.find((g: any) => {
+              const match = String(g.id).trim() === String(guestIndex).trim();
+              console.log('[CreateGuests] Comparing:', g.id, '===', guestIndex, '->', match);
+              return match;
+            });
+          }
+          console.log('[CreateGuests] guestToEdit found:', guestToEdit);
 
           if (guestToEdit) {
             setGuests([]); // Clear guests state to avoid rendering the summary card
-            setEditGuestIdx(idx);
+            setEditGuestIdx(!isNaN(idx) ? idx : null);
 
             if (guestToEdit.groupId) {
               // Editing a group
@@ -305,11 +430,17 @@ export default function CreateGuests() {
           console.error('Error loading guest data for edit:', error);
           // Fallback to localStorage if Supabase fails
           const allGuests = JSON.parse(localStorage.getItem(`event_guests_${eventId}`) || '[]');
-          const guestToEdit = allGuests[idx];
+          console.log('[CreateGuests] Fallback allGuests:', allGuests.map((g: any) => g.id));
+          if (!isNaN(idx)) {
+            guestToEdit = allGuests[idx];
+          } else {
+            guestToEdit = allGuests.find((g: any) => g.id === guestIndex);
+          }
+          console.log('[CreateGuests] Fallback guestToEdit found:', guestToEdit);
 
           if (guestToEdit) {
             setGuests([]);
-            setEditGuestIdx(idx);
+            setEditGuestIdx(!isNaN(idx) ? idx : null);
 
             if (guestToEdit.groupId) {
               const groupGuests = allGuests.filter((g: any) => g.groupId === guestToEdit.groupId);
@@ -354,6 +485,20 @@ export default function CreateGuests() {
       } catch {}
     }
   }, [eventId]);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (countryDropdownRef.current && !countryDropdownRef.current.contains(event.target as Node)) {
+        setCountryDropdownOpen(null);
+      }
+    }
+    if (countryDropdownOpen !== null) {
+      document.addEventListener('mousedown', handleClickOutside);
+    } else {
+      document.removeEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [countryDropdownOpen]);
 
   function handleConfirmGroupName() {
     if (groupName.trim()) {
@@ -492,12 +637,10 @@ export default function CreateGuests() {
           if (!text) {
             return reject(new Error('File is empty.'));
           }
-
           const lines = text.split(/\r\n|\n/).filter(line => line.trim() !== '');
           if (lines.length < 2) {
             return reject(new Error('CSV must have a header row and at least one data row.'));
           }
-
           const headers = lines[0].split(',').map(h => h.trim());
           const requiredHeaders = ['First Name', 'Last Name'];
           for (const requiredHeader of requiredHeaders) {
@@ -505,7 +648,7 @@ export default function CreateGuests() {
               return reject(new Error(`CSV is missing required header: ${requiredHeader}`));
             }
           }
-
+          const moduleHeaders = GUEST_MODULES.map(m => m.label);
           const parsedData = lines.slice(1).map((line, rowIndex) => {
             const values = line.split(',').map(v => v.trim());
             const entry: any = {};
@@ -528,7 +671,15 @@ export default function CreateGuests() {
                 case 'Next of Kin Country Code': entry.nextOfKinPhoneCountry = value; break;
                 case 'Next of Kin Number': entry.nextOfKinPhone = value; break;
                 case 'Dietary': entry.dietary = value ? value.split(';').map(d => d.trim()) : []; break;
-                case 'Medical': entry.medical = value ? value.split(';').map(d => d.trim()) : []; break;
+                case 'Medical/Accessibility': entry.medical = value ? value.split(';').map(d => d.trim()) : []; break;
+                default:
+                  // If header is a module, store in moduleValues
+                  const moduleIdx = moduleHeaders.indexOf(header);
+                  if (moduleIdx !== -1) {
+                    if (!entry.moduleValues) entry.moduleValues = {};
+                    entry.moduleValues[GUEST_MODULES[moduleIdx].key] = [value];
+                  }
+                  break;
               }
             });
             if (!entry.firstName || !entry.lastName) {
@@ -599,98 +750,131 @@ export default function CreateGuests() {
     return (
       <div style={{
         position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
-        background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center'
+        background: isDark ? 'rgba(0,0,0,0.85)' : 'rgba(0,0,0,0.6)',
+        zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center'
       }}>
         <form
           onSubmit={handleCsvSubmit}
           style={{
-            background: '#fff', borderRadius: 16, padding: '32px 40px', width: 480,
-            boxShadow: '0 5px 30px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column', alignItems: 'center'
+            background: isDark ? 'rgba(30,30,30,0.95)' : '#fff',
+            borderRadius: 16,
+            padding: '32px 40px',
+            width: 480,
+            boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.7)' : '0 5px 30px rgba(0,0,0,0.2)',
+            display: 'flex', flexDirection: 'column', alignItems: 'center',
+            color: isDark ? '#fff' : '#222',
+            border: isDark ? '1.5px solid rgba(255,255,255,0.10)' : '1.5px solid #e5e7eb',
+            backdropFilter: 'blur(18px)',
+            WebkitBackdropFilter: 'blur(18px)'
           }}
         >
-          <div style={{ fontSize: 24, fontWeight: 600, marginBottom: 16 }}>Upload Guests CSV</div>
-          <p style={{ color: '#555', fontSize: 15, marginBottom: 24, textAlign: 'center', maxWidth: 380, lineHeight: 1.5 }}>
-            Select a CSV file to create draft guest forms.
-            Required columns are 'First Name' and 'Last Name'.
-          </p>
+          <div style={{ fontSize: 24, fontWeight: 600, marginBottom: 16, color: isDark ? '#fff' : '#222' }}>Upload Guests CSV</div>
+          <p style={{ color: isDark ? '#cbd5e1' : '#555', fontSize: 15, marginBottom: 24, textAlign: 'center', maxWidth: 380, lineHeight: 1.5 }}>
+             Select a CSV file to create draft guest forms.
+             Required columns are 'First Name' and 'Last Name'.
+           </p>
 
-          <label
-            htmlFor="csv-upload-input"
-            style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              width: '100%', background: '#f9fafb', border: '1.5px solid #d1d5db',
-              borderRadius: 8, padding: '12px 16px', cursor: 'pointer', marginBottom: 16
-            }}
-          >
-            <span style={{ color: '#333', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {csvFile ? csvFile.name : 'No file chosen'}
-            </span>
-            <span style={{
-              background: '#374151', color: '#fff', borderRadius: 6, padding: '6px 18px',
-              fontWeight: 500, fontSize: 14, marginLeft: 16, flexShrink: 0
-            }}>
-              Choose File
-            </span>
-          </label>
-          <input
-            id="csv-upload-input"
-            type="file"
-            accept=".csv,text/csv"
-            style={{ display: 'none' }}
-            disabled={isCsvProcessing}
-            onChange={e => {
-              const file = e.target.files?.[0] || null;
-              setCsvFile(file);
-              setCsvError(null);
-            }}
-          />
+           <label
+             htmlFor="csv-upload-input"
+             style={{
+               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+               width: '100%',
+               background: isDark ? 'rgba(255,255,255,0.07)' : '#f9fafb',
+               border: isDark ? '1.5px solid rgba(255,255,255,0.13)' : '1.5px solid #d1d5db',
+               borderRadius: 8, padding: '12px 16px', cursor: 'pointer', marginBottom: 16
+             }}
+           >
+             <span style={{ color: isDark ? '#fff' : '#333', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+               {csvFile ? csvFile.name : 'No file chosen'}
+             </span>
+             <span style={{
+               background: isDark ? 'rgba(255,255,255,0.10)' : '#374151',
+               color: isDark ? '#fff' : '#fff',
+               borderRadius: 6, padding: '6px 18px',
+               fontWeight: 500, fontSize: 14, marginLeft: 16, flexShrink: 0,
+               border: isDark ? '1.5px solid rgba(255,255,255,0.13)' : 'none',
+               boxShadow: isDark ? '0 2px 8px #0003' : '0 1px 4px #0001',
+             }}>
+               Choose File
+             </span>
+           </label>
+           <input
+             id="csv-upload-input"
+             type="file"
+             accept=".csv,text/csv"
+             style={{ display: 'none' }}
+             disabled={isCsvProcessing}
+             onChange={e => {
+               const file = e.target.files?.[0] || null;
+               setCsvFile(file);
+               setCsvError(null);
+             }}
+           />
 
-          {csvError && (
-            <div style={{ width: '100%', color: '#c53030', background: '#fed7d7', borderRadius: 8, padding: '12px 16px', marginBottom: 16, fontSize: 14, textAlign: 'center' }}>
-              {csvError}
-            </div>
-          )}
+           {csvError && (
+             <div style={{ width: '100%', color: '#c53030', background: '#fed7d7', borderRadius: 8, padding: '12px 16px', marginBottom: 16, fontSize: 14, textAlign: 'center' }}>
+               {csvError}
+             </div>
+           )}
 
-          <div style={{ display: 'flex', gap: 12, width: '100%', marginTop: 8 }}>
-            <button
-              type="button"
-              onClick={() => {
-                setIsCsvModalOpen(false);
-                setCsvFile(null);
-                setCsvError(null);
-              }}
-              disabled={isCsvProcessing}
-              style={{
-                flex: 1, background: '#e5e7eb', color: '#374151', fontWeight: 600, fontSize: 16,
-                border: 'none', borderRadius: 8, padding: '12px 0', cursor: 'pointer'
-              }}
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={!csvFile || isCsvProcessing}
-              style={{
-                flex: 2, background: '#1f2937', color: '#fff', fontWeight: 600, fontSize: 16,
-                border: 'none', borderRadius: 8, padding: '12px 0',
-                cursor: (!csvFile || isCsvProcessing) ? 'not-allowed' : 'pointer',
-                opacity: (!csvFile || isCsvProcessing) ? 0.6 : 1
-              }}
-            >
-              {isCsvProcessing ? 'Processing...' : 'Upload & Create Drafts'}
-            </button>
-          </div>
-            <button
-              type="button"
-              style={{
-                 background: 'none', border: 'none', color: '#4b5563', fontSize: 14,
-                 marginTop: 20, cursor: 'pointer', textDecoration: 'underline'
-              }}
-              onClick={handleDownloadCSVTemplate}
-              disabled={isCsvProcessing}
-            >
-              Download CSV
-            </button>
+           <div style={{ display: 'flex', gap: 12, width: '100%', marginTop: 8 }}>
+             <button
+               type="button"
+               onClick={() => {
+                 setIsCsvModalOpen(false);
+                 setCsvFile(null);
+                 setCsvError(null);
+               }}
+               disabled={isCsvProcessing}
+               style={{
+                 flex: 1,
+                 background: isDark ? 'rgba(255,255,255,0.10)' : '#e5e7eb',
+                 color: isDark ? '#fff' : '#374151',
+                 fontWeight: 600, fontSize: 16,
+                 border: isDark ? '1.5px solid rgba(255,255,255,0.13)' : 'none',
+                 borderRadius: 8, padding: '12px 0', cursor: 'pointer',
+                 boxShadow: isDark ? '0 2px 8px #0003' : '0 1px 4px #0001',
+                 transition: 'background 0.2s, color 0.2s',
+               }}
+             >
+               Cancel
+             </button>
+             <button
+               type="submit"
+               disabled={!csvFile || isCsvProcessing}
+               style={{
+                 flex: 2,
+                 background: isDark ? 'linear-gradient(135deg, #374151 0%, #111827 100%)' : '#1f2937',
+                 color: '#fff',
+                 fontWeight: 600, fontSize: 16,
+                 border: isDark ? '1.5px solid rgba(255,255,255,0.13)' : 'none',
+                 borderRadius: 8, padding: '12px 0',
+                 cursor: (!csvFile || isCsvProcessing) ? 'not-allowed' : 'pointer',
+                 opacity: (!csvFile || isCsvProcessing) ? 0.6 : 1,
+                 boxShadow: isDark ? '0 2px 8px #0003' : '0 1px 4px #0001',
+                 transition: 'background 0.2s, color 0.2s',
+               }}
+             >
+               {isCsvProcessing ? 'Processing...' : 'Upload & Create Drafts'}
+             </button>
+           </div>
+           <button
+             type="button"
+             style={{
+               background: 'none',
+               border: 'none',
+               color: isDark ? '#cbd5e1' : '#4b5563',
+               fontSize: 14,
+               marginTop: 20,
+               cursor: 'pointer',
+               textDecoration: 'underline',
+               transition: 'color 0.2s',
+             }}
+             onClick={handleDownloadCSVTemplate}
+             disabled={isCsvProcessing}
+           >
+             Download CSV
+           </button>
         </form>
       </div>
     );
@@ -871,12 +1055,14 @@ export default function CreateGuests() {
   }
 
   function handleDownloadCSVTemplate() {
+    const moduleHeaders = GUEST_MODULES.map(m => m.label);
     const headers = [
       'Prefix', 'Gender', 'First Name', 'Middle Name', 'Last Name',
       'Country Code', 'Contact Number', 'Email',
       'ID Type', 'ID Number', 'Country of Origin',
       'Next of Kin Name', 'Next of Kin Email', 'Next of Kin Country Code', 'Next of Kin Number',
-      'Dietary', 'Disabilities', 'Modules'
+      'Dietary', 'Medical/Accessibility',
+      ...moduleHeaders
     ];
     const csvContent = headers.join(',') + '\n';
     const blob = new Blob([csvContent], { type: 'text/csv' });
@@ -1003,8 +1189,8 @@ export default function CreateGuests() {
     }
   }
 
-  const labelStyle = { fontWeight: 500, fontSize: 13, marginBottom: 4, color: '#333', letterSpacing: 0.2 };
-  const inputStyle = { borderRadius: 8, background: '#f7f8fa', border: '1.5px solid #d1d5db', padding: 10, fontSize: 15, height: 38, width: '100%' };
+  const labelStyle = (isDark: boolean) => ({ fontWeight: 500, fontSize: 13, marginBottom: 4, color: isDark ? '#fff' : '#333', letterSpacing: 0.2 });
+  const inputStyle = (isDark: boolean) => ({ borderRadius: 8, background: isDark ? 'rgba(0,0,0,0)' : '#f7f8fa', border: isDark ? '1.5px solid rgba(255,255,255,0.13)' : '1.5px solid #d1d5db', padding: 10, fontSize: 15, height: 38, width: '100%', color: isDark ? '#fff' : '#000', transition: 'background 0.2s, color 0.2s' });
 
   function handleGuestChange(guestIdx: number, key: keyof Guest, value: any) {
     setGuests(guests.map((guest, i) => i === guestIdx ? { ...guest, [key]: value } : guest));
@@ -1107,1106 +1293,865 @@ export default function CreateGuests() {
   }
 
   return (
-    <div style={{ display: 'flex', background: '#fff', minHeight: '100vh' }}>
+    <div style={{ 
+      display: 'flex', 
+      background: colors.bg, 
+      minHeight: '100vh',
+      color: colors.text,
+      transition: 'background 0.3s, color 0.3s'
+    }}>
       {/* Main Content */}
-      <div style={{ flex: 1, maxWidth: 1200, margin: '0 auto', padding: 40, fontFamily: 'Roboto, Arial, system-ui, sans-serif', color: '#222', position: 'relative', height: '100vh', overflowY: 'auto' }}>
-        <div style={{ fontSize: 36, fontWeight: 500, marginBottom: 0 }}>{eventName}</div>
-        <hr style={{ margin: '12px 0 8px 0', border: 'none', borderTop: '2px solid #bbb' }} />
-        <div style={{ fontSize: 26, fontWeight: 500, marginBottom: 24, marginTop: 0, textAlign: 'left' }}>Add Guests</div>
-
-        {/* Action Buttons */}
-        {!editGuestIdx ? (
-          <div style={{ maxWidth: 1100, marginLeft: 'auto', marginRight: 'auto', marginBottom: 24 }}>
-            <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-                <button
-                    onClick={() => setIsGroup(!isGroup)}
-                    style={{
-                        background: isGroup ? '#222' : '#fff',
-                        color: isGroup ? '#fff' : '#222',
-                        border: '2px solid #222',
-                        borderRadius: 8,
-                        fontWeight: 500,
-                        fontSize: 18,
-                        padding: '12px 32px',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                    }}
-                >
-                    Create as Group
-                </button>
-                <button
-                    onClick={handleAddDraft}
-                    style={{ background: '#222', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 500, fontSize: 18, padding: '14px 34px', cursor: 'pointer' }}
-                >
-                    Add {isGroup ? 'Group Member' : 'New Guest'}
-                </button>
-                <button
-                    onClick={() => setIsCsvModalOpen(true)}
-                    style={{ background: '#fff', color: '#222', border: '2px solid #222', borderRadius: 8, fontWeight: 500, fontSize: 18, padding: '12px 32px', cursor: 'pointer' }}
-                >
-                    Upload from CSV
-                </button>
-            </div>
-            {isGroup && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 16 }}>
-                <input
-                  placeholder="Enter Group Name (e.g., Smith Family, Team Alpha)"
-                  value={groupName}
-                  onChange={(e) => setGroupName(e.target.value)}
-                  readOnly={groupNameConfirmed}
-                  style={{
-                    width: '100%',
-                    maxWidth: 400,
-                    padding: '12px 16px',
-                    fontSize: 16,
-                    borderRadius: 8,
-                    border: '1.5px solid #d1d5db',
-                    background: groupNameConfirmed ? '#f8f9fa' : '#fff',
-                    fontWeight: groupNameConfirmed ? 'bold' : 'normal',
-                    transition: 'all 0.3s ease',
-                  }}
-                />
-                <button
-                  onClick={() => groupNameConfirmed ? setGroupNameConfirmed(false) : handleConfirmGroupName()}
-                  style={{
-                    background: '#222',
-                    border: 'none',
-                    borderRadius: 8,
-                    padding: '10px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: 'pointer',
-                    height: '45px',
-                    width: '45px',
-                    transition: 'all 0.3s ease',
-                  }}
-                >
-                  {groupNameConfirmed ? (
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-                  ) : (
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                  )}
-                </button>
-              </div>
-            )}
+      <div style={{ 
+        flex: 1, 
+        maxWidth: 1200, 
+        margin: '0 auto', 
+        padding: 40, 
+        fontFamily: 'Roboto, Arial, system-ui, sans-serif', 
+        position: 'relative', 
+        height: '100vh', 
+        overflowY: 'auto' 
+      }}>
+        {/* Header with Glass Effect */}
+        <div style={{
+          ...getGlassStyles(isDark),
+          padding: '32px',
+          marginBottom: '32px',
+          position: 'sticky',
+          top: '0',
+          zIndex: 10
+        }}>
+          <div style={{ 
+            fontSize: 36, 
+            fontWeight: 500, 
+            marginBottom: 8,
+            color: colors.text
+          }}>
+            {eventDetails?.name || 'Event'}
           </div>
-        ) : (
-          isGroup && (
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 16, alignItems: 'center', margin: '24px 0 32px 0', maxWidth: 1100, marginLeft: 'auto', marginRight: 'auto' }}>
-                <button
-                    onClick={handleAddDraft}
-                    style={{ background: '#222', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 500, fontSize: 18, padding: '14px 32px', cursor: 'pointer' }}
-                >
-                    Add Group Member
-                </button>
-                <button
-                  onClick={() => setShowDeleteConfirm({ type: 'group' })}
-                  style={{
-                    background: '#fef2f2',
-                    color: '#ef4444',
-                    border: 'none',
-                    borderRadius: 8,
-                    fontWeight: 500,
-                    fontSize: 18,
-                    padding: '14px 32px',
-                    cursor: 'pointer',
-                    marginLeft: 16,
-                  }}
-                >
-                  Delete Group
-                </button>
-            </div>
-          )
+          <hr style={{ 
+            margin: '12px 0 8px 0', 
+            border: 'none', 
+            borderTop: `2px solid ${colors.border}` 
+          }} />
+          <div style={{ 
+            fontSize: 26, 
+            fontWeight: 500, 
+            marginBottom: 0, 
+            marginTop: 0, 
+            textAlign: 'left',
+            color: colors.textSecondary
+          }}>
+            Add Guests
+          </div>
+          {dateRange && (
+            <div style={{ fontSize: 16, color: colors.textSecondary, marginTop: 4 }}>{dateRange}</div>
+          )}
+        </div>
+
+        {/* Action Buttons with Glass Effect */}
+        <div style={{ 
+          maxWidth: 1100, 
+          marginLeft: 'auto', 
+          marginRight: 'auto', 
+          marginBottom: 24 
+        }}>
+          <div style={{ 
+            display: 'flex', 
+            gap: 16, 
+            alignItems: 'center' 
+          }}>
+            <button
+              onClick={() => setIsGroup(!isGroup)}
+              style={{
+                ...getButtonStyles(isDark, isGroup ? 'primary' : 'secondary'),
+                fontSize: 18,
+                padding: '12px 32px',
+                minWidth: '165px',
+                border: isGroup ? undefined : `1px solid ${colors.border}`
+              }}
+            >
+              Create as Group
+            </button>
+            <button
+              onClick={handleAddDraft}
+              style={{ ...getButtonStyles(isDark, 'primary'), fontSize: 18, padding: '14px 34px', minWidth: '165px' }}
+            >
+              Add {isGroup ? 'Group Member' : 'New Guest'}
+            </button>
+            <button
+              onClick={() => setIsCsvModalOpen(true)}
+              style={{ ...getButtonStyles(isDark, 'secondary'), fontSize: 18, padding: '12px 32px', minWidth: '145px' }}
+            >
+              Upload from CSV
+            </button>
+          </div>
+        </div>
+
+        {/* Group Name Input (if grouping) with Glass Effect */}
+        {isGroup && (
+          <div style={{ 
+            marginBottom: 24, 
+            maxWidth: 500 
+          }}>
+            <label style={{ 
+              fontWeight: 600, 
+              fontSize: 16, 
+              color: colors.text, 
+              marginBottom: 8, 
+              display: 'block' 
+            }}>
+              Group Name
+            </label>
+            <input
+              type="text"
+              value={groupName}
+              onChange={e => setGroupName(e.target.value)}
+              placeholder="Enter group name (e.g. Smith Family)"
+              style={{
+                ...inputStyle(isDark),
+                width: '100%',
+                padding: '12px 16px',
+                fontSize: 18,
+                height: 48,
+                marginBottom: 8
+              }}
+            />
+          </div>
         )}
 
+        {/* Draft/Guest Cards with Glass Effect */}
         {drafts.map((draft, idx) => (
-          <div key={idx} style={{
-            background: '#fff',
-            border: expandedDraftIndex === idx ? '2px solid #4f46e5' : '2px solid #bbb',
-            borderRadius: 14,
+          <div key={`draft-${idx}`} style={{
+            ...getGlassStyles(isDark),
+            border: expandedDraftIndex === idx 
+              ? `2px solid ${isDark ? '#ffffff' : '#000000'}` 
+              : `2px solid ${colors.border}`,
             marginBottom: 32,
-            boxShadow: expandedDraftIndex === idx ? '0 4px 16px rgba(0,0,0,0.1)' : '0 2px 8px #0001',
             display: 'flex',
             flexDirection: 'column',
             maxWidth: 1100,
             marginLeft: 'auto',
             marginRight: 'auto',
             transition: 'all 0.3s ease-in-out',
-          }}>
+            cursor: expandedDraftIndex !== idx ? 'pointer' : 'default',
+            position: 'relative'
+          }}
+            onClick={() => expandedDraftIndex !== idx && setExpandedDraftIndex(idx)}
+          >
+            {/* Card Title */}
+            <div style={{
+              fontSize: 22,
+              fontWeight: 700,
+              color: '#fff',
+              padding: '18px 24px 0 24px',
+              letterSpacing: 0.2,
+              textShadow: '0 2px 8px #0007',
+              minHeight: 32
+            }}>
+              {(draft.firstName || draft.lastName)
+                ? `${draft.firstName || ''}${draft.firstName && draft.lastName ? ' ' : ''}${draft.lastName || ''}`
+                : `New Guest ${idx + 1}`}
+            </div>
             {expandedDraftIndex === idx ? (
-              // EXPANDED VIEW
-              <div style={{ padding: 32, position: 'relative' }}>
+              <div style={{ padding: 20, position: 'relative' }}>
                 <button
                   onClick={() => setExpandedDraftIndex(null)}
                   title="Collapse"
                   style={{
                     position: 'absolute',
-                    top: 24,
-                    right: 76,
-                    background: '#f1f5f9',
+                    top: 16,
+                    right: 60,
+                    background: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)',
                     border: 'none',
                     borderRadius: '50%',
-                    width: 44,
-                    height: 44,
+                    width: 32,
+                    height: 32,
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     zIndex: 10,
-                    color: '#475569',
-                    fontSize: 24,
+                    color: '#fff',
+                    fontSize: 18,
+                    backdropFilter: 'blur(10px)',
+                    transition: 'all 0.2s ease'
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = '#e2e8f0'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = '#f1f5f9'; }}
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                 </button>
                 <button
-                  onClick={() => {
-                    setScannerState({ show: true, draftIndex: idx, processing: false, imageUrl: null, message: 'Upload or scan a passport to begin.' });
-                    setScannerTab('upload');
-                  }}
-                  title="Scan Passport"
+                  onClick={() => handleRemoveDraft(idx)}
+                  title="Delete Draft"
                   style={{
                     position: 'absolute',
-                    top: 24,
-                    right: 24,
-                    background: '#222',
-                    border: 'none',
+                    top: 16,
+                    right: 16,
+                    ...getButtonStyles(isDark, 'danger'),
                     borderRadius: '50%',
-                    width: 44,
-                    height: 44,
-                    cursor: 'pointer',
+                    width: 32,
+                    height: 32,
+                    padding: 0,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    transition: 'all 0.2s ease',
                     zIndex: 10,
+                    fontSize: 16
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = '#444'; e.currentTarget.style.transform = 'scale(1.1)'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = '#222'; e.currentTarget.style.transform = 'scale(1)'; }}
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12v3a6 6 0 0 1-6 6H9a6 6 0 0 1-6-6V9a6 6 0 0 1 6-6h3"/><path d="M18 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"/><path d="M15 3h6v6"/><path d="m21 3-7.5 7.5"/></svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3,6 5,6 21,6"></polyline><path d="m19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2"></path></svg>
                 </button>
-                <div style={{ paddingTop: '40px' }}>
-                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 8, letterSpacing: 0.5, color: '#222', marginTop: 50 }}>GENDER & PREFIX</div>
-                  <div style={{ display: 'flex', gap: 16, marginBottom: 14 }}>
-                    <select value={draft.prefix} onChange={e => handleDraftChange(idx, 'prefix', e.target.value)} style={{ flex: 1, borderRadius: 8, background: '#f7f8fa', border: '1.5px solid #d1d5db', padding: 10, fontSize: 18, height: 48 }}>
-                      <option value="">Prefix</option>
-                      {PREFIXES.map(p => <option key={p} value={p}>{p}</option>)}
-                    </select>
-                    <select value={draft.gender} onChange={e => handleDraftChange(idx, 'gender', e.target.value)} style={{ flex: 2, borderRadius: 8, background: '#f7f8fa', border: '1.5px solid #d1d5db', padding: 10, fontSize: 18, height: 48 }}>
-                      <option value="">Gender</option>
-                      {GENDERS.map(g => <option key={g} value={g}>{g}</option>)}
-                    </select>
-                  </div>
-                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 8, letterSpacing: 0.5, color: '#222' }}>NAMES</div>
-                  <div style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
-                    <input placeholder="First Name" value={draft.firstName} onChange={e => handleDraftChange(idx, 'firstName', e.target.value)} style={{ flex: 1, borderRadius: 8, background: '#f7f8fa', border: '1.5px solid #d1d5db', padding: 10, fontSize: 18, height: 48 }} />
-                    <input placeholder="Middle Name (Optional)" value={draft.middleName} onChange={e => handleDraftChange(idx, 'middleName', e.target.value)} style={{ flex: 1, borderRadius: 8, background: '#f7f8fa', border: '1.5px solid #d1d5db', padding: 10, fontSize: 18, height: 48 }} />
-                    <input placeholder="Last Name" value={draft.lastName} onChange={e => handleDraftChange(idx, 'lastName', e.target.value)} style={{ flex: 1, borderRadius: 8, background: '#f7f8fa', border: '1.5px solid #d1d5db', padding: 10, fontSize: 18, height: 48 }} />
-                  </div>
-                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 8, letterSpacing: 0.5, color: '#222' }}>DATE OF BIRTH</div>
-                  <div style={{ marginBottom: 14 }}>
-                    <input type="date" value={draft.dob} onChange={e => handleDraftChange(idx, 'dob', e.target.value)} style={{ width: '100%', borderRadius: 8, background: '#f7f8fa', border: '1.5px solid #d1d5db', padding: 10, fontSize: 18, height: 48 }} />
-                  </div>
-                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 8, letterSpacing: 0.5, color: '#222' }}>CONTACT INFORMATION</div>
-                  <div style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
-                    <select value={draft.countryCode} onChange={e => handleDraftChange(idx, 'countryCode', e.target.value)} style={{ flex: 1, borderRadius: 8, background: '#f7f8fa', border: '1.5px solid #d1d5db', padding: 10, fontSize: 18, height: 48 }}>
-                      {COUNTRY_CODES.map(c => <option key={c.code} value={c.code}>{c.flag} {c.code}</option>)}
-                    </select>
-                    <input placeholder="Contact Number" value={draft.contactNumber} onChange={e => handleDraftChange(idx, 'contactNumber', e.target.value)} style={{ flex: 2, borderRadius: 8, background: '#f7f8fa', border: '1.5px solid #d1d5db', padding: 10, fontSize: 18, height: 48 }} />
-                    <input placeholder="Email" value={draft.email} onChange={e => handleDraftChange(idx, 'email', e.target.value)} style={{ flex: 2, borderRadius: 8, background: '#f7f8fa', border: '1.5px solid #d1d5db', padding: 10, fontSize: 18, height: 48 }} />
-                  </div>
-                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 8, letterSpacing: 0.5, color: '#222' }}>DOCUMENTS</div>
-                  <div style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
-                    <select value={draft.idType} onChange={e => handleDraftChange(idx, 'idType', e.target.value)} style={{ flex: 1, borderRadius: 8, background: '#f7f8fa', border: '1.5px solid #d1d5db', padding: 10, fontSize: 18, height: 48 }}>
-                      <option value="">Select ID Type</option>
-                      <option value="Passport">Passport</option>
-                      <option value="Identity Card">Identity Card</option>
-                      <option value="Drivers License">Drivers License</option>
-                    </select>
-                    <input placeholder="ID Number" value={draft.idNumber} onChange={e => handleDraftChange(idx, 'idNumber', e.target.value)} style={{ flex: 1, borderRadius: 8, background: '#f7f8fa', border: '1.5px solid #d1d5db', padding: 10, fontSize: 18, height: 48 }} />
-                    <select value={draft.idCountry} onChange={e => handleDraftChange(idx, 'idCountry', e.target.value)} style={{ flex: 2, borderRadius: 8, background: '#f7f8fa', border: '1.5px solid #d1d5db', padding: 10, fontSize: 18, height: 48 }}>
-                      <option value="">Country of Origin</option>
-                      {COUNTRIES.map((c: string) => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </div>
-                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 8, letterSpacing: 0.5, color: '#222' }}>NEXT OF KIN</div>
-                  <div style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
-                    <div style={{ flex: 2, display: 'flex', flexDirection: 'column' }}>
-                      <label style={labelStyle}>Next of Kin Name</label>
-                      <input value={draft.nextOfKinName} onChange={e => handleDraftChange(idx, 'nextOfKinName', e.target.value)} style={{ ...inputStyle, fontSize: 18, height: 48 }} />
+                {/* --- FIELD ROWS --- */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 24 }}>
+                  {/* Row 1: Prefix, Gender, First Name, Middle Name, Last Name */}
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <div style={{ flex: 1 }}>
+                      <label style={labelStyle(isDark)}>Prefix</label>
+                      <select value={draft.prefix} onChange={e => handleDraftChange(idx, 'prefix', e.target.value)} style={{...inputStyle(isDark), height: 40, fontSize: 15, padding: '8px 12px'}}>
+                        <option value="">Prefix</option>
+                        {PREFIXES.map(p => <option key={p} value={p}>{p}</option>)}
+                      </select>
                     </div>
-                    <div style={{ flex: 2, display: 'flex', flexDirection: 'column' }}>
-                      <label style={labelStyle}>Next of Kin Email</label>
-                      <input type="email" value={draft.nextOfKinEmail} onChange={e => handleDraftChange(idx, 'nextOfKinEmail', e.target.value)} style={{ ...inputStyle, fontSize: 18, height: 48 }} />
+                    <div style={{ flex: 1 }}>
+                      <label style={labelStyle(isDark)}>Gender</label>
+                      <select value={draft.gender} onChange={e => handleDraftChange(idx, 'gender', e.target.value)} style={{...inputStyle(isDark), height: 40, fontSize: 15, padding: '8px 12px'}}>
+                        <option value="">Gender</option>
+                        {GENDERS.map(g => <option key={g} value={g}>{g}</option>)}
+                      </select>
                     </div>
-                    <div style={{ flex: 3, display: 'flex', flexDirection: 'column' }}>
-                      <label style={labelStyle}>Next of Kin Number</label>
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        <select value={draft.nextOfKinPhoneCountry} onChange={e => handleDraftChange(idx, 'nextOfKinPhoneCountry', e.target.value)} style={{ ...inputStyle, width: 110, flex: 'none', fontSize: 18, height: 48 }}>
-                          {COUNTRY_CODES.map(c => <option key={c.code} value={c.code}>{c.flag} {c.code}</option>)}
-                        </select>
-                        <input value={draft.nextOfKinPhone} onChange={e => handleDraftChange(idx, 'nextOfKinPhone', e.target.value)} style={{ ...inputStyle, flex: 1, fontSize: 18, height: 48 }} />
+                    <div style={{ flex: 2 }}>
+                      <label style={labelStyle(isDark)}>First Name</label>
+                      <input value={draft.firstName} onChange={e => handleDraftChange(idx, 'firstName', e.target.value)} style={{...inputStyle(isDark), height: 40, fontSize: 15, padding: '8px 12px'}} placeholder="First Name" />
+                    </div>
+                    <div style={{ flex: 2 }}>
+                      <label style={labelStyle(isDark)}>Middle Name</label>
+                      <input value={draft.middleName} onChange={e => handleDraftChange(idx, 'middleName', e.target.value)} style={{...inputStyle(isDark), height: 40, fontSize: 15, padding: '8px 12px'}} placeholder="Middle Name" />
+                    </div>
+                    <div style={{ flex: 2 }}>
+                      <label style={labelStyle(isDark)}>Last Name</label>
+                      <input value={draft.lastName} onChange={e => handleDraftChange(idx, 'lastName', e.target.value)} style={{...inputStyle(isDark), height: 40, fontSize: 15, padding: '8px 12px'}} placeholder="Last Name" />
+                    </div>
+                  </div>
+                  {/* Row 2: Country Code, Contact Number, Email */}
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <div style={{ flex: 1 }}>
+                      <label style={labelStyle(isDark)}>Country Code</label>
+                      <input value={draft.countryCode} onChange={e => handleDraftChange(idx, 'countryCode', e.target.value)} style={{...inputStyle(isDark), height: 40, fontSize: 15, padding: '8px 12px'}} placeholder="+44" />
+                    </div>
+                    <div style={{ flex: 2 }}>
+                      <label style={labelStyle(isDark)}>Contact Number</label>
+                      <input value={draft.contactNumber} onChange={e => handleDraftChange(idx, 'contactNumber', e.target.value)} style={{...inputStyle(isDark), height: 40, fontSize: 15, padding: '8px 12px'}} placeholder="Contact Number" />
+                    </div>
+                    <div style={{ flex: 3 }}>
+                      <label style={labelStyle(isDark)}>Email</label>
+                      <input value={draft.email} onChange={e => handleDraftChange(idx, 'email', e.target.value)} style={{...inputStyle(isDark), height: 40, fontSize: 15, padding: '8px 12px'}} placeholder="Email" />
+                    </div>
+                  </div>
+                  {/* Row 3: ID Type (custom dropdown), ID Number, Country of Origin (dropdown) */}
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <div style={{ flex: 2 }}>
+                      <label style={labelStyle(isDark)}>ID Type</label>
+                      <select value={draft.idType} onChange={e => handleDraftChange(idx, 'idType', e.target.value)} style={{...inputStyle(isDark), height: 40, fontSize: 15, padding: '8px 12px'}}>
+                        <option value="">ID Type</option>
+                        <option value="Passport">Passport</option>
+                        <option value="Identity Card">Identity Card</option>
+                        <option value="Drivers License">Drivers License</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+                    <div style={{ flex: 2 }}>
+                      <label style={labelStyle(isDark)}>ID Number</label>
+                      <input value={draft.idNumber} onChange={e => handleDraftChange(idx, 'idNumber', e.target.value)} style={{...inputStyle(isDark), height: 40, fontSize: 15, padding: '8px 12px'}} placeholder="ID Number" />
+                    </div>
+                    <div style={{ flex: 3 }}>
+                      <label style={labelStyle(isDark)}>Country of Origin</label>
+                      <div style={{ position: 'relative' }} ref={countryDropdownRef}>
+                        <div
+                          tabIndex={0}
+                          style={{
+                            ...inputStyle(isDark),
+                            height: 40,
+                            fontSize: 15,
+                            padding: '8px 12px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            cursor: 'pointer',
+                            color: draft.idCountry ? (isDark ? '#fff' : '#000') : '#888',
+                            userSelect: 'none',
+                            position: 'relative',
+                          }}
+                          onClick={() => setCountryDropdownOpen(idx === countryDropdownOpen ? null : idx)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter' || e.key === ' ') setCountryDropdownOpen(idx === countryDropdownOpen ? null : idx);
+                            if (e.key === 'Escape') setCountryDropdownOpen(null);
+                          }}
+                        >
+                          {draft.idCountry || 'Country'}
+                          <span style={{ marginLeft: 8, fontSize: 18, color: isDark ? '#fff' : '#000' }}>▼</span>
+                        </div>
+                        {countryDropdownOpen === idx && (
+                          <div style={{
+                            position: 'absolute',
+                            top: 44,
+                            left: 0,
+                            width: '100%',
+                            maxHeight: 220,
+                            overflowY: 'auto',
+                            background: isDark ? 'rgba(0,0,0,0)' : '#fff',
+                            border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.13)' : '#d1d5db'}`,
+                            borderRadius: 12,
+                            zIndex: 100,
+                            boxShadow: isDark ? '0 4px 24px #000a' : '0 2px 8px #0002',
+                            padding: 4,
+                          }}>
+                            {COUNTRIES.map((c: string) => (
+                              <div
+                                key={c}
+                                tabIndex={0}
+                                style={{
+                                  padding: '8px 14px',
+                                  color: isDark ? '#fff' : '#000',
+                                  background: draft.idCountry === c ? (isDark ? 'rgba(255,255,255,0.08)' : '#e0e7ff') : 'transparent',
+                                  borderRadius: 8,
+                                  cursor: 'pointer',
+                                  fontWeight: draft.idCountry === c ? 700 : 400,
+                                  fontSize: 15,
+                                  outline: 'none',
+                                  marginBottom: 2,
+                                }}
+                                onClick={() => {
+                                  handleDraftChange(idx, 'idCountry', c);
+                                  setCountryDropdownOpen(null);
+                                }}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter' || e.key === ' ') {
+                                    handleDraftChange(idx, 'idCountry', c);
+                                    setCountryDropdownOpen(null);
+                                  }
+                                }}
+                              >
+                                {c}
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
-                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 8, letterSpacing: 0.5, color: '#222' }}>DIETARY</div>
-                  <div style={{ marginBottom: 14 }}>
-                    <input
-                      placeholder="Add dietary request and press Enter"
-                      value={draft.dietaryInput || ''}
-                      onChange={e => handleTagInput(idx, 'dietaryInput', e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter' && draft.dietaryInput?.trim()) { handleAddTag(idx, 'dietary', draft.dietaryInput.trim()); handleTagInput(idx, 'dietaryInput', ''); e.preventDefault(); } }}
-                      style={{ width: '100%', borderRadius: 8, background: '#f7f8fa', border: '1.5px solid #d1d5db', padding: 10, fontSize: 18, height: 48 }}
-                    />
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
-                      {(draft.dietary || []).map((tag: string, tagIdx: number) => (
-                        <span key={tagIdx} style={{ background: '#eee', borderRadius: 16, padding: '6px 16px', fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
-                          {tag}
-                          <button onClick={() => handleRemoveTag(idx, 'dietary', tagIdx)} style={{ background: 'none', border: 'none', color: '#888', fontWeight: 'bold', fontSize: 15, cursor: 'pointer', marginLeft: 4 }}>×</button>
-                        </span>
-                      ))}
+                  {/* Row 4: Next of Kin Name, Next of Kin Email, Next of Kin Contact Number (country code + number) */}
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <div style={{ flex: 2 }}>
+                      <label style={labelStyle(isDark)}>Next of Kin Name</label>
+                      <input value={draft.nextOfKinName} onChange={e => handleDraftChange(idx, 'nextOfKinName', e.target.value)} style={{...inputStyle(isDark), height: 40, fontSize: 15, padding: '8px 12px'}} placeholder="Next of Kin Name" />
+                    </div>
+                    <div style={{ flex: 3 }}>
+                      <label style={labelStyle(isDark)}>Next of Kin Email</label>
+                      <input value={draft.nextOfKinEmail} onChange={e => handleDraftChange(idx, 'nextOfKinEmail', e.target.value)} style={{...inputStyle(isDark), height: 40, fontSize: 15, padding: '8px 12px'}} placeholder="Next of Kin Email" />
+                    </div>
+                    <div style={{ flex: 3, display: 'flex', gap: 6 }}>
+                      <div style={{ flex: 1 }}>
+                        <label style={labelStyle(isDark)}>Country Code</label>
+                        <input value={draft.nextOfKinPhoneCountry} onChange={e => handleDraftChange(idx, 'nextOfKinPhoneCountry', e.target.value)} style={{...inputStyle(isDark), height: 40, fontSize: 15, padding: '8px 12px'}} placeholder="+44" />
+                      </div>
+                      <div style={{ flex: 2 }}>
+                        <label style={labelStyle(isDark)}>Contact Number</label>
+                        <input value={draft.nextOfKinPhone} onChange={e => handleDraftChange(idx, 'nextOfKinPhone', e.target.value)} style={{...inputStyle(isDark), height: 40, fontSize: 15, padding: '8px 12px'}} placeholder="Contact Number" />
+                      </div>
                     </div>
                   </div>
-                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 8, letterSpacing: 0.5, color: '#222' }}>MEDICAL</div>
-                  <div style={{ marginBottom: 14 }}>
-                    <input
-                      placeholder="Add medical condition and press Enter"
-                      value={draft.medicalInput || ''}
-                      onChange={e => handleTagInput(idx, 'medicalInput', e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter' && draft.medicalInput?.trim()) { handleAddTag(idx, 'medical', draft.medicalInput.trim()); handleTagInput(idx, 'medicalInput', ''); e.preventDefault(); } }}
-                      style={{ width: '100%', borderRadius: 8, background: '#f7f8fa', border: '1.5px solid #d1d5db', padding: 10, fontSize: 18, height: 48 }}
-                    />
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
-                      {(draft.medical || []).map((tag: string, tagIdx: number) => (
-                        <span key={tagIdx} style={{ background: '#eee', borderRadius: 16, padding: '6px 16px', fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
-                          {tag}
-                          <button onClick={() => handleRemoveTag(idx, 'medical', tagIdx)} style={{ background: 'none', border: 'none', color: '#888', fontWeight: 'bold', fontSize: 15, cursor: 'pointer', marginLeft: 4 }}>×</button>
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                  {Object.values(draft.errors || {}).length > 0 && (
-                    <div style={{ color: 'red', marginBottom: 8, fontSize: 14 }}>
-                      {Object.values(draft.errors || {}).map((err: any, i: number) => <div key={i}>{err}</div>)}
-                    </div>
-                  )}
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-                    {Object.entries(draft.modules || {}).map(([key, instances]) => {
-                      const module = GUEST_MODULES.find(m => m.key === key);
-                      if (!module) return null;
-
-                      const instanceArray = Array.isArray(instances) ? instances : [];
-
-                      return instanceArray.map((_, index) => (
-                        <div key={`${key}-${index}`} style={{
-                          background: '#f8f9fa',
-                          borderRadius: 12,
-                          padding: '20px',
-                          border: '1px solid #e5e7eb',
-                          position: 'relative'
-                        }}>
-                          <button
-                            onClick={() => handleRemoveModule(idx, key, index)}
-                            style={{
-                              position: 'absolute',
-                              top: 8,
-                              right: 8,
-                              background: 'transparent',
-                              border: 'none',
-                              color: '#9ca3af',
-                              cursor: 'pointer',
-                              fontSize: 28,
-                              lineHeight: 1,
-                              padding: '8px',
+                  {/* Row 5: Dietary (tag), Medical (tag) */}
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <div style={{ flex: 1 }}>
+                      <label style={labelStyle(isDark)}>Dietary</label>
+                      <input value={draft.dietaryInput || ''} onChange={e => handleTagInput(idx, 'dietaryInput', e.target.value)} style={{...inputStyle(isDark), height: 40, fontSize: 15, padding: '8px 12px'}} placeholder="Add dietary requirement and press Enter" onKeyDown={e => { if (e.key === 'Enter' && draft.dietaryInput?.trim()) { handleAddTag(idx, 'dietary', draft.dietaryInput.trim()); e.preventDefault(); } }} />
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+                        {(draft.dietary || []).map((tag, tagIdx) => (
+                          <span key={tagIdx} style={{
+                            background: isDark ? 'rgba(255,255,255,0.08)' : '#e0e7ff',
+                            color: isDark ? '#fff' : '#3730a3',
+                            borderRadius: 25,
+                            padding: '6px 18px',
+                            fontSize: 15,
+                            fontWeight: 500,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            marginRight: 6,
+                            marginBottom: 6
+                          }}>
+                            {tag}
+                            <button onClick={() => handleRemoveTag(idx, 'dietary', tagIdx)} style={{
+                              background: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.06)',
+                              color: isDark ? '#fff' : '#222',
+                              border: `1px solid ${isDark ? 'rgba(255,255,255,0.18)' : '#bbb'}`,
                               borderRadius: '50%',
-                              width: 40,
-                              height: 40,
+                              width: 24,
+                              height: 24,
+                              minWidth: 24,
+                              minHeight: 24,
+                              padding: 0,
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
-                              transition: 'color 0.2s, background-color 0.2s'
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.color = '#ef4444';
-                              e.currentTarget.style.background = '#fee2e2';
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.color = '#9ca3af';
-                              e.currentTarget.style.background = 'transparent';
-                            }}
-                          >
-                            ×
-                          </button>
-                          <div style={{ paddingRight: '40px' }}>
-                            <div style={{ marginBottom: 12 }}>
-                              <label style={{ fontWeight: 600, fontSize: 16, color: '#374151' }}>{module.label}</label>
-                            </div>
-
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                              {module.key === 'flightNumber' ? (
-                                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                                  <input
-                                    placeholder="e.g. BA2490"
-                                    value={draft.moduleValues?.[key]?.[index]?.number || ''}
-                                    onChange={e => {
-                                      const newValues = { ...draft.moduleValues };
-                                      if (!Array.isArray(newValues[key])) newValues[key] = new Array(instanceArray.length).fill({});
-                                      newValues[key][index] = { ...(newValues[key][index] || {}), number: e.target.value };
-                                      handleDraftChange(idx, 'moduleValues', newValues);
-                                    }}
-                                    style={{ flex: '2 1 auto', padding: '0 16px', borderRadius: 8, border: '1.5px solid #d1d5db', fontSize: 18, height: 48, background: '#fff', boxSizing: 'border-box' }}
-                                  />
-                                  <input
-                                    type="date"
-                                    value={draft.moduleValues?.[key]?.[index]?.date || ''}
-                                    onChange={e => {
-                                      const newValues = { ...draft.moduleValues };
-                                      if (!Array.isArray(newValues[key])) newValues[key] = new Array(instanceArray.length).fill({});
-                                      newValues[key][index] = { ...(newValues[key][index] || {}), date: e.target.value };
-                                      handleDraftChange(idx, 'moduleValues', newValues);
-                                    }}
-                                    style={{ flex: '1 1 auto', padding: '0 16px', borderRadius: 8, border: '1.5px solid #d1d5db', fontSize: 18, height: 48, background: '#fff', boxSizing: 'border-box' }}
-                                  />
-                                  <button
-                                    onClick={async () => {
-                                      const flightInfo = draft.moduleValues?.[key]?.[index];
-                                      if (flightInfo && flightInfo.number && flightInfo.date) {
-                                        await handleGuestFlightData(idx, key, index, flightInfo.number, flightInfo.date);
-                                      }
-                                    }}
-                                    style={{ flex: '0 0 auto', padding: '0 24px', cursor: 'pointer', background: '#222', color: 'white', fontWeight: 500, border: 'none', fontSize: 18, height: 48, borderRadius: 8, boxSizing: 'border-box' }}
-                                  >
-                                    Find
-                                  </button>
-                                </div>
-                              ) : module.type === 'file' ? (
-                                <div>
-                                  <label htmlFor={`file-upload-${key}-${index}`} style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    width: '100%',
-                                    height: 48,
-                                    background: '#fff',
-                                    border: '1.5px dashed #d1d5db',
-                                    borderRadius: 8,
-                                    cursor: 'pointer',
-                                    color: '#6b7280',
-                                    fontSize: 16,
-                                    transition: 'all 0.2s'
-                                  }}>
-                                    {draft.moduleValues?.[key]?.[index]?.name || 'Upload ID (PNG, JPG, PDF)'}
-                                  </label>
-                                  <input
-                                    id={`file-upload-${key}-${index}`}
-                                    type="file"
-                                    accept="image/png,image/jpeg,.pdf"
-                                    onChange={e => {
-                                      const newValues = { ...draft.moduleValues };
-                                      if (!Array.isArray(newValues[key])) {
-                                        newValues[key] = new Array(instanceArray.length).fill(undefined);
-                                      }
-                                      newValues[key][index] = e.target.files?.[0];
-                                      handleDraftChange(idx, 'moduleValues', newValues);
-                                    }}
-                                    style={{ display: 'none' }}
-                                  />
-                                </div>
-                              ) : (
-                                <input
-                                  placeholder={module.placeholder}
-                                  value={Array.isArray(draft.moduleValues?.[key]) ?
-                                    draft.moduleValues[key][index] || '' :
-                                    (index === 0 ? draft.moduleValues?.[key] || '' : '')}
-                                  onChange={e => {
-                                    const newValues = { ...draft.moduleValues };
-                                    if (!Array.isArray(newValues[key])) {
-                                      newValues[key] = new Array(instanceArray.length).fill('');
-                                    }
-                                    newValues[key][index] = e.target.value;
-                                    handleDraftChange(idx, 'moduleValues', newValues);
-                                  }}
-                                  style={{
-                                    width: '100%',
-                                    padding: '10px 16px',
-                                    borderRadius: 8,
-                                    border: '1.5px solid #d1d5db',
-                                    fontSize: 18,
-                                    height: 48,
-                                    background: '#fff'
-                                  }}
-                                />
-                              )}
-
-                              {(() => {
-                                const flightState = draft.moduleFlightData?.[key]?.[index];
-                                if (!flightState || flightState.status === 'idle') {
-                                  return module.description && <div style={{ fontSize: 13, color: '#666', paddingLeft: 4 }}>{module.description}</div>;
-                                }
-                                if (flightState.status === 'loading') {
-                                  return <div style={{ marginTop: 8, padding: '12px 16px', background: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 14, color: '#4b5563', textAlign: 'center' }}>Loading flight data...</div>;
-                                }
-                                if (flightState.status === 'not_found') {
-                                  return <div style={{ marginTop: 8, padding: '12px 16px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, fontSize: 14, color: '#b91c1c', textAlign: 'center' }}>Flight not found. Please check the details and try again.</div>;
-                                }
-                                if (flightState.status === 'found' && flightState.data) {
-                                  const flightData = flightState.data;
-                                  return (
-                                    <div style={{ marginTop: 8, padding: '12px 16px', background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 8, fontSize: 14, color: '#374151', lineHeight: 1.6 }}>
-                                      <p style={{ margin: '0 0 8px 0' }}><strong>Status:</strong> {flightData.flight_status}</p>
-                                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '16px' }}>
-                                        <div style={{ flex: 1 }}>
-                                          <p style={{ margin: 0, fontWeight: 'bold' }}>Departure</p>
-                                          <p style={{ margin: '4px 0' }}>Airport: {flightData.departure.airport} ({flightData.departure.iata})</p>
-                                          {flightData.departure.terminal && <p style={{ margin: '4px 0' }}>Terminal: {flightData.departure.terminal}</p>}
-                                          {flightData.departure.gate && <p style={{ margin: '4px 0' }}>Gate: {flightData.departure.gate}</p>}
-                                          <p style={{ margin: '4px 0' }}>Scheduled: {formatFlightTime(flightData.departure.scheduled, flightData.departure.timezone)}</p>
-                                          {flightData.departure.estimated && <p style={{ margin: '4px 0' }}>Estimated: {formatFlightTime(flightData.departure.estimated, flightData.departure.timezone)}</p>}
-                                          {flightData.departure.actual && <p style={{ margin: '4px 0' }}>Actual: {formatFlightTime(flightData.departure.actual, flightData.departure.timezone)}</p>}
-                                        </div>
-                                        <div style={{ flex: 1 }}>
-                                          <p style={{ margin: 0, fontWeight: 'bold' }}>Arrival</p>
-                                          <p style={{ margin: '4px 0' }}>Airport: {flightData.arrival.airport} ({flightData.arrival.iata})</p>
-                                          {flightData.arrival.terminal && <p style={{ margin: '4px 0' }}>Terminal: {flightData.arrival.terminal}</p>}
-                                          {flightData.arrival.gate && <p style={{ margin: '4px 0' }}>Gate: {flightData.arrival.gate}</p>}
-                                          <p style={{ margin: '4px 0' }}>Scheduled: {formatFlightTime(flightData.arrival.scheduled, flightData.arrival.timezone)}</p>
-                                          {flightData.arrival.estimated && <p style={{ margin: '4px 0' }}>Estimated: {formatFlightTime(flightData.arrival.estimated, flightData.arrival.timezone)}</p>}
-                                          {flightData.arrival.actual && <p style={{ margin: '4px 0' }}>Actual: {formatFlightTime(flightData.arrival.actual, flightData.arrival.timezone)}</p>}
-                                        </div>
-                                      </div>
-                                    </div>
-                                  );
-                                }
-                                return null;
-                              })()}
-                            </div>
-                          </div>
-                        </div>
-                      ));
-                    })}
-                  </div>
-                  
-                  <div
-                    style={{ border: '2px dashed #d1d5db', borderRadius: 8, background: '#fff', padding: 24, minHeight: 60, display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: 'copy', marginTop: 24 }}
-                    onDrop={e => handleModuleDrop(idx, e)}
-                    onDragOver={e => e.preventDefault()}
-                  >
-                    <span style={{ color: '#9ca3af', fontSize: 16, fontWeight: 500 }}>Drag modules here</span>
+                              fontSize: 16,
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              marginLeft: 8,
+                              boxShadow: isDark ? '0 2px 8px #0003' : '0 1px 4px #0001',
+                              transition: 'background 0.2s, color 0.2s',
+                              outline: 'none',
+                            }} title="Remove tag">×</button>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <label style={labelStyle(isDark)}>Medical</label>
+                      <input value={draft.medicalInput || ''} onChange={e => handleTagInput(idx, 'medicalInput', e.target.value)} style={{...inputStyle(isDark), height: 40, fontSize: 15, padding: '8px 12px'}} placeholder="Add medical/accessibility need and press Enter" onKeyDown={e => { if (e.key === 'Enter' && draft.medicalInput?.trim()) { handleAddTag(idx, 'medical', draft.medicalInput.trim()); e.preventDefault(); } }} />
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+                        {(draft.medical || []).map((tag, tagIdx) => (
+                          <span key={tagIdx} style={{
+                            background: isDark ? 'rgba(255,255,255,0.08)' : '#e0e7ff',
+                            color: isDark ? '#fff' : '#3730a3',
+                            borderRadius: 25,
+                            padding: '6px 18px',
+                            fontSize: 15,
+                            fontWeight: 500,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            marginRight: 6,
+                            marginBottom: 6
+                          }}>
+                            {tag}
+                            <button onClick={() => handleRemoveTag(idx, 'medical', tagIdx)} style={{
+                              background: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.06)',
+                              color: isDark ? '#fff' : '#222',
+                              border: `1px solid ${isDark ? 'rgba(255,255,255,0.18)' : '#bbb'}`,
+                              borderRadius: '50%',
+                              width: 24,
+                              height: 24,
+                              minWidth: 24,
+                              minHeight: 24,
+                              padding: 0,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: 16,
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              marginLeft: 8,
+                              boxShadow: isDark ? '0 2px 8px #0003' : '0 1px 4px #0001',
+                              transition: 'background 0.2s, color 0.2s',
+                              outline: 'none',
+                            }} title="Remove tag">×</button>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 </div>
-                {editGuestIdx === null && (
-                  <div style={{ display: 'flex', gap: 16, justifyContent: 'flex-end', marginTop: 8 }}>
-                    <button
-                      style={{ background: '#222', color: '#fff', fontWeight: 400, fontSize: 16, border: 'none', borderRadius: 20, padding: '8px 28px', minWidth: 90, cursor: 'pointer' }}
-                      onClick={() => handleSaveDraft(idx)}
-                    >Save</button>
-                    <button
-                      style={{ background: '#eee', color: '#222', fontWeight: 400, fontSize: 16, border: 'none', borderRadius: 20, padding: '8px 28px', minWidth: 90, cursor: 'pointer' }}
-                      onClick={() => handleRemoveDraft(idx)}
-                    >Cancel</button>
-                  </div>
-                )}
+                {/* --- MODULES DROP ZONE & MODULE CARDS --- */}
+                <div
+                  style={{ 
+                    ...getGlassStyles(isDark),
+                    padding: 20, 
+                    minHeight: 60, 
+                    display: 'flex', 
+                    justifyContent: 'center', 
+                    alignItems: 'center', 
+                    cursor: 'copy', 
+                    marginTop: 18,
+                    border: `2px dashed ${colors.border}`,
+                    background: isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'
+                  }}
+                  onDrop={e => handleModuleDrop(idx, e)}
+                  onDragOver={e => e.preventDefault()}
+                >
+                  <span style={{ 
+                    color: colors.textSecondary, 
+                    fontSize: 16, 
+                    fontWeight: 500 
+                  }}>
+                    Drag modules here
+                  </span>
+                </div>
+                {/* Display Added Modules with CreateItinerary visuals */}
+                {Object.entries(draft.modules || {}).map(([key, instances]) => {
+                  const module = GUEST_MODULES.find(m => m.key === key);
+                  if (!module) return null;
+                  const instanceArray = Array.isArray(instances) ? instances : [];
+                  return instanceArray.map((_, index) => (
+                    <div key={`${key}-${index}`} style={{
+                      background: isDark ? 'rgba(0,0,0,0)' : 'rgba(255,255,255,0.8)',
+                      border: `2px solid ${isDark ? 'rgba(255,255,255,0.10)' : '#e5e7eb'}`,
+                      borderRadius: 16,
+                      padding: 20,
+                      marginTop: 16,
+                      position: 'relative',
+                      boxShadow: isDark ? '0 2px 12px #0006' : '0 1px 4px #0001',
+                      color: isDark ? '#fff' : '#111',
+                      backdropFilter: 'blur(16px)',
+                      WebkitBackdropFilter: 'blur(16px)'
+                    }}>
+                      <button
+                        onClick={() => handleRemoveModule(idx, key, index)}
+                        style={{
+                          position: 'absolute',
+                          top: 10,
+                          right: 10,
+                          background: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.06)',
+                          color: isDark ? '#fff' : '#222',
+                          border: `1px solid ${isDark ? 'rgba(255,255,255,0.18)' : '#bbb'}`,
+                          borderRadius: '50%',
+                          width: 28,
+                          height: 28,
+                          minWidth: 28,
+                          minHeight: 28,
+                          padding: 0,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: 18,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          boxShadow: isDark ? '0 2px 8px #0003' : '0 1px 4px #0001',
+                          transition: 'background 0.2s, color 0.2s',
+                          outline: 'none',
+                        }}
+                        title="Remove module"
+                      >
+                        ×
+                      </button>
+                      {/* Module-specific fields */}
+                      {key === 'flightNumber' && (
+                        <div>
+                          <div style={{ fontSize: 16, fontWeight: 600, color: '#000', marginBottom: 4 }}>Flight Tracker</div>
+                          <label style={labelStyle(isDark)}>Flight Number</label>
+                          <input
+                            type="text"
+                            value={draft.moduleValues?.[key]?.[index] || ''}
+                            onChange={e => {
+                              const newVals = Array.isArray(draft.moduleValues?.[key]) ? [...draft.moduleValues[key]] : [];
+                              newVals[index] = e.target.value;
+                              handleDraftChange(idx, 'moduleValues', { ...draft.moduleValues, [key]: newVals });
+                            }}
+                            style={{
+                              width: '100%',
+                              borderRadius: 6,
+                              background: isDark ? 'rgba(0,0,0,0)' : '#f9fafb',
+                              border: '1px solid #d1d5db',
+                              padding: '10px 12px',
+                              fontSize: 14,
+                              outline: 'none',
+                              marginBottom: 4
+                            }}
+                            placeholder="e.g. BA2490"
+                          />
+                        </div>
+                      )}
+                      {key === 'seatNumber' && (
+                        <div>
+                          <div style={{ fontSize: 16, fontWeight: 600, color: isDark ? '#fff' : '#000', marginBottom: 4 }}>Seat Number</div>
+                          <label style={labelStyle(isDark)}>Seat Number</label>
+                          <input
+                            type="text"
+                            value={draft.moduleValues?.[key]?.[index] || ''}
+                            onChange={e => {
+                              const newVals = Array.isArray(draft.moduleValues?.[key]) ? [...draft.moduleValues[key]] : [];
+                              newVals[index] = e.target.value;
+                              handleDraftChange(idx, 'moduleValues', { ...draft.moduleValues, [key]: newVals });
+                            }}
+                            style={{
+                              width: '100%',
+                              borderRadius: 8,
+                              background: isDark ? 'rgba(255,255,255,0.07)' : '#f9fafb',
+                              border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.13)' : '#d1d5db'}`,
+                              color: isDark ? '#fff' : '#111',
+                              padding: '10px 12px',
+                              fontSize: 14,
+                              outline: 'none',
+                              marginBottom: 4
+                            }}
+                            placeholder="e.g. 14A"
+                          />
+                        </div>
+                      )}
+                      {key === 'eventReference' && (
+                        <div>
+                          <div style={{ fontSize: 16, fontWeight: 600, color: '#000', marginBottom: 4 }}>Event Reference</div>
+                          <label style={labelStyle(isDark)}>Reference</label>
+                          <input
+                            type="text"
+                            value={draft.moduleValues?.[key]?.[index] || ''}
+                            onChange={e => {
+                              const newVals = Array.isArray(draft.moduleValues?.[key]) ? [...draft.moduleValues[key]] : [];
+                              newVals[index] = e.target.value;
+                              handleDraftChange(idx, 'moduleValues', { ...draft.moduleValues, [key]: newVals });
+                            }}
+                            style={{
+                              width: '100%',
+                              borderRadius: 6,
+                              background: isDark ? 'rgba(0,0,0,0)' : '#f9fafb',
+                              border: '1px solid #d1d5db',
+                              padding: '10px 12px',
+                              fontSize: 14,
+                              outline: 'none',
+                              marginBottom: 4
+                            }}
+                            placeholder="Enter reference number"
+                          />
+                        </div>
+                      )}
+                      {key === 'hotelReservation' && (
+                        <div>
+                          <div style={{ fontSize: 16, fontWeight: 600, color: '#000', marginBottom: 4 }}>Hotel Tracker</div>
+                          <label style={labelStyle(isDark)}>Hotel Location</label>
+                          <input
+                            type="text"
+                            value={draft.moduleValues?.[key]?.[index]?.location || ''}
+                            onChange={e => {
+                              const newVals = Array.isArray(draft.moduleValues?.[key]) ? [...draft.moduleValues[key]] : [];
+                              newVals[index] = { ...newVals[index], location: e.target.value };
+                              handleDraftChange(idx, 'moduleValues', { ...draft.moduleValues, [key]: newVals });
+                            }}
+                            style={{
+                              width: '100%',
+                              borderRadius: 6,
+                              background: isDark ? 'rgba(0,0,0,0)' : '#f9fafb',
+                              border: '1px solid #d1d5db',
+                              padding: '10px 12px',
+                              fontSize: 14,
+                              outline: 'none',
+                              marginBottom: 8
+                            }}
+                            placeholder="Enter hotel location"
+                          />
+                          <label style={labelStyle(isDark)}>Hotel Booking Number</label>
+                          <input
+                            type="text"
+                            value={draft.moduleValues?.[key]?.[index]?.bookingNumber || ''}
+                            onChange={e => {
+                              const newVals = Array.isArray(draft.moduleValues?.[key]) ? [...draft.moduleValues[key]] : [];
+                              newVals[index] = { ...newVals[index], bookingNumber: e.target.value };
+                              handleDraftChange(idx, 'moduleValues', { ...draft.moduleValues, [key]: newVals });
+                            }}
+                            style={{
+                              width: '100%',
+                              borderRadius: 6,
+                              background: isDark ? 'rgba(0,0,0,0)' : '#f9fafb',
+                              border: '1px solid #d1d5db',
+                              padding: '10px 12px',
+                              fontSize: 14,
+                              outline: 'none',
+                              marginBottom: 4
+                            }}
+                            placeholder="Enter booking number"
+                          />
+                        </div>
+                      )}
+                      {key === 'trainBookingNumber' && (
+                        <div>
+                          <div style={{ fontSize: 16, fontWeight: 600, color: '#000', marginBottom: 4 }}>Train Booking Number</div>
+                          <label style={labelStyle(isDark)}>Booking Number</label>
+                          <input
+                            type="text"
+                            value={draft.moduleValues?.[key]?.[index] || ''}
+                            onChange={e => {
+                              const newVals = Array.isArray(draft.moduleValues?.[key]) ? [...draft.moduleValues[key]] : [];
+                              newVals[index] = e.target.value;
+                              handleDraftChange(idx, 'moduleValues', { ...draft.moduleValues, [key]: newVals });
+                            }}
+                            style={{
+                              width: '100%',
+                              borderRadius: 6,
+                              background: isDark ? 'rgba(0,0,0,0)' : '#f9fafb',
+                              border: '1px solid #d1d5db',
+                              padding: '10px 12px',
+                              fontSize: 14,
+                              outline: 'none',
+                              marginBottom: 4
+                            }}
+                            placeholder="Enter train booking number"
+                          />
+                        </div>
+                      )}
+                      {key === 'coachBookingNumber' && (
+                        <div>
+                          <div style={{ fontSize: 16, fontWeight: 600, color: '#000', marginBottom: 4 }}>Coach Booking Number</div>
+                          <label style={labelStyle(isDark)}>Booking Number</label>
+                          <input
+                            type="text"
+                            value={draft.moduleValues?.[key]?.[index] || ''}
+                            onChange={e => {
+                              const newVals = Array.isArray(draft.moduleValues?.[key]) ? [...draft.moduleValues[key]] : [];
+                              newVals[index] = e.target.value;
+                              handleDraftChange(idx, 'moduleValues', { ...draft.moduleValues, [key]: newVals });
+                            }}
+                            style={{
+                              width: '100%',
+                              borderRadius: 6,
+                              background: isDark ? 'rgba(0,0,0,0)' : '#f9fafb',
+                              border: '1px solid #d1d5db',
+                              padding: '10px 12px',
+                              fontSize: 14,
+                              outline: 'none',
+                              marginBottom: 4
+                            }}
+                            placeholder="Enter coach booking number"
+                          />
+                        </div>
+                      )}
+                      {key === 'idUpload' && (
+                        <div>
+                          <div style={{ fontSize: 16, fontWeight: 600, color: '#000', marginBottom: 4 }}>ID Upload</div>
+                          <label style={labelStyle(isDark)}>Upload ID (PDF, PNG, JPG)</label>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                            <label
+                              htmlFor={`id-upload-${idx}-${index}`}
+                              style={{
+                                background: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.06)',
+                                color: isDark ? '#fff' : '#222',
+                                border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.18)' : '#bbb'}`,
+                                borderRadius: 999,
+                                padding: '8px 22px',
+                                fontSize: 15,
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                boxShadow: isDark ? '0 2px 8px #0003' : '0 1px 4px #0001',
+                                transition: 'background 0.2s, color 0.2s',
+                                outline: 'none',
+                                display: 'inline-block',
+                                backdropFilter: 'blur(10px)',
+                                WebkitBackdropFilter: 'blur(10px)'
+                              }}
+                            >
+                              {draft.moduleValues?.[key]?.[index]?.name || 'Choose file'}
+                            </label>
+                            <input
+                              id={`id-upload-${idx}-${index}`}
+                              type="file"
+                              accept=".pdf,.png,.jpg,.jpeg"
+                              onChange={e => {
+                                const file = e.target.files?.[0];
+                                const newVals = Array.isArray(draft.moduleValues?.[key]) ? [...draft.moduleValues[key]] : [];
+                                newVals[index] = file;
+                                handleDraftChange(idx, 'moduleValues', { ...draft.moduleValues, [key]: newVals });
+                              }}
+                              style={{ display: 'none' }}
+                            />
+                            {draft.moduleValues?.[key]?.[index]?.name && (
+                              <span style={{ color: isDark ? '#cbd5e1' : '#374151', fontSize: 14, marginLeft: 4 }}>
+                                {draft.moduleValues[key][index].name}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ));
+                })}
               </div>
             ) : (
               // COLLAPSED VIEW
-              <div
-                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '24px 32px', cursor: 'pointer' }}
-                onClick={() => setExpandedDraftIndex(idx)}
-              >
-                <span style={{ fontSize: 20, fontWeight: 600, color: '#333' }}>
-                  {[draft.prefix, draft.firstName, draft.lastName].filter(Boolean).join(' ') || 'New Guest'}
-                </span>
-                <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-                  <button
-                    style={{ background: '#eee', color: '#222', fontWeight: 500, fontSize: 16, border: '1px solid #ccc', borderRadius: 8, padding: '8px 24px', cursor: 'pointer' }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setExpandedDraftIndex(idx);
-                    }}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    style={{ background: '#fef2f2', color: '#ef4444', fontWeight: 500, border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer', fontSize: 16 }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setShowDeleteConfirm({ type: 'draft', index: idx });
-                    }}
-                  >Delete</button>
+              <div style={{ padding: 24, cursor: 'pointer' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ fontSize: 18, fontWeight: 500, marginBottom: 4 }}>
+                    {draft.firstName} {draft.lastName}
+                  </div>
+                  <div style={{ fontSize: 14, color: '#666' }}>
+                    {draft.email}
+                  </div>
                 </div>
               </div>
             )}
           </div>
         ))}
 
-        {guests.length > 0 && (
+        {/* Empty State */}
+        {drafts.length === 0 && guests.length === 0 && (
           <div style={{
-            display: 'grid',
-            gridTemplateColumns: expandedGuestIndex !== null ? '1fr' : 'repeat(auto-fit, minmax(320px, 1fr))',
-            gap: 32,
-            marginBottom: 48,
-            justifyItems: expandedGuestIndex !== null ? 'center' : 'start',
+            textAlign: 'center',
+            padding: '60px 40px',
+            color: '#666',
+            fontSize: 18,
             maxWidth: 1100,
             marginLeft: 'auto',
             marginRight: 'auto',
-            transition: 'all 0.4s ease',
           }}>
-            {guests.map((guest, idx) => (
-              <div key={idx} style={{
-                background: '#fff',
-                border: '1.5px solid #bbb',
-                borderRadius: 18,
-                boxShadow: expandedGuestIndex === idx ? '0 8px 24px #0002' : '0 4px 16px #0001',
-                padding: expandedGuestIndex === idx ? '32px 28px 24px 28px' : '28px 24px 20px 24px',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'flex-start',
-                position: 'relative',
-                minHeight: 180,
-                maxWidth: expandedGuestIndex === idx ? '100%' : 340,
-                width: '100%',
-                transition: 'all 0.3s ease',
-                cursor: expandedGuestIndex === idx ? 'default' : 'pointer',
-                transform: expandedGuestIndex === idx ? 'scale(1.02)' : 'scale(1)',
-              }}
-              onClick={() => {
-                if (expandedGuestIndex !== idx) {
-                  handleGuestCardClick(idx);
-                }
-              }}
-              onMouseEnter={(e) => {
-                if (expandedGuestIndex !== idx) {
-                  e.currentTarget.style.transform = 'scale(1.01)';
-                  e.currentTarget.style.boxShadow = '0 6px 20px #0002';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (expandedGuestIndex !== idx) {
-                  e.currentTarget.style.transform = 'scale(1)';
-                  e.currentTarget.style.boxShadow = '0 4px 16px #0001';
-                }
-              }}>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowDeleteConfirm({ type: 'guest', index: idx });
-                  }}
-                  title="Delete Guest"
-                  style={{
-                    position: 'absolute',
-                    top: 16,
-                    right: 16,
-                    background: '#fee2e2',
-                    border: 'none',
-                    borderRadius: '50%',
-                    width: 32,
-                    height: 32,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
-                </button>
-                {expandedGuestIndex === idx && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setExpandedGuestIndex(null);
-                    }}
-                    style={{
-                      position: 'absolute',
-                      top: 16,
-                      right: 56,
-                      background: '#f5f5f5',
-                      border: 'none',
-                      borderRadius: '50%',
-                      width: 32,
-                      height: 32,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    −
-                  </button>
-                )}
-
-                <div style={{ fontWeight: 700, fontSize: 22, marginBottom: 10, color: '#222', letterSpacing: 0.2 }}>
-                  {guest.firstName} {guest.middleName} {guest.lastName}
-                </div>
-                <div style={{ color: '#444', fontSize: 15, marginBottom: 6 }}>
-                  <b style={{ fontWeight: 500, color: '#222' }}>Contact:</b> {guest.countryCode} {guest.contactNumber}
-                </div>
-                <div style={{ color: '#444', fontSize: 15, marginBottom: 6 }}>
-                  <b style={{ fontWeight: 500, color: '#222' }}>Email:</b> {guest.email}
-                </div>
-                <div style={{ color: '#444', fontSize: 15, marginBottom: 6 }}>
-                  <b style={{ fontWeight: 500, color: '#222' }}>ID:</b> {guest.idType} {guest.idNumber}
-                </div>
-
-                {expandedGuestIndex === idx && (
-                  <div style={{ 
-                    marginTop: 24,
-                    width: '100%',
-                    borderTop: '1px solid #eee',
-                    paddingTop: 24,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 20
-                  }}>
-                    <div style={{ paddingRight: 40, marginBottom: 20 }}>
-                      <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 12, letterSpacing: 0.5, color: '#222' }}>NAMES</div>
-                      <div style={{ display: 'flex', gap: 12 }}>
-                        <input 
-                          value={guest.firstName} 
-                          onChange={(e) => handleGuestChange(idx, 'firstName', e.target.value)}
-                          onClick={(e) => e.stopPropagation()}
-                          style={{ flex: 1, borderRadius: 8, background: '#f7f8fa', border: '1.5px solid #d1d5db', padding: 10, fontSize: 16, height: 44 }}
-                          placeholder="First Name"
-                        />
-                        <input 
-                          value={guest.middleName || ''} 
-                          onChange={(e) => handleGuestChange(idx, 'middleName', e.target.value)}
-                          onClick={(e) => e.stopPropagation()}
-                          style={{ flex: 1, borderRadius: 8, background: '#f7f8fa', border: '1.5px solid #d1d5db', padding: 10, fontSize: 16, height: 44 }}
-                          placeholder="Middle Name"
-                        />
-                        <input 
-                          value={guest.lastName} 
-                          onChange={(e) => handleGuestChange(idx, 'lastName', e.target.value)}
-                          onClick={(e) => e.stopPropagation()}
-                          style={{ flex: 1, borderRadius: 8, background: '#f7f8fa', border: '1.5px solid #d1d5db', padding: 10, fontSize: 16, height: 44 }}
-                          placeholder="Last Name"
-                        />
-                      </div>
-                    </div>
-
-                    <div style={{ paddingRight: 40, marginBottom: 20 }}>
-                      <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 12, letterSpacing: 0.5, color: '#222' }}>CONTACT INFORMATION</div>
-                      <div style={{ display: 'flex', gap: 12 }}>
-                        <select 
-                          value={guest.countryCode} 
-                          onChange={(e) => handleGuestChange(idx, 'countryCode', e.target.value)}
-                          onClick={(e) => e.stopPropagation()}
-                          style={{ width: 120, borderRadius: 8, background: '#f7f8fa', border: '1.5px solid #d1d5db', padding: 10, fontSize: 16, height: 44 }}
-                        >
-                          {COUNTRY_CODES.map(c => <option key={c.code} value={c.code}>{c.flag} {c.code}</option>)}
-                        </select>
-                        <input 
-                          value={guest.contactNumber} 
-                          onChange={(e) => handleGuestChange(idx, 'contactNumber', e.target.value)}
-                          onClick={(e) => e.stopPropagation()}
-                          style={{ flex: 1, borderRadius: 8, background: '#f7f8fa', border: '1.5px solid #d1d5db', padding: 10, fontSize: 16, height: 44 }}
-                          placeholder="Contact Number"
-                        />
-                        <input 
-                          value={guest.email} 
-                          onChange={(e) => handleGuestChange(idx, 'email', e.target.value)}
-                          onClick={(e) => e.stopPropagation()}
-                          style={{ flex: 2, borderRadius: 8, background: '#f7f8fa', border: '1.5px solid #d1d5db', padding: 10, fontSize: 16, height: 44 }}
-                          placeholder="Email"
-                        />
-                      </div>
-                    </div>
-
-                    <div style={{ paddingRight: 40, marginBottom: 20 }}>
-                      <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 12, letterSpacing: 0.5, color: '#222' }}>IDENTIFICATION</div>
-                      <div style={{ display: 'flex', gap: 12 }}>
-                        <select 
-                          value={guest.idType} 
-                          onChange={(e) => handleGuestChange(idx, 'idType', e.target.value)}
-                          onClick={(e) => e.stopPropagation()}
-                          style={{ flex: 1, borderRadius: 8, background: '#f7f8fa', border: '1.5px solid #d1d5db', padding: 10, fontSize: 16, height: 44 }}
-                        >
-                          <option value="">Select ID Type</option>
-                          <option value="Passport">Passport</option>
-                          <option value="Identity Card">Identity Card</option>
-                          <option value="Drivers License">Driver's License</option>
-                        </select>
-                        <input 
-                          value={guest.idNumber} 
-                          onChange={(e) => handleGuestChange(idx, 'idNumber', e.target.value)}
-                          onClick={(e) => e.stopPropagation()}
-                          style={{ flex: 1, borderRadius: 8, background: '#f7f8fa', border: '1.5px solid #d1d5db', padding: 10, fontSize: 16, height: 44 }}
-                          placeholder="ID Number"
-                        />
-                        <select 
-                          value={guest.idCountry} 
-                          onChange={(e) => handleGuestChange(idx, 'idCountry', e.target.value)}
-                          onClick={(e) => e.stopPropagation()}
-                          style={{ flex: 1, borderRadius: 8, background: '#f7f8fa', border: '1.5px solid #d1d5db', padding: 10, fontSize: 16, height: 44 }}
-                        >
-                          <option value="">Country</option>
-                          {COUNTRIES.map((c: string) => <option key={c} value={c}>{c}</option>)}
-                        </select>
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-                      {Object.entries(guest.modules || {}).map(([key, instances]) => {
-                        const module = GUEST_MODULES.find(m => m.key === key);
-                        if (!module) return null;
-
-                        const instanceArray = Array.isArray(instances) ? instances : [];
-                        
-                        return instanceArray.map((_, index) => (
-                          <div key={`${key}-${index}`} style={{ 
-                            background: '#fff',
-                            borderRadius: 12,
-                            padding: '20px',
-                            border: '1px solid #e5e7eb',
-                            position: 'relative'
-                          }}>
-                            <button
-                              onClick={() => handleGuestModuleRemove(idx, key, index)}
-                              style={{
-                                position: 'absolute',
-                                top: 8, right: 8, background: 'transparent', border: 'none',
-                                color: '#9ca3af', cursor: 'pointer', fontSize: 28, lineHeight: 1,
-                                padding: '8px', borderRadius: '50%', width: 40, height: 40,
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                transition: 'color 0.2s, background-color 0.2s'
-                              }}
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.color = '#ef4444';
-                                e.currentTarget.style.background = '#fee2e2';
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.color = '#9ca3af';
-                                e.currentTarget.style.background = 'transparent';
-                              }}
-                            >
-                              ×
-                            </button>
-                            <div style={{ paddingRight: '40px' }}>
-                              <div style={{ marginBottom: 12 }}>
-                                <label style={{ fontWeight: 600, fontSize: 16, color: '#374151' }}>{module.label}</label>
-                              </div>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                {module.key === 'flightNumber' ? (
-                                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                                    <input
-                                      placeholder="e.g. BA2490"
-                                      value={guest.moduleValues?.[key]?.[index]?.number || ''}
-                                      onChange={e => {
-                                        const newValues = { ...guest.moduleValues };
-                                        if (!Array.isArray(newValues[key])) newValues[key] = new Array(instanceArray.length).fill({});
-                                        newValues[key][index] = { ...(newValues[key][index] || {}), number: e.target.value };
-                                        handleGuestChange(idx, 'moduleValues', newValues);
-                                      }}
-                                      style={{ flex: '2 1 auto', padding: '0 16px', borderRadius: 8, border: '1.5px solid #d1d5db', fontSize: 18, height: 48, background: '#fff', boxSizing: 'border-box' }}
-                                    />
-                                    <input
-                                      type="date"
-                                      value={guest.moduleValues?.[key]?.[index]?.date || ''}
-                                      onChange={e => {
-                                        const newValues = { ...guest.moduleValues };
-                                        if (!Array.isArray(newValues[key])) newValues[key] = new Array(instanceArray.length).fill({});
-                                        newValues[key][index] = { ...(newValues[key][index] || {}), date: e.target.value };
-                                        handleGuestChange(idx, 'moduleValues', newValues);
-                                      }}
-                                      style={{ flex: '1 1 auto', padding: '0 16px', borderRadius: 8, border: '1.5px solid #d1d5db', fontSize: 18, height: 48, background: '#fff', boxSizing: 'border-box' }}
-                                    />
-                                    <button
-                                      onClick={async () => {
-                                        const flightInfo = guest.moduleValues?.[key]?.[index];
-                                        if (flightInfo && flightInfo.number && flightInfo.date) {
-                                          await handleGuestFlightData(idx, key, index, flightInfo.number, flightInfo.date);
-                                        }
-                                      }}
-                                      style={{ flex: '0 0 auto', padding: '0 24px', cursor: 'pointer', background: '#222', color: 'white', fontWeight: 500, border: 'none', fontSize: 18, height: 48, borderRadius: 8, boxSizing: 'border-box' }}
-                                    >
-                                      Find
-                                    </button>
-                                  </div>
-                                ) : module.type === 'file' ? (
-                                  <input type="file" />
-                                ) : (
-                                  <input 
-                                    placeholder={module.placeholder}
-                                    value={Array.isArray(guest.moduleValues?.[key]) ? guest.moduleValues[key][index] || '' : ''}
-                                    onChange={e => {
-                                      const newValues = { ...guest.moduleValues };
-                                      if (!Array.isArray(newValues[key])) {
-                                        newValues[key] = new Array(instanceArray.length).fill('');
-                                      }
-                                      newValues[key][index] = e.target.value;
-                                      handleGuestChange(idx, 'moduleValues', newValues);
-                                    }}
-                                    style={{ 
-                                      width: '100%',
-                                      padding: '10px 16px',
-                                      borderRadius: 8,
-                                      border: '1.5px solid #d1d5db',
-                                      fontSize: 18,
-                                      height: 48,
-                                      background: '#fff'
-                                    }}
-                                  />
-                                )}
-
-                                {(() => {
-                                    const flightState = guest.moduleFlightData?.[key]?.[index];
-                                    if (!flightState || flightState.status === 'idle') return null;
-                                    if (flightState.status === 'loading') {
-                                        return <div style={{marginTop: 8, padding: '12px 16px', background: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 14, color: '#4b5563', textAlign: 'center'}}>Loading flight data...</div>;
-                                    }
-                                    if (flightState.status === 'not_found') {
-                                        return <div style={{marginTop: 8, padding: '12px 16px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, fontSize: 14, color: '#b91c1c', textAlign: 'center'}}>Flight not found. Please check the details and try again.</div>;
-                                    }
-                                    if (flightState.status === 'found' && flightState.data) {
-                                        const flightData = flightState.data;
-                                        return (
-                                            <div style={{marginTop: 8, padding: '12px 16px', background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 8, fontSize: 14, color: '#374151', lineHeight: 1.6}}>
-                                                <p style={{margin: '0 0 8px 0'}}><strong>Status:</strong> {flightData.flight_status}</p>
-                                                <div style={{display: 'flex', justifyContent: 'space-between', gap: '16px'}}>
-                                                    <div style={{flex: 1}}>
-                                                        <p style={{margin: 0, fontWeight: 'bold'}}>Departure</p>
-                                                        <p style={{margin: '4px 0'}}>Airport: {flightData.departure.airport} ({flightData.departure.iata})</p>
-                                                        {flightData.departure.terminal && <p style={{margin: '4px 0'}}>Terminal: {flightData.departure.terminal}</p>}
-                                                        {flightData.departure.gate && <p style={{margin: '4px 0'}}>Gate: {flightData.departure.gate}</p>}
-                                                        <p style={{margin: '4px 0'}}>Scheduled: {formatFlightTime(flightData.departure.scheduled, flightData.departure.timezone)}</p>
-                                                        {flightData.departure.estimated && <p style={{margin: '4px 0'}}>Estimated: {formatFlightTime(flightData.departure.estimated, flightData.departure.timezone)}</p>}
-                                                        {flightData.departure.actual && <p style={{margin: '4px 0'}}>Actual: {formatFlightTime(flightData.departure.actual, flightData.departure.timezone)}</p>}
-                                                    </div>
-                                                    <div style={{flex: 1}}>
-                                                        <p style={{margin: 0, fontWeight: 'bold'}}>Arrival</p>
-                                                        <p style={{margin: '4px 0'}}>Airport: {flightData.arrival.airport} ({flightData.arrival.iata})</p>
-                                                        {flightData.arrival.terminal && <p style={{margin: '4px 0'}}>Terminal: {flightData.arrival.terminal}</p>}
-                                                        {flightData.arrival.gate && <p style={{margin: '4px 0'}}>Gate: {flightData.arrival.gate}</p>}
-                                                        <p style={{margin: '4px 0'}}>Scheduled: {formatFlightTime(flightData.arrival.scheduled, flightData.arrival.timezone)}</p>
-                                                        {flightData.arrival.estimated && <p style={{margin: '4px 0'}}>Estimated: {formatFlightTime(flightData.arrival.estimated, flightData.arrival.timezone)}</p>}
-                                                        {flightData.arrival.actual && <p style={{margin: '4px 0'}}>Actual: {formatFlightTime(flightData.arrival.actual, flightData.arrival.timezone)}</p>}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        );
-                                    }
-                                    return null;
-                                })()}
-                              </div>
-                            </div>
-                          </div>
-                        )).flat();
-                      })}
-                    
-                      <div
-                        style={{ border: '2px dashed #d1d5db', borderRadius: 8, background: '#fff', padding: 24, minHeight: 60, display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: 'copy' }}
-                        onDrop={e => handleGuestModuleDrop(idx, e)}
-                        onDragOver={e => e.preventDefault()}
-                      >
-                        <span style={{ color: '#9ca3af', fontSize: 16, fontWeight: 500 }}>Drag modules here</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
+            <div style={{ fontSize: 48, marginBottom: 16 }}>👤</div>
+            <div style={{ marginBottom: 8 }}>No guests yet</div>
+            <div style={{ fontSize: 16 }}>Click "Add New Guest" to get started</div>
           </div>
         )}
 
+        {/* Footer with Glass Effect */}
         <div style={{
-            display: 'flex',
-            gap: 16,
-            justifyContent: 'flex-end',
-            marginTop: 40,
-            paddingBottom: 40,
-            maxWidth: 1100,
-            marginLeft: 'auto',
-            marginRight: 'auto',
+          ...getGlassStyles(isDark),
+          display: 'flex',
+          justifyContent: 'space-between',
+          gap: 16,
+          marginTop: 48,
+          padding: '24px 32px',
+          maxWidth: 1100,
+          marginLeft: 'auto',
+          marginRight: 'auto',
         }}>
           <button 
-            style={{ background: '#eee', color: '#222', fontWeight: 500, fontSize: 18, border: '1px solid #ccc', borderRadius: 8, padding: '10px 36px', minWidth: 120, cursor: 'pointer' }} 
+            style={{ 
+              ...getButtonStyles(isDark, 'secondary'),
+              fontSize: 18, 
+              padding: '10px 36px', 
+              minWidth: '125px'
+            }} 
             onClick={() => navigate(`/event/${eventId}?tab=guests`)}
           >
             Cancel
           </button>
           <button
             style={{ 
-              background: '#222', 
-              color: '#fff', 
-              fontWeight: 500, 
+              ...getButtonStyles(isDark, (drafts.length + guests.length) > 0 ? 'primary' : 'secondary'),
               fontSize: 18, 
-              border: 'none', 
-              borderRadius: 8, 
               padding: '11px 37px',
-              minWidth: 120,
-              opacity: (isGroup && !groupNameConfirmed) || (guests.length === 0 && drafts.length === 0) ? 0.5 : 1,
-              cursor: (isGroup && !groupNameConfirmed) || (guests.length === 0 && drafts.length === 0) ? 'not-allowed' : 'pointer'
+              minWidth: '155px',
+              opacity: (drafts.length + guests.length) > 0 ? 1 : 0.5,
+              cursor: (drafts.length + guests.length) > 0 ? 'pointer' : 'not-allowed'
             }}
             onClick={handleSave}
-            disabled={(isGroup && !groupNameConfirmed) || (guests.length === 0 && drafts.length === 0)}
+            disabled={(drafts.length + guests.length) === 0}
           >
             Save Changes
           </button>
         </div>
-
-        {showDeleteConfirm && (
-          <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.6)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(5px)' }}>
-            <div style={{ background: '#fff', borderRadius: 16, padding: '40px 48px', minWidth: 400, boxShadow: '0 4px 32px rgba(0,0,0,0.2)', textAlign: 'center' }}>
-              <h2 style={{ marginTop: 0, marginBottom: 16, fontSize: 24, fontWeight: 600 }}>Are you sure?</h2>
-              <p style={{ color: '#666', fontSize: 16, marginBottom: 32, lineHeight: 1.6 }}>
-                {showDeleteConfirm.type === 'group' 
-                  ? "This will permanently delete the entire group and all its members. This action cannot be undone."
-                  : "This will permanently delete this guest. This action cannot be undone."}
-              </p>
-              <div style={{ display: 'flex', justifyContent: 'center', gap: 16 }}>
-                <button
-                  style={{ background: '#f5f5f5', color: '#222', fontWeight: 500, fontSize: 18, border: '1px solid #ddd', borderRadius: 8, padding: '12px 36px', minWidth: 120, cursor: 'pointer' }}
-                  onClick={() => setShowDeleteConfirm(null)}
-                >
-                  No, Cancel
-                </button>
-                <button
-                  style={{ background: '#ef4444', color: '#fff', fontWeight: 500, fontSize: 18, border: 'none', borderRadius: 8, padding: '13px 37px', minWidth: 120, cursor: 'pointer' }}
-                  onClick={handleConfirmDelete}
-                >
-                  Yes, Delete
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {isCsvModalOpen && <CsvUploadModal />}
-        
-        {scannerState.show && (
-          <div style={{
-            position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', 
-            background: 'rgba(0,0,0,0.6)', zIndex: 1000, 
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            backdropFilter: 'blur(5px)',
-            animation: 'fadeIn 0.3s ease'
-          }}>
-            <style>{`
-              @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-              @keyframes scaleUp { from { transform: scale(0.9); } to { transform: scale(1); } }
-            `}</style>
-            <div style={{ 
-              background: '#fff', borderRadius: 16, 
-              width: 'clamp(500px, 60vw, 700px)', 
-              boxShadow: '0 4px 32px rgba(0,0,0,0.2)',
-              animation: 'scaleUp 0.3s ease',
-              overflow: 'hidden'
-            }}>
-              <div style={{ padding: '24px 32px', borderBottom: '1px solid #eee' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <h2 style={{ margin: 0, fontSize: 22, fontWeight: 600 }}>Passport Scanner</h2>
-                </div>
-              </div>
-
-              <div style={{ padding: 32 }}>
-                <div style={{ display: 'flex', gap: 4, background: '#eee', borderRadius: 8, padding: 4, marginBottom: 24 }}>
-                  <button 
-                    onClick={() => { setScannerTab('upload'); handleStopCamera(); setScannerState(s => ({...s, imageUrl: null})); }}
-                    style={{
-                      flex: 1, padding: '10px 0', border: 'none', borderRadius: 6,
-                      background: scannerTab === 'upload' ? '#fff' : 'transparent',
-                      color: scannerTab === 'upload' ? '#222' : '#666',
-                      fontSize: 15, fontWeight: 500, cursor: 'pointer',
-                    }}
-                  >
-                    Upload File
-                  </button>
-                  <button 
-                    onClick={handleStartCamera}
-                    style={{
-                      flex: 1, padding: '10px 0', border: 'none', borderRadius: 6,
-                      background: scannerTab === 'camera' ? '#fff' : 'transparent',
-                      color: scannerTab === 'camera' ? '#222' : '#666',
-                      fontSize: 15, fontWeight: 500, cursor: 'pointer',
-                    }}
-                  >
-                    Use Camera
-                  </button>
-                </div>
-
-                <div>
-                  {scannerTab === 'camera' ? (
-                    <div style={{ textAlign: 'center' }}>
-                      <video ref={videoRef} autoPlay playsInline style={{ width: '100%', borderRadius: 8, border: '1px solid #ddd' }} />
-                      <canvas ref={canvasRef} style={{ display: 'none' }} />
-                    </div>
-                  ) : (
-                    scannerState.imageUrl ? (
-                       <div style={{ marginBottom: 24, textAlign: 'center' }}>
-                        <img src={scannerState.imageUrl} style={{ maxWidth: '100%', maxHeight: 300, borderRadius: 8, border: '1px solid #ddd' }} alt="Passport preview" />
-                      </div>
-                    ) : (
-                      <div
-                        onDrop={(e) => { e.preventDefault(); if (e.dataTransfer.files[0]) { setScannerState(s => ({...s, imageUrl: URL.createObjectURL(e.dataTransfer.files[0])}))}}}
-                        onDragOver={(e) => e.preventDefault()}
-                        style={{ border: '2px dashed #d1d5db', borderRadius: 12, padding: 48, textAlign: 'center', background: '#f9fafb', marginBottom: 24 }}
-                      >
-                        <input
-                          type="file" id="passport-upload" accept="image/*" style={{ display: 'none' }}
-                          onChange={e => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              setScannerState(s => ({ ...s, imageUrl: URL.createObjectURL(file) }));
-                            }
-                          }}
-                        />
-                        <label htmlFor="passport-upload" style={{ cursor: 'pointer', fontSize: 16, color: '#2563eb', fontWeight: 500 }}>
-                          Choose a file
-                        </label>
-                        <span style={{ color: '#6b7280', margin: '0 8px' }}>or drag and drop</span>
-                      </div>
-                    )
-                  )}
-                </div>
-              </div>
-              
-              {!scannerState.processing && (
-                <div style={{ padding: '0 32px 32px 32px', display: 'flex', justifyContent: 'flex-end', gap: 16 }}>
-                  <button
-                    onClick={handleModalClose}
-                    style={{ background: '#fff', border: '1px solid #222', color: '#222', padding: '10px 24px', borderRadius: 8, cursor: 'pointer' }}
-                  >
-                    Cancel
-                  </button>
-                  {scannerTab === 'camera' ? (
-                    <button
-                      onClick={handleCapture}
-                      style={{ background: '#222', color: '#fff', border: 'none', padding: '10px 24px', borderRadius: 8, cursor: 'pointer' }}
-                    >
-                      Capture Image
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => processImageWithOCR(scannerState.imageUrl!, scannerState.draftIndex!)}
-                      disabled={!scannerState.imageUrl}
-                      style={{ 
-                        background: scannerState.imageUrl ? '#222' : '#ccc', color: '#fff', border: 'none', 
-                        padding: '10px 24px', borderRadius: 8, cursor: scannerState.imageUrl ? 'pointer' : 'not-allowed'
-                      }}
-                    >
-                      Process Image
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
       </div>
-      {/* Right Toolbar (Modules) */}
-      <div style={{ width: showModules ? 280 : 32, background: '#222', color: '#fff', transition: 'width 0.2s', position: 'relative', display: 'flex', flexDirection: 'column', alignItems: showModules ? 'flex-start' : 'center', padding: showModules ? '40px 24px' : '40px 0', minHeight: '100vh' }}>
-        <button onClick={() => setShowModules(v => !v)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 22, cursor: 'pointer', alignSelf: showModules ? 'flex-end' : 'center', marginBottom: 24 }} title={showModules ? 'Hide Modules' : 'Show Modules'}>
+
+      {/* Module Sidebar with Glass Effect */}
+      <div style={{
+        width: showModules ? 280 : 32,
+        color: colors.text,
+        transition: 'width 0.2s',
+        position: 'relative',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: showModules ? 'flex-start' : 'center',
+        padding: showModules ? '40px 24px' : '40px 0',
+        minHeight: '100vh',
+        background: isDark
+          ? 'rgba(0, 0, 0, 0.35)'
+          : 'rgba(255, 255, 255, 0.9)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        border: isDark
+          ? '1.5px solid rgba(255,255,255,0.12)'
+          : '1.5px solid #e5e7eb',
+        boxShadow: isDark
+          ? '0 8px 32px rgba(0,0,0,0.3)'
+          : '0 8px 32px rgba(0,0,0,0.08)'
+      }}>
+        <button onClick={() => setShowModules(v => !v)} style={{ background: 'none', border: 'none', color: colors.text, fontSize: 22, cursor: 'pointer', alignSelf: showModules ? 'flex-end' : 'center', marginBottom: 24 }} title={showModules ? 'Hide Modules' : 'Show Modules'}>
           {showModules ? '→' : '←'}
         </button>
         {showModules && (
           <>
-            <div style={{ fontSize: 13, color: '#bbb', marginBottom: 24, letterSpacing: 1, textTransform: 'uppercase' }}>Guest Modules</div>
-            
+            <div style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 24, letterSpacing: 1, textTransform: 'uppercase' }}>Guest Modules</div>
             <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 12 }}>
               {GUEST_MODULES.map(module => (
                 <div
@@ -2214,23 +2159,23 @@ export default function CreateGuests() {
                   draggable
                   onDragStart={e => e.dataTransfer.setData('moduleKey', module.key)}
                   style={{
-                    background: '#fff',
-                    border: '1px solid #bbb',
-                    borderRadius: 8,
-                    padding: '12px 16px',
+                    background: isDark ? 'rgba(40,40,40,0.45)' : 'rgba(255,255,255,0.85)',
+                    border: isDark ? '1.5px solid rgba(255,255,255,0.13)' : '1px solid #bbb',
+                    borderRadius: 12,
+                    padding: '14px 18px',
                     cursor: 'grab',
                     userSelect: 'none',
-                    boxShadow: '0 1px 4px #0001',
-                    width: '100%'
+                    boxShadow: isDark ? '0 2px 12px #0004' : '0 1px 4px #0001',
+                    width: '100%',
+                    color: isDark ? '#fff' : '#222',
+                    backdropFilter: 'blur(12px)',
+                    WebkitBackdropFilter: 'blur(12px)',
+                    transition: 'background 0.2s, color 0.2s',
                   }}
                 >
-                  <div style={{ color: '#222', fontWeight: 500, marginBottom: module.description ? 4 : 0 }}>
-                    {module.label}
-                  </div>
+                  <div style={{ color: isDark ? '#fff' : '#222', fontWeight: 600, fontSize: 16, marginBottom: module.description ? 4 : 0 }}>{module.label}</div>
                   {module.description && (
-                    <div style={{ color: '#666', fontSize: 12 }}>
-                      {module.description}
-                    </div>
+                    <div style={{ color: isDark ? '#cbd5e1' : '#666', fontSize: 12 }}>{module.description}</div>
                   )}
                 </div>
               ))}
@@ -2238,6 +2183,7 @@ export default function CreateGuests() {
           </>
         )}
       </div>
+      {isCsvModalOpen && <CsvUploadModal />}
     </div>
   );
 }

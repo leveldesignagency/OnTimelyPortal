@@ -52,7 +52,7 @@ export const ActiveModules: React.FC<ActiveModulesProps> = ({
             onClick={() => handleExpand(module.id)}
           >
             <div className="flex items-center gap-3">
-              <span className="text-2xl">{module.icon}</span>
+              {/* <span className="text-2xl">{module.icon}</span> */}
               <div>
                 <h3 className="font-semibold">{module.name}</h3>
                 <p className="text-sm text-gray-600">{module.description}</p>

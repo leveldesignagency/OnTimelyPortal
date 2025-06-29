@@ -289,6 +289,7 @@ export type Itinerary = {
   company_id: string
   title: string
   description?: string
+  date?: string
   arrival_time?: string
   start_time?: string
   end_time?: string
@@ -306,6 +307,9 @@ export type Itinerary = {
   contact_email?: string
   // Notifications Timer Module
   notification_times?: string[]
+  // Grouping support
+  group_id?: string
+  group_name?: string
   // Legacy support
   content?: any
   created_by?: string
@@ -358,6 +362,16 @@ export const deleteItinerary = async (id: string) => {
     .from('itineraries')
     .delete()
     .eq('id', id)
+
+  if (error) throw error
+}
+
+// Bulk delete multiple itineraries
+export const deleteMultipleItineraries = async (ids: string[]) => {
+  const { error } = await supabase
+    .from('itineraries')
+    .delete()
+    .in('id', ids)
 
   if (error) throw error
 }
@@ -428,13 +442,21 @@ export type EventModule = {
 }
 
 export const getEventModules = async (eventId: string) => {
+  const currentUser = await getCurrentUser();
+  if (!currentUser) {
+    throw new Error('No authenticated user found');
+  }
   const { data, error } = await supabase
     .from('event_modules')
     .select('*')
     .eq('event_id', eventId)
-    .single()
+    .eq('company_id', currentUser.company_id)
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
   if (error && error.code !== 'PGRST116') throw error // PGRST116 = no rows returned
+  console.log('getEventModules result:', JSON.stringify(data, null, 2));
   return data
 }
 
@@ -445,18 +467,30 @@ export const saveEventModules = async (eventId: string, moduleData: any, created
     throw new Error('No authenticated user found')
   }
 
-  const { data, error } = await supabase
+  console.log('saveEventModules called with:', JSON.stringify({ eventId, companyId: currentUser.company_id, moduleData, createdBy }, null, 2));
+
+  let upsertQuery = supabase
     .from('event_modules')
     .upsert({
       event_id: eventId,
       company_id: currentUser.company_id,
       module_data: moduleData,
       created_by: createdBy || currentUser.id
-    })
+    }, { onConflict: 'event_id,company_id' })
     .select()
-    .single()
+    .single();
 
-  if (error) throw error
+  const { data, error } = await upsertQuery;
+
+  if (error) {
+    if (error instanceof Error) {
+      console.error('Supabase error in saveEventModules:', error.message, error.stack, error);
+    } else {
+      console.error('Supabase error in saveEventModules:', error);
+    }
+    throw error;
+  }
+  console.log('saveEventModules result:', JSON.stringify(data, null, 2));
   return data
 }
 

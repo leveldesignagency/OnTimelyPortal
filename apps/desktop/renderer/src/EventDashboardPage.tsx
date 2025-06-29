@@ -4,6 +4,7 @@ import Sidebar from './Sidebar';
 import { ModulesPage } from './pages/ModulesPage';
 import Icon from './Icon';
 import { ThemeContext } from './ThemeContext';
+import SendFormModal from './components/SendFormModal';
 import { getCurrentUser } from './lib/auth';
 import { useRealtimeGuests, useRealtimeItineraries } from './hooks/useRealtime';
 import { 
@@ -14,11 +15,15 @@ import {
   addItinerary,
   updateItinerary,
   deleteItinerary,
+  deleteMultipleItineraries,
   getEventModules,
   saveEventModules,
   type Guest,
-  type Itinerary 
+  type Itinerary,
+  deleteEvent as supabaseDeleteEvent
 } from './lib/supabase';
+import { Itinerary as SupabaseItinerary } from './lib/supabase';
+import AddOnCard from './components/AddOnCard';
 
 console.log("THIS IS EVENT DASHBOARD PAGE");
 
@@ -30,7 +35,10 @@ type EventType = {
   status: string;
 };
 
-type ItineraryType = Itinerary;
+type ItineraryType = SupabaseItinerary & {
+  group_id?: string;
+  group_name?: string;
+};
 
 type GuestType = {
   id: string;
@@ -103,6 +111,57 @@ const MODULES: ActivityModule[] = [
   { key: 'notes', label: 'Notes' },
 ];
 
+// Glassmorphic style helpers
+const getGlassStyles = (isDark: boolean) => ({
+  background: isDark 
+    ? 'rgba(30, 30, 30, 0.8)' 
+    : 'rgba(255, 255, 255, 0.8)',
+  backdropFilter: 'blur(20px)',
+  WebkitBackdropFilter: 'blur(20px)',
+  border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
+  borderRadius: '16px',
+  boxShadow: isDark 
+    ? '0 8px 32px rgba(0, 0, 0, 0.3)' 
+    : '0 8px 32px rgba(0, 0, 0, 0.1)',
+});
+
+const getButtonStyles = (isDark: boolean, variant: 'primary' | 'secondary' = 'primary') => {
+  const baseStyles = {
+    backdropFilter: 'blur(10px)',
+    WebkitBackdropFilter: 'blur(10px)',
+    border: 'none',
+    borderRadius: '12px',
+    padding: '12px 24px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    fontSize: '16px',
+  };
+
+  switch (variant) {
+    case 'primary':
+      return {
+        ...baseStyles,
+        background: isDark 
+          ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%)'
+          : 'linear-gradient(135deg, rgba(0, 0, 0, 0.8) 0%, rgba(0, 0, 0, 0.9) 100%)',
+        color: isDark ? '#ffffff' : '#ffffff',
+        border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)'}`,
+      };
+    case 'secondary':
+      return {
+        ...baseStyles,
+        background: isDark 
+          ? 'rgba(255, 255, 255, 0.05)' 
+          : 'rgba(0, 0, 0, 0.03)',
+        color: isDark ? '#ffffff' : '#000000',
+        border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
+      };
+    default:
+      return baseStyles;
+  }
+};
+
 export default function EventDashboardPage({ events }: { events: EventType[] }) {
   const { theme } = useContext(ThemeContext);
   const isDark = theme === 'dark';
@@ -119,7 +178,7 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
   const { itineraries: realtimeItineraries, loading: itinerariesLoading, error: itinerariesError, refetch: refetchItineraries } = useRealtimeItineraries(id || null);
 
   const event = events.find(e => e.id === id);
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState('settings');
   const [guests, setGuests] = useState<GuestType[]>([]);
   const [savedItineraries, setSavedItineraries] = useState<ItineraryType[]>([]);
   const [draftItineraries, setDraftItineraries] = useState<ItineraryType[]>([]);
@@ -133,6 +192,14 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
   const [itineraryToDelete, setItineraryToDelete] = useState<number | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteText, setDeleteText] = useState('');
+  
+  // New itinerary management states
+  const [selectedItineraryIds, setSelectedItineraryIds] = useState<string[]>([]);
+  const [showOptionsMenu, setShowOptionsMenu] = useState(false);
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+  const [bulkDeleteText, setBulkDeleteText] = useState('');
+  const [isSelectModeActive, setIsSelectModeActive] = useState(false);
+  
   const [activeSection, setActiveSection] = useState('modules');
   const [activeModules, setActiveModules] = useState<{
     [key: string]: {
@@ -146,7 +213,8 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
     hotels: [],
     logistics: [],
     eventTracker: [],
-    safety: []
+    safety: [],
+    addons: []
   });
   const [draggedModule, setDraggedModule] = useState<string | null>(null);
   const [dragOverCategory, setDragOverCategory] = useState<string | null>(null);
@@ -161,7 +229,6 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
   const [selectedGuestIds, setSelectedGuestIds] = useState<string[]>([]);
   const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
   const [showGuestDeleteConfirm, setShowGuestDeleteConfirm] = useState(false);
-  const [isSelectModeActive, setIsSelectModeActive] = useState(false);
   
   // State for Send Form modal
   const [showSendFormModal, setShowSendFormModal] = useState(false);
@@ -225,16 +292,18 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
   const { id: eventId } = useParams();
   const currentEvent = events.find(e => e.id === eventId);
 
+  // Refs for click-outside detection
+  const optionsMenuRef = useRef<HTMLDivElement>(null);
+
+  // Add state for CSV export modal
+  const [showCsvExportModal, setShowCsvExportModal] = useState(false);
+
+  const [isSavingAddOns, setIsSavingAddOns] = useState(false);
+  const [saveAddOnsMessage, setSaveAddOnsMessage] = useState<string | null>(null);
+
   // When the modal is closed, reset the state
   const handleCloseModal = () => {
     setShowSendFormModal(false);
-    // Add a small delay to allow the modal to animate out before resetting state
-    setTimeout(() => {
-      setSendState('idle');
-      setModalView('recipients');
-      setSendFormRecipients([]);
-      setSendError('');
-    }, 300);
   };
 
   const handleSendForm = async () => {
@@ -397,30 +466,54 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
 
   useEffect(() => {
     if (!event?.id) return;
-    
     const loadEventData = async () => {
       try {
         // Load event modules from Supabase
         const modules = await getEventModules(event.id);
-        if (modules) {
-          setActiveModules(modules.modules);
-        }
+        setActiveModules(prev => ({
+          travel: prev.travel || [],
+          hotels: prev.hotels || [],
+          logistics: prev.logistics || [],
+          eventTracker: prev.eventTracker || [],
+          safety: prev.safety || [],
+          addons: (modules && modules.module_data && modules.module_data.addons) ? modules.module_data.addons : []
+        }));
       } catch (error) {
-        console.error('Error loading event modules from Supabase:', error);
+        if (error instanceof Error) {
+          console.error('Error loading event modules from Supabase:', error.message, error.stack, error);
+        } else {
+          console.error('Error loading event modules from Supabase:', error);
+        }
+        console.error('Event ID used for getEventModules:', event?.id);
         // Fallback to localStorage for modules only
         try {
           const savedModules = localStorage.getItem(`event_modules_${event.id}`);
           if (savedModules) {
-            setActiveModules(JSON.parse(savedModules));
+            const parsed = JSON.parse(savedModules);
+            setActiveModules(prev => ({
+              ...prev,
+              addons: parsed.addons || []
+            }));
           }
         } catch (localError) {
           console.error('Error loading modules from localStorage fallback:', localError);
         }
+        setActiveModules(prev => ({
+          travel: prev.travel || [],
+          hotels: prev.hotels || [],
+          logistics: prev.logistics || [],
+          eventTracker: prev.eventTracker || [],
+          safety: prev.safety || [],
+          addons: []
+        }));
       }
     };
-
     loadEventData();
   }, [event?.id]);
+
+  useEffect(() => {
+    console.log('DEBUG: activeModules changed', activeModules);
+  }, [activeModules]);
 
   // Update local guests state when real-time data changes
   useEffect(() => {
@@ -447,7 +540,6 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
         nextOfKinPhone: guest.next_of_kin_phone,
         dietary: guest.dietary || [],
         medical: guest.medical || [],
-        nextOfKin: guest.next_of_kin || {},
         modules: guest.modules || {},
         moduleValues: guest.module_values || {},
         prefix: guest.prefix,
@@ -500,33 +592,8 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
 
   useEffect(() => {
     if (!event) return;
-    const savedModules = localStorage.getItem(`event_modules_${event.id}`);
-    if (savedModules) {
-      setActiveModules(JSON.parse(savedModules));
-    }
-  }, [event]);
-
-  useEffect(() => {
-    if (!event) return;
     localStorage.setItem(`event_modules_${event.id}`, JSON.stringify(activeModules));
   }, [activeModules, event]);
-
-  // Save modules to Supabase when they change
-  useEffect(() => {
-    if (!event?.id) return;
-    
-    const saveModules = async () => {
-      try {
-        await saveEventModules(event.id, activeModules);
-      } catch (error) {
-        console.error('Error saving modules to Supabase:', error);
-        // Fallback to localStorage
-        localStorage.setItem(`event_modules_${event.id}`, JSON.stringify(activeModules));
-      }
-    };
-
-    saveModules();
-  }, [activeModules, event?.id]);
 
   const shareSearchResults = useMemo(() => {
     if (!shareSearchQuery) {
@@ -593,6 +660,599 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
     setShareRecipients([]);
     setShareSearchQuery('');
   };
+
+  function formatUK(dateStr: string) {
+    if (!dateStr) return '';
+    const [y, m, d] = dateStr.split('-');
+    if (!y || !m || !d) return dateStr;
+    return `${d.padStart(2, '0')}/${m.padStart(2, '0')}/${y}`;
+  }
+
+  function handleDownloadCSVTemplate() {
+    const headers = [
+      'Prefix', 'Gender', 'First Name', 'Middle Name', 'Last Name',
+      'Country Code', 'Contact Number', 'Email',
+      'ID Type', 'ID Number', 'Date of Birth (YYYY-MM-DD)',
+      'Flight Number', 'Event Reference', 'Hotel Location',
+      'Hotel Booking Number', 'Train Booking Number',
+      'Coach Booking Number', 'ID Upload (file path)',
+      'Seat Number'
+    ];
+    
+    const csvContent = headers.join(',') + '\n';
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'guest_template.csv';
+    a.click();
+    window.URL.revokeObjectURL(url);
+  }
+
+  function getAge(dateString?: string) {
+    if (!dateString) return null;
+    try {
+      const today = new Date();
+      const birthDate = new Date(dateString);
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const monthDiff = today.getMonth() - birthDate.getMonth();
+      
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+      }
+      
+      return age;
+    } catch {
+      return null;
+    }
+  }
+
+  const groupedGuests = useMemo(() => {
+    const grouped: GroupedGuestsType = {};
+    
+    if (!guests || guests.length === 0) return grouped;
+    
+    guests.forEach(guest => {
+      const groupKey = guest.groupId || 'ungrouped';
+      if (!grouped[groupKey]) {
+        grouped[groupKey] = [];
+      }
+      grouped[groupKey].push(guest);
+    });
+    
+    return grouped;
+  }, [guests]);
+
+  const groupedItineraries = useMemo(() => {
+    const groups: { [key: string]: ItineraryType[] } = {};
+    const individuals: ItineraryType[] = [];
+
+    savedItineraries.forEach(itinerary => {
+      if (itinerary.group_id) {
+        if (!groups[itinerary.group_id]) {
+          groups[itinerary.group_id] = [];
+        }
+        groups[itinerary.group_id].push(itinerary);
+      } else {
+        individuals.push(itinerary);
+      }
+    });
+
+    return { groups, individuals };
+  }, [savedItineraries]);
+
+  const handleSelectAll = () => {
+    if (selectedGuestIds.length === guests.length) {
+      setSelectedGuestIds([]);
+    } else {
+      setSelectedGuestIds(guests.map(g => g.id));
+    }
+  };
+
+  const handleSelectAllClick = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.checked) {
+      setSelectedGuestIds(guests.map(g => g.id));
+    } else {
+      setSelectedGuestIds([]);
+    }
+  };
+
+  const isAllSelected = selectedGuestIds.length === guests.length && guests.length > 0;
+  const isIndeterminate = selectedGuestIds.length > 0 && selectedGuestIds.length < guests.length;
+
+  const TabButton = ({ id, label }: { id: string; label: string }) => (
+    <button
+      onClick={() => setActiveTab(id)}
+      style={{
+        padding: '12px 24px',
+        fontWeight: 600,
+        fontSize: '16px',
+        borderRadius: '8px',
+        border: `2px solid ${isDark ? '#ffffff' : '#000000'}`,
+        background: activeTab === id 
+          ? (isDark ? '#ffffff' : '#ffffff') 
+          : 'transparent',
+        color: activeTab === id 
+          ? '#000000' 
+          : (isDark ? '#ffffff' : '#000000'),
+        cursor: 'pointer',
+        transition: 'all 0.2s ease',
+        whiteSpace: 'nowrap' as const
+      }}
+    >
+      {label}
+    </button>
+  );
+
+  const handleDuplicate = async (idx: number) => {
+    if (!event) return;
+    
+    const itinerary = savedItineraries[idx];
+    if (!itinerary) return;
+    
+    try {
+      const newItinerary = {
+        ...itinerary,
+        id: undefined,
+        title: `${itinerary.title} (Copy)`,
+        created_at: undefined,
+        updated_at: undefined
+      };
+      
+      await addItinerary(newItinerary);
+      await refetchItineraries();
+    } catch (error) {
+      console.error('Error duplicating itinerary:', error);
+    }
+  };
+
+  const handleMakeDraft = async (idx: number) => {
+    if (!event) return;
+    
+    const itinerary = savedItineraries[idx];
+    if (!itinerary) return;
+    
+    try {
+      await updateItinerary(itinerary.id, { ...itinerary, is_draft: true });
+      await refetchItineraries();
+    } catch (error) {
+      console.error('Error making itinerary draft:', error);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!event || selectedItineraryIds.length === 0) return;
+    
+    try {
+      for (const id of selectedItineraryIds) {
+        await deleteItinerary(id);
+      }
+      setSelectedItineraryIds([]);
+      await refetchItineraries();
+    } catch (error) {
+      console.error('Error deleting itineraries:', error);
+    }
+  };
+
+  function handleSelectGuest(guestId: string) {
+    setSelectedGuestIds(prev => {
+      if (prev.includes(guestId)) {
+        return prev.filter(id => id !== guestId);
+      } else {
+        return [...prev, guestId];
+      }
+    });
+  }
+
+  function handleSelectGroup(groupId: string) {
+    const groupGuests = groupedGuests[groupId] || [];
+    const groupGuestIds = groupGuests.map(g => g.id);
+    const allSelected = groupGuestIds.every(id => selectedGuestIds.includes(id));
+    
+    if (allSelected) {
+      setSelectedGuestIds(prev => prev.filter(id => !groupGuestIds.includes(id)));
+    } else {
+      setSelectedGuestIds(prev => [...new Set([...prev, ...groupGuestIds])]);
+    }
+  }
+
+  async function handleDeleteSelectedGuests() {
+    if (selectedGuestIds.length === 0) return;
+    
+    try {
+      for (const guestId of selectedGuestIds) {
+        await deleteGuest(guestId);
+      }
+      setSelectedGuestIds([]);
+      await refetchGuests();
+    } catch (error) {
+      console.error('Error deleting guests:', error);
+    }
+  }
+
+  const handlePublishDraft = async (draftIndex: number) => {
+    if (!event) return;
+    
+    const draft = draftItineraries[draftIndex];
+    if (!draft) return;
+    
+    try {
+      await updateItinerary(draft.id, { ...draft, is_draft: false });
+      await refetchItineraries();
+    } catch (error) {
+      console.error('Error publishing draft:', error);
+    }
+  };
+
+  const handleDragStart = (e: React.DragEvent, moduleKey: string) => {
+    e.dataTransfer.setData('text/plain', moduleKey);
+  };
+
+  const handleModuleDrop = (e: React.DragEvent, category: string) => {
+    e.preventDefault();
+    const moduleKey = e.dataTransfer.getData('text/plain');
+    
+    if (!event) return;
+    
+    setActiveModules(prev => ({
+      ...prev,
+      [category]: [...(prev[category] || []), { 
+        id: `${moduleKey}-${Date.now()}`,
+        name: moduleKey,
+        type: moduleKey
+      }]
+    }));
+  };
+
+  const handleModuleRemove = (category: string, moduleId: string) => {
+    setActiveModules(prev => ({
+      ...prev,
+      [category]: (prev[category] || []).filter(m => m.id !== moduleId)
+    }));
+  };
+
+  const GuestCard = ({ guest, isSelected, onSelect, standalone, isSelectModeActive }: { guest: GuestType, isSelected: boolean, onSelect: (id: string) => void, standalone?: boolean, isSelectModeActive: boolean }) => {
+    const handleNavigate = () => {
+      if (!isSelectModeActive) {
+        navigate(`/event/${event?.id}/guests/edit/${guest.id}`);
+      }
+    };
+    
+    const handleSelectClick = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      onSelect(guest.id);
+    };
+
+    const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      e.stopPropagation();
+      onSelect(guest.id);
+    };
+
+    return (
+      <div
+        onClick={handleNavigate}
+        style={{
+          ...getGlassStyles(isDark),
+          border: isSelected
+            ? (isDark ? '2px solid #fff' : '2px solid #000')
+            : (isDark ? '1px solid rgba(255,255,255,0.13)' : '1px solid #e5e7eb'),
+          borderRadius: 16,
+          padding: '28px 28px 20px 28px',
+          marginBottom: 0,
+          boxShadow: isDark
+            ? '0 4px 16px rgba(0,0,0,0.25)'
+            : '0 4px 16px rgba(0,0,0,0.08)',
+          cursor: isSelectModeActive ? 'default' : 'pointer',
+          position: 'relative',
+          minHeight: 120,
+          transition: 'background 0.2s, border 0.2s',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+        }}
+      >
+        {isSelectModeActive && (
+          <div style={{ position: 'absolute', top: 16, right: 16 }}>
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={handleCheckboxChange}
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: '18px',
+                height: '18px',
+                accentColor: isDark ? '#ffffff' : '#000000',
+                borderRadius: 6,
+              }}
+            />
+          </div>
+        )}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div style={{ fontWeight: 600, fontSize: 18, color: isDark ? '#fff' : '#111', marginBottom: 2 }}>
+            {guest.firstName} {guest.lastName}
+          </div>
+          <div style={{ color: isDark ? '#aaa' : '#444', fontSize: 15, marginBottom: 2 }}>
+            {guest.email}
+          </div>
+          <div style={{ color: isDark ? '#888' : '#666', fontSize: 14 }}>
+            {guest.countryCode} {guest.contactNumber}
+          </div>
+          {guest.dob && (
+            <div style={{ color: isDark ? '#888' : '#666', fontSize: 14 }}>
+              Age: {getAge(guest.dob)}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const handleDeleteEvent = () => {
+    setShowDeleteEventModal(true);
+  };
+
+  const handleConfirmDeleteEvent = async () => {
+    if (!event || deleteEventText !== 'delete') return;
+    
+    try {
+      await supabaseDeleteEvent(event.id);
+      setShowDeleteEventModal(false);
+      navigate('/');
+    } catch (error) {
+      console.error('Error deleting event:', error);
+    }
+  };
+
+  const handleAddEmailRecipient = () => {
+    if (currentEmailInput && currentEmailInput.includes('@')) {
+      setSendFormRecipients(prev => [...prev, currentEmailInput]);
+      setCurrentEmailInput('');
+    }
+  };
+
+  const handleRemoveEmailRecipient = (index: number) => {
+    setSendFormRecipients(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleNextToPreview = () => {
+    setModalView('preview');
+  };
+
+  const isEventLive = (event: EventType): boolean => {
+    const now = new Date();
+    const eventStart = new Date(event.from);
+    const eventEnd = new Date(event.to);
+    
+    return now >= eventStart && now <= eventEnd;
+  };
+
+  const getEventDisplayStatus = (event: EventType): string => {
+    const now = new Date();
+    const eventStart = new Date(event.from);
+    const eventEnd = new Date(event.to);
+    
+    if (now < eventStart) {
+      return 'Upcoming';
+    } else if (now >= eventStart && now <= eventEnd) {
+      return 'Live';
+    } else {
+      return 'Completed';
+    }
+  };
+
+  const getStatusColor = (event: EventType): string => {
+    const displayStatus = getEventDisplayStatus(event);
+    
+    switch (displayStatus) {
+      case 'Live':
+        return '#22c55e'; // Green
+      case 'Upcoming':
+        return '#f59e0b'; // Orange
+      case 'Completed':
+        return '#ef4444'; // Red
+      default:
+        return '#6b7280'; // Gray
+    }
+  };
+
+  const handleSelectItinerary = (itineraryId: string) => {
+    setSelectedItineraryIds(prev => {
+      if (prev.includes(itineraryId)) {
+        return prev.filter(id => id !== itineraryId);
+      } else {
+        return [...prev, itineraryId];
+      }
+    });
+  };
+
+  const handleSelectAllItineraries = () => {
+    if (selectedItineraryIds.length === savedItineraries.length) {
+      setSelectedItineraryIds([]);
+    } else {
+      setSelectedItineraryIds(savedItineraries.map(i => i.id));
+    }
+  };
+
+  const handleDeleteAllItineraries = async () => {
+    if (selectedItineraryIds.length === 0) return;
+    
+    try {
+      for (const id of selectedItineraryIds) {
+        await deleteItinerary(id);
+      }
+      setSelectedItineraryIds([]);
+      await refetchItineraries();
+    } catch (error) {
+      console.error('Error deleting itineraries:', error);
+    }
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (optionsMenuRef.current && !optionsMenuRef.current.contains(event.target as Node)) {
+        setShowOptionsMenu(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  function handleExportCsv() {
+    setShowCsvExportModal(true);
+  }
+
+  function downloadCsv() {
+    if (!event || !guests) return;
+
+    const headers = ['First Name', 'Last Name', 'Email', 'Contact Number', 'Country Code', 'ID Type', 'ID Number'];
+    const rows = guests.map(guest => [
+      guest.firstName || '',
+      guest.lastName || '',
+      guest.email || '',
+      guest.contactNumber || '',
+      guest.countryCode || '',
+      guest.idType || '',
+      guest.idNumber || ''
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `${event.name}_guests.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    setShowCsvExportModal(false);
+  }
+
+  // Guest page styles
+  const guestPageBlackButtonStyle = {
+    ...getButtonStyles(isDark, 'primary'),
+    minWidth: '120px',
+    maxWidth: '140px',
+    whiteSpace: 'nowrap' as const,
+    textAlign: 'center' as const,
+  };
+
+  const guestPageWhiteButtonStyle = {
+    ...getButtonStyles(isDark, 'secondary'),
+    minWidth: '120px',
+    maxWidth: '140px',
+    whiteSpace: 'nowrap' as const,
+    textAlign: 'center' as const,
+  };
+
+  const guestPageInputStyle = {
+    padding: '12px 16px',
+    border: '2px solid #ffffff',
+    borderRadius: 8,
+    fontSize: 16,
+    background: 'transparent',
+    color: '#ffffff',
+    outline: 'none',
+    width: '300px',
+    transition: 'all 0.2s ease',
+  };
+
+  // Filter and search logic for guests
+  const filteredGuests = useMemo(() => {
+    let filtered = guests.filter(guest => {
+      const matchesSearch = searchQuery === '' || 
+        guest.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        guest.lastName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        guest.email.toLowerCase().includes(searchQuery.toLowerCase());
+
+      const matchesNationality = filters.nationality === 'all' || guest.countryCode === filters.nationality;
+      const matchesGender = filters.gender === 'all' || guest.gender === filters.gender;
+      const matchesIdType = filters.idType === 'all' || guest.idType === filters.idType;
+
+      let matchesAge = true;
+      if (filters.ageRange.min || filters.ageRange.max) {
+        const age = getAge(guest.dob);
+        if (age !== null) {
+          if (filters.ageRange.min && age < parseInt(filters.ageRange.min)) matchesAge = false;
+          if (filters.ageRange.max && age > parseInt(filters.ageRange.max)) matchesAge = false;
+        }
+      }
+
+      return matchesSearch && matchesNationality && matchesGender && matchesIdType && matchesAge;
+    });
+
+    // Apply sorting
+    filtered.sort((a, b) => {
+      const [field, direction] = filters.sort.split('-');
+      let aValue = (a as any)[field] || '';
+      let bValue = (b as any)[field] || '';
+      
+      if (typeof aValue === 'string') aValue = aValue.toLowerCase();
+      if (typeof bValue === 'string') bValue = bValue.toLowerCase();
+      
+      if (direction === 'asc') {
+        return aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
+      } else {
+        return aValue > bValue ? -1 : aValue < bValue ? 1 : 0;
+      }
+    });
+
+    return filtered;
+  }, [guests, searchQuery, filters]);
+
+  const allFilteredSelected = filteredGuests.length > 0 && filteredGuests.every(guest => selectedGuestIds.includes(guest.id));
+
+  const handleSaveAddOns = async () => {
+    if (!event?.id) return;
+    setIsSavingAddOns(true);
+    setSaveAddOnsMessage(null);
+    try {
+      const toSave = { addons: activeModules.addons };
+      console.log('DEBUG: handleSaveAddOns will save:', JSON.stringify(toSave, null, 2));
+      await saveEventModules(event.id, toSave);
+      setSaveAddOnsMessage('Add-Ons saved!');
+    } catch (error) {
+      setSaveAddOnsMessage('Failed to save Add-Ons.');
+    } finally {
+      setIsSavingAddOns(false);
+      setTimeout(() => setSaveAddOnsMessage(null), 2000);
+    }
+  };
+
+  // Before the return statement in the component, add:
+  const addOnsList = (() => {
+    console.log('DEBUG: Rendering Add Ons', activeModules.addons);
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 24, minHeight: 100 }}>
+        {activeModules.addons && activeModules.addons.length > 0 && (
+          activeModules.addons.map((module, idx) => {
+            const moduleInfo = DASHBOARD_MODULES.addons.find(m =>
+              m.key === module.name ||
+              m.key === module.id ||
+              (module.name && m.key && module.name.includes(m.key)) ||
+              (module.id && m.key && module.id.includes(m.key))
+            );
+            if (!moduleInfo) return null;
+            return (
+              <AddOnCard
+                key={module.id}
+                title={moduleInfo.label}
+                description={moduleInfo.description}
+              />
+            );
+          })
+        )}
+      </div>
+    );
+  })();
 
   if (!event) {
     return (
@@ -676,14 +1336,6 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                 cursor: 'pointer',
                 transition: 'all 0.2s ease'
               }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = isDark ? '#666' : '#888'
-                e.currentTarget.style.transform = 'translateY(-1px)'
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = isDark ? '#444' : '#bbb'
-                e.currentTarget.style.transform = 'translateY(0)'
-              }}
             >
               Create New Event
             </button>
@@ -693,506 +1345,18 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
     );
   }
 
-  function formatUK(dateStr: string) {
-    if (!dateStr) return '';
-    const [y, m, d] = dateStr.split('-');
-    if (!y || !m || !d) return dateStr;
-    return `${d.padStart(2, '0')}/${m.padStart(2, '0')}/${y}`;
+  // Function to store selected add-ons in Supabase for an event
+  async function saveEventAddOns(eventId: string, addOnKeys: string[]) {
+    // TODO: Implement actual Supabase update logic
+    // await supabase.from('events').update({ addons: addOnKeys }).eq('id', eventId);
   }
 
-  function handleDownloadCSVTemplate() {
-    const headers = [
-      'Prefix', 'Gender', 'First Name', 'Middle Name', 'Last Name',
-      'Country Code', 'Contact Number', 'Email',
-      'ID Type', 'ID Number', 'Country of Origin',
-      'Next of Kin Name', 'Next of Kin Email', 'Next of Kin Country Code', 'Next of Kin Number',
-      'Dietary', 'Medical/Accessibility', 'Modules'
-    ];
-    const csvContent = headers.join(',') + '\n';
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'guest_template.csv';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }
-
-  function getAge(dateString?: string) {
-    if (!dateString) return null;
-    try {
-      const today = new Date();
-      const birthDate = new Date(dateString);
-      if (isNaN(birthDate.getTime())) return null;
-      
-      let age = today.getFullYear() - birthDate.getFullYear();
-      const m = today.getMonth() - birthDate.getMonth();
-      if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
-        age--;
-      }
-      return age;
-    } catch {
-      return null;
-    }
-  }
-
-  const filteredGuests = guests
-    .filter(guest => {
-      // Search filter
-      const searchLower = searchQuery.toLowerCase();
-      if (searchQuery && 
-        !`${guest.firstName} ${guest.lastName}`.toLowerCase().includes(searchLower) &&
-        !guest.email.toLowerCase().includes(searchLower) &&
-        !guest.idNumber.toLowerCase().includes(searchLower)
-      ) {
-        return false;
-      }
-
-      // Group filter
-      if (filters.group !== 'all' && guest.groupId !== filters.group) {
-        return false;
-      }
-      
-      // Age filter
-      const age = getAge(guest.dob);
-      const minAge = filters.ageRange.min ? parseInt(filters.ageRange.min, 10) : null;
-      const maxAge = filters.ageRange.max ? parseInt(filters.ageRange.max, 10) : null;
-
-      if (minAge !== null && (age === null || age < minAge)) {
-        return false;
-      }
-      if (maxAge !== null && (age === null || age > maxAge)) {
-        return false;
-      }
-
-      // Nationality filter
-      if (filters.nationality !== 'all' && guest.countryCode !== filters.nationality) {
-        return false;
-      }
-
-      // Gender filter
-      if (filters.gender !== 'all' && guest.gender !== filters.gender) {
-        return false;
-      }
-
-      // ID Type filter
-      if (filters.idType !== 'all' && guest.idType !== filters.idType) {
-        return false;
-      }
-
-      return true;
-    })
-    .sort((a, b) => {
-      // Sorting logic
-      const [sortKey, sortDir] = filters.sort.split('-');
-      
-      let valA: any, valB: any;
-
-      if (sortKey === 'countryCode') {
-        valA = a.countryCode || '';
-        valB = b.countryCode || '';
-      } else {
-        valA = (a as any)[sortKey] || '';
-        valB = (b as any)[sortKey] || '';
-      }
-
-      if (valA < valB) return sortDir === 'asc' ? -1 : 1;
-      if (valA > valB) return sortDir === 'asc' ? 1 : -1;
-      return 0;
-    });
-
-  const allFilteredSelected = useMemo(() => {
-    const allFilteredGuestIds = filteredGuests.map(g => g.id);
-    return allFilteredGuestIds.length > 0 && allFilteredGuestIds.every(id => selectedGuestIds.includes(id));
-  }, [filteredGuests, selectedGuestIds]);
-
-  const handleSelectAll = () => {
-    const allFilteredGuestIds = filteredGuests.map(g => g.id);
-    if (allFilteredSelected) {
-      // Deselect all visible
-      setSelectedGuestIds(current => current.filter(id => !allFilteredGuestIds.includes(id)));
-    } else {
-      // Select all visible
-      setSelectedGuestIds(current => [...new Set([...current, ...allFilteredGuestIds])]);
-    }
-  };
-
-  const handleSelectAllClick = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const allFilteredGuestIds = filteredGuests.map(g => g.id);
-    if (e.target.checked) {
-      setSelectedGuestIds(current => [...new Set([...current, ...allFilteredGuestIds])]);
-    } else {
-      setSelectedGuestIds(current => current.filter(id => !allFilteredGuestIds.includes(id)));
-    }
-  };
-
-  useEffect(() => {
-    const allFilteredGuestIds = filteredGuests.map(g => g.id);
-    const allVisibleSelected = allFilteredGuestIds.length > 0 && allFilteredGuestIds.every(id => selectedGuestIds.includes(id));
-    const someVisibleSelected = allFilteredGuestIds.length > 0 && selectedGuestIds.some(id => allFilteredGuestIds.includes(id));
-
-    if (selectAllCheckboxRef.current) {
-      selectAllCheckboxRef.current.checked = allVisibleSelected;
-      selectAllCheckboxRef.current.indeterminate = !allVisibleSelected && someVisibleSelected;
-    }
-  }, [selectedGuestIds, filteredGuests]);
-
-  const TabButton = ({ id, label }: { id: string; label: string }) => (
-    <button
-      onClick={() => setActiveTab(id)}
-      style={{
-        background: activeTab === id ? (isDark ? '#ffffff' : '#000') : 'transparent',
-        color: activeTab === id ? (isDark ? '#000000' : '#fff') : (isDark ? '#ffffff' : '#666'),
-        border: isDark ? '1.5px solid #444' : '1.5px solid #ddd',
-        borderRadius: 8,
-        padding: '12px 24px',
-        fontSize: 16,
-        cursor: 'pointer',
-        fontFamily: 'inherit',
-        transition: 'all 0.2s ease',
-      }}
-    >
-      {label}
-    </button>
-  );
-
-  const handleDuplicate = async (idx: number) => {
-    if (!event?.id) return;
-    
-    try {
-      const itinerary = savedItineraries[idx];
-      const duplicatedItinerary = {
-        ...itinerary,
-        title: `${itinerary.title} (Copy)`,
-        id: undefined // Let Supabase generate new ID
-      };
-      
-      const newItinerary = await addItinerary(duplicatedItinerary);
-      setSavedItineraries(prev => [...prev, newItinerary]);
-    } catch (error) {
-      console.error('Error duplicating itinerary:', error);
-      alert('Failed to duplicate itinerary. Please try again.');
-    }
-  };
-
-  const handleMakeDraft = async (idx: number) => {
-    if (!event?.id) return;
-    
-    try {
-      const itinerary = savedItineraries[idx];
-      
-      // Update the itinerary to be a draft
-      const updatedItinerary = await updateItinerary(itinerary.id!, { ...itinerary, is_draft: true });
-      
-      // Update local state
-      setDraftItineraries(prev => [...prev, updatedItinerary]);
-      setSavedItineraries(prev => prev.filter((_, i) => i !== idx));
-    } catch (error) {
-      console.error('Error making itinerary draft:', error);
-      alert('Failed to make itinerary a draft. Please try again.');
-    }
-  };
-
-  const handleDelete = async () => {
-    if (itineraryToDelete === null || deleteText !== 'delete' || !event?.id) return;
-    
-    try {
-      const itinerary = savedItineraries[itineraryToDelete];
-      await deleteItinerary(itinerary.id!);
-      
-      setSavedItineraries(prev => prev.filter((_, idx) => idx !== itineraryToDelete));
-      
-      setShowDeleteConfirm(false);
-      setItineraryToDelete(null);
-      setDeleteText('');
-    } catch (error) {
-      console.error('Error deleting itinerary:', error);
-      alert('Failed to delete itinerary. Please try again.');
-    }
-  };
-
-  function handleSelectGuest(guestId: string) {
-    if (shiftKeyRef.current && lastSelectedId) {
-      // Shift-click selection
-      const allGuestIds = guests.map(g => g.id);
-      const lastIdx = allGuestIds.indexOf(lastSelectedId);
-      const currentIdx = allGuestIds.indexOf(guestId);
-      const start = Math.min(lastIdx, currentIdx);
-      const end = Math.max(lastIdx, currentIdx);
-      const rangeIds = allGuestIds.slice(start, end + 1);
-
-      const uniqueIds = new Set([...selectedGuestIds, ...rangeIds]);
-      setSelectedGuestIds(Array.from(uniqueIds));
-    } else {
-      // Regular click selection
-      const newSelectedIds = selectedGuestIds.includes(guestId)
-        ? selectedGuestIds.filter(id => id !== guestId)
-        : [...selectedGuestIds, guestId];
-      setSelectedGuestIds(newSelectedIds);
-      setLastSelectedId(guestId);
-    }
-  }
-
-  function handleSelectGroup(groupId: string) {
-    const guestIdsInGroup = guests
-      .filter(g => g.groupId === groupId)
-      .map(g => g.id);
-    
-    // Check if all guests in the group are already selected
-    const allSelected = guestIdsInGroup.every(id => selectedGuestIds.includes(id));
-    
-    if (allSelected) {
-      // Deselect all guests in the group
-      setSelectedGuestIds(currentSelected => currentSelected.filter(id => !guestIdsInGroup.includes(id)));
-    } else {
-      // Select all guests in the group (and remove duplicates)
-      setSelectedGuestIds(currentSelected => [...new Set([...currentSelected, ...guestIdsInGroup])]);
-    }
-  }
-
-  async function handleDeleteSelectedGuests() {
-    if (!event?.id) return;
-
-    try {
-      // Delete from Supabase database
-      for (const guestId of selectedGuestIds) {
-        await deleteGuest(guestId);
-      }
-      
-      console.log(`✅ Successfully deleted ${selectedGuestIds.length} guests from database`);
-      
-      // The real-time subscription will automatically update the UI
-      setSelectedGuestIds([]);
-      setShowGuestDeleteConfirm(false);
-    } catch (error) {
-      console.error('❌ Error deleting guests:', error);
-      alert(`Failed to delete guests: ${error.message || 'Unknown error'}`);
-    }
-  }
-
-  const handlePublishDraft = async (draftIndex: number) => {
-    if (!event?.id) return;
-    
-    try {
-      const draftToPublish = draftItineraries[draftIndex];
-      
-      // Update the itinerary to not be a draft
-      const updatedItinerary = await updateItinerary(draftToPublish.id!, { ...draftToPublish, is_draft: false });
-      
-      // Update local state
-      setSavedItineraries(prev => [...prev, updatedItinerary]);
-      setDraftItineraries(prev => prev.filter((_, idx) => idx !== draftIndex));
-    } catch (error) {
-      console.error('Error publishing draft:', error);
-      alert('Failed to publish draft. Please try again.');
-    }
-  };
-
-  const handleDragStart = (e: React.DragEvent, moduleKey: string) => {
-    setDraggedModule(moduleKey);
-  };
-
-  const handleModuleDrop = (e: React.DragEvent, category: string) => {
-    e.preventDefault();
-    const moduleType = e.dataTransfer.getData('moduleType');
-    const moduleName = e.dataTransfer.getData('moduleName');
-    
-    setActiveModules(prev => ({
-      ...prev,
-      [category]: [...prev[category], {
-        id: `${moduleType}-${Date.now()}`,
-        name: moduleName,
-        type: moduleType
-      }]
-    }));
-  };
-
-  const handleModuleRemove = (category: string, moduleId: string) => {
-    setActiveModules(prev => ({
-      ...prev,
-      [category]: prev[category].filter(m => m.id !== moduleId)
-    }));
-  };
-
-  const GuestCard = ({ guest, isSelected, onSelect, standalone, isSelectModeActive }: { guest: GuestType, isSelected: boolean, onSelect: (id: string) => void, standalone?: boolean, isSelectModeActive: boolean }) => {
-    const handleNavigate = () => {
-      const guestIndex = guests.findIndex(g => g.id === guest.id);
-      if (guestIndex !== -1) {
-        navigate(`/event/${id}/guests/edit/${guestIndex}`);
-      }
-    };
-
-    const handleSelectClick = (e: React.MouseEvent) => {
-      e.stopPropagation();
-      onSelect(guest.id);
-    };
-
-    const cardStyle: React.CSSProperties = {
-      background: isSelected ? (isDark ? '#2a2a2a' : '#f0f0f0') : (isDark ? '#1e1e1e' : '#fff'),
-      borderRadius: 12,
-      border: isSelected ? (isDark ? '2px solid #ffffff' : '2px solid #000') : (isDark ? '1.5px solid #444' : '1.5px solid #bbb'),
-      transition: 'all 0.2s ease-in-out',
-      boxShadow: isSelected ? (isDark ? '0 4px 12px rgba(255,255,255,0.1)' : '0 4px 12px rgba(0,0,0,0.1)') : (isDark ? '0 1px 3px rgba(0,0,0,0.3)' : '0 1px 3px rgba(0,0,0,0.05)'),
-      display: 'flex',
-      alignItems: 'center',
-      cursor: 'pointer',
-    };
-    
-    if (!standalone) {
-        cardStyle.background = isSelected ? (isDark ? '#2a2a2a' : '#f0f0f0') : (isDark ? '#1a1a1a' : '#f8f9fa');
-        cardStyle.border = isSelected ? (isDark ? '2px solid #ffffff' : '2px solid #000') : (isDark ? '1px solid #333' : '1px solid #ddd');
-    }
-
-    return (
-      <div 
-        onClick={handleNavigate}
-        style={cardStyle}
-      >
-        {isSelectModeActive && (
-          <div onClick={handleSelectClick} style={{ padding: '16px', alignSelf: 'stretch', display: 'flex', alignItems: 'center' }}>
-            <input type="checkbox" checked={isSelected} readOnly style={{ width: 18, height: 18, cursor: 'pointer' }}/>
-          </div>
-        )}
-        <div style={{ flex: 1, padding: isSelectModeActive ? '16px 16px 16px 0' : '16px' }}>
-          <div style={{ fontSize: standalone ? 18 : 16, fontWeight: 500, marginBottom: standalone ? 12 : 8, textTransform: 'uppercase', color: isDark ? '#ffffff' : '#222' }}>
-            {[guest.firstName, guest.middleName, guest.lastName].filter(Boolean).join(' ')}
-          </div>
-          <>
-            <div style={{ fontSize: 14, color: isDark ? '#b0b0b0' : '#666', marginBottom: 8 }}>
-              <span style={{ color: isDark ? '#d0d0d0' : '#444', fontWeight: 500 }}>Email:</span> {guest.email}
-            </div>
-            <div style={{ fontSize: 14, color: isDark ? '#b0b0b0' : '#666', marginBottom: 8 }}>
-              <span style={{ color: isDark ? '#d0d0d0' : '#444', fontWeight: 500 }}>Phone:</span> {guest.countryCode} {guest.contactNumber}
-            </div>
-            <div style={{ fontSize: 14, color: isDark ? '#b0b0b0' : '#666' }}>
-              <span style={{ color: isDark ? '#d0d0d0' : '#444', fontWeight: 500 }}>ID:</span> {guest.idType} {guest.idNumber}
-            </div>
-          </>
-        </div>
-      </div>
-    );
-  };
-
-  const guestPageButtonBaseStyle: React.CSSProperties = {
-    borderRadius: '8px',
-    fontWeight: 600,
-    fontSize: 15,
-    cursor: 'pointer',
-    height: 45,
-    width: '160px',
-    border: isDark ? '2px solid #ffffff' : '2px solid #000',
-    boxSizing: 'border-box',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    whiteSpace: 'nowrap',
-  };
-  
-  const guestPageBlackButtonStyle: React.CSSProperties = {
-    ...guestPageButtonBaseStyle,
-    background: isDark ? '#ffffff' : '#000',
-    color: isDark ? '#000000' : '#fff',
-  };
-  
-  const guestPageWhiteButtonStyle: React.CSSProperties = {
-    ...guestPageButtonBaseStyle,
-    background: isDark ? '#1e1e1e' : '#fff',
-    color: isDark ? '#ffffff' : '#000',
-  };
-
-  const guestPageInputStyle: React.CSSProperties = {
-    height: 45,
-    padding: '0 16px',
-    border: isDark ? '2px solid #444' : '2px solid #000',
-    borderRadius: '8px',
-    boxSizing: 'border-box',
-    fontSize: 15,
-    width: '280px',
-    background: isDark ? '#2a2a2a' : '#fff',
-    color: isDark ? '#ffffff' : '#333',
-  };
-
-  const selectAllCheckboxRef = useRef<HTMLInputElement>(null);
-
-  // Add delete event logic
-  const handleDeleteEvent = () => {
-    setShowDeleteEventModal(true);
-  };
-
-  const handleConfirmDeleteEvent = async () => {
-    if (deleteEventText !== 'delete') return;
-    
-    try {
-      // TODO: Add Supabase event deletion when event management is implemented
-      // For now, just update localStorage
-      const updatedEvents = events.filter(e => e.id !== id);
-      localStorage.setItem('timely_events', JSON.stringify(updatedEvents));
-      navigate('/');
-    } catch (error) {
-      console.error('Error deleting event:', error);
-      // Fallback to localStorage only
-      const updatedEvents = events.filter(e => e.id !== id);
-      localStorage.setItem('timely_events', JSON.stringify(updatedEvents));
-      navigate('/');
-    }
-  };
-
-  // Add email recipient handling functions
-  const handleAddEmailRecipient = () => {
-    if (currentEmailInput && currentEmailInput.includes('@')) {
-      setSendFormRecipients(prev => [...prev, currentEmailInput]);
-      setCurrentEmailInput('');
-    }
-  };
-
-  const handleRemoveEmailRecipient = (index: number) => {
-    setSendFormRecipients(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const handleNextToPreview = () => {
-    setModalView('preview');
-  };
-
-  // Helper function to determine if event is live (happening today)
-  const isEventLive = (event: EventType): boolean => {
-    const today = new Date().toISOString().split('T')[0] // YYYY-MM-DD format
-    const eventStart = event.from
-    const eventEnd = event.to
-    
-    return today >= eventStart && today <= eventEnd
-  }
-
-  // Get display status for event
-  const getEventDisplayStatus = (event: EventType): string => {
-    const today = new Date().toISOString().split('T')[0] // YYYY-MM-DD format
-    const eventStart = event.from
-    const eventEnd = event.to
-    
-    if (today >= eventStart && today <= eventEnd) {
-      return 'LIVE'
-    } else if (today < eventStart) {
-      return 'UPCOMING'
-    } else {
-      return 'FINISHED'
-    }
-  }
-
-  // Get status color
-  const getStatusColor = (event: EventType): string => {
-    const status = getEventDisplayStatus(event)
-    switch (status) {
-      case 'LIVE':
-        return '#22c55e' // Green
-      case 'UPCOMING':
-        return '#f59e0b' // Orange/Amber
-      case 'FINISHED':
-        return '#ef4444' // Red
-      default:
-        return '#6b7280' // Gray
-    }
-  }
+  // Function to be called by the mobile app to activate add-ons for a guest profile
+  // (This is a placeholder for future mobile integration)
+  // function activateAddOnsForGuest(eventId: string, guestId: string) {
+  //   // Mobile app would call this to install/activate add-ons for the guest
+  //   // Example: fetch enabled add-ons from Supabase and show/hide modules in the mobile UI
+  // }
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: isDark ? '#121212' : '#f8f9fa' }}>
@@ -1240,31 +1404,58 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
           {showModules && (
             <>
               <div style={{ fontSize: 13, color: '#bbb', marginBottom: 24, letterSpacing: 1, textTransform: 'uppercase' }}>Available Services</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {DASHBOARD_MODULES.addons.map(module => (
-                  <div
-                    key={module.key}
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, module.key)}
-                    style={{
-                      background: isDark ? '#404040' : '#333',
-                      borderRadius: 8,
-                      padding: '12px 16px',
-                      cursor: 'grab',
-                      userSelect: 'none',
-                      boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 12,
-                    }}
-                  >
-                    <span style={{ fontSize: 24 }}>{module.icon}</span>
-                    <div>
-                      <div style={{ fontWeight: 600 }}>{module.label}</div>
-                      <div style={{ fontSize: 13, color: '#ccc' }}>{module.description}</div>
+              <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {DASHBOARD_MODULES.addons.map(module => {
+                  const isActive = (activeModules.addons || []).some(m =>
+                    (typeof m.id === 'string' && m.id.includes(module.key)) ||
+                    (typeof m.name === 'string' && m.name.includes(module.key))
+                  );
+                  return (
+                    <div
+                      key={module.key}
+                      draggable={!isActive}
+                      onDragStart={e => handleDragStart(e, module.key)}
+                      style={{
+                        background: isDark ? 'rgba(40,40,40,0.45)' : 'rgba(255,255,255,0.85)',
+                        border: isActive
+                          ? '2px solid #22c55e'
+                          : isDark ? '1.5px solid rgba(255,255,255,0.13)' : '1px solid #bbb',
+                        borderRadius: 12,
+                        padding: '14px 18px',
+                        cursor: isActive ? 'not-allowed' : 'grab',
+                        userSelect: 'none',
+                        boxShadow: isActive
+                          ? '0 0 12px 2px #22c55e99'
+                          : isDark ? '0 2px 12px #0004' : '0 1px 4px #0001',
+                        width: '100%',
+                        color: isDark ? '#fff' : '#222',
+                        backdropFilter: 'blur(12px)',
+                        WebkitBackdropFilter: 'blur(12px)',
+                        transition: 'background 0.2s, color 0.2s, box-shadow 0.2s, border 0.2s',
+                        opacity: isActive ? 0.7 : 1,
+                        position: 'relative',
+                        pointerEvents: isActive ? 'none' : 'auto',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        {/* <span style={{ fontSize: 24 }}>{module.icon}</span> */}
+                        <div>
+                          <div style={{ color: isDark ? '#fff' : '#222', fontWeight: 600, fontSize: 16 }}>{module.label}</div>
+                          <div style={{ color: isDark ? '#cbd5e1' : '#666', fontSize: 12 }}>{module.description}</div>
+                        </div>
+                        {isActive && (
+                          <span style={{
+                            marginLeft: 'auto',
+                            fontSize: 22,
+                            color: '#22c55e',
+                            fontWeight: 700,
+                            filter: 'drop-shadow(0 0 6px #22c55e99)'
+                          }}>✓</span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </>
           )}
@@ -1279,13 +1470,13 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
         height: '100vh',
         overflowY: 'auto',
         background: isDark ? '#121212' : '#fff',
-        padding: '0 40px',
+        padding: 0, // Remove side padding from outer container
         transition: 'right 0.3s ease'
       }}>
         <div style={{
           maxWidth: 1200,
           margin: '0 auto',
-          padding: '40px',
+          padding: '0 40px', // Only side padding for inner container
           fontFamily: 'Roboto, Arial, system-ui, sans-serif',
           color: isDark ? '#ffffff' : '#222',
           width: '100%'
@@ -1296,7 +1487,7 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                 {currentEvent?.name || 'Event Dashboard'}
               </h1>
               <span style={{
-                background: getStatusColor(currentEvent),
+                background: currentEvent ? getStatusColor(currentEvent) : '#6b7280',
                 color: '#fff',
                 padding: '6px 12px',
                 borderRadius: 20,
@@ -1305,10 +1496,42 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                 textTransform: 'uppercase',
                 letterSpacing: '0.5px'
               }}>
-                {getEventDisplayStatus(currentEvent)}
+                {currentEvent ? getEventDisplayStatus(currentEvent) : 'UNKNOWN'}
               </span>
-          </div>
-            <div style={{ fontSize: 22, color: isDark ? '#b0b0b0' : '#888', fontWeight: 400, marginBottom: 0, textAlign: 'right' }}>{formatUK(event.from)} - {formatUK(event.to)}</div>
+            </div>
+            {currentEvent && (currentEvent.from || currentEvent.to) && (
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'flex-end',
+                gap: 4,
+                color: isDark ? '#aaa' : '#666',
+                fontSize: 14
+              }}>
+                {currentEvent.from && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontWeight: 600 }}>From:</span>
+                    <span>{new Date(currentEvent.from).toLocaleDateString('en-GB', { 
+                      weekday: 'short', 
+                      year: 'numeric', 
+                      month: 'short', 
+                      day: 'numeric' 
+                    })}</span>
+                  </div>
+                )}
+                {currentEvent.to && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontWeight: 600 }}>To:</span>
+                    <span>{new Date(currentEvent.to).toLocaleDateString('en-GB', { 
+                      weekday: 'short', 
+                      year: 'numeric', 
+                      month: 'short', 
+                      day: 'numeric' 
+                    })}</span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
           <hr style={{ margin: '7px 0 16px 0', border: 'none', borderTop: isDark ? '2px solid #444' : '2px solid #bbb' }} />
           <div style={{ display: 'flex', gap: 16, marginBottom: 32 }}>
@@ -1320,10 +1543,55 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
 
           {activeTab === 'settings' && (
             <div style={{ marginBottom: 64, paddingBottom: 48 }}>
-              <h2 style={{ fontSize: 28, fontWeight: 600, margin: '0 0 32px 0', display: 'flex', alignItems: 'center', gap: 12 }}>
-                <Icon name="report" style={{ fontSize: 32, color: isDark ? '#60A5FA' : '#3B82F6' }} />
-                Event Dashboard
-              </h2>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                <h2 style={{ fontSize: 28, fontWeight: 600, margin: '0', display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <Icon name="report" style={{ fontSize: 32, color: isDark ? '#60A5FA' : '#3B82F6' }} />
+                  Event Dashboard
+                </h2>
+                <button
+                  onClick={() => navigate(`/link-itineraries/${currentEvent?.id}`)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    background: isDark 
+                      ? 'rgba(255, 255, 255, 0.1)' 
+                      : 'rgba(255, 255, 255, 0.2)',
+                    backdropFilter: 'blur(10px)',
+                    border: isDark 
+                      ? '1px solid rgba(255, 255, 255, 0.2)' 
+                      : '1px solid rgba(0, 0, 0, 0.1)',
+                    color: isDark ? '#ffffff' : '#000000',
+                    borderRadius: 12,
+                    padding: '16px 32px',
+                    fontSize: 16,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    boxShadow: isDark 
+                      ? '0 8px 32px rgba(0, 0, 0, 0.3)' 
+                      : '0 8px 32px rgba(0, 0, 0, 0.1)',
+                    transition: 'all 0.2s ease',
+                    outline: 'none',
+                    minWidth: '140px',
+                    maxWidth: '180px',
+                    whiteSpace: 'nowrap' as const,
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = isDark 
+                      ? 'rgba(255, 255, 255, 0.15)' 
+                      : 'rgba(255, 255, 255, 0.3)';
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = isDark 
+                      ? 'rgba(255, 255, 255, 0.1)' 
+                      : 'rgba(255, 255, 255, 0.2)';
+                    e.currentTarget.style.transform = 'translateY(0px)';
+                  }}
+                >
+                  Launch Event
+                </button>
+              </div>
               
               {/* Overview Stats Row */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 24, marginBottom: 32 }}>
@@ -1856,136 +2124,622 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
 
           {activeTab === 'itineraries' && (
             <div style={{ marginBottom: 64, paddingBottom: 48 }}>
-              <h2 style={{ fontSize: 28, fontWeight: 600, margin: '0 0 24px 0' }}>Itineraries</h2>
-              
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 24 }}>
-                <button 
-                  onClick={() => navigate(`/event/${id}/itinerary/create`)} 
-                  style={{ background: '#222', color: '#fff', fontWeight: 500, fontSize: 18, border: 'none', borderRadius: 8, padding: '12px 32px', minWidth: 140, minHeight: 48, width: 'auto' }}
-                >
-                  Create Itinerary
-                </button>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+                <h2 style={{ 
+                  fontSize: 28, 
+                  fontWeight: 600, 
+                  margin: 0,
+                  color: isDark ? '#ffffff' : '#000000'
+                }}>Itineraries</h2>
+                
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                  {/* Options Menu Button */}
+                  <div style={{ position: 'relative' }} ref={optionsMenuRef}>
+                    <button 
+                      onClick={() => setShowOptionsMenu(!showOptionsMenu)}
+                      style={{
+                        ...getButtonStyles(isDark, 'secondary'),
+                        fontSize: 16,
+                        minWidth: 120,
+                        minHeight: 48,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8
+                      }}
+                    >
+                      Options
+                      <span style={{ fontSize: 12 }}>▼</span>
+                    </button>
+                    
+                    {/* Options Dropdown */}
+                    {showOptionsMenu && (
+                      <div style={{
+                        position: 'absolute',
+                        top: '100%',
+                        right: 0,
+                        zIndex: 1000,
+                        width: 180,
+                        ...getGlassStyles(isDark),
+                        padding: 16,
+                        marginTop: 8,
+                        boxSizing: 'border-box',
+                      }}>
+                        {isSelectModeActive && (
+                          <>
+                            <button
+                              onClick={handleSelectAllItineraries}
+                              style={{
+                                width: '100%',
+                                padding: '12px 16px',
+                                background: 'transparent',
+                                border: 'none',
+                                color: isDark ? '#ffffff' : '#000000',
+                                textAlign: 'left',
+                                cursor: 'pointer',
+                                borderRadius: 8,
+                                fontSize: 14,
+                                fontWeight: 500,
+                                marginBottom: 8,
+                                transition: 'background 0.2s ease'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.background = isDark 
+                                  ? 'rgba(255, 255, 255, 0.1)' 
+                                  : 'rgba(0, 0, 0, 0.05)';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.background = 'transparent';
+                              }}
+                            >
+                              {selectedItineraryIds.length === savedItineraries.length ? 'Deselect All' : 'Select All'}
+                            </button>
+                            
+                            {selectedItineraryIds.length > 0 && (
+                              <button
+                                onClick={() => {
+                                  setShowBulkDeleteConfirm(true);
+                                  setShowOptionsMenu(false);
+                                }}
+                                style={{
+                                  width: '100%',
+                                  padding: '12px 16px',
+                                  background: 'rgba(239, 68, 68, 0.1)',
+                                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                                  color: '#ef4444',
+                                  textAlign: 'left',
+                                  cursor: 'pointer',
+                                  borderRadius: 8,
+                                  fontSize: 14,
+                                  fontWeight: 500,
+                                  marginBottom: 8,
+                                  transition: 'all 0.2s ease'
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
+                                }}
+                              >
+                                Delete Selected ({selectedItineraryIds.length})
+                              </button>
+                            )}
+                          </>
+                        )}
+                        
+                        <button
+                          onClick={() => {
+                            handleExportCsv();
+                            setShowOptionsMenu(false);
+                          }}
+                          style={{
+                            width: '100%',
+                            padding: '12px 16px',
+                            background: 'transparent',
+                            border: 'none',
+                            color: isDark ? '#ffffff' : '#000000',
+                            textAlign: 'left',
+                            cursor: 'pointer',
+                            borderRadius: 8,
+                            fontSize: 14,
+                            fontWeight: 500,
+                            marginBottom: 8,
+                            transition: 'background 0.2s ease'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = isDark 
+                              ? 'rgba(255, 255, 255, 0.1)' 
+                              : 'rgba(0, 0, 0, 0.05)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'transparent';
+                          }}
+                        >
+                          Export CSV
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Create Itinerary Button */}
+                  <button 
+                    onClick={() => navigate(`/event/${id}/itinerary/create`)} 
+                    style={{
+                      ...getButtonStyles(isDark, 'primary'),
+                      fontSize: 18,
+                      minWidth: 140,
+                      minHeight: 48,
+                      width: 'auto'
+                    }}
+                  >
+                    Create Itinerary
+                  </button>
+                </div>
               </div>
+              
               <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
-                {savedItineraries.length === 0 && <div style={{ color: '#bbb', fontSize: 17 }}>No itineraries yet.</div>}
-                {savedItineraries.map((it, idx) => (
+                {savedItineraries.length === 0 && (
+                  <div style={{ 
+                    color: isDark ? '#a1a1aa' : '#71717a', 
+                    fontSize: 17 
+                  }}>No itineraries yet.</div>
+                )}
+                {/* Render grouped itineraries */}
+                {Object.entries(groupedItineraries.groups).map(([groupId, groupItems]) => (
+                  <div
+                    key={groupId}
+                    style={{
+                      marginBottom: 32,
+                      border: `2px solid ${isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.15)'}`,
+                      borderRadius: 16,
+                      background: isDark ? 'rgba(40,40,40,0.8)' : 'rgba(245,245,245,0.9)',
+                      boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.4)' : '0 2px 8px rgba(0,0,0,0.1)',
+                      padding: 24,
+                      transition: 'box-shadow 0.2s, border-color 0.2s',
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.boxShadow = isDark
+                        ? '0 0 0 4px rgba(255,255,255,0.1), 0 2px 8px rgba(0,0,0,0.4)'
+                        : '0 0 0 4px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.1)';
+                      e.currentTarget.style.borderColor = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.25)';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.boxShadow = isDark
+                        ? '0 2px 8px rgba(0,0,0,0.4)'
+                        : '0 2px 8px rgba(0,0,0,0.1)';
+                      e.currentTarget.style.borderColor = isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.15)';
+                    }}
+                  >
+                    <div style={{
+                      fontWeight: 700,
+                      fontSize: 22,
+                      marginBottom: 12,
+                      color: isDark ? '#ffffff' : '#000000',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 12
+                    }}>
+                      <span style={{ background: isDark ? '#666666' : '#333333', color: '#fff', borderRadius: 8, padding: '2px 12px', fontSize: 13, fontWeight: 700, letterSpacing: 1 }}>GROUP</span>
+                      {groupItems[0].group_name || 'Unnamed Group'}
+                      <span style={{ fontSize: 13, color: isDark ? '#cccccc' : '#666666', marginLeft: 8 }}>
+                        {groupItems.length} item{groupItems.length !== 1 ? 's' : ''}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                      {groupItems.map((it, idx) => (
+                        <div 
+                          key={it.id} 
+                          style={{ 
+                            ...getGlassStyles(isDark),
+                            padding: '24px 20px', 
+                            marginBottom: 0,
+                            position: 'relative',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            border: selectedItineraryIds.includes(it.id!) 
+                              ? `2px solid ${isDark ? '#ffffff' : '#000000'}` 
+                              : `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
+                            transition: 'all 0.2s ease'
+                          }}
+                        >
+                          {/* Selection checkbox */}
+                          {isSelectModeActive && (
+                            <div style={{ 
+                              position: 'absolute', 
+                              top: 16, 
+                              left: 16, 
+                              zIndex: 10 
+                            }}>
+                              <input
+                                type="checkbox"
+                                checked={selectedItineraryIds.includes(it.id!)}
+                                onChange={() => handleSelectItinerary(it.id!)}
+                                style={{
+                                  width: 20,
+                                  height: 20,
+                                  cursor: 'pointer',
+                                  accentColor: isDark ? '#ffffff' : '#000000'
+                                }}
+                              />
+                            </div>
+                          )}
+                          <div style={{ flex: 1, marginLeft: isSelectModeActive ? 40 : 0 }}>
+                            <div style={{ fontWeight: 600, fontSize: 20, marginBottom: 12, color: isDark ? '#ffffff' : '#000000' }}>{it.title}</div>
+                            <div>
+                              {/* Display individual itinerary details */}
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                                <div style={{
+                                  background: isDark 
+                                    ? 'rgba(255, 255, 255, 0.05)' 
+                                    : 'rgba(0, 0, 0, 0.03)',
+                                  backdropFilter: 'blur(10px)',
+                                  WebkitBackdropFilter: 'blur(10px)',
+                                  border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
+                                  borderRadius: 12,
+                                  padding: '16px',
+                                  transition: 'all 0.2s ease'
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.background = isDark 
+                                    ? 'rgba(255, 255, 255, 0.08)' 
+                                    : 'rgba(0, 0, 0, 0.05)';
+                                  e.currentTarget.style.transform = 'scale(1.01)';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.background = isDark 
+                                    ? 'rgba(255, 255, 255, 0.05)' 
+                                    : 'rgba(0, 0, 0, 0.03)';
+                                  e.currentTarget.style.transform = 'scale(1)';
+                                }}>
+                                  <div style={{ display: 'flex', marginBottom: 8 }}>
+                                    <div style={{ fontWeight: 500, fontSize: 16, color: isDark ? '#ffffff' : '#000000' }}>{it.title}</div>
+                                  </div>
+                                  
+                                  <div style={{ display: 'flex', gap: 24, marginBottom: 12 }}>
+                                    {it.arrival_time && (
+                                      <div style={{ 
+                                        color: isDark ? '#d1d5db' : '#374151', 
+                                        fontSize: 14 
+                                      }}>
+                                        <span style={{ 
+                                          fontWeight: 500, 
+                                          color: isDark ? '#a1a1aa' : '#71717a' 
+                                        }}>Arrival:</span> {it.arrival_time}
+                                      </div>
+                                    )}
+                                    {it.start_time && it.end_time && (
+                                      <div style={{ 
+                                        color: isDark ? '#d1d5db' : '#374151', 
+                                        fontSize: 14 
+                                      }}>
+                                        <span style={{ 
+                                          fontWeight: 500, 
+                                          color: isDark ? '#a1a1aa' : '#71717a' 
+                                        }}>Time:</span> {it.start_time} - {it.end_time}
+                                      </div>
+                                    )}
+                                    {it.date && (
+                                      <div style={{ 
+                                        color: isDark ? '#d1d5db' : '#374151', 
+                                        fontSize: 14 
+                                      }}>
+                                        <span style={{ fontWeight: 500, color: isDark ? '#a1a1aa' : '#71717a', marginRight: 4 }}>Date:</span> {new Date(it.date).toLocaleDateString('en-GB', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
+                                      </div>
+                                    )}
+                                    {it.location && (
+                                      <div style={{ 
+                                        color: isDark ? '#d1d5db' : '#374151', 
+                                        fontSize: 14 
+                                      }}>
+                                        <span style={{ 
+                                          fontWeight: 500, 
+                                          color: isDark ? '#a1a1aa' : '#71717a' 
+                                        }}>Location:</span> {it.location}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {it.description && (
+                                    <div style={{ 
+                                      color: isDark ? '#a1a1aa' : '#71717a', 
+                                      fontSize: 14, 
+                                      marginBottom: 12 
+                                    }}>
+                                      {it.description}
+                                    </div>
+                                  )}
+
+                                  {/* Display active modules */}
+                                  {(it.document_file_name || it.qrcode_url || it.contact_name || (it.notification_times && it.notification_times.length > 0)) && (
+                                    <div style={{ 
+                                      marginTop: 12, 
+                                      borderTop: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`, 
+                                      paddingTop: 12 
+                                    }}>
+                                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                        {it.document_file_name && (
+                                          <span style={{
+                                            background: isDark 
+                                              ? 'rgba(255, 255, 255, 0.1)' 
+                                              : 'rgba(0, 0, 0, 0.05)',
+                                            color: isDark ? '#d1d5db' : '#374151',
+                                            padding: '4px 12px',
+                                            borderRadius: 12,
+                                            fontSize: 13,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: 4,
+                                            border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`
+                                          }}>
+                                            Document Upload
+                                          </span>
+                                        )}
+                                        {it.qrcode_url && (
+                                          <span style={{
+                                            background: isDark 
+                                              ? 'rgba(255, 255, 255, 0.1)' 
+                                              : 'rgba(0, 0, 0, 0.05)',
+                                            color: isDark ? '#d1d5db' : '#374151',
+                                            padding: '4px 12px',
+                                            borderRadius: 12,
+                                            fontSize: 13,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: 4,
+                                            border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`
+                                          }}>
+                                            QR Code
+                                          </span>
+                                        )}
+                                        {it.contact_name && (
+                                          <span style={{
+                                            background: isDark 
+                                              ? 'rgba(255, 255, 255, 0.1)' 
+                                              : 'rgba(0, 0, 0, 0.05)',
+                                            color: isDark ? '#d1d5db' : '#374151',
+                                            padding: '4px 12px',
+                                            borderRadius: 12,
+                                            fontSize: 13,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: 4,
+                                            border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`
+                                          }}>
+                                            Host Contact Details
+                                          </span>
+                                        )}
+                                        {it.notification_times && it.notification_times.length > 0 && (
+                                          <span style={{
+                                            background: isDark 
+                                              ? 'rgba(255, 255, 255, 0.1)' 
+                                              : 'rgba(0, 0, 0, 0.05)',
+                                            color: isDark ? '#d1d5db' : '#374151',
+                                            padding: '4px 12px',
+                                            borderRadius: 12,
+                                            fontSize: 13,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: 4,
+                                            border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`
+                                          }}>
+                                            Notifications Timer
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                          <div style={{ marginTop: 20, display: 'flex', alignSelf: 'flex-end', gap: 16, alignItems: 'center' }}>
+                            <button title="Edit" onClick={() => navigate(`/event/${id}/itinerary/edit/${idx}`)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="edit" /></button>
+                            <button title="Duplicate" onClick={() => handleDuplicate(idx)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="duplicate" /></button>
+                            <button title="Share" onClick={() => { setItineraryToShare(idx); setShowShareModal(true); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="share" /></button>
+                            <button title="Save as Draft" onClick={() => handleMakeDraft(idx)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="saveAsDraft" /></button>
+                            <button title="Delete" onClick={() => { setItineraryToDelete(idx); setShowDeleteConfirm(true); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="delete" /></button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                {/* Render individual itineraries */}
+                {groupedItineraries.individuals.map((it, idx) => (
                   <div 
-                    key={idx} 
+                    key={it.id} 
                     style={{ 
-                      background: '#fff', 
-                      border: '2px solid #d1d5db', 
-                      borderRadius: 14, 
+                      ...getGlassStyles(isDark),
                       padding: '24px 20px', 
                       marginBottom: 0,
                       position: 'relative',
                       display: 'flex',
-                      flexDirection: 'column'
+                      flexDirection: 'column',
+                      border: selectedItineraryIds.includes(it.id!) 
+                        ? `2px solid ${isDark ? '#ffffff' : '#000000'}` 
+                        : `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
+                      transition: 'all 0.2s ease'
                     }}
                   >
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 600, fontSize: 20, marginBottom: 12 }}>{it.title}</div>
+                    {/* Selection checkbox */}
+                    {isSelectModeActive && (
+                      <div style={{ 
+                        position: 'absolute', 
+                        top: 16, 
+                        left: 16, 
+                        zIndex: 10 
+                      }}>
+                        <input
+                          type="checkbox"
+                          checked={selectedItineraryIds.includes(it.id!)}
+                          onChange={() => handleSelectItinerary(it.id!)}
+                          style={{
+                            width: 20,
+                            height: 20,
+                            cursor: 'pointer',
+                            accentColor: isDark ? '#ffffff' : '#000000'
+                          }}
+                        />
+                      </div>
+                    )}
+                    <div style={{ flex: 1, marginLeft: isSelectModeActive ? 40 : 0 }}>
+                      <div style={{ fontWeight: 600, fontSize: 20, marginBottom: 12, color: isDark ? '#ffffff' : '#000000' }}>{it.title}</div>
                       <div>
                         {/* Display individual itinerary details */}
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                           <div style={{
-                            background: '#f8f9fa',
-                            border: '2px solid #eee',
-                            borderRadius: 10,
+                            background: isDark 
+                              ? 'rgba(255, 255, 255, 0.05)' 
+                              : 'rgba(0, 0, 0, 0.03)',
+                            backdropFilter: 'blur(10px)',
+                            WebkitBackdropFilter: 'blur(10px)',
+                            border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
+                            borderRadius: 12,
                             padding: '16px',
                             transition: 'all 0.2s ease'
                           }}
                           onMouseEnter={(e) => {
-                            e.currentTarget.style.background = '#f0f0f0';
+                            e.currentTarget.style.background = isDark 
+                              ? 'rgba(255, 255, 255, 0.08)' 
+                              : 'rgba(0, 0, 0, 0.05)';
                             e.currentTarget.style.transform = 'scale(1.01)';
                           }}
                           onMouseLeave={(e) => {
-                            e.currentTarget.style.background = '#f8f9fa';
+                            e.currentTarget.style.background = isDark 
+                              ? 'rgba(255, 255, 255, 0.05)' 
+                              : 'rgba(0, 0, 0, 0.03)';
                             e.currentTarget.style.transform = 'scale(1)';
                           }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                              <div style={{ fontWeight: 500, fontSize: 16, color: '#222' }}>{it.title}</div>
-                              {it.arrival_time && (
-                                <div style={{ color: '#666', fontSize: 14 }}>
-                                  Arrival: {new Date(it.arrival_time).toLocaleDateString('en-GB')}
-                                </div>
-                              )}
+                            <div style={{ display: 'flex', marginBottom: 8 }}>
+                              <div style={{ fontWeight: 500, fontSize: 16, color: isDark ? '#ffffff' : '#000000' }}>{it.title}</div>
                             </div>
                             
                             <div style={{ display: 'flex', gap: 24, marginBottom: 12 }}>
+                              {it.arrival_time && (
+                                <div style={{ 
+                                  color: isDark ? '#d1d5db' : '#374151', 
+                                  fontSize: 14 
+                                }}>
+                                  <span style={{ 
+                                    fontWeight: 500, 
+                                    color: isDark ? '#a1a1aa' : '#71717a' 
+                                  }}>Arrival:</span> {it.arrival_time}
+                                </div>
+                              )}
                               {it.start_time && it.end_time && (
-                                <div style={{ color: '#444', fontSize: 14 }}>
-                                  <span style={{ fontWeight: 500, color: '#666' }}>Time:</span> {it.start_time} - {it.end_time}
+                                <div style={{ 
+                                  color: isDark ? '#d1d5db' : '#374151', 
+                                  fontSize: 14 
+                                }}>
+                                  <span style={{ 
+                                    fontWeight: 500, 
+                                    color: isDark ? '#a1a1aa' : '#71717a' 
+                                  }}>Time:</span> {it.start_time} - {it.end_time}
+                                </div>
+                              )}
+                              {it.date && (
+                                <div style={{ 
+                                  color: isDark ? '#d1d5db' : '#374151', 
+                                  fontSize: 14 
+                                }}>
+                                  <span style={{ fontWeight: 500, color: isDark ? '#a1a1aa' : '#71717a', marginRight: 4 }}>Date:</span> {new Date(it.date).toLocaleDateString('en-GB', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
                                 </div>
                               )}
                               {it.location && (
-                                <div style={{ color: '#444', fontSize: 14 }}>
-                                  <span style={{ fontWeight: 500, color: '#666' }}>Location:</span> {it.location}
+                                <div style={{ 
+                                  color: isDark ? '#d1d5db' : '#374151', 
+                                  fontSize: 14 
+                                }}>
+                                  <span style={{ 
+                                    fontWeight: 500, 
+                                    color: isDark ? '#a1a1aa' : '#71717a' 
+                                  }}>Location:</span> {it.location}
                                 </div>
                               )}
                             </div>
 
                             {it.description && (
-                              <div style={{ color: '#666', fontSize: 14, marginBottom: 12 }}>
+                              <div style={{ 
+                                color: isDark ? '#a1a1aa' : '#71717a', 
+                                fontSize: 14, 
+                                marginBottom: 12 
+                              }}>
                                 {it.description}
                               </div>
                             )}
 
                             {/* Display active modules */}
                             {(it.document_file_name || it.qrcode_url || it.contact_name || (it.notification_times && it.notification_times.length > 0)) && (
-                              <div style={{ marginTop: 12, borderTop: '2px solid #eee', paddingTop: 12 }}>
+                              <div style={{ 
+                                marginTop: 12, 
+                                borderTop: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`, 
+                                paddingTop: 12 
+                              }}>
                                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                                   {it.document_file_name && (
                                     <span style={{
-                                      background: '#f3f4f6',
-                                      color: '#374151',
+                                      background: isDark 
+                                        ? 'rgba(255, 255, 255, 0.1)' 
+                                        : 'rgba(0, 0, 0, 0.05)',
+                                      color: isDark ? '#d1d5db' : '#374151',
                                       padding: '4px 12px',
                                       borderRadius: 12,
                                       fontSize: 13,
                                       display: 'flex',
                                       alignItems: 'center',
-                                      gap: 4
+                                      gap: 4,
+                                      border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`
                                     }}>
                                       Document Upload
                                     </span>
                                   )}
                                   {it.qrcode_url && (
                                     <span style={{
-                                      background: '#f3f4f6',
-                                      color: '#374151',
+                                      background: isDark 
+                                        ? 'rgba(255, 255, 255, 0.1)' 
+                                        : 'rgba(0, 0, 0, 0.05)',
+                                      color: isDark ? '#d1d5db' : '#374151',
                                       padding: '4px 12px',
                                       borderRadius: 12,
                                       fontSize: 13,
                                       display: 'flex',
                                       alignItems: 'center',
-                                      gap: 4
+                                      gap: 4,
+                                      border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`
                                     }}>
                                       QR Code
                                     </span>
                                   )}
                                   {it.contact_name && (
                                     <span style={{
-                                      background: '#f3f4f6',
-                                      color: '#374151',
+                                      background: isDark 
+                                        ? 'rgba(255, 255, 255, 0.1)' 
+                                        : 'rgba(0, 0, 0, 0.05)',
+                                      color: isDark ? '#d1d5db' : '#374151',
                                       padding: '4px 12px',
                                       borderRadius: 12,
                                       fontSize: 13,
                                       display: 'flex',
                                       alignItems: 'center',
-                                      gap: 4
+                                      gap: 4,
+                                      border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`
                                     }}>
                                       Host Contact Details
                                     </span>
                                   )}
                                   {it.notification_times && it.notification_times.length > 0 && (
                                     <span style={{
-                                      background: '#f3f4f6',
-                                      color: '#374151',
+                                      background: isDark 
+                                        ? 'rgba(255, 255, 255, 0.1)' 
+                                        : 'rgba(0, 0, 0, 0.05)',
+                                      color: isDark ? '#d1d5db' : '#374151',
                                       padding: '4px 12px',
                                       borderRadius: 12,
                                       fontSize: 13,
                                       display: 'flex',
                                       alignItems: 'center',
-                                      gap: 4
+                                      gap: 4,
+                                      border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`
                                     }}>
                                       Notifications Timer
                                     </span>
@@ -1996,175 +2750,16 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                           </div>
                         </div>
                       </div>
-                    </div>
-                    <div style={{ marginTop: 20, display: 'flex', alignSelf: 'flex-end', gap: 16, alignItems: 'center' }}>
-                      <button title="Edit" onClick={() => navigate(`/event/${id}/itinerary/edit/${idx}`)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="edit" /></button>
-                      <button title="Duplicate" onClick={() => handleDuplicate(idx)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="duplicate" /></button>
-                      <button title="Share" onClick={() => { setItineraryToShare(idx); setShowShareModal(true); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="share" /></button>
-                      <button title="Save as Draft" onClick={() => handleMakeDraft(idx)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="saveAsDraft" /></button>
-                      <button title="Delete" onClick={() => { setItineraryToDelete(idx); setShowDeleteConfirm(true); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="delete" /></button>
+                      <div style={{ marginTop: 20, display: 'flex', alignSelf: 'flex-end', gap: 16, alignItems: 'center' }}>
+                        <button title="Edit" onClick={() => navigate(`/event/${id}/itinerary/edit/${idx}`)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="edit" /></button>
+                        <button title="Duplicate" onClick={() => handleDuplicate(idx)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="duplicate" /></button>
+                        <button title="Share" onClick={() => { setItineraryToShare(idx); setShowShareModal(true); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="share" /></button>
+                        <button title="Save as Draft" onClick={() => handleMakeDraft(idx)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="saveAsDraft" /></button>
+                        <button title="Delete" onClick={() => { setItineraryToDelete(idx); setShowDeleteConfirm(true); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="delete" /></button>
+                      </div>
                     </div>
                   </div>
                 ))}
-
-                {draftItineraries.length > 0 && (
-                  <>
-                    <div style={{ marginTop: 48, marginBottom: 24 }}>
-                      <div style={{ fontSize: 20, fontWeight: 500, color: '#666', marginBottom: 8 }}>Drafts</div>
-                      <div style={{ height: 1, background: '#d1d5db', marginBottom: 24 }} />
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-                        {draftItineraries.map((it, idx) => (
-                          <div 
-                            key={`draft-${idx}`}
-                            style={{ 
-                              background: '#f8f9fa',
-                              border: '2px solid #d1d5db',
-                              borderRadius: 14, 
-                              padding: '24px 20px', 
-                              marginBottom: 0,
-                              position: 'relative'
-                            }}
-                          >
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                              <div style={{ fontWeight: 600, fontSize: 20 }}>{it.title}</div>
-                              <button
-                                onClick={() => handlePublishDraft(idx)}
-                                style={{
-                                  background: '#4CAF50',
-                                  color: '#fff',
-                                  border: 'none',
-                                  borderRadius: 8,
-                                  padding: '8px 16px',
-                                  fontSize: 15,
-                                  cursor: 'pointer',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: 6,
-                                  width: 'auto',
-                                  whiteSpace: 'nowrap',
-                                  fontWeight: 500
-                                }}
-                              >
-                                <span style={{ fontSize: 16 }}>↑</span>
-                                Publish
-                              </button>
-                            </div>
-                            {/* Display individual draft itinerary details */}
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                              <div style={{
-                                background: '#fff',
-                                border: '2px solid #eee',
-                                borderRadius: 10,
-                                padding: '16px',
-                                transition: 'all 0.2s ease'
-                              }}
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.background = '#f0f0f0';
-                                e.currentTarget.style.transform = 'scale(1.01)';
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.background = '#fff';
-                                e.currentTarget.style.transform = 'scale(1)';
-                              }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                                  <div style={{ fontWeight: 500, fontSize: 16, color: '#222' }}>{it.title}</div>
-                                  {it.arrival_time && (
-                                    <div style={{ color: '#666', fontSize: 14 }}>
-                                      Arrival: {new Date(it.arrival_time).toLocaleDateString('en-GB')}
-                                    </div>
-                                  )}
-                                </div>
-                                
-                                <div style={{ display: 'flex', gap: 24, marginBottom: 12 }}>
-                                  {it.start_time && it.end_time && (
-                                    <div style={{ color: '#444', fontSize: 14 }}>
-                                      <span style={{ fontWeight: 500, color: '#666' }}>Time:</span> {it.start_time} - {it.end_time}
-                                    </div>
-                                  )}
-                                  {it.location && (
-                                    <div style={{ color: '#444', fontSize: 14 }}>
-                                      <span style={{ fontWeight: 500, color: '#666' }}>Location:</span> {it.location}
-                                    </div>
-                                  )}
-                                </div>
-
-                                {it.description && (
-                                  <div style={{ color: '#666', fontSize: 14, marginBottom: 12 }}>
-                                    {it.description}
-                                  </div>
-                                )}
-
-                                {/* Display active modules */}
-                                {(it.document_file_name || it.qrcode_url || it.contact_name || (it.notification_times && it.notification_times.length > 0)) && (
-                                  <div style={{ marginTop: 12, borderTop: '2px solid #eee', paddingTop: 12 }}>
-                                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                                      {it.document_file_name && (
-                                        <span style={{
-                                          background: '#f3f4f6',
-                                          color: '#374151',
-                                          padding: '4px 12px',
-                                          borderRadius: 12,
-                                          fontSize: 13,
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          gap: 4
-                                        }}>
-                                          Document Upload
-                                        </span>
-                                      )}
-                                      {it.qrcode_url && (
-                                        <span style={{
-                                          background: '#f3f4f6',
-                                          color: '#374151',
-                                          padding: '4px 12px',
-                                          borderRadius: 12,
-                                          fontSize: 13,
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          gap: 4
-                                        }}>
-                                          QR Code
-                                        </span>
-                                      )}
-                                      {it.contact_name && (
-                                        <span style={{
-                                          background: '#f3f4f6',
-                                          color: '#374151',
-                                          padding: '4px 12px',
-                                          borderRadius: 12,
-                                          fontSize: 13,
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          gap: 4
-                                        }}>
-                                          Host Contact Details
-                                        </span>
-                                      )}
-                                      {it.notification_times && it.notification_times.length > 0 && (
-                                        <span style={{
-                                          background: '#f3f4f6',
-                                          color: '#374151',
-                                          padding: '4px 12px',
-                                          borderRadius: 12,
-                                          fontSize: 13,
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          gap: 4
-                                        }}>
-                                          Notifications Timer
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </>
-                )}
               </div>
             </div>
           )}
@@ -2224,7 +2819,8 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                     </button>
                     {showFilterPopup && (
                       <div style={{
-                        position: 'absolute', top: 'calc(100% + 8px)', right: 0, background: '#fff',
+                        position: 'absolute', top: 'calc(100% + 8px)', right: 0, 
+                        ...getGlassStyles(isDark),
                         borderRadius: 12, boxShadow: '0 8px 32px rgba(0,0,0,0.12)', border: '2px solid #e5e7eb',
                         zIndex: 10, width: 380, padding: 28,
                       }}>
@@ -2314,12 +2910,7 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                         setSelectedGuestIds([]);
                       }
                     }}
-                    style={{
-                      ...guestPageWhiteButtonStyle,
-                      background: isSelectModeActive ? '#eef2ff' : '#fff',
-                      color: isSelectModeActive ? '#4f46e5' : '#000',
-                      border: `2px solid ${isSelectModeActive ? '#4f46e5' : '#000'}`,
-                    }}
+                    style={guestPageWhiteButtonStyle}
                   >
                     Select
                   </button>
@@ -2381,7 +2972,7 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
               )}
 
               {(() => {
-                const grouped = filteredGuests.reduce((acc, guest) => {
+                const grouped = filteredGuests.reduce((acc: any, guest) => {
                   if (guest.groupId && guest.groupName) {
                     if (!acc.groups[guest.groupName]) {
                       acc.groups[guest.groupName] = { groupId: guest.groupId, guests: [] };
@@ -2391,19 +2982,22 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                     acc.individuals.push(guest);
                   }
                   return acc;
-                }, { individuals: [] as GuestType[], groups: {} as Record<string, { groupId: string; guests: GuestType[] }> });
+                }, { individuals: [], groups: {} });
 
                 return (
                   <>
-                    {Object.entries(grouped.groups).map(([groupName, { groupId, guests: groupGuests }]) => (
-                       <div key={groupId} style={{ background: '#fff', border: '2px solid #e5e7eb', borderRadius: 16, marginBottom: 24, padding: 24, boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+                    {Object.entries(grouped.groups as Record<string, { groupId: string; guests: GuestType[] }>).map(([groupName, { groupId, guests: groupGuests }]) => (
+                       <div key={groupId} style={{ 
+                         ...getGlassStyles(isDark),
+                         border: '2px solid #e5e7eb', borderRadius: 16, marginBottom: 24, padding: 24, boxShadow: '0 4px 12px rgba(0,0,0,0.05)'
+                       }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                             {isSelectModeActive && (
                               <input 
                                 type="checkbox" 
                                 style={{ width: 20, height: 20, cursor: 'pointer', accentColor: '#4f46e5' }}
-                                checked={groupGuests.length > 0 && groupGuests.every(g => selectedGuestIds.includes(g.id))}
+                                checked={groupGuests.length > 0 && groupGuests.every((g: GuestType) => selectedGuestIds.includes(g.id))}
                                 onChange={() => handleSelectGroup(groupId)}
                               />
                             )}
@@ -2412,7 +3006,7 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                           <span style={{ color: '#6b7280', fontSize: 14, fontWeight: 500, background: '#f3f4f6', padding: '4px 10px', borderRadius: '99px' }}>{groupGuests.length} guests</span>
                         </div>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
-                          {groupGuests.map((guest) => (
+                          {groupGuests.map((guest: GuestType) => (
                             <GuestCard key={guest.id} guest={guest} isSelected={selectedGuestIds.includes(guest.id)} onSelect={handleSelectGuest} isSelectModeActive={isSelectModeActive} />
                           ))}
                         </div>
@@ -2421,7 +3015,7 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                     
                     {grouped.individuals.length > 0 && (
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '24px' }}>
-                        {grouped.individuals.map((guest) => (
+                        {grouped.individuals.map((guest: GuestType) => (
                           <GuestCard key={guest.id} guest={guest} isSelected={selectedGuestIds.includes(guest.id)} onSelect={handleSelectGuest} standalone isSelectModeActive={isSelectModeActive} />
                         ))}
                       </div>
@@ -2437,85 +3031,54 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
           {activeTab === 'addons' && (
             <div style={{ marginBottom: 64, position: 'relative', paddingBottom: 48 }}>
               <h2 style={{ fontSize: 28, fontWeight: 600, margin: '0 0 24px 0' }}>Add Ons</h2>
-              
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
-                {Object.entries(activeModules).map(([category, modules]) => (
-                  <div
-                    key={category}
-                    onDragOver={(e) => {
-                      e.preventDefault();
-                      setDragOverCategory(category);
-                    }}
-                    onDragLeave={() => setDragOverCategory(null)}
-                    onDrop={(e) => {
-                      handleModuleDrop(e, category);
-                      setDragOverCategory(null);
-                    }}
-                    style={{
-                      padding: 24,
-                      background: isDark ? '#2a2a2a' : '#f8f9fa',
-                      borderRadius: 12,
-                      border: `2px dashed ${dragOverCategory === category ? '#2563eb' : (isDark ? '#555' : '#ccc')}`,
-                      minHeight: 200,
-                      transition: 'all 0.2s ease',
-                      transform: dragOverCategory === category ? 'scale(1.02)' : 'scale(1)',
-                      boxShadow: dragOverCategory === category ? '0 4px 12px rgba(37, 99, 235, 0.1)' : 'none'
-                    }}
-                  >
-                    <h3 style={{ margin: '0 0 16px 0', fontSize: 20, fontWeight: 500, color: isDark ? '#fff' : '#444' }}>
-                      {category.charAt(0).toUpperCase() + category.slice(1)}
-                    </h3>
-                    {modules.length > 0 ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                        {modules.map((module, index) => {
-                          const moduleInfo = DASHBOARD_MODULES.addons.find(m => m.key === module.id);
-                          if (!moduleInfo) return null;
-                          return (
-                            <div
-                              key={`${module.id}-${index}`}
-                              style={{
-                                background: '#fff',
-                                borderRadius: 8,
-                                padding: '12px 16px',
-                                boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                              }}
-                            >
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                                <span style={{ fontSize: 24 }}>{moduleInfo.icon}</span>
-                                <div>
-                                  <div style={{ fontWeight: 600, color: isDark ? '#fff' : '#333' }}>{moduleInfo.label}</div>
-                                  <div style={{ fontSize: 13, color: isDark ? '#aaa' : '#777' }}>{moduleInfo.description}</div>
-                                </div>
-                              </div>
-                              <button
-                                onClick={() => handleModuleRemove(category, module.id)}
-                                style={{
-                                  background: 'transparent',
-                                  border: 'none',
-                                  color: isDark ? '#888' : '#aaa',
-                                  cursor: 'pointer',
-                                  fontSize: 24,
-                                  lineHeight: 1,
-                                  padding: '4px'
-                                }}
-                              >
-                                ×
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <div style={{ textAlign: 'center', color: isDark ? '#888' : '#aaa', marginTop: 60 }}>
-                        Drag and drop {category} modules here
-                      </div>
-                    )}
-                  </div>
-                ))}
+              <div
+                style={{
+                  border: '2px dashed #888',
+                  borderRadius: 16,
+                  minHeight: 100,
+                  padding: 32,
+                  marginBottom: 32,
+                  background: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#888',
+                  fontSize: 18,
+                  fontWeight: 500,
+                  textAlign: 'center',
+                  transition: 'background 0.2s, border 0.2s',
+                  cursor: 'copy',
+                }}
+                onDrop={e => handleModuleDrop(e, 'addons')}
+                onDragOver={e => e.preventDefault()}
+              >
+                Drag add-ons from the right to activate them for this event.
               </div>
+              <button
+                onClick={handleSaveAddOns}
+                disabled={isSavingAddOns}
+                style={{
+                  margin: '0 auto 24px auto',
+                  display: 'block',
+                  padding: '12px 32px',
+                  borderRadius: 12,
+                  background: isDark ? '#22c55e' : '#16a34a',
+                  color: '#fff',
+                  fontWeight: 600,
+                  fontSize: 16,
+                  border: 'none',
+                  cursor: isSavingAddOns ? 'not-allowed' : 'pointer',
+                  opacity: isSavingAddOns ? 0.7 : 1,
+                  boxShadow: isDark ? '0 2px 8px #22c55e44' : '0 2px 8px #16a34a44',
+                  transition: 'all 0.2s',
+                }}
+              >
+                {isSavingAddOns ? 'Saving...' : 'Save Add-Ons'}
+              </button>
+              {saveAddOnsMessage && (
+                <div style={{ textAlign: 'center', color: isDark ? '#22c55e' : '#16a34a', marginBottom: 16, fontWeight: 600 }}>{saveAddOnsMessage}</div>
+              )}
+              {addOnsList}
             </div>
           )}
         </div>
@@ -2528,21 +3091,40 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
           left: 0,
           right: 0,
           bottom: 0,
-          background: 'rgba(0,0,0,0.5)',
+          background: 'rgba(0,0,0,0.6)',
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          zIndex: 1000
+          zIndex: 2000
         }}>
           <div style={{
-            background: '#fff',
-            borderRadius: 16,
+            ...getGlassStyles(isDark),
             padding: 32,
             minWidth: 400,
-            boxShadow: '0 4px 24px rgba(0,0,0,0.2)'
+            maxWidth: 500
           }}>
-            <div style={{ fontSize: 24, fontWeight: 500, marginBottom: 8, color: '#c00' }}>Delete Itinerary</div>
-            <div style={{ fontSize: 16, color: '#666', marginBottom: 24 }}>This action cannot be undone. Type "delete" to confirm.</div>
+            <div style={{ 
+              fontSize: 24, 
+              fontWeight: 600, 
+              marginBottom: 8, 
+              color: '#ef4444',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12
+            }}>
+              <span style={{ fontSize: 28 }}>⚠️</span>
+              Delete Itinerary
+            </div>
+            <div style={{ 
+              fontSize: 16, 
+              color: isDark ? '#a1a1aa' : '#71717a', 
+              marginBottom: 24,
+              lineHeight: 1.5
+            }}>
+              This action cannot be undone. Type <strong>"delete"</strong> to confirm.
+            </div>
             <input
               type="text"
               value={deleteText}
@@ -2552,9 +3134,16 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                 width: '100%',
                 padding: '12px 16px',
                 fontSize: 16,
-                borderRadius: 8,
-                border: '2px solid #ddd',
-                marginBottom: 24
+                borderRadius: 12,
+                border: `2px solid ${isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.2)'}`,
+                background: isDark 
+                  ? 'rgba(255, 255, 255, 0.05)' 
+                  : 'rgba(0, 0, 0, 0.02)',
+                color: isDark ? '#ffffff' : '#000000',
+                marginBottom: 24,
+                backdropFilter: 'blur(10px)',
+                WebkitBackdropFilter: 'blur(10px)',
+                boxSizing: 'border-box'
               }}
             />
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 16 }}>
@@ -2565,27 +3154,141 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                   setItineraryToDelete(null);
                 }}
                 style={{
-                  background: '#eee',
-                  border: 'none',
-                  padding: '8px 24px',
-                  borderRadius: 8,
-                  fontSize: 16,
-                  cursor: 'pointer'
+                  ...getButtonStyles(isDark, 'secondary'),
+                  padding: '12px 24px',
+                  fontSize: 16
                 }}
-              >Cancel</button>
+              >
+                Cancel
+              </button>
               <button
                 onClick={handleDelete}
                 disabled={deleteText !== 'delete'}
                 style={{
-                  background: deleteText === 'delete' ? '#c00' : '#fcc',
-                  color: '#fff',
+                  background: deleteText === 'delete' 
+                    ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)'
+                    : isDark 
+                      ? 'rgba(239, 68, 68, 0.3)' 
+                      : 'rgba(239, 68, 68, 0.2)',
+                  color: deleteText === 'delete' ? '#ffffff' : '#a1a1aa',
                   border: 'none',
-                  padding: '8px 24px',
-                  borderRadius: 8,
+                  padding: '12px 24px',
+                  borderRadius: 12,
                   fontSize: 16,
-                  cursor: deleteText === 'delete' ? 'pointer' : 'not-allowed'
+                  fontWeight: 600,
+                  cursor: deleteText === 'delete' ? 'pointer' : 'not-allowed',
+                  backdropFilter: 'blur(10px)',
+                  WebkitBackdropFilter: 'blur(10px)',
+                  transition: 'all 0.2s ease'
                 }}
-              >Delete</button>
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showBulkDeleteConfirm && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.6)',
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 2000
+        }}>
+          <div style={{
+            ...getGlassStyles(isDark),
+            padding: 32,
+            minWidth: 450,
+            maxWidth: 550
+          }}>
+            <div style={{ 
+              fontSize: 24, 
+              fontWeight: 600, 
+              marginBottom: 8, 
+              color: '#ef4444',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12
+            }}>
+              <span style={{ fontSize: 28 }}>🗑️</span>
+              Delete All Selected Itineraries
+            </div>
+            <div style={{ 
+              fontSize: 16, 
+              color: isDark ? '#a1a1aa' : '#71717a', 
+              marginBottom: 24,
+              lineHeight: 1.5
+            }}>
+              You are about to permanently delete <strong>{selectedItineraryIds.length}</strong> itineraries. 
+              This action cannot be undone. Type <strong>"delete all"</strong> to confirm.
+            </div>
+            <input
+              type="text"
+              value={bulkDeleteText}
+              onChange={(e) => setBulkDeleteText(e.target.value)}
+              placeholder="Type 'delete all' to confirm"
+              style={{
+                width: '100%',
+                padding: '12px 16px',
+                fontSize: 16,
+                borderRadius: 12,
+                border: `2px solid ${isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.2)'}`,
+                background: isDark 
+                  ? 'rgba(255, 255, 255, 0.05)' 
+                  : 'rgba(0, 0, 0, 0.02)',
+                color: isDark ? '#ffffff' : '#000000',
+                marginBottom: 24,
+                backdropFilter: 'blur(10px)',
+                WebkitBackdropFilter: 'blur(10px)',
+                boxSizing: 'border-box'
+              }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 16 }}>
+              <button
+                onClick={() => {
+                  setShowBulkDeleteConfirm(false);
+                  setBulkDeleteText('');
+                }}
+                style={{
+                  ...getButtonStyles(isDark, 'secondary'),
+                  padding: '12px 24px',
+                  fontSize: 16
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteAllItineraries}
+                disabled={bulkDeleteText !== 'delete all'}
+                style={{
+                  background: bulkDeleteText === 'delete all' 
+                    ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)'
+                    : isDark 
+                      ? 'rgba(239, 68, 68, 0.3)' 
+                      : 'rgba(239, 68, 68, 0.2)',
+                  color: bulkDeleteText === 'delete all' ? '#ffffff' : '#a1a1aa',
+                  border: 'none',
+                  padding: '12px 24px',
+                  borderRadius: 12,
+                  fontSize: 16,
+                  fontWeight: 600,
+                  cursor: bulkDeleteText === 'delete all' ? 'pointer' : 'not-allowed',
+                  backdropFilter: 'blur(10px)',
+                  WebkitBackdropFilter: 'blur(10px)',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                Delete All ({selectedItineraryIds.length})
+              </button>
             </div>
           </div>
         </div>
@@ -2714,128 +3417,12 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
       })()}
 
       {showSendFormModal && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center',
-          justifyContent: 'center', zIndex: 2000
-        }}>
-          <div style={{
-            background: '#fff', borderRadius: 16, padding: '0',
-            width: '100%', maxWidth: 640, boxShadow: '0 4px 24px rgba(0,0,0,0.2)',
-            display: 'flex', flexDirection: 'column', maxHeight: '85vh'
-          }}>
-            {/* Header */}
-            <div style={{ padding: '24px 32px', borderBottom: '2px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <h3 style={{ margin: 0, fontSize: 22, fontWeight: 600 }}>
-                  {sendState === 'success' ? 'Success!' : sendState === 'error' ? 'Error Sending Emails' : 'Send Guest Form'}
-                </h3>
-                {(sendState === 'idle') && (
-                  <p style={{ margin: '4px 0 0', color: '#666' }}>
-                    {modalView === 'recipients' ? 'Step 1: Add Recipients' : 'Step 2: Customize Form'}
-                  </p>
-                )}
-              </div>
-              <button onClick={handleCloseModal} style={{ background: '#f1f5f9', border: 'none', borderRadius: '50%', width: 32, height: 32, cursor: 'pointer', color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>&times;</button>
-            </div>
-            
-            {/* Body */}
-            <div style={{ padding: '32px', flex: 1, overflowY: 'auto' }}>
-              {sendState === 'success' && (
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 48, marginBottom: 16 }}>
-                    <Icon name="clipboard" style={{ fontSize: 48, color: '#22c55e' }} />
-                  </div>
-                  <p style={{ fontSize: 18, fontWeight: 500, marginBottom: 8 }}>Forms sent successfully!</p>
-                  <p style={{ color: '#666', marginBottom: 24 }}>Guest forms have been sent to all recipients.</p>
-                </div>
-              )}
-
-              {sendState === 'error' && (
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 48, marginBottom: 16, color: '#ef4444', fontWeight: 'bold' }}>!</div>
-                  <p style={{ fontSize: 18, fontWeight: 500, marginBottom: 8 }}>Failed to send forms</p>
-                  <p style={{ color: '#666', marginBottom: 24 }}>There was an error sending the guest forms. Please try again.</p>
-                </div>
-              )}
-
-              {sendState === 'sending' && (
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 48, marginBottom: 16 }}>
-                    <div style={{ 
-                      width: 48, 
-                      height: 48, 
-                      border: '4px solid #e5e7eb', 
-                      borderTop: '4px solid #3b82f6', 
-                      borderRadius: '50%', 
-                      animation: 'spin 1s linear infinite',
-                      margin: '0 auto'
-                    }}></div>
-                  </div>
-                  <p style={{ fontSize: 18, fontWeight: 500, marginBottom: 8 }}>Sending forms...</p>
-                  <p style={{ color: '#666' }}>Please wait while we send the forms to your guests.</p>
-                </div>
-              )}
-
-              {sendState === 'idle' && (
-                <div style={{ display: 'flex', justifyContent: 'center', gap: 16 }}>
-                  <button
-                    onClick={() => {
-                      setShowSendFormModal(false);
-                      setSendFormRecipients([]);
-                      setModalView('recipients');
-                      setCurrentEmailInput('');
-                      setSendState('idle');
-                    }}
-                    style={{
-                      background: '#f5f5f5',
-                      color: '#222',
-                      fontWeight: 500,
-                      fontSize: 18,
-                      border: '2px solid #e5e7eb',
-                      borderRadius: 8,
-                      padding: '12px 36px',
-                      minWidth: 120,
-                      cursor: 'pointer',
-                      transition: 'all 0.2s'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = '#e5e7eb';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = '#f5f5f5';
-                    }}
-                  >
-                    {modalView === 'preview' ? 'Back' : 'Cancel'}
-                  </button>
-                      <button
-                    onClick={modalView === 'preview' ? handleSendForm : () => setModalView('preview')}
-                      style={{
-                      background: '#3b82f6',
-                        color: '#fff',
-                      fontWeight: 500,
-                      fontSize: 18,
-                        border: 'none',
-                        borderRadius: 8,
-                      padding: '13px 37px',
-                      minWidth: 120,
-                      cursor: 'pointer',
-                      transition: 'all 0.2s'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = '#2563eb';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = '#3b82f6';
-                    }}
-                  >
-                    {modalView === 'preview' ? 'Send Forms' : 'Next'}
-                    </button>
-                  </div>
-              )}
-            </div>
-          </div>
-        </div>
+        <SendFormModal
+          isOpen={showSendFormModal}
+          onClose={handleCloseModal}
+          eventId={event?.id || ''}
+          eventName={event?.name || ''}
+        />
       )}
 
       {/* Delete Event Confirmation Modal */}
@@ -2853,17 +3440,19 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
           zIndex: 10001
         }}>
           <div style={{
-            background: '#fff',
+            background: isDark ? '#232323' : '#fff',
             borderRadius: 12,
             padding: 32,
             minWidth: 400,
             maxWidth: 500,
-            textAlign: 'center'
+            textAlign: 'center',
+            color: isDark ? '#fff' : '#222',
+            border: isDark ? '1px solid #444' : 'none'
           }}>
             <div style={{ fontSize: 48, marginBottom: 16, color: '#ef4444', fontWeight: 'bold' }}>!</div>
             <h2 style={{ margin: 0, marginBottom: 16, fontSize: 24, fontWeight: 600 }}>Delete Event</h2>
-            <p style={{ color: '#666', marginBottom: 24 }}>This action cannot be undone. All event data, guests, and configurations will be permanently deleted.</p>
-            <p style={{ color: '#666', marginBottom: 24 }}>Type <strong>delete</strong> to confirm:</p>
+            <p style={{ color: isDark ? '#bbb' : '#666', marginBottom: 24 }}>This action cannot be undone. All event data, guests, and configurations will be permanently deleted.</p>
+            <p style={{ color: isDark ? '#bbb' : '#666', marginBottom: 24 }}>Type <strong>delete</strong> to confirm:</p>
               <input
                 type="text"
                 value={deleteEventText}
@@ -2871,12 +3460,14 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                 placeholder="Type 'delete' to confirm"
                 style={{
                   width: '100%',
-                padding: 12,
-                  border: '2px solid #e5e7eb',
-                borderRadius: 8,
-                fontSize: 16,
-                marginBottom: 24,
-                  textAlign: 'center'
+                  padding: 12,
+                  border: isDark ? '2px solid #444' : '2px solid #e5e7eb',
+                  borderRadius: 8,
+                  fontSize: 16,
+                  marginBottom: 24,
+                  textAlign: 'center',
+                  background: isDark ? '#18181b' : '#fff',
+                  color: isDark ? '#fff' : '#222'
                 }}
             />
             <div style={{ display: 'flex', justifyContent: 'center', gap: 16 }}>
@@ -2886,11 +3477,11 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                   setDeleteEventText('');
                 }}
                 style={{
-                  background: '#f5f5f5',
-                  color: '#222',
+                  background: isDark ? '#18181b' : '#f5f5f5',
+                  color: isDark ? '#fff' : '#222',
                   fontWeight: 500,
                   fontSize: 18,
-                  border: '2px solid #e5e7eb',
+                  border: isDark ? '2px solid #444' : '2px solid #e5e7eb',
                   borderRadius: 8,
                   padding: '12px 36px',
                   minWidth: 120,
@@ -2898,10 +3489,10 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                   transition: 'all 0.2s'
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.background = '#e5e7eb';
+                  e.currentTarget.style.background = isDark ? '#232323' : '#e5e7eb';
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.background = '#f5f5f5';
+                  e.currentTarget.style.background = isDark ? '#18181b' : '#f5f5f5';
                 }}
               >
                 Cancel
@@ -2910,7 +3501,7 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                 onClick={handleConfirmDeleteEvent}
                 disabled={deleteEventText !== 'delete'}
                 style={{
-                  background: deleteEventText === 'delete' ? '#ef4444' : '#fca5a5',
+                  background: deleteEventText === 'delete' ? '#ef4444' : (isDark ? '#3a3a3a' : '#fca5a5'),
                   color: '#fff',
                   fontWeight: 500,
                   fontSize: 18,
@@ -2933,6 +3524,103 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                 }}
               >
                 Delete Event
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showCsvExportModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          background: 'rgba(0,0,0,0.85)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          zIndex: 3000,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}>
+          <div style={{
+            background: isDark ? 'rgba(30,30,30,0.95)' : 'rgba(255,255,255,0.95)',
+            backdropFilter: 'blur(10px)',
+            WebkitBackdropFilter: 'blur(10px)',
+            borderRadius: 16,
+            padding: 32,
+            minWidth: 700,
+            maxWidth: '90vw',
+            maxHeight: '80vh',
+            overflow: 'auto',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+            color: isDark ? '#fff' : '#222',
+            border: isDark ? '1.5px solid rgba(255,255,255,0.2)' : '1.5px solid rgba(0,0,0,0.1)',
+          }}>
+            <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 18 }}>Preview Itinerary CSV Export</div>
+            <div style={{ overflowX: 'auto', marginBottom: 24 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 15 }}>
+                <thead>
+                  <tr>
+                    <th style={{ padding: 8, borderBottom: '2px solid #ddd', background: isDark ? '#23234a' : '#f3f4f6', color: isDark ? '#fff' : '#222', fontWeight: 700 }}>Title</th>
+                    <th style={{ padding: 8, borderBottom: '2px solid #ddd', background: isDark ? '#23234a' : '#f3f4f6', color: isDark ? '#fff' : '#222', fontWeight: 700 }}>Description</th>
+                    <th style={{ padding: 8, borderBottom: '2px solid #ddd', background: isDark ? '#23234a' : '#f3f4f6', color: isDark ? '#fff' : '#222', fontWeight: 700 }}>Date</th>
+                    <th style={{ padding: 8, borderBottom: '2px solid #ddd', background: isDark ? '#23234a' : '#f3f4f6', color: isDark ? '#fff' : '#222', fontWeight: 700 }}>Arrival Time</th>
+                    <th style={{ padding: 8, borderBottom: '2px solid #ddd', background: isDark ? '#23234a' : '#f3f4f6', color: isDark ? '#fff' : '#222', fontWeight: 700 }}>Start Time</th>
+                    <th style={{ padding: 8, borderBottom: '2px solid #ddd', background: isDark ? '#23234a' : '#f3f4f6', color: isDark ? '#fff' : '#222', fontWeight: 700 }}>End Time</th>
+                    <th style={{ padding: 8, borderBottom: '2px solid #ddd', background: isDark ? '#23234a' : '#f3f4f6', color: isDark ? '#fff' : '#222', fontWeight: 700 }}>Location</th>
+                    <th style={{ padding: 8, borderBottom: '2px solid #ddd', background: isDark ? '#23234a' : '#f3f4f6', color: isDark ? '#fff' : '#222', fontWeight: 700 }}>Group Name</th>
+                    <th style={{ padding: 8, borderBottom: '2px solid #ddd', background: isDark ? '#23234a' : '#f3f4f6', color: isDark ? '#fff' : '#222', fontWeight: 700 }}>Group ID</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {savedItineraries.map((it, idx) => (
+                    <tr key={it.id || idx}>
+                      <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{it.title}</td>
+                      <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{it.description}</td>
+                      <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{it.date}</td>
+                      <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{it.arrival_time}</td>
+                      <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{it.start_time}</td>
+                      <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{it.end_time}</td>
+                      <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{it.location}</td>
+                      <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{it.group_name}</td>
+                      <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{it.group_id}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 16 }}>
+              <button
+                onClick={() => setShowCsvExportModal(false)}
+                style={{
+                  ...getButtonStyles(isDark, 'secondary'),
+                  minWidth: 120,
+                  fontSize: 16
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={downloadCsv}
+                style={{
+                  padding: '12px 24px',
+                  background: isDark ? '#ffffff' : '#000000',
+                  color: isDark ? '#000000' : '#ffffff',
+                  border: `2px solid ${isDark ? '#ffffff' : '#000000'}`,
+                  borderRadius: 8,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  fontSize: 16,
+                  transition: 'all 0.2s ease',
+                  minWidth: 120,
+                  whiteSpace: 'nowrap',
+                  textAlign: 'center',
+                }}
+              >
+                Download CSV
               </button>
             </div>
           </div>

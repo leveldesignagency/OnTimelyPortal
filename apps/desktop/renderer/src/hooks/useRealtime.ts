@@ -3,17 +3,24 @@ import { supabase, subscribeToEvents, subscribeToGuests, subscribeToItineraries,
 import { getCurrentUser } from '../lib/auth'
 
 // Hook for real-time events
-export const useRealtimeEvents = () => {
+export const useRealtimeEvents = (companyId?: string | null) => {
   const [events, setEvents] = useState<Event[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const fetchEvents = useCallback(async () => {
+    if (!companyId) {
+      setEvents([])
+      setLoading(false)
+      return
+    }
+    
     try {
       setLoading(true)
       const { data, error } = await supabase
         .from('events')
         .select('*')
+        .eq('company_id', companyId)
         .order('created_at', { ascending: false })
       
       if (error) throw error
@@ -23,14 +30,21 @@ export const useRealtimeEvents = () => {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [companyId])
 
   useEffect(() => {
     fetchEvents()
 
+    if (!companyId) return
+
     // Set up real-time subscription
     const subscription = subscribeToEvents((payload) => {
       console.log('Real-time event update:', payload)
+      
+      // Additional security check: only process updates for the current company
+      if (payload.new?.company_id !== companyId) {
+        return // Ignore updates from other companies
+      }
       
       if (payload.eventType === 'INSERT') {
         setEvents(prev => [payload.new, ...prev])
@@ -46,7 +60,7 @@ export const useRealtimeEvents = () => {
     return () => {
       subscription.unsubscribe()
     }
-  }, [fetchEvents])
+  }, [fetchEvents, companyId])
 
   return { events, loading, error, refetch: fetchEvents }
 }
@@ -162,22 +176,13 @@ export const useRealtimeItineraries = (eventId: string | null) => {
 
 // Hook for connection status
 export const useSupabaseConnection = () => {
-  const [isConnected, setIsConnected] = useState(true)
+  const [isConnected, setIsConnected] = useState(false)
   const [connectionError, setConnectionError] = useState<string | null>(null)
 
   useEffect(() => {
-    // Monitor connection status
     const channel = supabase.channel('connection-test')
-    
-    channel
-      .on('system', {}, (payload) => {
-        if (payload.type === 'connected') {
-          setIsConnected(true)
-          setConnectionError(null)
-        } else if (payload.type === 'error') {
-          setIsConnected(false)
-          setConnectionError('Connection lost')
-        }
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, () => {
+        // Connection test
       })
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {

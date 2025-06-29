@@ -1,0 +1,2531 @@
+import React, { useState, useEffect, useMemo, useContext } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import Tesseract from 'tesseract.js';
+import countryList from 'country-list';
+import { codes as countryCallingCodes } from 'country-calling-code';
+import { getCurrentUser } from './lib/auth';
+import { addMultipleGuests, getGuests, deleteGuest, deleteGuestsByGroupId } from './lib/supabase';
+import { useRealtimeEvents } from './hooks/useRealtime';
+import { ThemeContext } from './ThemeContext';
+
+const AVIATIONSTACK_API_KEY = 'bb7fd8369e323c356434d5b1ac77b437'; // 🚨 PASTE YOUR NEW AVIATIONSTACK API KEY HERE 🚨
+
+// --- TYPE DEFINITIONS ---
+interface FlightData {
+  flight_status: string;
+  departure: {
+    airport: string;
+    iata: string;
+    scheduled: string;
+    timezone: string;
+    terminal: string | null;
+    gate: string | null;
+    estimated: string | null;
+    actual: string | null;
+  };
+  arrival: {
+    airport: string;
+    iata: string;
+    scheduled: string;
+    timezone: string;
+    terminal: string | null;
+    gate: string | null;
+    estimated: string | null;
+    actual: string | null;
+  };
+}
+
+interface FlightModuleState {
+  status: 'idle' | 'loading' | 'found' | 'not_found';
+  data: FlightData | null;
+}
+
+interface Guest {
+  // Basic Info
+  id?: string;
+  prefix: string;
+  gender: string;
+  firstName: string;
+  middleName: string;
+  lastName: string;
+  dob: string;
+  // Contact
+  countryCode: string;
+  contactNumber: string;
+  email: string;
+  // ID
+  idType: string;
+  idNumber: string;
+  idCountry: string;
+  // Next of Kin
+  nextOfKinName: string;
+  nextOfKinEmail: string;
+  nextOfKinPhoneCountry: string;
+  nextOfKinPhone: string;
+  // Additional Info
+  dietary: string[];
+  medical: string[];
+  // Modules
+  modules: Record<string, boolean[]>;
+  moduleValues: Record<string, any[]>;
+  moduleFlightData?: Record<string, (FlightModuleState | null)[]>;
+  // UI State for Drafts
+  dietaryInput?: string;
+  medicalInput?: string;
+  errors?: Record<string, string>;
+  // Grouping
+  groupId?: string | null;
+  groupName?: string | null;
+  flightData?: FlightData;
+  hotelAddress?: string;
+  hotelBookingNumber?: string;
+}
+
+type Draft = Guest;
+
+async function fetchFlightData(flightNumber: string, flightDate: string): Promise<FlightData | null> {
+  if (!flightNumber || !flightDate || !AVIATIONSTACK_API_KEY) {
+    return null;
+  }
+
+  const upperCaseFlightNumber = flightNumber.toUpperCase();
+  const requestUrl = `http://api.aviationstack.com/v1/flights?access_key=${AVIATIONSTACK_API_KEY}&flight_iata=${upperCaseFlightNumber}&flight_date=${flightDate}`;
+  
+  try {
+    const response = await fetch(requestUrl);
+
+    if (!response.ok) {
+        console.error(`AviationStack API error! Status: ${response.status}`);
+        try {
+            const errorData = await response.json();
+            console.error('API Error Details:', errorData);
+        } catch (e) {
+            console.error('Could not parse error response from API.');
+        }
+        return null;
+    }
+
+    const data = await response.json();
+
+    if (data.error) {
+        console.error('AviationStack API returned an error object:', data.error);
+        return null;
+    }
+
+    if (data.data && data.data.length > 0) {
+      return data.data[0];
+    }
+  } catch (error) {
+    console.error('Failed to fetch flight data. This could be a network error or a Cross-Origin (CORS) issue because the free API uses HTTP. Please check the browser console for more details.', error);
+  }
+  return null;
+}
+
+function formatFlightTime(dateTimeString: string, timeZone: string) {
+  if (!dateTimeString) return 'N/A';
+  try {
+    const date = new Date(dateTimeString);
+    return new Intl.DateTimeFormat('en-GB', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZoneName: 'short',
+      timeZone,
+    }).format(date);
+  } catch (error) {
+    console.error('Error formatting date:', error);
+    return 'Invalid Date';
+  }
+}
+
+const GUEST_MODULES = [
+  { key: 'flightNumber', label: 'Flight Tracker', type: 'text', placeholder: 'e.g. BA2490', description: 'Auto-detects flight details' },
+  { key: 'seatNumber', label: 'Seat Number', type: 'text', placeholder: 'e.g. 14A' },
+  { key: 'eventReference', label: 'Event Reference', type: 'text', placeholder: 'Enter reference number' },
+  { key: 'hotelTracker', label: 'Hotel Tracker', type: 'group' },
+  { key: 'trainBookingNumber', label: 'Train Booking Number', type: 'text', placeholder: 'Enter booking reference' },
+  { key: 'coachBookingNumber', label: 'Coach Booking Number', type: 'text', placeholder: 'Enter booking reference' },
+  { key: 'idUpload', label: 'ID Upload', type: 'file', placeholder: 'Upload ID (PNG, JPG, PDF)' },
+];
+
+const GUEST_FIELDS = [
+  { key: 'firstName', label: 'First Name', required: true },
+  { key: 'middleName', label: 'Middle Name', required: false },
+  { key: 'lastName', label: 'Last Name', required: true },
+  { key: 'contactNumber', label: 'Contact Number', required: true },
+  { key: 'email', label: 'Email', required: true },
+  { key: 'nextOfKin', label: 'Next of Kin Contact Information', required: false },
+  { key: 'idType', label: 'ID Type', required: true },
+  { key: 'idNumber', label: 'ID Number', required: true },
+];
+
+const PREFIXES = ['Mr', 'Mrs', 'Ms', 'Mx', 'Dr', 'Prof'];
+const GENDERS = ['Male', 'Female', 'Transgender', 'Non Binary', 'Other', 'Prefer Not to Say'];
+const COUNTRIES = countryList.getNames();
+
+function getFlagEmoji(isoCode2: string) {
+  if (!isoCode2) return '';
+  return isoCode2
+    .toUpperCase()
+    .replace(/./g, (char: string) => String.fromCodePoint(127397 + char.charCodeAt(0)));
+}
+
+const COUNTRY_CODES = Array.from(
+  new Map(
+    countryCallingCodes
+      .filter(c => c.countryCodes[0] && c.isoCode2)
+      .map(c => [`+${c.countryCodes[0]}`, {
+        code: `+${c.countryCodes[0]}`,
+        label: c.country,
+        flag: getFlagEmoji(c.isoCode2)
+      }])
+  ).values()
+);
+
+function countryCodeSelector(value: string, onChange: (val: string) => void) {
+  return (
+    <select value={value} onChange={e => onChange(e.target.value)} style={{ width: 120, minWidth: 90, borderRadius: 8, background: '#f7f8fa', border: '1px solid #d1d5db', padding: '0 8px', fontSize: 18, height: 48, lineHeight: '48px' }}>
+      {COUNTRY_CODES.map(c => (
+        <option key={c.code} value={c.code}>{c.flag} {c.code}</option>
+      ))}
+    </select>
+  );
+}
+
+// Glassmorphic style helper functions
+const getGlassStyles = (isDark: boolean) => ({
+  background: isDark 
+    ? 'rgba(255, 255, 255, 0.05)' 
+    : 'rgba(255, 255, 255, 0.8)',
+  backdropFilter: 'blur(20px)',
+  WebkitBackdropFilter: 'blur(20px)',
+  border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.2)'}`,
+  borderRadius: '16px',
+  boxShadow: isDark 
+    ? '0 8px 32px rgba(0, 0, 0, 0.3)' 
+    : '0 8px 32px rgba(0, 0, 0, 0.1)'
+});
+
+const getInputStyles = (isDark: boolean) => ({
+  background: isDark 
+    ? 'rgba(255, 255, 255, 0.05)' 
+    : 'rgba(255, 255, 255, 0.9)',
+  backdropFilter: 'blur(10px)',
+  WebkitBackdropFilter: 'blur(10px)',
+  border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
+  borderRadius: '8px',
+  color: isDark ? '#ffffff' : '#000000',
+  outline: 'none',
+  transition: 'all 0.2s ease'
+});
+
+const getButtonStyles = (isDark: boolean, variant: 'primary' | 'secondary' | 'danger') => {
+  const baseStyles = {
+    border: 'none',
+    borderRadius: '8px',
+    padding: '12px 24px',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    backdropFilter: 'blur(10px)',
+    WebkitBackdropFilter: 'blur(10px)'
+  };
+
+  switch (variant) {
+    case 'primary':
+      return {
+        ...baseStyles,
+        background: isDark 
+          ? 'linear-gradient(135deg, #ffffff 0%, #f0f0f0 100%)' 
+          : 'linear-gradient(135deg, #000000 0%, #333333 100%)',
+        color: isDark ? '#000000' : '#ffffff',
+        boxShadow: '0 4px 16px rgba(0, 0, 0, 0.2)'
+      };
+    case 'secondary':
+      return {
+        ...baseStyles,
+        background: isDark 
+          ? 'rgba(255, 255, 255, 0.1)' 
+          : 'rgba(0, 0, 0, 0.05)',
+        color: isDark ? '#ffffff' : '#000000',
+        border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)'}`
+      };
+    case 'danger':
+      return {
+        ...baseStyles,
+        background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+        color: '#ffffff',
+        boxShadow: '0 4px 16px rgba(239, 68, 68, 0.3)'
+      };
+    default:
+      return baseStyles;
+  }
+};
+
+export default function CreateGuests() {
+  const { eventId } = useParams();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { theme } = useContext(ThemeContext);
+  const isDark = theme === 'dark';
+
+  // Get current user for company context
+  const currentUser = getCurrentUser();
+  
+  // Use real-time events hook
+  const { events: realtimeEvents } = useRealtimeEvents(currentUser?.company_id || null);
+
+  const [guests, setGuests] = useState<Guest[]>([]);
+  const [drafts, setDrafts] = useState<Draft[]>([]);
+  const [showModules, setShowModules] = useState(false);
+  const [eventName, setEventName] = useState('');
+  const [openMenuIdx, setOpenMenuIdx] = useState(null);
+  const [editGuestIdx, setEditGuestIdx] = useState<number | null>(null);
+  const [isGroup, setIsGroup] = useState(false);
+  const [groupName, setGroupName] = useState('');
+  const [groupNameConfirmed, setGroupNameConfirmed] = useState(false);
+  const [expandedGuestIndex, setExpandedGuestIndex] = useState<number | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<{type: 'guest' | 'group' | 'draft', index?: number} | null>(null);
+  const [scannerTab, setScannerTab] = useState<'upload' | 'camera'>('upload');
+  const [scannerState, setScannerState] = useState<{
+    show: boolean;
+    draftIndex: number | null;
+    processing: boolean;
+    imageUrl: string | null;
+    message: string;
+  }>({
+    show: false,
+    draftIndex: null,
+    processing: false,
+    imageUrl: null,
+    message: 'Upload or scan a passport to begin.'
+  });
+  const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [isCsvProcessing, setIsCsvProcessing] = useState(false);
+  const [csvError, setCsvError] = useState<string | null>('');
+  const [expandedDraftIndex, setExpandedDraftIndex] = useState<number | null>(null);
+
+  const eventIdFromUrl = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    const idFromParams = params.get('eventId');
+    return eventId || idFromParams;
+  }, [eventId, location.search]);
+
+  useEffect(() => {
+    if (!eventIdFromUrl) return;
+
+    const loadGuestDataForEdit = async () => {
+      if (editGuestIdx !== undefined) {
+        const idx = parseInt(editGuestIdx, 10);
+        
+        try {
+          // Load guests from Supabase instead of localStorage
+          const supabaseGuests = await getGuests(eventIdFromUrl);
+          
+          // Convert Supabase guest format to local format
+          const convertedGuests = supabaseGuests.map((guest: any) => ({
+            id: guest.id, // Ensure ID is preserved
+            firstName: guest.first_name,
+            middleName: guest.middle_name,
+            lastName: guest.last_name,
+            email: guest.email,
+            contactNumber: guest.contact_number,
+            countryCode: guest.country_code,
+            idType: guest.id_type,
+            idNumber: guest.id_number,
+            idCountry: guest.id_country,
+            dob: guest.dob,
+            gender: guest.gender,
+            groupId: guest.group_id,
+            groupName: guest.group_name,
+            nextOfKinName: guest.next_of_kin_name,
+            nextOfKinEmail: guest.next_of_kin_email,
+            nextOfKinPhoneCountry: guest.next_of_kin_phone_country,
+            nextOfKinPhone: guest.next_of_kin_phone,
+            dietary: guest.dietary || [],
+            medical: guest.medical || [],
+            modules: guest.modules || {},
+            moduleValues: guest.module_values || {},
+            prefix: guest.prefix,
+            status: guest.status,
+            hotelAddress: guest.hotel_address,
+            hotelBookingNumber: guest.hotel_booking_number
+          }));
+
+          const guestToEdit = convertedGuests[idx];
+
+          if (guestToEdit) {
+            setGuests([]); // Clear guests state to avoid rendering the summary card
+            setEditGuestIdx(idx);
+
+            if (guestToEdit.groupId) {
+              // Editing a group
+              const groupGuests = convertedGuests.filter((g: any) => g.groupId === guestToEdit.groupId);
+              setDrafts(groupGuests);
+              setIsGroup(true);
+              setGroupName(guestToEdit.groupName || '');
+              setGroupNameConfirmed(true); // When editing a group, name is already set
+              setExpandedDraftIndex(null);
+            } else {
+              // Editing a single guest
+              setDrafts([guestToEdit]);
+              setIsGroup(false);
+              setExpandedDraftIndex(0);
+            }
+          }
+        } catch (error) {
+          console.error('Error loading guest data for edit:', error);
+          // Fallback to localStorage if Supabase fails
+          const allGuests = JSON.parse(localStorage.getItem(`event_guests_${eventIdFromUrl}`) || '[]');
+          const guestToEdit = allGuests[idx];
+
+          if (guestToEdit) {
+            setGuests([]);
+            setEditGuestIdx(idx);
+
+            if (guestToEdit.groupId) {
+              const groupGuests = allGuests.filter((g: any) => g.groupId === guestToEdit.groupId);
+              setDrafts(groupGuests);
+              setIsGroup(true);
+              setGroupName(guestToEdit.groupName || '');
+              setGroupNameConfirmed(true);
+              setExpandedDraftIndex(null);
+            } else {
+              setDrafts([guestToEdit]);
+              setIsGroup(false);
+              setExpandedDraftIndex(0);
+            }
+          }
+        }
+      } else {
+        // Creating a new guest/group
+        setGuests([]);
+        setDrafts([]);
+        setEditGuestIdx(null);
+        setIsGroup(false);
+        setGroupName('');
+        setGroupNameConfirmed(false);
+        setExpandedDraftIndex(null);
+      }
+    };
+
+    loadGuestDataForEdit();
+  }, [eventIdFromUrl, editGuestIdx]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('upload') === '1') setIsCsvModalOpen(true);
+  }, [location.search]);
+
+  useEffect(() => {
+    if (eventIdFromUrl) {
+      try {
+        const events = JSON.parse(localStorage.getItem('timely_events') || '[]');
+        const event = events.find((e: { id: string }) => e.id === eventIdFromUrl);
+        setEventName(event ? event.name : '');
+      } catch {}
+    }
+  }, [eventIdFromUrl]);
+
+  function handleConfirmGroupName() {
+    if (groupName.trim()) {
+      setGroupNameConfirmed(true);
+    }
+  }
+
+  function handleAddDraft() {
+    const newDraft = {
+      firstName: '',
+      middleName: '',
+      lastName: '',
+      dob: '',
+      contactNumber: '',
+      countryCode: '+44',
+      email: '',
+      idType: '',
+      idNumber: '',
+      idCountry: '',
+      nextOfKinName: '',
+      nextOfKinEmail: '',
+      nextOfKinPhone: '',
+      nextOfKinPhoneCountry: '+44',
+      modules: {},
+      moduleValues: {},
+      moduleFlightData: {},
+      errors: {},
+      prefix: '',
+      gender: '',
+      dietary: [],
+      medical: [],
+      dietaryInput: '',
+      medicalInput: '',
+    };
+    const newDrafts = [newDraft, ...drafts];
+    setDrafts(newDrafts);
+    setExpandedDraftIndex(0);
+  }
+
+  function handleDraftChange(idx: number, key: keyof Draft, value: any) {
+    setDrafts(d => d.map((draft, i) => i === idx ? { ...draft, [key]: value } : draft));
+  }
+
+  function validateDraft(draft: Draft): Record<string, string> {
+    const errs: Record<string, string> = {};
+    if (!draft.firstName.trim()) errs.firstName = 'First name is required.';
+    if (!draft.lastName.trim()) errs.lastName = 'Last name is required.';
+    if (!draft.contactNumber.trim()) errs.contactNumber = 'Contact number is required.';
+    if (!draft.email.trim()) errs.email = 'Email is required.';
+    if (!draft.idType) errs.idType = 'ID type is required.';
+    if (!draft.idNumber.trim()) errs.idNumber = 'ID number is required.';
+    if (!draft.idCountry) errs.idCountry = 'Country of origin is required.';
+    if (!draft.nextOfKinName.trim()) errs.nextOfKinName = 'Next of kin name is required.';
+    if (!draft.nextOfKinEmail.trim()) errs.nextOfKinEmail = 'Next of kin email is required.';
+    if (!draft.nextOfKinPhone.trim()) errs.nextOfKinPhone = 'Next of kin phone is required.';
+    if (draft.idType === 'Passport' && !/^\w{6,9}$/.test(draft.idNumber)) errs.idNumber = 'Passport number must be 6-9 alphanumeric characters.';
+    if (draft.idType === 'Identity Card' && !/^\w{6,12}$/.test(draft.idNumber)) errs.idNumber = 'Identity Card number must be 6-12 alphanumeric characters.';
+    if (draft.idType === 'Drivers License' && !/^\w{6,15}$/.test(draft.idNumber)) errs.idNumber = 'Drivers License number must be 6-15 alphanumeric characters.';
+    if (draft.email && !/^\S+@\S+\.\S+$/.test(draft.email)) errs.email = 'Invalid email address.';
+    if (draft.nextOfKinEmail && !/^\S+@\S+\.\S+$/.test(draft.nextOfKinEmail)) errs.nextOfKinEmail = 'Invalid next of kin email address.';
+    return errs;
+  }
+
+  function handleSaveDraft(idx: number) {
+    const draft = drafts[idx];
+    const errs = validateDraft(draft);
+    if (Object.keys(errs).length > 0) {
+      setDrafts(d => d.map((dft, i) => i === idx ? { ...dft, errors: errs } : dft));
+      return;
+    }
+    setGuests(g => [...g, draft]);
+    setDrafts(d => d.filter((_, i) => i !== idx));
+  }
+
+  function handleRemoveDraft(idx: number) {
+    setDrafts(d => d.filter((_, i) => i !== idx));
+  }
+
+  function handleModuleDrop(idx: number, e: React.DragEvent) {
+    e.preventDefault();
+    const moduleKey = e.dataTransfer.getData('moduleKey');
+    setDrafts(d => d.map((draft, i) => {
+      if (i !== idx) return draft;
+      if (moduleKey) {
+        const newModules = { ...draft.modules };
+        if (Array.isArray(newModules[moduleKey])) {
+          newModules[moduleKey] = [...newModules[moduleKey], true];
+        } else {
+          newModules[moduleKey] = [true];
+        }
+        return { ...draft, modules: newModules };
+      }
+      return draft;
+    }));
+  }
+
+  function handleRemoveModule(draftIdx: number, moduleKey: string, instanceIndex: number) {
+    setDrafts(d => d.map((draft, i) => {
+      if (i !== draftIdx) return draft;
+      
+      const newModules = { ...draft.modules };
+      const newModuleValues = { ...draft.moduleValues };
+      const newModuleFlightData = { ...draft.moduleFlightData };
+
+      if (Array.isArray(newModules[moduleKey])) {
+        newModules[moduleKey] = newModules[moduleKey].filter((_, i) => i !== instanceIndex);
+        if (newModules[moduleKey].length === 0) {
+          delete newModules[moduleKey];
+        }
+      }
+
+      if (Array.isArray(newModuleValues[moduleKey])) {
+        newModuleValues[moduleKey] = newModuleValues[moduleKey].filter((_, i) => i !== instanceIndex);
+        if (newModuleValues[moduleKey].length === 0) {
+          delete newModuleValues[moduleKey];
+        }
+      }
+
+      if (Array.isArray(newModuleFlightData[moduleKey])) {
+        newModuleFlightData[moduleKey] = newModuleFlightData[moduleKey].filter((_, i) => i !== instanceIndex);
+        if (newModuleFlightData[moduleKey].length === 0) {
+          delete newModuleFlightData[moduleKey];
+        }
+      }
+
+      return { ...draft, modules: newModules, moduleValues: newModuleValues, moduleFlightData: newModuleFlightData };
+    }));
+  }
+
+  function parseNewCsv(file: File): Promise<Partial<Draft>[]> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const text = event.target?.result as string;
+          if (!text) {
+            return reject(new Error('File is empty.'));
+          }
+
+          const lines = text.split(/\r\n|\n/).filter(line => line.trim() !== '');
+          if (lines.length < 2) {
+            return reject(new Error('CSV must have a header row and at least one data row.'));
+          }
+
+          const headers = lines[0].split(',').map(h => h.trim());
+          const requiredHeaders = ['First Name', 'Last Name'];
+          for (const requiredHeader of requiredHeaders) {
+            if (!headers.includes(requiredHeader)) {
+              return reject(new Error(`CSV is missing required header: ${requiredHeader}`));
+            }
+          }
+
+          const parsedData = lines.slice(1).map((line, rowIndex) => {
+            const values = line.split(',').map(v => v.trim());
+            const entry: any = {};
+            headers.forEach((header, index) => {
+              const value = values[index] || '';
+              switch (header) {
+                case 'Prefix': entry.prefix = value; break;
+                case 'Gender': entry.gender = value; break;
+                case 'First Name': entry.firstName = value; break;
+                case 'Middle Name': entry.middleName = value; break;
+                case 'Last Name': entry.lastName = value; break;
+                case 'Country Code': entry.countryCode = value; break;
+                case 'Contact Number': entry.contactNumber = value; break;
+                case 'Email': entry.email = value; break;
+                case 'ID Type': entry.idType = value; break;
+                case 'ID Number': entry.idNumber = value; break;
+                case 'Country of Origin': entry.idCountry = value; break;
+                case 'Next of Kin Name': entry.nextOfKinName = value; break;
+                case 'Next of Kin Email': entry.nextOfKinEmail = value; break;
+                case 'Next of Kin Country Code': entry.nextOfKinPhoneCountry = value; break;
+                case 'Next of Kin Number': entry.nextOfKinPhone = value; break;
+                case 'Dietary': entry.dietary = value ? value.split(';').map(d => d.trim()) : []; break;
+                case 'Medical': entry.medical = value ? value.split(';').map(d => d.trim()) : []; break;
+                case 'Hotel Address': entry.hotelAddress = value; break;
+                case 'Hotel Booking Number': entry.hotelBookingNumber = value; break;
+              }
+            });
+            if (!entry.firstName || !entry.lastName) {
+              throw new Error(`Row ${rowIndex + 2} is missing First Name or Last Name.`);
+            }
+            return entry;
+          });
+          resolve(parsedData);
+        } catch (error) {
+          reject(error instanceof Error ? error : new Error('Failed to parse CSV file. Please check its format.'));
+        }
+      };
+      reader.onerror = () => reject(new Error('Failed to read the file.'));
+      reader.readAsText(file);
+    });
+  }
+
+  async function handleCsvSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    if (!csvFile) {
+      setCsvError('Please select a file to upload.');
+      return;
+    }
+    setIsCsvProcessing(true);
+    setCsvError(null);
+    try {
+      const parsedGuests = await parseNewCsv(csvFile);
+      const newDrafts = parsedGuests.map(guest => ({
+        id: `draft-${Date.now()}-${Math.random()}`,
+        prefix: guest.prefix || '',
+        gender: guest.gender || '',
+        firstName: guest.firstName || '',
+        middleName: guest.middleName || '',
+        lastName: guest.lastName || '',
+        dob: guest.dob || '',
+        contactNumber: guest.contactNumber || '',
+        countryCode: guest.countryCode || '+44',
+        email: guest.email || '',
+        idType: guest.idType || '',
+        idNumber: guest.idNumber || '',
+        idCountry: guest.idCountry || '',
+        nextOfKinName: guest.nextOfKinName || '',
+        nextOfKinEmail: guest.nextOfKinEmail || '',
+        nextOfKinPhoneCountry: guest.nextOfKinPhoneCountry || '+44',
+        nextOfKinPhone: guest.nextOfKinPhone || '',
+        dietary: guest.dietary || [],
+        medical: guest.medical || [],
+        modules: {},
+        moduleValues: {},
+        errors: {},
+        dietaryInput: '',
+        medicalInput: '',
+        hotelAddress: guest.hotelAddress,
+        hotelBookingNumber: guest.hotelBookingNumber
+      }));
+
+      setDrafts(d => [...d, ...newDrafts]);
+
+      // Success: close modal and reset state
+      setIsCsvModalOpen(false);
+      setCsvFile(null);
+    } catch (error) {
+      setCsvError(error instanceof Error ? error.message : 'An unknown error occurred.');
+    } finally {
+      setIsCsvProcessing(false);
+    }
+  }
+
+  function CsvUploadModal() {
+    return (
+      <div style={{
+        position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+        background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center'
+      }}>
+        <form
+          onSubmit={handleCsvSubmit}
+          style={{
+            background: '#fff', borderRadius: 16, padding: '32px 40px', width: 480,
+            boxShadow: '0 5px 30px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column', alignItems: 'center'
+          }}
+        >
+          <div style={{ fontSize: 24, fontWeight: 600, marginBottom: 16 }}>Upload Guests CSV</div>
+          <p style={{ color: '#555', fontSize: 15, marginBottom: 24, textAlign: 'center', maxWidth: 380, lineHeight: 1.5 }}>
+            Select a CSV file to create draft guest forms.
+            Required columns are 'First Name' and 'Last Name'.
+          </p>
+
+          <label
+            htmlFor="csv-upload-input"
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              width: '100%', background: '#f9fafb', border: '1.5px solid #d1d5db',
+              borderRadius: 8, padding: '12px 16px', cursor: 'pointer', marginBottom: 16
+            }}
+          >
+            <span style={{ color: '#333', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {csvFile ? csvFile.name : 'No file chosen'}
+            </span>
+            <span style={{
+              background: '#374151', color: '#fff', borderRadius: 6, padding: '6px 18px',
+              fontWeight: 500, fontSize: 14, marginLeft: 16, flexShrink: 0
+            }}>
+              Choose File
+            </span>
+          </label>
+          <input
+            id="csv-upload-input"
+            type="file"
+            accept=".csv,text/csv"
+            style={{ display: 'none' }}
+            disabled={isCsvProcessing}
+            onChange={e => {
+              const file = e.target.files?.[0] || null;
+              setCsvFile(file);
+              setCsvError(null);
+            }}
+          />
+
+          {csvError && (
+            <div style={{ width: '100%', color: '#c53030', background: '#fed7d7', borderRadius: 8, padding: '12px 16px', marginBottom: 16, fontSize: 14, textAlign: 'center' }}>
+              {csvError}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: 12, width: '100%', marginTop: 8 }}>
+            <button
+              type="button"
+              onClick={() => {
+                setIsCsvModalOpen(false);
+                setCsvFile(null);
+                setCsvError(null);
+              }}
+              disabled={isCsvProcessing}
+              style={{
+                flex: 1, background: '#e5e7eb', color: '#374151', fontWeight: 600, fontSize: 16,
+                border: 'none', borderRadius: 8, padding: '12px 0', cursor: 'pointer'
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={!csvFile || isCsvProcessing}
+              style={{
+                flex: 2, background: '#1f2937', color: '#fff', fontWeight: 600, fontSize: 16,
+                border: 'none', borderRadius: 8, padding: '12px 0',
+                cursor: (!csvFile || isCsvProcessing) ? 'not-allowed' : 'pointer',
+                opacity: (!csvFile || isCsvProcessing) ? 0.6 : 1
+              }}
+            >
+              {isCsvProcessing ? 'Processing...' : 'Upload & Create Drafts'}
+            </button>
+          </div>
+            <button
+              type="button"
+              style={{
+                 background: 'none', border: 'none', color: '#4b5563', fontSize: 14,
+                 marginTop: 20, cursor: 'pointer', textDecoration: 'underline'
+              }}
+              onClick={handleDownloadCSVTemplate}
+              disabled={isCsvProcessing}
+            >
+              Download CSV
+            </button>
+        </form>
+      </div>
+    );
+  }
+
+  async function handleRemoveGuest(idx: number) {
+    const guestToRemove = guests[idx];
+
+    // If the guest has an ID, it means it's saved in Supabase and needs to be deleted
+    if (guestToRemove.id && eventIdFromUrl) {
+        try {
+          // Delete from Supabase using the guest's ID
+          await deleteGuest(guestToRemove.id);
+          console.log('Guest deleted from Supabase successfully');
+          
+          // Remove from local state
+          setGuests(g => g.filter((_, i) => i !== idx));
+          
+          // If we're in edit mode, navigate back to guests tab
+          if (editGuestIdx !== null) {
+            navigate(`/event/${eventIdFromUrl}?tab=guests`);
+          }
+        } catch (error) {
+          console.error('Error deleting guest from Supabase:', error);
+          alert('Failed to delete guest. Please try again.');
+        }
+        return;
+    }
+
+    // If in edit mode and guest is not in Supabase yet, try to find and delete it
+    if (editGuestIdx !== null && !isGroup) {
+        if (!eventIdFromUrl) return;
+        
+        try {
+          // Get all guests from Supabase to find the one to delete
+          const supabaseGuests = await getGuests(eventIdFromUrl);
+          const guestToDelete = supabaseGuests[editGuestIdx];
+          
+          if (guestToDelete && guestToDelete.id) {
+            // Delete from Supabase
+            await deleteGuest(guestToDelete.id);
+            console.log('Guest deleted from Supabase successfully');
+            navigate(`/event/${eventIdFromUrl}?tab=guests`);
+          } else {
+            console.warn('Guest not found in Supabase, navigating back');
+            navigate(`/event/${eventIdFromUrl}?tab=guests`);
+          }
+        } catch (error) {
+          console.error('Error deleting guest from Supabase:', error);
+          alert('Failed to delete guest. Please try again.');
+        }
+        return;
+    }
+    
+    // If guest is not in Supabase (no ID), just remove from local state
+    setGuests(g => g.filter((_, i) => i !== idx));
+  }
+
+  function handleSave() {
+    if (!eventIdFromUrl) {
+        console.error('Save failed: no eventId');
+        return;
+    }
+
+    const guestsToProcess = [...guests, ...drafts];
+
+    if (guestsToProcess.length === 0) {
+        // If there's nothing to save, just go back to the dashboard.
+        navigate(`/event/${eventIdFromUrl}?tab=guests`, { replace: true });
+        return;
+    }
+
+    // Check if user is logged in
+    const currentUser = getCurrentUser();
+    if (!currentUser) {
+        console.error('No user logged in');
+        alert('You must be logged in to save guests. Please log in and try again.');
+        return;
+    }
+
+    // Convert guests to Supabase format and save
+    const guestsForSupabase = guestsToProcess.map(guest => ({
+      event_id: eventIdFromUrl,
+      company_id: currentUser.company_id || '',
+      first_name: guest.firstName,
+      middle_name: guest.middleName || '',
+      last_name: guest.lastName,
+      email: guest.email,
+      contact_number: guest.contactNumber,
+      country_code: guest.countryCode,
+      id_type: guest.idType,
+      id_number: guest.idNumber,
+      id_country: guest.idCountry || '',
+      dob: guest.dob || undefined,
+      gender: guest.gender || '',
+      group_id: isGroup ? `group-${Date.now()}` : undefined,
+      group_name: isGroup ? groupName : undefined,
+      next_of_kin_name: guest.nextOfKinName || '',
+      next_of_kin_email: guest.nextOfKinEmail || '',
+      next_of_kin_phone_country: guest.nextOfKinPhoneCountry || '',
+      next_of_kin_phone: guest.nextOfKinPhone || '',
+      dietary: guest.dietary || [],
+      medical: guest.medical || [],
+      modules: guest.modules || {},
+      module_values: guest.moduleValues || {},
+      prefix: guest.prefix || '',
+      status: 'pending',
+      created_by: currentUser.id || undefined,
+      hotel_address: guest.hotelAddress,
+      hotel_booking_number: guest.hotelBookingNumber
+    }));
+
+    console.log('Saving guests to Supabase:', guestsForSupabase);
+
+    // Save to Supabase
+    addMultipleGuests(guestsForSupabase)
+      .then(() => {
+        console.log('Guests saved to Supabase successfully');
+        // Reset state and navigate
+        setGuests([]);
+        setDrafts([]);
+        setIsGroup(false);
+        setGroupName('');
+        setGroupNameConfirmed(false);
+        navigate(`/event/${eventIdFromUrl}?tab=guests`, { replace: true });
+      })
+      .catch(error => {
+        console.error('Error saving guests to Supabase:', error);
+        alert('Failed to save guests. Please try again.');
+      });
+  }
+
+  async function handleDeleteGroup() {
+    if (editGuestIdx !== null && guests.length > 0 && guests[0].groupId) {
+        if (!eventIdFromUrl) return;
+        
+        const groupIdToDelete = guests[0].groupId;
+        
+        try {
+          // Delete the entire group from Supabase
+          await deleteGuestsByGroupId(groupIdToDelete);
+          console.log('Group deleted from Supabase successfully');
+          navigate(`/event/${eventIdFromUrl}?tab=guests`);
+        } catch (error) {
+          console.error('Error deleting group from Supabase:', error);
+          alert('Failed to delete group. Please try again.');
+        }
+    } else {
+        setGuests([]);
+        setIsGroup(false);
+        setGroupName('');
+    }
+  }
+
+  function handleConfirmDelete() {
+    if (!showDeleteConfirm) return;
+
+    const { type, index } = showDeleteConfirm;
+
+    if (type === 'guest' && index !== undefined) {
+        handleRemoveGuest(index);
+    } else if (type === 'draft' && index !== undefined) {
+        handleRemoveDraft(index);
+    } else if (type === 'group') {
+        handleDeleteGroup();
+    }
+    setShowDeleteConfirm(null);
+  }
+
+  function handleTagInput(idx: number, key: 'dietaryInput' | 'medicalInput', value: string) {
+    setDrafts(d => d.map((draft, i) => i === idx ? { ...draft, [key]: value } : draft));
+  }
+
+  function handleAddTag(idx: number, key: 'dietary' | 'medical', tag: string) {
+    setDrafts(d => d.map((draft, i) => i === idx ? { ...draft, [key]: [...(draft[key] || []), tag] } : draft));
+  }
+
+  function handleRemoveTag(idx: number, key: 'dietary' | 'medical', tagIdx: number) {
+    setDrafts(d => d.map((draft, i) => i === idx ? { ...draft, [key]: draft[key].filter((_, j) => j !== tagIdx) } : draft));
+  }
+
+  function handleDownloadCSVTemplate() {
+    const headers = [
+      'Prefix', 'Gender', 'First Name', 'Middle Name', 'Last Name',
+      'Country Code', 'Contact Number', 'Email',
+      'ID Type', 'ID Number', 'Country of Origin',
+      'Next of Kin Name', 'Next of Kin Email', 'Next of Kin Country Code', 'Next of Kin Number',
+      'Dietary', 'Disabilities', 'Modules', 'Hotel Address', 'Hotel Booking Number'
+    ];
+    const csvContent = headers.join(',') + '\n';
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'guest_template.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function handleGuestCardClick(idx: number) {
+    setExpandedGuestIndex(expandedGuestIndex === idx ? null : idx);
+  }
+
+  function parseMRZ(mrzText: string, draftIndex: number) {
+    const lines = mrzText
+      .split('\n')
+      .map(line => line.replace(/[^A-Z0-9<]/gi, '').trim())
+      .filter(line => line.length > 25);
+    const mrzStartIdx = lines.findIndex(line => /^P<[A-Z0-9]{3}/.test(line));
+    if (mrzStartIdx === -1 || !lines[mrzStartIdx + 1]) {
+      setScannerState(s => ({ ...s, processing: false, message: 'Could not find MRZ code. Please try a clearer image.' }));
+      return;
+    }
+    const line1 = lines[mrzStartIdx];
+    const line2 = lines[mrzStartIdx + 1];
+
+    const nameSection = line1.substring(5);
+    const [lastNameRaw, firstAndMiddleRaw] = nameSection.split('<<');
+    const lastName = lastNameRaw.replace(/</g, ' ').replace(/[^A-Z ]/gi, '').trim();
+    const firstAndMiddle = (firstAndMiddleRaw || '').replace(/</g, ' ').replace(/[^A-Z ]/gi, '').trim();
+    const [firstName, ...middleNamesArr] = firstAndMiddle.split(' ').filter(Boolean);
+    const middleName = middleNamesArr.join(' ');
+
+    let passportNumber = line2.substring(0, 9).replace(/</g, '');
+    let nationality = line2.substring(10, 13).replace(/</g, '');
+    let dob = line2.substring(13, 19);
+    let sex = line2.substring(20, 21).replace(/</g, '');
+    let expiry = line2.substring(21, 27);
+
+    // DOB formatting
+    let year = parseInt(dob.substring(0, 2), 10);
+    const month = dob.substring(2, 4);
+    const day = dob.substring(4, 6);
+    year += (year < (new Date().getFullYear() % 100) + 1) ? 2000 : 1900;
+    const formattedDob = `${year}-${month}-${day}`;
+
+    let countryName = '';
+    if (/^[A-Z]{3}$/.test(nationality)) {
+      countryName = countryList.getName(nationality) || nationality;
+    }
+    if (!/^[A-Z0-9]+$/.test(passportNumber)) passportNumber = '';
+
+    handleDraftChange(draftIndex, 'firstName', firstName || '');
+    handleDraftChange(draftIndex, 'middleName', middleName || '');
+    handleDraftChange(draftIndex, 'lastName', lastName || '');
+    handleDraftChange(draftIndex, 'idType', 'Passport');
+    handleDraftChange(draftIndex, 'idNumber', passportNumber);
+    handleDraftChange(draftIndex, 'idCountry', countryName);
+    handleDraftChange(draftIndex, 'dob', formattedDob);
+    handleDraftChange(draftIndex, 'gender', sex === 'M' ? 'Male' : sex === 'F' ? 'Female' : 'Other');
+
+    setScannerState(s => ({ ...s, processing: false, show: false, message: 'Scan successful!' }));
+  }
+
+  async function processImageWithOCR(imageUrl: string, draftIndex: number) {
+    if (!imageUrl) return;
+    setScannerState(s => ({ ...s, processing: true, message: 'Recognizing text from image...' }));
+    try {
+      const result = await Tesseract.recognize(imageUrl, 'eng');
+      parseMRZ(result.data.text, draftIndex);
+    } catch (error) {
+      console.error('OCR Error:', error);
+      setScannerState(s => ({ ...s, processing: false, message: 'An error occurred during OCR. Please try again.' }));
+    }
+  }
+
+  function handleStopCamera() {
+    if (videoRef.current && videoRef.current.srcObject) {
+      const stream = videoRef.current.srcObject as MediaStream;
+      stream.getTracks().forEach(track => track.stop());
+      videoRef.current.srcObject = null;
+    }
+  }
+
+  function handleModalClose() {
+    handleStopCamera();
+    setScannerState({ show: false, draftIndex: null, processing: false, imageUrl: null, message: '' });
+    setScannerTab('upload');
+  }
+
+  async function handleStartCamera() {
+    setScannerTab('camera');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+    } catch (err) {
+      console.error("Error accessing camera: ", err);
+      setScannerState(s => ({ ...s, message: 'Could not access camera. Please check permissions.' }));
+    }
+  }
+
+  function handleCapture() {
+    if (videoRef.current && canvasRef.current) {
+      const canvas = canvasRef.current;
+      const video = videoRef.current;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const context = canvas.getContext('2d');
+      if (context) {
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const imageUrl = canvas.toDataURL('image/jpeg');
+        setScannerState(s => ({ ...s, imageUrl }));
+        handleStopCamera();
+        if (scannerState.draftIndex !== null) {
+          processImageWithOCR(imageUrl, scannerState.draftIndex);
+        }
+      }
+    }
+  }
+
+  const labelStyle = { fontWeight: 500, fontSize: 13, marginBottom: 4, color: '#333', letterSpacing: 0.2 };
+  const inputStyle = { borderRadius: 8, background: '#f7f8fa', border: '1.5px solid #d1d5db', padding: 10, fontSize: 15, height: 38, width: '100%' };
+
+  function handleGuestChange(guestIdx: number, key: keyof Guest, value: any) {
+    setGuests(guests.map((guest, i) => i === guestIdx ? { ...guest, [key]: value } : guest));
+  }
+  
+  function handleGuestTagInputChange(guestIdx: number, key: 'dietaryInput' | 'medicalInput', value: string) {
+    setGuests(guests.map((guest, i) => i === guestIdx ? { ...guest, [key]: value } : guest));
+  }
+  
+  function handleGuestTagAdd(guestIdx: number, key: 'dietary' | 'medical', tag: string) {
+    setGuests(guests.map((guest, i) => {
+      if (i === guestIdx) {
+        const existingTags = guest[key] || [];
+        return { ...guest, [key]: [...existingTags, tag], [`${key}Input`]: '' };
+      }
+      return guest;
+    }));
+  }
+  
+  function handleGuestTagRemove(guestIdx: number, key: 'dietary' | 'medical', tagIndexToRemove: number) {
+    setGuests(guests.map((guest, i) => {
+      if (i === guestIdx) {
+        const existingTags = guest[key] || [];
+        return { ...guest, [key]: existingTags.filter((_, tagIdx) => tagIdx !== tagIndexToRemove) };
+      }
+      return guest;
+    }));
+  }
+  
+  function handleGuestModuleDrop(guestIdx: number, e: React.DragEvent) {
+      e.preventDefault();
+      const moduleKey = e.dataTransfer.getData('moduleKey');
+      setGuests(guests.map((guest, i) => {
+          if (i !== guestIdx || !moduleKey) return guest;
+          
+          const newModules = { ...guest.modules };
+          if (Array.isArray(newModules[moduleKey])) {
+              newModules[moduleKey].push(true);
+          } else {
+              newModules[moduleKey] = [true];
+          }
+          return { ...guest, modules: newModules };
+      }));
+  }
+  
+  function handleGuestModuleRemove(guestIdx: number, moduleKey: string, instanceIndex: number) {
+    setGuests(guests.map((guest, i) => {
+        if (i !== guestIdx) return guest;
+        
+        const newModules = { ...guest.modules };
+        const newModuleValues = { ...guest.moduleValues };
+  
+        if (Array.isArray(newModules[moduleKey])) {
+          newModules[moduleKey] = newModules[moduleKey].filter((_, i) => i !== instanceIndex);
+          if (newModules[moduleKey].length === 0) {
+            delete newModules[moduleKey];
+          }
+        }
+  
+        if (Array.isArray(newModuleValues[moduleKey])) {
+          newModuleValues[moduleKey] = newModuleValues[moduleKey].filter((_, i) => i !== instanceIndex);
+          if (newModuleValues[moduleKey].length === 0) {
+            delete newModuleValues[moduleKey];
+          }
+        }
+  
+        const newModuleFlightData = { ...guest.moduleFlightData };
+        if (Array.isArray(newModuleFlightData[moduleKey])) {
+          newModuleFlightData[moduleKey] = newModuleFlightData[moduleKey].filter((_, i) => i !== instanceIndex);
+          if (newModuleFlightData[moduleKey].length === 0) {
+            delete newModuleFlightData[moduleKey];
+          }
+        }
+  
+        return { ...guest, modules: newModules, moduleValues: newModuleValues, moduleFlightData: newModuleFlightData };
+    }));
+  }
+  
+  async function handleGuestFlightData(guestIdx: number, moduleKey: string, instanceIndex: number, flightNumber: string, flightDate: string) {
+    setGuests(guests => guests.map((g, i) => {
+        if (i !== guestIdx) return g;
+        const newModuleFlightData = { ...g.moduleFlightData };
+        if (!Array.isArray(newModuleFlightData[moduleKey])) newModuleFlightData[moduleKey] = new Array(g.modules[moduleKey].length).fill(null);
+        newModuleFlightData[moduleKey][instanceIndex] = { status: 'loading', data: null };
+        return { ...g, moduleFlightData: newModuleFlightData };
+    }));
+
+    const data = await fetchFlightData(flightNumber, flightDate);
+
+    setGuests(guests => guests.map((g, i) => {
+        if (i !== guestIdx) return g;
+        const newModuleFlightData = { ...g.moduleFlightData };
+        if (data) {
+            newModuleFlightData[moduleKey][instanceIndex] = { status: 'found', data };
+        } else {
+            newModuleFlightData[moduleKey][instanceIndex] = { status: 'not_found', data: null };
+        }
+        return { ...g, moduleFlightData: newModuleFlightData };
+    }));
+  }
+
+  return (
+    <div style={{
+      minHeight: '100vh',
+      background: isDark 
+        ? 'linear-gradient(135deg, #0c0c0c 0%, #1a1a1a 50%, #0c0c0c 100%)'
+        : 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 50%, #f8fafc 100%)',
+      padding: '20px',
+      fontFamily: 'system-ui, -apple-system, sans-serif'
+    }}>
+      {/* Header */}
+      <div style={{
+        ...getGlassStyles(isDark),
+        padding: '24px 32px',
+        marginBottom: '24px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center'
+      }}>
+        <div>
+          <h1 style={{
+            margin: 0,
+            fontSize: '28px',
+            fontWeight: '700',
+            color: isDark ? '#ffffff' : '#000000',
+            marginBottom: '8px'
+          }}>
+            {editGuestIdx !== null ? 'Edit Guest' : 'Add Guests'}
+          </h1>
+          <p style={{
+            margin: 0,
+            fontSize: '16px',
+            color: isDark ? '#a1a1aa' : '#71717a'
+          }}>
+            {eventName || 'Loading event details...'}
+          </p>
+        </div>
+        
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <button
+            onClick={handleSave}
+            disabled={guests.length === 0 && drafts.length === 0}
+            style={{
+              ...getButtonStyles(isDark, 'primary'),
+              opacity: (guests.length === 0 && drafts.length === 0) ? 0.5 : 1,
+              cursor: (guests.length === 0 && drafts.length === 0) ? 'not-allowed' : 'pointer'
+            }}
+          >
+            {editGuestIdx !== null ? 'Update Guest' : `Save ${guests.length + drafts.length} Guest${(guests.length + drafts.length) !== 1 ? 's' : ''}`}
+          </button>
+          
+          <button
+            onClick={() => navigate(`/event/${eventIdFromUrl}?tab=dashboard`)}
+            style={getButtonStyles(isDark, 'secondary')}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+
+      {/* Action Buttons */}
+      {!editGuestIdx ? (
+        <div style={{
+          ...getGlassStyles(isDark),
+          padding: '20px 24px',
+          marginBottom: '24px'
+        }}>
+          <div style={{ display: 'flex', gap: '16px', alignItems: 'center', marginBottom: isGroup ? '16px' : '0' }}>
+            <button
+              onClick={() => setIsGroup(!isGroup)}
+              style={{
+                ...getButtonStyles(isDark, isGroup ? 'primary' : 'secondary'),
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}
+            >
+              👥 Create as Group
+            </button>
+            
+            <button
+              onClick={handleAddDraft}
+              style={{
+                ...getButtonStyles(isDark, 'primary'),
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}
+            >
+              ➕ Add {isGroup ? 'Group Member' : 'New Guest'}
+            </button>
+            
+            <button
+              onClick={() => setIsCsvModalOpen(true)}
+              style={{
+                ...getButtonStyles(isDark, 'secondary'),
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}
+            >
+              📄 Upload from CSV
+            </button>
+          </div>
+          
+          {isGroup && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <input
+                placeholder="Enter Group Name (e.g., Smith Family, Team Alpha)"
+                value={groupName}
+                onChange={(e) => setGroupName(e.target.value)}
+                readOnly={groupNameConfirmed}
+                style={{
+                  ...getInputStyles(isDark),
+                  flex: 1,
+                  maxWidth: '400px',
+                  padding: '12px 16px',
+                  fontSize: '16px',
+                  fontWeight: groupNameConfirmed ? '600' : 'normal',
+                  opacity: groupNameConfirmed ? 0.8 : 1
+                }}
+              />
+              
+              <button
+                onClick={() => groupNameConfirmed ? setGroupNameConfirmed(false) : handleConfirmGroupName()}
+                style={{
+                  ...getButtonStyles(isDark, 'primary'),
+                  padding: '12px',
+                  minWidth: '48px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                {groupNameConfirmed ? '✏️' : '✓'}
+              </button>
+            </div>
+          )}
+        </div>
+      ) : (
+        isGroup && (
+          <div style={{
+            ...getGlassStyles(isDark),
+            padding: '20px 24px',
+            marginBottom: '24px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}>
+            <div>
+              <h3 style={{
+                margin: 0,
+                fontSize: '18px',
+                fontWeight: '600',
+                color: isDark ? '#ffffff' : '#000000'
+              }}>
+                Group Management
+              </h3>
+            </div>
+            
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                onClick={handleAddDraft}
+                style={getButtonStyles(isDark, 'primary')}
+              >
+                Add Group Member
+              </button>
+              
+              <button
+                onClick={() => setShowDeleteConfirm({ type: 'group' })}
+                style={getButtonStyles(isDark, 'danger')}
+              >
+                Delete Group
+              </button>
+            </div>
+          </div>
+        )
+      )}
+
+      {/* Main Content */}
+      <div style={{ display: 'flex', gap: '24px' }}>
+        {/* Left Panel - Drafts and Guests */}
+        <div style={{ flex: 1 }}>
+          {/* Drafts List */}
+          {drafts.map((draft, idx) => (
+            <div key={idx} style={{
+              ...getGlassStyles(isDark),
+              marginBottom: '24px',
+              borderRadius: '16px',
+              overflow: 'hidden',
+              border: expandedDraftIndex === idx 
+                ? `2px solid ${isDark ? '#3b4fe0' : '#4f46e5'}` 
+                : `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
+              transition: 'all 0.3s ease'
+            }}>
+              {expandedDraftIndex === idx ? (
+                // EXPANDED VIEW
+                <div style={{ padding: '32px', position: 'relative' }}>
+                  <button
+                    onClick={() => setExpandedDraftIndex(null)}
+                    title="Collapse"
+                    style={{
+                      position: 'absolute',
+                      top: '20px',
+                      right: '70px',
+                      ...getButtonStyles(isDark, 'secondary'),
+                      padding: '8px',
+                      borderRadius: '50%',
+                      width: '40px',
+                      height: '40px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                  >
+                    −
+                  </button>
+                  
+                  <button
+                    onClick={() => {
+                      setScannerState({ show: true, draftIndex: idx, processing: false, imageUrl: null, message: 'Upload or scan a passport to begin.' });
+                      setScannerTab('upload');
+                    }}
+                    title="Scan Passport"
+                    style={{
+                      position: 'absolute',
+                      top: '20px',
+                      right: '20px',
+                      ...getButtonStyles(isDark, 'primary'),
+                      padding: '8px',
+                      borderRadius: '50%',
+                      width: '40px',
+                      height: '40px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                  >
+                    📷
+                  </button>
+
+                  <div style={{ paddingTop: '40px' }}>
+                    {/* Gender & Prefix */}
+                    <div style={{ marginBottom: '24px' }}>
+                      <label style={{
+                        display: 'block',
+                        fontSize: '14px',
+                        fontWeight: '600',
+                        color: isDark ? '#ffffff' : '#000000',
+                        marginBottom: '8px',
+                        letterSpacing: '0.5px'
+                      }}>
+                        GENDER & PREFIX
+                      </label>
+                      <div style={{ display: 'flex', gap: '16px' }}>
+                        <select 
+                          value={draft.prefix} 
+                          onChange={e => handleDraftChange(idx, 'prefix', e.target.value)} 
+                          style={{
+                            ...getInputStyles(isDark),
+                            flex: 1,
+                            padding: '12px 16px',
+                            fontSize: '16px'
+                          }}
+                        >
+                          <option value="">Prefix</option>
+                          {PREFIXES.map(p => <option key={p} value={p}>{p}</option>)}
+                        </select>
+                        <select 
+                          value={draft.gender} 
+                          onChange={e => handleDraftChange(idx, 'gender', e.target.value)} 
+                          style={{
+                            ...getInputStyles(isDark),
+                            flex: 2,
+                            padding: '12px 16px',
+                            fontSize: '16px'
+                          }}
+                        >
+                          <option value="">Gender</option>
+                          {GENDERS.map(g => <option key={g} value={g}>{g}</option>)}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Names */}
+                    <div style={{ marginBottom: '24px' }}>
+                      <label style={{
+                        display: 'block',
+                        fontSize: '14px',
+                        fontWeight: '600',
+                        color: isDark ? '#ffffff' : '#000000',
+                        marginBottom: '8px',
+                        letterSpacing: '0.5px'
+                      }}>
+                        NAMES
+                      </label>
+                      <div style={{ display: 'flex', gap: '12px' }}>
+                        <input 
+                          placeholder="First Name" 
+                          value={draft.firstName} 
+                          onChange={e => handleDraftChange(idx, 'firstName', e.target.value)} 
+                          style={{
+                            ...getInputStyles(isDark),
+                            flex: 1,
+                            padding: '12px 16px',
+                            fontSize: '16px'
+                          }} 
+                        />
+                        <input 
+                          placeholder="Middle Name (Optional)" 
+                          value={draft.middleName} 
+                          onChange={e => handleDraftChange(idx, 'middleName', e.target.value)} 
+                          style={{
+                            ...getInputStyles(isDark),
+                            flex: 1,
+                            padding: '12px 16px',
+                            fontSize: '16px'
+                          }} 
+                        />
+                        <input 
+                          placeholder="Last Name" 
+                          value={draft.lastName} 
+                          onChange={e => handleDraftChange(idx, 'lastName', e.target.value)} 
+                          style={{
+                            ...getInputStyles(isDark),
+                            flex: 1,
+                            padding: '12px 16px',
+                            fontSize: '16px'
+                          }} 
+                        />
+                      </div>
+                    </div>
+
+                    {/* Date of Birth */}
+                    <div style={{ marginBottom: '24px' }}>
+                      <label style={{
+                        display: 'block',
+                        fontSize: '14px',
+                        fontWeight: '600',
+                        color: isDark ? '#ffffff' : '#000000',
+                        marginBottom: '8px',
+                        letterSpacing: '0.5px'
+                      }}>
+                        DATE OF BIRTH
+                      </label>
+                      <input 
+                        type="date" 
+                        value={draft.dob} 
+                        onChange={e => handleDraftChange(idx, 'dob', e.target.value)} 
+                        style={{
+                          ...getInputStyles(isDark),
+                          width: '100%',
+                          padding: '12px 16px',
+                          fontSize: '16px'
+                        }} 
+                      />
+                    </div>
+
+                    {/* Contact Information */}
+                    <div style={{ marginBottom: '24px' }}>
+                      <label style={{
+                        display: 'block',
+                        fontSize: '14px',
+                        fontWeight: '600',
+                        color: isDark ? '#ffffff' : '#000000',
+                        marginBottom: '8px',
+                        letterSpacing: '0.5px'
+                      }}>
+                        CONTACT INFORMATION
+                      </label>
+                      <div style={{ display: 'flex', gap: '12px' }}>
+                        <select 
+                          value={draft.countryCode} 
+                          onChange={e => handleDraftChange(idx, 'countryCode', e.target.value)} 
+                          style={{
+                            ...getInputStyles(isDark),
+                            flex: 1,
+                            padding: '12px 16px',
+                            fontSize: '16px'
+                          }}
+                        >
+                          {COUNTRY_CODES.map(c => <option key={c.code} value={c.code}>{c.flag} {c.code}</option>)}
+                        </select>
+                        <input 
+                          placeholder="Contact Number" 
+                          value={draft.contactNumber} 
+                          onChange={e => handleDraftChange(idx, 'contactNumber', e.target.value)} 
+                          style={{
+                            ...getInputStyles(isDark),
+                            flex: 2,
+                            padding: '12px 16px',
+                            fontSize: '16px'
+                          }} 
+                        />
+                        <input 
+                          placeholder="Email" 
+                          value={draft.email} 
+                          onChange={e => handleDraftChange(idx, 'email', e.target.value)} 
+                          style={{
+                            ...getInputStyles(isDark),
+                            flex: 2,
+                            padding: '12px 16px',
+                            fontSize: '16px'
+                          }} 
+                        />
+                      </div>
+                    </div>
+
+                    {/* Documents */}
+                    <div style={{ marginBottom: '24px' }}>
+                      <label style={{
+                        display: 'block',
+                        fontSize: '14px',
+                        fontWeight: '600',
+                        color: isDark ? '#ffffff' : '#000000',
+                        marginBottom: '8px',
+                        letterSpacing: '0.5px'
+                      }}>
+                        DOCUMENTS
+                      </label>
+                      <div style={{ display: 'flex', gap: '12px' }}>
+                        <select 
+                          value={draft.idType} 
+                          onChange={e => handleDraftChange(idx, 'idType', e.target.value)} 
+                          style={{
+                            ...getInputStyles(isDark),
+                            flex: 1,
+                            padding: '12px 16px',
+                            fontSize: '16px'
+                          }}
+                        >
+                          <option value="">Select ID Type</option>
+                          <option value="Passport">Passport</option>
+                          <option value="Identity Card">Identity Card</option>
+                          <option value="Drivers License">Drivers License</option>
+                        </select>
+                        <input 
+                          placeholder="ID Number" 
+                          value={draft.idNumber} 
+                          onChange={e => handleDraftChange(idx, 'idNumber', e.target.value)} 
+                          style={{
+                            ...getInputStyles(isDark),
+                            flex: 1,
+                            padding: '12px 16px',
+                            fontSize: '16px'
+                          }} 
+                        />
+                        <select 
+                          value={draft.idCountry} 
+                          onChange={e => handleDraftChange(idx, 'idCountry', e.target.value)} 
+                          style={{
+                            ...getInputStyles(isDark),
+                            flex: 2,
+                            padding: '12px 16px',
+                            fontSize: '16px'
+                          }}
+                        >
+                          <option value="">Country of Origin</option>
+                          {COUNTRIES.map((c: string) => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Next of Kin */}
+                    <div style={{ marginBottom: '24px' }}>
+                      <label style={{
+                        display: 'block',
+                        fontSize: '14px',
+                        fontWeight: '600',
+                        color: isDark ? '#ffffff' : '#000000',
+                        marginBottom: '8px',
+                        letterSpacing: '0.5px'
+                      }}>
+                        NEXT OF KIN
+                      </label>
+                      <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
+                        <input 
+                          placeholder="Next of Kin Name"
+                          value={draft.nextOfKinName} 
+                          onChange={e => handleDraftChange(idx, 'nextOfKinName', e.target.value)} 
+                          style={{
+                            ...getInputStyles(isDark),
+                            flex: 2,
+                            padding: '12px 16px',
+                            fontSize: '16px'
+                          }} 
+                        />
+                        <input 
+                          type="email"
+                          placeholder="Next of Kin Email"
+                          value={draft.nextOfKinEmail} 
+                          onChange={e => handleDraftChange(idx, 'nextOfKinEmail', e.target.value)} 
+                          style={{
+                            ...getInputStyles(isDark),
+                            flex: 2,
+                            padding: '12px 16px',
+                            fontSize: '16px'
+                          }} 
+                        />
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <select 
+                          value={draft.nextOfKinPhoneCountry} 
+                          onChange={e => handleDraftChange(idx, 'nextOfKinPhoneCountry', e.target.value)} 
+                          style={{
+                            ...getInputStyles(isDark),
+                            width: '110px',
+                            flex: 'none',
+                            padding: '12px 16px',
+                            fontSize: '16px'
+                          }}
+                        >
+                          {COUNTRY_CODES.map(c => <option key={c.code} value={c.code}>{c.flag} {c.code}</option>)}
+                        </select>
+                        <input 
+                          placeholder="Next of Kin Phone"
+                          value={draft.nextOfKinPhone} 
+                          onChange={e => handleDraftChange(idx, 'nextOfKinPhone', e.target.value)} 
+                          style={{
+                            ...getInputStyles(isDark),
+                            flex: 1,
+                            padding: '12px 16px',
+                            fontSize: '16px'
+                          }} 
+                        />
+                      </div>
+                    </div>
+
+                    {/* Dietary */}
+                    <div style={{ marginBottom: '24px' }}>
+                      <label style={{
+                        display: 'block',
+                        fontSize: '14px',
+                        fontWeight: '600',
+                        color: isDark ? '#ffffff' : '#000000',
+                        marginBottom: '8px',
+                        letterSpacing: '0.5px'
+                      }}>
+                        DIETARY
+                      </label>
+                      <input
+                        placeholder="Add dietary request and press Enter"
+                        value={draft.dietaryInput || ''}
+                        onChange={e => handleTagInput(idx, 'dietaryInput', e.target.value)}
+                        onKeyDown={e => { 
+                          if (e.key === 'Enter' && draft.dietaryInput?.trim()) { 
+                            handleAddTag(idx, 'dietary', draft.dietaryInput.trim()); 
+                            handleTagInput(idx, 'dietaryInput', ''); 
+                            e.preventDefault(); 
+                          } 
+                        }}
+                        style={{
+                          ...getInputStyles(isDark),
+                          width: '100%',
+                          padding: '12px 16px',
+                          fontSize: '16px'
+                        }}
+                      />
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px' }}>
+                        {(draft.dietary || []).map((tag: string, tagIdx: number) => (
+                          <span key={tagIdx} style={{
+                            background: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
+                            borderRadius: '16px',
+                            padding: '6px 16px',
+                            fontSize: '14px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            color: isDark ? '#ffffff' : '#000000'
+                          }}>
+                            {tag}
+                            <button 
+                              onClick={() => handleRemoveTag(idx, 'dietary', tagIdx)} 
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: isDark ? '#a1a1aa' : '#888',
+                                fontWeight: 'bold',
+                                fontSize: '15px',
+                                cursor: 'pointer',
+                                marginLeft: '4px'
+                              }}
+                            >
+                              ×
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Medical */}
+                    <div style={{ marginBottom: '24px' }}>
+                      <label style={{
+                        display: 'block',
+                        fontSize: '14px',
+                        fontWeight: '600',
+                        color: isDark ? '#ffffff' : '#000000',
+                        marginBottom: '8px',
+                        letterSpacing: '0.5px'
+                      }}>
+                        MEDICAL
+                      </label>
+                      <input
+                        placeholder="Add medical condition and press Enter"
+                        value={draft.medicalInput || ''}
+                        onChange={e => handleTagInput(idx, 'medicalInput', e.target.value)}
+                        onKeyDown={e => { 
+                          if (e.key === 'Enter' && draft.medicalInput?.trim()) { 
+                            handleAddTag(idx, 'medical', draft.medicalInput.trim()); 
+                            handleTagInput(idx, 'medicalInput', ''); 
+                            e.preventDefault(); 
+                          } 
+                        }}
+                        style={{
+                          ...getInputStyles(isDark),
+                          width: '100%',
+                          padding: '12px 16px',
+                          fontSize: '16px'
+                        }}
+                      />
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px' }}>
+                        {(draft.medical || []).map((tag: string, tagIdx: number) => (
+                          <span key={tagIdx} style={{
+                            background: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
+                            borderRadius: '16px',
+                            padding: '6px 16px',
+                            fontSize: '14px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            color: isDark ? '#ffffff' : '#000000'
+                          }}>
+                            {tag}
+                            <button 
+                              onClick={() => handleRemoveTag(idx, 'medical', tagIdx)} 
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: isDark ? '#a1a1aa' : '#888',
+                                fontWeight: 'bold',
+                                fontSize: '15px',
+                                cursor: 'pointer',
+                                marginLeft: '4px'
+                              }}
+                            >
+                              ×
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Error Messages */}
+                    {Object.values(draft.errors || {}).length > 0 && (
+                      <div style={{
+                        background: isDark ? 'rgba(239, 68, 68, 0.1)' : '#fef2f2',
+                        border: `1px solid ${isDark ? 'rgba(239, 68, 68, 0.3)' : '#fecaca'}`,
+                        borderRadius: '8px',
+                        padding: '12px 16px',
+                        marginBottom: '24px'
+                      }}>
+                        {Object.values(draft.errors || {}).map((err: any, i: number) => (
+                          <div key={i} style={{
+                            color: isDark ? '#fca5a5' : '#b91c1c',
+                            fontSize: '14px',
+                            marginBottom: i < Object.values(draft.errors || {}).length - 1 ? '4px' : '0'
+                          }}>
+                            {err}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Module Drop Zone */}
+                    <div
+                      style={{
+                        border: `2px dashed ${isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.2)'}`,
+                        borderRadius: '8px',
+                        background: isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)',
+                        padding: '24px',
+                        minHeight: '60px',
+                        display: 'flex',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        cursor: 'copy',
+                        marginTop: '24px'
+                      }}
+                      onDrop={e => handleModuleDrop(idx, e)}
+                      onDragOver={e => e.preventDefault()}
+                    >
+                      <span style={{
+                        color: isDark ? '#a1a1aa' : '#9ca3af',
+                        fontSize: '16px',
+                        fontWeight: '500'
+                      }}>
+                        Drag modules here
+                      </span>
+                    </div>
+
+                    {/* Action Buttons */}
+                    {editGuestIdx === null && (
+                      <div style={{
+                        display: 'flex',
+                        gap: '16px',
+                        justifyContent: 'flex-end',
+                        marginTop: '24px'
+                      }}>
+                        <button
+                          style={getButtonStyles(isDark, 'primary')}
+                          onClick={() => handleSaveDraft(idx)}
+                        >
+                          Save
+                        </button>
+                        <button
+                          style={getButtonStyles(isDark, 'secondary')}
+                          onClick={() => handleRemoveDraft(idx)}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                // COLLAPSED VIEW
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '24px 32px',
+                    cursor: 'pointer'
+                  }}
+                  onClick={() => setExpandedDraftIndex(idx)}
+                >
+                  <span style={{
+                    fontSize: '20px',
+                    fontWeight: '600',
+                    color: isDark ? '#ffffff' : '#000000'
+                  }}>
+                    {[draft.prefix, draft.firstName, draft.lastName].filter(Boolean).join(' ') || 'New Guest'}
+                  </span>
+                  <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+                    <button
+                      style={getButtonStyles(isDark, 'secondary')}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setExpandedDraftIndex(idx);
+                      }}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      style={getButtonStyles(isDark, 'danger')}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowDeleteConfirm({ type: 'draft', index: idx });
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+          
+          {/* Saved Guests List */}
+          {guests.map((guest, idx) => (
+            // Guest cards will be updated next
+            <div key={idx}>Guest Card {idx}</div>
+          ))}
+          
+          {/* No Items Message */}
+          {drafts.length === 0 && guests.length === 0 && (
+            <div style={{
+              ...getGlassStyles(isDark),
+              padding: '60px 40px',
+              textAlign: 'center'
+            }}>
+              <div style={{ fontSize: '48px', marginBottom: '16px' }}>👥</div>
+              <h3 style={{
+                margin: '0 0 8px 0',
+                fontSize: '20px',
+                fontWeight: '600',
+                color: isDark ? '#ffffff' : '#000000'
+              }}>
+                No guests added yet
+              </h3>
+              <p style={{
+                margin: 0,
+                fontSize: '16px',
+                color: isDark ? '#a1a1aa' : '#71717a'
+              }}>
+                Click "Add New Guest" to get started
+              </p>
+            </div>
+          )}
+        </div>
+        
+        {/* Right Panel - Module Sidebar */}
+        <ModuleSidebar 
+          isCollapsed={isModuleSidebarCollapsed} 
+          onToggle={() => setIsModuleSidebarCollapsed(!isModuleSidebarCollapsed)}
+          isDark={isDark}
+        />
+      </div>
+
+      {/* Modals */}
+      {isCsvModalOpen && <CsvUploadModal />}
+      {scannerState.show && <PassportScannerModal />}
+      {showDeleteConfirm && <DeleteConfirmationModal />}
+    </div>
+  );
+}
+
+// Updated ModuleSidebar component
+const ModuleSidebar = ({ isCollapsed, onToggle, isDark }: { 
+  isCollapsed: boolean; 
+  onToggle: () => void;
+  isDark: boolean;
+}) => {
+  const handleDragStart = (e: React.DragEvent<HTMLDivElement>, moduleKey: string) => {
+    e.dataTransfer.setData('moduleKey', moduleKey);
+  };
+
+  return (
+    <div style={{
+      width: isCollapsed ? '60px' : '300px',
+      transition: 'width 0.3s ease',
+      ...getGlassStyles(isDark),
+      height: 'fit-content',
+      position: 'sticky',
+      top: '20px'
+    }}>
+      <div style={{
+        padding: '20px',
+        borderBottom: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center'
+      }}>
+        {!isCollapsed && (
+          <h3 style={{
+            margin: 0,
+            fontSize: '18px',
+            fontWeight: '600',
+            color: isDark ? '#ffffff' : '#000000'
+          }}>
+            Guest Modules
+          </h3>
+        )}
+        
+        <button
+          onClick={onToggle}
+          style={{
+            ...getButtonStyles(isDark, 'secondary'),
+            padding: '8px 12px',
+            fontSize: '14px'
+          }}
+        >
+          {isCollapsed ? '→' : '←'}
+        </button>
+      </div>
+
+      {!isCollapsed && (
+        <div style={{ padding: '20px' }}>
+          <p style={{
+            margin: '0 0 16px 0',
+            fontSize: '14px',
+            color: isDark ? '#a1a1aa' : '#71717a'
+          }}>
+            Drag modules onto guest cards to add functionality
+          </p>
+          
+          {GUEST_MODULES.map((module) => (
+            <div
+              key={module.key}
+              draggable
+              onDragStart={(e) => handleDragStart(e, module.key)}
+              style={{
+                padding: '12px 16px',
+                marginBottom: '8px',
+                background: isDark 
+                  ? 'rgba(255, 255, 255, 0.05)' 
+                  : 'rgba(0, 0, 0, 0.03)',
+                border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
+                borderRadius: '8px',
+                cursor: 'grab',
+                transition: 'all 0.2s ease',
+                color: isDark ? '#ffffff' : '#000000',
+                fontSize: '14px',
+                fontWeight: '500'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = isDark 
+                  ? 'rgba(255, 255, 255, 0.1)' 
+                  : 'rgba(0, 0, 0, 0.05)';
+                e.currentTarget.style.transform = 'translateY(-2px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = isDark 
+                  ? 'rgba(255, 255, 255, 0.05)' 
+                  : 'rgba(0, 0, 0, 0.03)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
+            >
+              {module.label}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// CSV Upload Modal Component
+const CsvUploadModal = () => {
+  const { theme } = useContext(ThemeContext);
+  const isDark = theme === 'dark';
+
+  return (
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      width: '100vw',
+      height: '100vh',
+      background: isDark ? 'rgba(0, 0, 0, 0.8)' : 'rgba(0, 0, 0, 0.6)',
+      zIndex: 2000,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backdropFilter: 'blur(8px)'
+    }}>
+      <div style={{
+        ...getGlassStyles(isDark),
+        borderRadius: '16px',
+        width: 'clamp(400px, 50vw, 600px)',
+        maxHeight: '80vh',
+        overflow: 'hidden'
+      }}>
+        <div style={{
+          padding: '24px 32px',
+          borderBottom: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h2 style={{
+              margin: 0,
+              fontSize: '22px',
+              fontWeight: '600',
+              color: isDark ? '#ffffff' : '#000000'
+            }}>
+              Upload Guest CSV
+            </h2>
+            <button
+              onClick={() => setIsCsvModalOpen(false)}
+              style={{
+                ...getButtonStyles(isDark, 'secondary'),
+                padding: '8px',
+                borderRadius: '50%',
+                width: '36px',
+                height: '36px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              ×
+            </button>
+          </div>
+        </div>
+
+        <div style={{ padding: '32px' }}>
+          <div style={{
+            border: `2px dashed ${isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.2)'}`,
+            borderRadius: '12px',
+            padding: '48px',
+            textAlign: 'center',
+            background: isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)',
+            marginBottom: '24px'
+          }}>
+            <input
+              type="file"
+              id="csv-upload"
+              accept=".csv"
+              style={{ display: 'none' }}
+              onChange={handleCsvFileChange}
+            />
+            <label htmlFor="csv-upload" style={{
+              cursor: 'pointer',
+              fontSize: '16px',
+              color: isDark ? '#3b82f6' : '#2563eb',
+              fontWeight: '500'
+            }}>
+              Choose CSV file
+            </label>
+            <span style={{
+              color: isDark ? '#a1a1aa' : '#6b7280',
+              margin: '0 8px'
+            }}>
+              or drag and drop
+            </span>
+          </div>
+
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '24px'
+          }}>
+            <span style={{
+              fontSize: '14px',
+              color: isDark ? '#a1a1aa' : '#71717a'
+            }}>
+              Need a template?
+            </span>
+            <button
+              onClick={downloadCsvTemplate}
+              style={{
+                ...getButtonStyles(isDark, 'secondary'),
+                fontSize: '14px',
+                padding: '8px 16px'
+              }}
+            >
+              Download Template
+            </button>
+          </div>
+
+          <div style={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            gap: '16px'
+          }}>
+            <button
+              onClick={() => setIsCsvModalOpen(false)}
+              style={getButtonStyles(isDark, 'secondary')}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleCsvSubmit}
+              disabled={!csvFile}
+              style={{
+                ...getButtonStyles(isDark, 'primary'),
+                opacity: !csvFile ? 0.5 : 1,
+                cursor: !csvFile ? 'not-allowed' : 'pointer'
+              }}
+            >
+              Upload & Process
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Passport Scanner Modal Component
+const PassportScannerModal = () => {
+  const { theme } = useContext(ThemeContext);
+  const isDark = theme === 'dark';
+
+  return (
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      width: '100vw',
+      height: '100vh',
+      background: isDark ? 'rgba(0, 0, 0, 0.8)' : 'rgba(0, 0, 0, 0.6)',
+      zIndex: 1000,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backdropFilter: 'blur(8px)'
+    }}>
+      <div style={{
+        ...getGlassStyles(isDark),
+        borderRadius: '16px',
+        width: 'clamp(500px, 60vw, 700px)',
+        maxHeight: '80vh',
+        overflow: 'hidden'
+      }}>
+        <div style={{
+          padding: '24px 32px',
+          borderBottom: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h2 style={{
+              margin: 0,
+              fontSize: '22px',
+              fontWeight: '600',
+              color: isDark ? '#ffffff' : '#000000'
+            }}>
+              Passport Scanner
+            </h2>
+          </div>
+        </div>
+
+        <div style={{ padding: '32px' }}>
+          <div style={{
+            display: 'flex',
+            gap: '4px',
+            background: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)',
+            borderRadius: '8px',
+            padding: '4px',
+            marginBottom: '24px'
+          }}>
+            <button
+              onClick={() => {
+                setScannerTab('upload');
+                handleStopCamera();
+                setScannerState(s => ({ ...s, imageUrl: null }));
+              }}
+              style={{
+                flex: 1,
+                padding: '10px 0',
+                border: 'none',
+                borderRadius: '6px',
+                background: scannerTab === 'upload' 
+                  ? (isDark ? 'rgba(255, 255, 255, 0.1)' : '#ffffff') 
+                  : 'transparent',
+                color: scannerTab === 'upload' 
+                  ? (isDark ? '#ffffff' : '#000000') 
+                  : (isDark ? '#a1a1aa' : '#666'),
+                fontSize: '15px',
+                fontWeight: '500',
+                cursor: 'pointer'
+              }}
+            >
+              Upload File
+            </button>
+            <button
+              onClick={handleStartCamera}
+              style={{
+                flex: 1,
+                padding: '10px 0',
+                border: 'none',
+                borderRadius: '6px',
+                background: scannerTab === 'camera' 
+                  ? (isDark ? 'rgba(255, 255, 255, 0.1)' : '#ffffff') 
+                  : 'transparent',
+                color: scannerTab === 'camera' 
+                  ? (isDark ? '#ffffff' : '#000000') 
+                  : (isDark ? '#a1a1aa' : '#666'),
+                fontSize: '15px',
+                fontWeight: '500',
+                cursor: 'pointer'
+              }}
+            >
+              Use Camera
+            </button>
+          </div>
+
+          <div>
+            {scannerTab === 'camera' ? (
+              <div style={{ textAlign: 'center' }}>
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  style={{
+                    width: '100%',
+                    borderRadius: '8px',
+                    border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : '#ddd'}`
+                  }}
+                />
+                <canvas ref={canvasRef} style={{ display: 'none' }} />
+              </div>
+            ) : (
+              scannerState.imageUrl ? (
+                <div style={{ marginBottom: '24px', textAlign: 'center' }}>
+                  <img
+                    src={scannerState.imageUrl}
+                    style={{
+                      maxWidth: '100%',
+                      maxHeight: '300px',
+                      borderRadius: '8px',
+                      border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : '#ddd'}`
+                    }}
+                    alt="Passport preview"
+                  />
+                </div>
+              ) : (
+                <div
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (e.dataTransfer.files[0]) {
+                      setScannerState(s => ({ ...s, imageUrl: URL.createObjectURL(e.dataTransfer.files[0]) }));
+                    }
+                  }}
+                  onDragOver={(e) => e.preventDefault()}
+                  style={{
+                    border: `2px dashed ${isDark ? 'rgba(255, 255, 255, 0.2)' : '#d1d5db'}`,
+                    borderRadius: '12px',
+                    padding: '48px',
+                    textAlign: 'center',
+                    background: isDark ? 'rgba(255, 255, 255, 0.02)' : '#f9fafb',
+                    marginBottom: '24px'
+                  }}
+                >
+                  <input
+                    type="file"
+                    id="passport-upload"
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={e => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        setScannerState(s => ({ ...s, imageUrl: URL.createObjectURL(file) }));
+                      }
+                    }}
+                  />
+                  <label htmlFor="passport-upload" style={{
+                    cursor: 'pointer',
+                    fontSize: '16px',
+                    color: isDark ? '#3b82f6' : '#2563eb',
+                    fontWeight: '500'
+                  }}>
+                    Choose a file
+                  </label>
+                  <span style={{
+                    color: isDark ? '#a1a1aa' : '#6b7280',
+                    margin: '0 8px'
+                  }}>
+                    or drag and drop
+                  </span>
+                </div>
+              )
+            )}
+          </div>
+        </div>
+
+        {!scannerState.processing && (
+          <div style={{
+            padding: '0 32px 32px 32px',
+            display: 'flex',
+            justifyContent: 'flex-end',
+            gap: '16px'
+          }}>
+            <button
+              onClick={handleModalClose}
+              style={getButtonStyles(isDark, 'secondary')}
+            >
+              Cancel
+            </button>
+            {scannerTab === 'camera' ? (
+              <button
+                onClick={handleCapture}
+                style={getButtonStyles(isDark, 'primary')}
+              >
+                Capture Image
+              </button>
+            ) : (
+              <button
+                onClick={() => processImageWithOCR(scannerState.imageUrl!, scannerState.draftIndex!)}
+                disabled={!scannerState.imageUrl}
+                style={{
+                  ...getButtonStyles(isDark, 'primary'),
+                  opacity: !scannerState.imageUrl ? 0.5 : 1,
+                  cursor: !scannerState.imageUrl ? 'not-allowed' : 'pointer'
+                }}
+              >
+                Process Image
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Delete Confirmation Modal Component
+const DeleteConfirmationModal = () => {
+  const { theme } = useContext(ThemeContext);
+  const isDark = theme === 'dark';
+
+  return (
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      width: '100vw',
+      height: '100vh',
+      background: isDark ? 'rgba(0, 0, 0, 0.8)' : 'rgba(0, 0, 0, 0.6)',
+      zIndex: 2000,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backdropFilter: 'blur(8px)'
+    }}>
+      <div style={{
+        ...getGlassStyles(isDark),
+        borderRadius: '16px',
+        minWidth: '400px',
+        textAlign: 'center'
+      }}>
+        <div style={{ padding: '40px 48px' }}>
+          <h2 style={{
+            marginTop: 0,
+            marginBottom: '16px',
+            fontSize: '24px',
+            fontWeight: '600',
+            color: isDark ? '#ffffff' : '#000000'
+          }}>
+            Are you sure?
+          </h2>
+          <p style={{
+            color: isDark ? '#a1a1aa' : '#666',
+            fontSize: '16px',
+            marginBottom: '32px',
+            lineHeight: 1.6
+          }}>
+            {showDeleteConfirm?.type === 'group'
+              ? "This will permanently delete the entire group and all its members. This action cannot be undone."
+              : "This will permanently delete this guest. This action cannot be undone."}
+          </p>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'center',
+            gap: '16px'
+          }}>
+            <button
+              style={getButtonStyles(isDark, 'secondary')}
+              onClick={() => setShowDeleteConfirm(null)}
+            >
+              No, Cancel
+            </button>
+            <button
+              style={getButtonStyles(isDark, 'danger')}
+              onClick={handleConfirmDelete}
+            >
+              Yes, Delete
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};

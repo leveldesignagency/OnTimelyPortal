@@ -140,7 +140,7 @@ const GUEST_MODULES = [
   { key: 'flightNumber', label: 'Flight Tracker', type: 'text', placeholder: 'e.g. BA2490', description: 'Auto-detects flight details' },
   { key: 'seatNumber', label: 'Seat Number', type: 'text', placeholder: 'e.g. 14A' },
   { key: 'eventReference', label: 'Event Reference', type: 'text', placeholder: 'Enter reference number' },
-  { key: 'hotelReservation', label: 'Hotel Reservation', type: 'text', placeholder: 'Enter confirmation number', description: 'Auto-detects hotel details' },
+  { key: 'hotelTracker', label: 'Hotel Tracker', type: 'group' },
   { key: 'trainBookingNumber', label: 'Train Booking Number', type: 'text', placeholder: 'Enter booking reference' },
   { key: 'coachBookingNumber', label: 'Coach Booking Number', type: 'text', placeholder: 'Enter booking reference' },
   { key: 'idUpload', label: 'ID Upload', type: 'file', placeholder: 'Upload ID (PNG, JPG, PDF)' },

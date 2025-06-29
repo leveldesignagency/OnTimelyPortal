@@ -1,0 +1,102 @@
+2025-06-26T00:00:29.547311Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/.env.example")}
+2025-06-26T00:00:29.547340Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-06-26T00:00:29.647893Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf(".turbo/daemon/249c21a426315f5a-turbo.log.2025-06-25"), AnchoredSystemPathBuf(".turbo/daemon/249c21a426315f5a-turbo.log.2025-06-26")}
+2025-06-26T00:00:29.647901Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2025-06-26T00:00:54.549298Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CalendarPage.tsx")}
+2025-06-26T00:00:54.549308Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-06-26T00:00:54.591898Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-06-26T00:01:00.747668Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CalendarPage.tsx")}
+2025-06-26T00:01:00.747684Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-06-26T00:01:01.347742Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CalendarPage.tsx")}
+2025-06-26T00:01:01.347751Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-06-26T00:01:01.347788Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-06-26T00:04:30.747337Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/vite.config.ts")}
+2025-06-26T00:04:30.747355Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-06-26T00:04:31.148171Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/vite.config.ts")}
+2025-06-26T00:04:31.148180Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-06-26T00:04:31.160015Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-06-26T00:04:41.547933Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/vite-env.d.ts")}
+2025-06-26T00:04:41.547942Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-06-26T00:04:51.247597Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/.env.example")}
+2025-06-26T00:04:51.247615Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-06-26T00:04:51.247669Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-06-26T00:04:52.148194Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/vite-env.d.ts")}
+2025-06-26T00:04:52.148203Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-06-26T00:04:52.346906Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/vite-env.d.ts")}
+2025-06-26T00:04:52.346915Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-06-26T00:04:52.346960Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-06-26T00:05:27.846246Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/.env.example")}
+2025-06-26T00:05:27.846255Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-06-26T00:05:27.886957Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-06-26T00:05:42.546758Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/.env.example")}
+2025-06-26T00:05:42.546772Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-06-26T00:07:43.947280Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/services/calendarConnectionService.ts")}
+2025-06-26T00:07:43.947300Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-06-26T00:07:43.980326Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-06-26T00:07:45.047734Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/services/calendarConnectionService.ts")}
+2025-06-26T00:07:45.047743Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-06-26T00:07:45.047789Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-06-26T00:08:05.045903Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/services/calendarConnectionService.ts")}
+2025-06-26T00:08:05.045911Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-06-26T00:08:05.076755Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-06-26T00:08:24.747790Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/services/calendarConnectionService.ts")}
+2025-06-26T00:08:24.747800Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-06-26T00:08:25.247250Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/services/calendarConnectionService.ts")}
+2025-06-26T00:08:25.247260Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-06-26T00:08:25.247304Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-06-26T00:08:41.146478Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/services/calendarConnectionService.ts")}
+2025-06-26T00:08:41.146486Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-06-26T00:08:41.146529Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-06-26T00:08:47.646956Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/services/calendarConnectionService.ts")}
+2025-06-26T00:08:47.646964Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-06-26T00:08:48.847764Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/services/calendarConnectionService.ts")}
+2025-06-26T00:08:48.847772Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-06-26T00:08:48.854687Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-06-26T00:09:00.847448Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CalendarPage.tsx")}
+2025-06-26T00:09:00.847466Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-06-26T00:09:00.847583Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-06-26T00:09:08.047234Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CalendarPage.tsx")}
+2025-06-26T00:09:08.047254Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-06-26T00:09:08.047313Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-06-26T00:09:08.146936Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CalendarPage.tsx")}
+2025-06-26T00:09:08.146944Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-06-26T00:09:08.146976Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-06-26T00:09:34.346991Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CalendarPage.tsx")}
+2025-06-26T00:09:34.347007Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-06-26T00:09:34.388414Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-06-26T00:09:41.646875Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CalendarPage.tsx")}
+2025-06-26T00:09:41.646897Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-06-26T00:11:59.546331Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/services/calendarConnectionService.ts")}
+2025-06-26T00:11:59.546350Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-06-26T00:11:59.591427Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-06-26T00:12:00.647004Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/services/calendarConnectionService.ts")}
+2025-06-26T00:12:00.647012Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-06-26T00:12:00.647060Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-06-26T00:12:12.346146Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/services/calendarConnectionService.ts")}
+2025-06-26T00:12:12.346155Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-06-26T00:12:12.366235Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-06-26T00:12:19.447276Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/services/calendarConnectionService.ts")}
+2025-06-26T00:12:19.447284Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-06-26T00:12:20.446507Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/services/calendarConnectionService.ts")}
+2025-06-26T00:12:20.446515Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-06-26T00:12:20.446560Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-06-26T00:12:41.746223Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/services/calendarConnectionService.ts")}
+2025-06-26T00:12:41.746235Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-06-26T00:12:41.786974Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-06-26T00:12:49.146313Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/services/calendarConnectionService.ts")}
+2025-06-26T00:12:49.146328Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-06-26T00:12:49.747373Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/services/calendarConnectionService.ts")}
+2025-06-26T00:12:49.747381Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-06-26T00:12:49.747434Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-06-26T00:24:50.667126Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/vite.config.ts")}
+2025-06-26T00:24:50.667179Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-06-26T00:24:50.765403Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/vite.config.ts")}
+2025-06-26T00:24:50.765412Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-06-26T00:24:50.775667Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-06-26T00:34:02.368482Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/services/googleCalendar.ts")}
+2025-06-26T00:34:02.368505Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-06-26T00:39:06.770142Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/services/googleCalendar.ts")}
+2025-06-26T00:39:06.770161Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-06-26T00:39:06.784161Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-06-26T00:39:12.970292Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/services/googleCalendar.ts")}
+2025-06-26T00:39:12.970302Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))

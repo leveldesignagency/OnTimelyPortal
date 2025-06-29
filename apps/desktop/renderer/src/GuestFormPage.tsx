@@ -10,7 +10,7 @@ const GUEST_MODULES_CONFIG = [
   { key: 'flightNumber', label: 'Flight Tracker', type: 'text', placeholder: 'e.g. BA2490' },
   { key: 'seatNumber', label: 'Seat Number', type: 'text', placeholder: 'e.g. 14A' },
   { key: 'eventReference', label: 'Event Reference', type: 'text', placeholder: 'Enter reference number' },
-  { key: 'hotelReservation', label: 'Hotel Reservation', type: 'text', placeholder: 'Enter confirmation number' },
+  { key: 'hotelTracker', label: 'Hotel Tracker', type: 'group' },
   { key: 'trainBookingNumber', label: 'Train Booking Number', type: 'text', placeholder: 'Enter booking reference' },
   { key: 'coachBookingNumber', label: 'Coach Booking Number', type: 'text', placeholder: 'Enter booking reference' },
   { key: 'idUpload', label: 'ID Upload', type: 'file', placeholder: 'Upload ID (PNG, JPG, PDF)' },
@@ -161,6 +161,32 @@ export default function GuestFormPage() {
       color: isDark ? '#ffffff' : '#000'
     };
 
+    if (key === 'hotelTracker') {
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', marginBottom: 20 }}>
+          <label style={{ marginBottom: 8, fontSize: 14, fontWeight: 500, color: isDark ? '#ffffff' : '#333' }}>Hotel Tracker</label>
+          <input
+            type="text"
+            id="hotelAddress"
+            name="hotelAddress"
+            value={guestData['hotelAddress'] || ''}
+            onChange={handleInputChange}
+            placeholder="Enter hotel address"
+            style={{ padding: '12px 16px', border: isDark ? '2px solid #555' : '2px solid #ccc', borderRadius: 8, fontSize: 16, outline: 'none', background: isDark ? '#2a2a2a' : '#fff', color: isDark ? '#ffffff' : '#000', marginBottom: 12 }}
+          />
+          <input
+            type="text"
+            id="hotelReservationNumber"
+            name="hotelReservationNumber"
+            value={guestData['hotelReservationNumber'] || ''}
+            onChange={handleInputChange}
+            placeholder="Enter reservation number"
+            style={{ padding: '12px 16px', border: isDark ? '2px solid #555' : '2px solid #ccc', borderRadius: 8, fontSize: 16, outline: 'none', background: isDark ? '#2a2a2a' : '#fff', color: isDark ? '#ffffff' : '#000' }}
+          />
+        </div>
+      );
+    }
+
     if (moduleConfig.type === 'file') {
       return (
         <div style={fieldStyle}>
@@ -193,6 +219,11 @@ export default function GuestFormPage() {
     );
   };
 
+  // Define Stage 1 modules
+  const stage1Modules = ['flightNumber', 'hotelTracker', 'trainBookingNumber', 'coachBookingNumber'];
+  const otherModules = formConfig?.modules.filter(m => !stage1Modules.includes(m)) || [];
+  const activeStage1Modules = formConfig?.modules.filter(m => stage1Modules.includes(m)) || [];
+
   return (
     <div style={{ background: isDark ? '#121212' : '#f8f9fa', minHeight: '100vh', padding: '40px 20px' }}>
       <div style={{ 
@@ -207,8 +238,61 @@ export default function GuestFormPage() {
         <h1 style={{ textAlign: 'center', margin: '0 0 16px', fontSize: 28, color: isDark ? '#ffffff' : '#000' }}>{eventName}</h1>
         <h2 style={{ textAlign: 'center', margin: '0 0 32px', fontSize: 20, color: isDark ? '#aaa' : '#555' }}>Guest Information Form</h2>
         <form onSubmit={handleSubmit}>
-          {formConfig.fields.map(renderField)}
-          {formConfig.modules.length > 0 && (
+          {formConfig?.fields.map(renderField)}
+          
+          {/* Stage 1 Travel Package */}
+          {activeStage1Modules.length > 0 && (
+            <div style={{ marginTop: 32 }}>
+              <div style={{ 
+                borderTop: isDark ? '2px solid #444' : '2px solid #eee', 
+                paddingTop: 24, 
+                marginBottom: 24 
+              }}>
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: 12, 
+                  marginBottom: 16 
+                }}>
+                  <h3 style={{ 
+                    margin: 0, 
+                    fontSize: 22,
+                    color: isDark ? '#ffffff' : '#000'
+                  }}>Stage 1: Travel Package</h3>
+                  <div style={{
+                    background: isDark ? '#10b981' + '20' : '#059669' + '20',
+                    color: isDark ? '#10b981' : '#059669',
+                    padding: '4px 8px',
+                    borderRadius: 6,
+                    fontSize: 12,
+                    fontWeight: 500,
+                    border: `1px solid ${isDark ? '#10b981' + '40' : '#059669' + '40'}`
+                  }}>
+                    Essential Travel Info
+                  </div>
+                </div>
+                <p style={{ 
+                  color: isDark ? '#aaa' : '#666', 
+                  fontSize: 14, 
+                  margin: '0 0 20px',
+                  lineHeight: 1.4 
+                }}>
+                  Complete your travel arrangements including flights, accommodation, and transfers.
+                </p>
+                <div style={{
+                  background: isDark ? '#1a1a1a' : '#f8f9fa',
+                  border: isDark ? '1px solid #333' : '1px solid #e5e7eb',
+                  borderRadius: 12,
+                  padding: '20px'
+                }}>
+                  {activeStage1Modules.map(renderModule)}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Other Modules */}
+          {otherModules.length > 0 && (
             <div style={{ marginTop: 32 }}>
               <h3 style={{ 
                 borderTop: isDark ? '2px solid #444' : '2px solid #eee', 
@@ -217,9 +301,10 @@ export default function GuestFormPage() {
                 fontSize: 22,
                 color: isDark ? '#ffffff' : '#000'
               }}>Additional Information</h3>
-              {formConfig.modules.map(renderModule)}
+              {otherModules.map(renderModule)}
             </div>
           )}
+          
           <button type="submit" style={{ 
             width: '100%', 
             padding: 16, 

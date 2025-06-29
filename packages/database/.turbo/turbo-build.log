@@ -2,16 +2,4 @@
 > @timely/database@0.0.1 build
 > tsc
 
-[1G[0K[91merror[0m[90m TS18003: [0mNo inputs were found in config file '/Users/charlesmorgan/Documents/Timely/packages/database/tsconfig.json'. Specified 'include' paths were '["src/**/*"]' and 'exclude' paths were '["node_modules","dist"]'.
-
-
-Found 1 error.
-
-[1G[0K⠙[1G[0K[1mnpm[22m [31merror[39m Lifecycle script `build` failed with error:
-[1G[0K⠙[1G[0K[1mnpm[22m [31merror[39m [94mcode[39m [33m2[39m
-[1G[0K⠙[1G[0K[1mnpm[22m [31merror[39m [94mpath[39m /Users/charlesmorgan/Documents/Timely/packages/database
-[1G[0K⠙[1G[0K[1mnpm[22m [31merror[39m [94mworkspace[39m @timely/database@0.0.1
-[1G[0K⠙[1G[0K[1mnpm[22m [31merror[39m [94mlocation[39m /Users/charlesmorgan/Documents/Timely/packages/database
-[1G[0K⠙[1G[0K[1mnpm[22m [31merror[39m command failed
-[1G[0K⠙[1G[0K[1mnpm[22m [31merror[39m [94mcommand[39m sh -c tsc
-[1G[0K⠙[1G[0K
+error TS18003: No inputs were found in config file '/Users/charlesmorgan/Documents/Timely/packages/database/tsconfig.json'. Specified 'include' paths were '["src/**/*"]' and 'exclude' paths were '["node_modules","dist"]'.

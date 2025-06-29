@@ -15,7 +15,6 @@ import {
   Chat as SupabaseChat,
   Message as SupabaseMessage,
   getCompanyTeams,
-  searchTeams,
   createTeamChat,
   Team as SupabaseTeam,
   removeUserFromGroup
@@ -2114,7 +2113,7 @@ const MessageNotificationToast = ({ notification, onRemove, onMarkRead, onOpenCh
         borderRadius: '8px',
         padding: '10px 12px',
         marginTop: '8px',
-        borderLeft: `3px solid #228B22`
+        borderLeft: `3px solid ${isDark ? '#ffffff' : '#000000'}` // White for dark mode, black for light mode
       }}>
         <p style={{
           margin: 0,

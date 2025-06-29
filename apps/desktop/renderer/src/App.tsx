@@ -19,6 +19,9 @@ import ProtectedRoute from './components/ProtectedRoute';
 import { ThemeProvider, ThemeContext } from './ThemeContext';
 import { getCurrentUser } from './lib/auth';
 import { getEvents, createEvent, Event } from './lib/supabase';
+import LinkItinerariesPage from './pages/LinkItinerariesPage';
+import AssignOverviewPage from './pages/AssignOverviewPage';
+import EventPortalManagementPage from './pages/EventPortalManagementPage';
 
 // Update EventType to match Supabase Event type
 export type EventType = Event;
@@ -211,10 +214,12 @@ const AppContent = () => {
     background: 'none',
     transition: 'margin-left 0.3s ease',
     marginLeft: (isTeamsPage && !isLoginPage) ? '50px' : '0',
+    height: '100vh',
+    overflowY: 'auto',
   }
 
   return (
-    <div style={{ display: 'flex', position: 'relative' }}>
+    <div style={{ display: 'flex', position: 'relative', height: '100vh', overflow: 'hidden' }}>
       {!isLoginPage && (
         <Sidebar 
           events={events} 
@@ -247,6 +252,9 @@ const AppContent = () => {
           </Route>
           <Route path="/guest-form/:eventId" element={<ProtectedRoute><GuestFormPage /></ProtectedRoute>} />
           <Route path="/guest-form/:eventId/edit/:guestIndex" element={<ProtectedRoute><GuestFormPage /></ProtectedRoute>} />
+          <Route path="/link-itineraries/:id" element={<LinkItinerariesPage />} />
+          <Route path="/link-itineraries/:id/assign-overview" element={<AssignOverviewPage />} />
+          <Route path="/event-portal-management" element={<ProtectedRoute><EventPortalManagementPage /></ProtectedRoute>} />
         </Routes>
       </main>
     </div>

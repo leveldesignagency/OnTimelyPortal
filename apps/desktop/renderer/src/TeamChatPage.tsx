@@ -188,13 +188,12 @@ const getTeamInitials = (team: Team): string => {
 // Helper function to convert Supabase user to local User type
 const convertSupabaseUser = (supabaseUser: AuthUser): User => ({
   id: supabaseUser.id,
-  name: supabaseUser.name,
-  avatar: supabaseUser.avatar || supabaseUser.name.charAt(0).toUpperCase(),
-  status: supabaseUser.status as UserStatus,
-  lastSeen: supabaseUser.last_seen,
+  name: supabaseUser.name || 'Unknown User',
+  avatar: getUserInitials(supabaseUser.name || 'Unknown User'),
+  status: 'online' as UserStatus,
   email: supabaseUser.email,
-  role: (supabaseUser.role as 'admin' | 'member') || 'member',
-  company_id: supabaseUser.company_id
+  company_id: supabaseUser.company_id,
+  role: supabaseUser.role as 'admin' | 'member'
 });
 
 // Helper function to convert Supabase message to local Message type
@@ -220,35 +219,68 @@ const convertSupabaseMessage = (supabaseMessage: SupabaseMessage): Message => ({
 });
 
 // Helper function to convert Supabase chat to local Chat type
-const convertSupabaseChat = (supabaseChat: SupabaseChat): Chat => ({
-  id: supabaseChat.id,
-  name: supabaseChat.name || supabaseChat.participants?.map(p => p.name).join(', ') || 'Unknown',
-  type: supabaseChat.type as ChatType,
-  lastMessage: supabaseChat.last_message?.content || 'No messages yet',
-  timestamp: new Date(supabaseChat.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-  unread: supabaseChat.unread_count || 0,
-  avatar: supabaseChat.avatar || (supabaseChat.name?.charAt(0) || 'C'),
-  messages: [],
-  participants: supabaseChat.participants?.map((participant) => ({
-    ...convertSupabaseUser(participant),
-    // Assign admin role to the group creator, member role to others
-    role: participant.id === supabaseChat.created_by ? 'admin' : 'member'
-  })) || [],
-  created_by: supabaseChat.created_by,
-  isPinned: false,
-  isMuted: false,
-  isArchived: supabaseChat.is_archived
-});
+const convertSupabaseChat = (supabaseChat: SupabaseChat): Chat => {
+  // For direct chats, show the other participant's name
+  let chatName = supabaseChat.name || 'Unknown';
+  
+  if (supabaseChat.type === 'direct' && supabaseChat.participants && CURRENT_USER) {
+    // Find the other participant (not the current user)
+    const otherParticipant = supabaseChat.participants.find(p => p.id !== CURRENT_USER!.id);
+    if (otherParticipant) {
+      chatName = otherParticipant.name;
+    }
+  } else if (supabaseChat.type === 'group' && !supabaseChat.name && supabaseChat.participants) {
+    // For groups without a name, use participant names
+    chatName = supabaseChat.participants.map(p => p.name).join(', ');
+  }
+
+  return {
+    id: supabaseChat.id,
+    name: chatName,
+    type: supabaseChat.type as ChatType,
+    lastMessage: supabaseChat.last_message?.content || 'No messages yet',
+    timestamp: new Date(supabaseChat.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    unread: supabaseChat.unread_count || 0,
+    avatar: supabaseChat.avatar || (chatName?.charAt(0) || 'C'),
+      messages: [],
+    participants: supabaseChat.participants?.map((participant) => ({
+      ...convertSupabaseUser(participant),
+      // Assign admin role to the group creator, member role to others
+      role: participant.id === supabaseChat.created_by ? 'admin' : 'member'
+    })) || [],
+    created_by: supabaseChat.created_by,
+    isPinned: false,
+    isMuted: false,
+    isArchived: supabaseChat.is_archived
+  };
+};
+
+// Helper function to get the display name for a chat
+const getChatDisplayName = (chat: Chat): string => {
+  if (chat.type === 'direct' && chat.participants && CURRENT_USER) {
+    // For direct chats, show the other participant's name from actual user data
+    const otherParticipant = chat.participants.find(p => p.id !== CURRENT_USER!.id);
+    return otherParticipant?.name || 'Unknown User';
+  }
+  // For groups and other chat types, use the stored name
+  return chat.name;
+};
 
 // Mock data with enhanced features
 const MOCK_USERS: User[] = [
-  { id: 'user_1', name: 'Leon JENKINGS!', avatar: 'LJ', status: 'online', email: 'leon@example.com', company_id: 'company_1', role: 'admin' },
-  { id: 'user_2', name: 'Luis', avatar: 'L', status: 'away', email: 'luis@example.com', company_id: 'company_1', role: 'member' },
-  { id: 'user_3', name: 'Vanilla Gorilla', avatar: 'VG', status: 'offline', lastSeen: '2 hours ago', company_id: 'company_1', role: 'member' },
-  { id: 'user_4', name: 'Alice Johnson', avatar: 'AJ', status: 'online', email: 'alice@example.com', company_id: 'company_1', role: 'member' },
-  { id: 'user_5', name: 'Bob Smith', avatar: 'BS', status: 'busy', email: 'bob@example.com', company_id: 'company_1', role: 'member' },
-  { id: 'user_6', name: 'Charlie Brown', avatar: 'CB', status: 'online', email: 'charlie@example.com', company_id: 'company_1', role: 'member' },
+  // Remove hardcoded mock users - will use real data from database
 ];
+
+// Helper function to generate avatar initials from user name
+const getUserInitials = (name: string): string => {
+  if (!name) return 'U';
+  const nameParts = name.trim().split(' ');
+  if (nameParts.length === 1) {
+    return nameParts[0].charAt(0).toUpperCase();
+  }
+  // Use first letter of first name and first letter of last name
+  return (nameParts[0].charAt(0) + nameParts[nameParts.length - 1].charAt(0)).toUpperCase();
+};
 
 // Enhanced components
 const UserProfileCard: React.FC<{ user: User; isDark: boolean; notificationCount?: number }> = ({ user, isDark, notificationCount = 0 }) => {
@@ -408,7 +440,10 @@ const ChatListItem = ({ chat, active, onClick, isDark }: { chat: Chat, active: b
             : '0 2px 8px rgba(0,0,0,0.1)'
         }}
       >
-        {chat.avatar && chat.avatar.length <= 3 ? chat.avatar : chat.name.charAt(0).toUpperCase()}
+        {chat.type === 'direct' && chat.participants && CURRENT_USER
+          ? getUserInitials(getChatDisplayName(chat))
+          : (chat.avatar && chat.avatar.length <= 3 ? chat.avatar : getUserInitials(getChatDisplayName(chat)))
+        }
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{
@@ -427,7 +462,7 @@ const ChatListItem = ({ chat, active, onClick, isDark }: { chat: Chat, active: b
               whiteSpace: 'nowrap',
               letterSpacing: '0.3px'
             }}>
-              {chat.name}
+              {getChatDisplayName(chat)}
             </span>
             {chat.isPinned && (
               <span style={{ fontSize: '12px', color: colors.accent }}>📌</span>
@@ -618,7 +653,7 @@ const ChatHeader = ({ chat, isDark, onToggleRightPanel }: {
             fontWeight: '600',
             boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.1)'
           }}>
-            {chat.avatar && chat.avatar.length <= 3 ? chat.avatar : chat.name.charAt(0).toUpperCase()}
+            {chat.avatar && chat.avatar.length <= 3 ? chat.avatar : getChatDisplayName(chat).charAt(0).toUpperCase()}
           </div>
           <div>
             <div style={{
@@ -626,7 +661,7 @@ const ChatHeader = ({ chat, isDark, onToggleRightPanel }: {
               fontSize: '16px',
               color: isDark ? '#ffffff' : '#1a1a1a'
             }}>
-              {chat.name}
+              {getChatDisplayName(chat)}
             </div>
             <div style={{
               fontSize: '13px',
@@ -763,7 +798,7 @@ const FilePreview = ({ message, isDark }: { message: Message, isDark: boolean })
         if (isPDF) {
           // Open PDF in new window
           window.open(message.fileUrl, '_blank');
-        } else {
+    } else {
           // Download other files
           const link = document.createElement('a');
           link.href = message.fileUrl;
@@ -909,7 +944,7 @@ const MessageBubble = ({ message, sent, isDark, onReact, onReply }: {
         )}
         
         <div
-          style={{
+            style={{
             background: sent ? colors.messageBubbleSent : colors.messageBubble,
             color: sent ? (isDark ? colors.bg : '#ffffff') : colors.text,
             padding: '12px 16px',
@@ -1076,9 +1111,9 @@ const MessageBubble = ({ message, sent, isDark, onReact, onReply }: {
           borderRadius: '50%',
           background: colors.accent,
           color: isDark ? '#000000' : '#ffffff',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
           fontSize: '12px',
           fontWeight: '600',
           flexShrink: 0,
@@ -1183,7 +1218,7 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
           >
             ✕
           </button>
-        </div>
+          </div>
       )}
 
       {/* Emoji Picker */}
@@ -1288,11 +1323,11 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
           pointerEvents: 'none'
         }}>
           {/* Emoji Button */}
-          <button
+        <button
             onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-            style={{
+          style={{
               background: 'none',
-              border: 'none',
+            border: 'none',
               cursor: 'pointer',
               padding: '0',
               display: 'flex',
@@ -1572,6 +1607,82 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
     }
   };
 
+  const handleDeleteDirectChat = async () => {
+    if (chat.type === 'direct' && CURRENT_USER) {
+      console.log('🗑️ DELETE DIRECT CHAT - Starting process');
+      console.log('📋 Chat info:', {
+        chatId: chat.id,
+        chatName: chat.name,
+        participants: chat.participants.map(p => ({ id: p.id, name: p.name }))
+      });
+      
+      // Get the other participant's name for the confirmation message
+      const otherParticipant = chat.participants.find(p => p.id !== CURRENT_USER!.id);
+      const otherParticipantName = otherParticipant?.name || 'this user';
+
+      console.log('✅ Showing confirmation modal for direct chat deletion');
+      onShowConfirmation({
+        isOpen: true,
+        title: 'Delete Chat',
+        message: `Are you sure you want to delete this conversation with ${otherParticipantName}? This action cannot be undone and all messages will be permanently lost.`,
+        confirmText: 'Delete',
+        cancelText: 'Cancel',
+        type: 'danger',
+        onConfirm: async () => {
+          try {
+            console.log('🗑️ User confirmed deletion, attempting to delete direct chat:', chat.id);
+            const success = await deleteChat(chat.id);
+            console.log('🔄 Delete result:', success);
+            
+            if (success) {
+              console.log('✅ Direct chat deleted successfully');
+              // Remove from local state and navigate away
+              onUpdateChats(prevChats => prevChats.filter(c => c.id !== chat.id));
+              onSetActiveChat('');
+              onAddNotification(`Conversation with ${otherParticipantName} has been deleted`, 'success');
+            } else {
+              console.error('❌ Failed to delete direct chat - deleteChat returned false');
+              onAddNotification('Failed to delete conversation. Please try again.', 'error');
+            }
+          } catch (error) {
+            console.error('💥 Error deleting direct chat:', error);
+            onAddNotification('An error occurred while deleting the conversation.', 'error');
+          }
+          // Close the modal
+          onShowConfirmation({
+            isOpen: false,
+            title: '',
+            message: '',
+            confirmText: '',
+            cancelText: '',
+            onConfirm: () => {},
+            onCancel: () => {},
+            type: 'info'
+          });
+        },
+        onCancel: () => {
+          console.log('❌ Delete direct chat cancelled by user');
+          // Close the modal
+          onShowConfirmation({
+            isOpen: false,
+            title: '',
+            message: '',
+            confirmText: '',
+            cancelText: '',
+            onConfirm: () => {},
+            onCancel: () => {},
+            type: 'info'
+          });
+        }
+      });
+    } else {
+      console.log('❌ Cannot delete direct chat:', {
+        chatType: chat?.type,
+        hasCurrentUser: !!CURRENT_USER
+      });
+    }
+  };
+
   const handleRemoveUser = (userId: string, userName: string) => {
     if (chat.type === 'group' && userId !== CURRENT_USER?.id) {
       onRemoveUser(userId, userName);
@@ -1627,7 +1738,7 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
             fontWeight: '600',
             color: isDark ? '#ffffff' : '#1a1a1a'
           }}>
-            {chat.name}
+            {getChatDisplayName(chat)}
           </h3>
           <p style={{
             margin: 0,
@@ -1724,8 +1835,8 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
                   }}>
                     {participant.status}
                   </div>
-                </div>
-                
+      </div>
+
                 {/* Remove User Button - Smaller and less intrusive */}
                 {participant.id !== CURRENT_USER?.id && (
         <button
@@ -1759,7 +1870,7 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
                     ✕
                   </button>
                 )}
-          </div>
+            </div>
         ))}
             </div>
         </div>
@@ -1939,7 +2050,49 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
                   <span>🗑️</span>
                   Delete Group
                 </button>
-              )}
+        )}
+      </div>
+          </div>
+        )}
+
+        {/* Direct Chat Actions - Only show for direct chats */}
+        {chat.type === 'direct' && (
+          <div style={{ marginTop: '20px' }}>
+            <h4 style={{
+              margin: '0 0 12px 0',
+              fontSize: '15px',
+              fontWeight: '600',
+              color: isDark ? '#ffffff' : '#1a1a1a'
+            }}>
+              Chat Actions
+            </h4>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <button
+                onClick={handleDeleteDirectChat}
+                style={{
+                  background: isDark ? '#2a2a2a' : '#f8f9fa',
+                  border: `1px solid ${isDark ? '#404040' : '#dee2e6'}`,
+                  borderRadius: '6px',
+                  padding: '10px 12px',
+                  fontSize: '13px',
+                  fontWeight: '500',
+                  color: '#ef4444',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = isDark ? '#404040' : '#e9ecef';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = isDark ? '#2a2a2a' : '#f8f9fa';
+                }}
+              >
+                <span>🗑️</span>
+                Delete Chat
+              </button>
             </div>
           </div>
         )}
@@ -2088,7 +2241,7 @@ const NotificationBubble = ({ notification, onRemove, isDark }: {
         }}
       >
         {config.icon}
-      </div>
+                  </div>
       
       {/* Content */}
       <div style={{ flex: 1, zIndex: 1 }}>
@@ -2326,7 +2479,7 @@ const ConfirmationModal = ({ modal, isDark }: {
           >
             {config.icon}
             </div>
-          <div>
+                    <div>
             <h2
               style={{
                 margin: 0,
@@ -2338,8 +2491,8 @@ const ConfirmationModal = ({ modal, isDark }: {
             >
               {modal.title}
             </h2>
-          </div>
-        </div>
+                    </div>
+                  </div>
 
         {/* Message */}
         <div
@@ -2481,7 +2634,7 @@ const MessageNotificationToast = ({ notification, onRemove, onMarkRead, onOpenCh
   const getChatTypeColor = () => {
     switch (notification.chatType) {
       case 'direct':
-        return '#ffffff'; // White instead of blue
+        return isDark ? '#ffffff' : '#000000'; // White for dark mode, black for light mode
       case 'group':
         return '#10b981'; // Green
       case 'team':
@@ -3602,8 +3755,8 @@ export default function TeamChatPage() {
               onRemove={removeNotification}
               isDark={isDark}
             />
-                  </div>
-        ))}
+                </div>
+              ))}
         {messageNotifications.map(notification => (
           <div key={notification.id} style={{ pointerEvents: 'auto' }}>
             <MessageNotificationToast
@@ -3773,44 +3926,36 @@ export default function TeamChatPage() {
                 onClick={handleCreateGroupClick}
                 style={{
                   width: '100%',
-                  background: showCreateGroup ? colors.accent : colors.inputBg,
-                  color: showCreateGroup ? (isDark ? colors.bg : '#ffffff') : colors.text,
-                  border: `1px solid ${showCreateGroup ? colors.accent : colors.border}`,
+                  padding: '12px 16px',
                   borderRadius: '12px',
-                  padding: '12px 20px',
+                  border: 'none',
+                  background: '#000000',
+                  color: '#ffffff',
                   fontSize: '14px',
                   fontWeight: '600',
                   cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
                   transition: 'all 0.2s ease',
                   backdropFilter: 'blur(20px)',
-                  boxShadow: showCreateGroup ? (isDark 
+                  boxShadow: showCreateGroup 
+                    ? (isDark 
                     ? '0 4px 16px rgba(255,255,255,0.2)' 
                     : '0 4px 16px rgba(0,0,0,0.2)') : 'none'
                 }}
                 onMouseEnter={e => {
                   if (!showCreateGroup) {
-                    e.currentTarget.style.backgroundColor = colors.hoverBg;
+                    e.currentTarget.style.backgroundColor = '#333333';
                   }
                 }}
                 onMouseLeave={e => {
                   if (!showCreateGroup) {
-                    e.currentTarget.style.backgroundColor = colors.inputBg;
+                    e.currentTarget.style.backgroundColor = '#000000';
                   }
                 }}
               >
-                <svg 
-                  width="16" 
-                  height="16" 
-                  viewBox="0 0 24 24" 
-                  fill="none" 
-                  stroke="currentColor" 
-                  strokeWidth="2" 
-                  strokeLinecap="round" 
-                  strokeLinejoin="round"
-                >
-                  <path d="M12 5v14"/>
-                  <path d="M5 12h14"/>
-                </svg>
                 Create Group
               </button>
             </div>
@@ -4086,13 +4231,13 @@ export default function TeamChatPage() {
                           style={{
                             background: colors.accent,
                             color: '#ffffff',
-                            padding: '6px 12px',
+                            padding: '6px 8px 6px 12px',
                             borderRadius: '20px',
                             fontSize: '13px',
                             fontWeight: '600',
                             display: 'flex',
                             alignItems: 'center',
-                            gap: '8px',
+                            gap: '10px',
                             whiteSpace: 'nowrap',
                             maxWidth: '160px',
                             minWidth: 'fit-content',
@@ -4109,7 +4254,7 @@ export default function TeamChatPage() {
                           }}>
                             {user.name}
                           </span>
-              <button
+                          <button
                             onClick={(e) => {
                               e.stopPropagation();
                               setSelectedUsers(prev => prev.filter(u => u.id !== user.id));
@@ -4122,7 +4267,7 @@ export default function TeamChatPage() {
                               fontSize: '16px',
                               fontWeight: 'bold',
                               padding: '0',
-                              margin: '0',
+                              margin: '0 2px 0 0',
                               lineHeight: '1',
                               display: 'flex',
                               alignItems: 'center',
@@ -4143,32 +4288,14 @@ export default function TeamChatPage() {
                             }}
                           >
                             ×
-              </button>
+                          </button>
                         </span>
                       ))}
             </div>
                         </div>
                 )}
 
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button
-                    onClick={handleCreateGroup}
-                    disabled={!groupName.trim() || selectedUsers.length === 0}
-                    style={{
-                      width: '50%',
-                      background: (groupName.trim() && selectedUsers.length > 0) ? colors.primary : (isDark ? '#404040' : '#dee2e6'),
-                      color: (groupName.trim() && selectedUsers.length > 0) ? (isDark ? '#000' : '#fff') : (isDark ? '#888' : '#6c757d'),
-                      border: 'none',
-                      borderRadius: '6px',
-                      padding: '10px 12px',
-                      fontSize: '13px',
-                      fontWeight: '600',
-                      cursor: (groupName.trim() && selectedUsers.length > 0) ? 'pointer' : 'not-allowed',
-                      transition: 'all 0.2s ease'
-                    }}
-                  >
-                    Create Group
-                  </button>
+                <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
                   <button
                     onClick={() => {
                       setShowCreateGroup(false);
@@ -4188,11 +4315,29 @@ export default function TeamChatPage() {
                       cursor: 'pointer',
                       transition: 'all 0.2s ease'
                     }}
+              >
+                Cancel
+              </button>
+              <button
+                    onClick={handleCreateGroup}
+                    disabled={!groupName.trim() || selectedUsers.length === 0}
+                    style={{
+                      width: '50%',
+                      background: (groupName.trim() && selectedUsers.length > 0) ? '#000000' : (isDark ? '#404040' : '#dee2e6'),
+                      color: (groupName.trim() && selectedUsers.length > 0) ? '#ffffff' : (isDark ? '#888' : '#6c757d'),
+                      border: 'none',
+                      borderRadius: '6px',
+                      padding: '10px 12px',
+                      fontSize: '13px',
+                      fontWeight: '600',
+                      cursor: (groupName.trim() && selectedUsers.length > 0) ? 'pointer' : 'not-allowed',
+                      transition: 'all 0.2s ease'
+                    }}
                   >
-                    Cancel
-                  </button>
+                    Create Group
+              </button>
+            </div>
           </div>
-        </div>
       )}
 
             {/* Chat List */}
@@ -4211,7 +4356,7 @@ export default function TeamChatPage() {
                         letterSpacing: '0.5px'
                       }}>
                         Users
-                </div>
+        </div>
                       {searchResults.map(user => 
                         <SearchResultItem 
                           key={user.id} 
@@ -4354,10 +4499,10 @@ export default function TeamChatPage() {
               }}>
                 <div style={{ fontSize: '48px', marginBottom: '16px', opacity: 0.6 }}>💬</div>
                 <h3 style={{
-                  fontSize: '18px',
+                  margin: 0,
+                  fontSize: '16px',
                   fontWeight: '600',
-                  margin: '0 0 6px 0',
-                  color: isDark ? '#adb5bd' : '#6c757d'
+                  color: isDark ? '#ffffff' : '#1a1a1a'
                 }}>
                   No chat selected
                 </h3>

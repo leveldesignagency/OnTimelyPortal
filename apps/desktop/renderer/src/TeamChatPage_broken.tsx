@@ -2419,7 +2419,7 @@ const MessageNotificationToast = ({ notification, onRemove, onMarkRead, onOpenCh
   const getChatTypeColor = () => {
     switch (notification.chatType) {
       case 'direct':
-        return '#3b82f6'; // Blue
+        return isDark ? '#ffffff' : '#000000'; // White for dark mode, black for light mode
       case 'group':
         return '#10b981'; // Green
       case 'team':
