@@ -1,7 +1,11 @@
 import React from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useContext } from 'react';
+import { ThemeContext } from '../ThemeContext';
 
 export default function AssignOverviewPage() {
+  const { theme } = useContext(ThemeContext);
+  const isDark = theme === 'dark';
   const navigate = useNavigate();
   const location = useLocation();
   const { id: eventId } = useParams();
@@ -10,7 +14,7 @@ export default function AssignOverviewPage() {
 
   if (!guests.length || !itineraries.length) {
     return (
-      <div style={{ padding: 48, background: (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? '#121212' : '#f8f9fa', minHeight: '100vh', color: '#fff' }}>
+      <div style={{ padding: 48, background: isDark ? '#121212' : '#f8f9fa', minHeight: '100vh', color: isDark ? '#fff' : '#222' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32, paddingRight: 40 }}>
           <button onClick={() => navigate(-1)} style={{ width: 140, fontSize: 16, background: 'none', color: '#fff', border: '1.5px solid #bbb', borderRadius: 8, cursor: 'pointer', fontWeight: 600, padding: '10px 0' }}>
             Back
@@ -37,7 +41,7 @@ export default function AssignOverviewPage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', padding: 48, background: (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? '#121212' : '#f8f9fa', color: '#fff' }}>
+    <div style={{ minHeight: '100vh', padding: 48, background: isDark ? '#121212' : '#f8f9fa', color: isDark ? '#fff' : '#222' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32, paddingRight: 40 }}>
         <button onClick={() => navigate(-1)} style={{ width: 140, fontSize: 16, background: 'none', color: '#fff', border: '1.5px solid #bbb', borderRadius: 8, cursor: 'pointer', fontWeight: 600, padding: '10px 0' }}>
           Back
@@ -68,7 +72,7 @@ export default function AssignOverviewPage() {
               <div style={{ fontWeight: 800, fontSize: 22, marginBottom: 4 }}>{`${guest.first_name || ''} ${guest.last_name || ''}`.trim() || guest.email || guest.id}</div>
               <div style={{ fontWeight: 500, fontSize: 16, marginBottom: 18, color: '#ccc' }}>{guest.email}</div>
               <div style={{ marginBottom: 18 }}>
-                <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 24, borderBottom: (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? '2px solid #333' : '2px solid #e5e7eb', paddingBottom: 12 }}>Assigned Itineraries</h2>
+                <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 24, borderBottom: isDark ? '2px solid #333' : '2px solid #e5e7eb', paddingBottom: 12 }}>Assigned Itineraries</h2>
                 {assignedItins.length > 0 ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                     {assignedItins.map((itin: any) => (
@@ -84,7 +88,7 @@ export default function AssignOverviewPage() {
               </div>
               {eventAddOns.length > 0 && (
                 <div style={{ marginTop: 10 }}>
-                  <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 24, borderBottom: (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? '2px solid #333' : '2px solid #e5e7eb', paddingBottom: 12 }}>Add-Ons</h2>
+                  <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 24, borderBottom: isDark ? '2px solid #333' : '2px solid #e5e7eb', paddingBottom: 12 }}>Add-Ons</h2>
                   <ul style={{ margin: 0, paddingLeft: 22, display: 'flex', flexDirection: 'column', gap: 6 }}>
                     {eventAddOns.map((addon: any, index: number) => (
                       <li key={addon.id || addon.name || index} style={{ color: '#ccc', fontSize: 15 }}>

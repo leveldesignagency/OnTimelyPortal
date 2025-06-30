@@ -1,6 +1,7 @@
-import React, { useState, useContext, useEffect } from 'react';
+import React, { useState, useContext, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ThemeContext } from '../ThemeContext';
+import TimelinePreview from '../components/TimelinePreview';
 
 interface GuestLogin {
   id: string;
@@ -15,6 +16,7 @@ export default function EventPortalManagementPage() {
   const location = useLocation();
   const { theme } = useContext(ThemeContext);
   const isDark = theme === 'dark';
+  const timelineRef = useRef<any>(null);
   
   // Get data from navigation state
   const { 
@@ -208,6 +210,19 @@ export default function EventPortalManagementPage() {
           background: '#ef4444',
           color: '#ffffff',
         };
+    }
+  };
+
+  // Timeline navigation functions
+  const handleTimelinePrevious = () => {
+    if (timelineRef.current && timelineRef.current.goToPrevious) {
+      timelineRef.current.goToPrevious();
+    }
+  };
+
+  const handleTimelineNext = () => {
+    if (timelineRef.current && timelineRef.current.goToNext) {
+      timelineRef.current.goToNext();
     }
   };
 
@@ -959,118 +974,199 @@ export default function EventPortalManagementPage() {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
+            width: '100vw',
+            height: '100vh',
           }}>
+            {/* Itinerary List - Left side, in a container */}
             <div style={{
-              display: 'flex',
-              background: isDark ? 'rgba(30,30,30,0.95)' : 'rgba(255,255,255,0.95)',
+              position: 'absolute',
+              left: 48,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              width: 260,
+              minHeight: 400,
+              maxHeight: 600,
+              background: isDark ? 'rgba(24,24,27,0.95)' : 'rgba(255,255,255,0.95)',
               borderRadius: 24,
-              boxShadow: '0 8px 32px rgba(0,0,0,0.25)',
-              padding: 0,
-              maxWidth: 1200,
-              width: '90vw',
-              minHeight: 600,
-              maxHeight: '90vh',
-              overflow: 'hidden',
+              boxShadow: isDark ? '0 4px 24px rgba(0,0,0,0.4)' : '0 4px 24px rgba(0,0,0,0.08)',
+              border: isDark ? '1.5px solid #222' : '1.5px solid #eee',
+              padding: 24,
+              overflowY: 'auto',
+              zIndex: 3,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 12,
             }}>
-              {/* Left: Itinerary List */}
+              <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 12, color: isDark ? '#fff' : '#222', letterSpacing: 0.5 }}>
+                Itinerary Items
+              </div>
+              {itineraries.map((itin: any) => (
+                <div key={itin.id} style={{
+                  borderRadius: 12,
+                  background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
+                  border: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
+                  padding: '12px 14px',
+                  marginBottom: 4,
+                  fontSize: 15,
+                  fontWeight: 600,
+                  color: isDark ? '#fff' : '#222',
+                  cursor: 'pointer',
+                  transition: 'background 0.2s',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 2,
+                }}
+                onClick={() => {
+                  if (timelineRef.current && timelineRef.current.goToItem) {
+                    timelineRef.current.goToItem(itineraries.findIndex((i: any) => i.id === itin.id));
+                  }
+                }}
+                >
+                  <span>{itin.title}</span>
+                  <span style={{ fontSize: 12, color: isDark ? '#aaa' : '#666', fontWeight: 400 }}>
+                    {itin.start_time} - {itin.end_time} {itin.location ? `• ${itin.location}` : ''}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {/* Center: iPhone Mockup, dead center */}
+            <div style={{
+              position: 'absolute',
+              left: '50%',
+              top: '50%',
+              transform: 'translate(-50%, -50%)',
+              zIndex: 3,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}>
               <div style={{
-                width: 320,
-                background: isDark ? 'rgba(20,20,20,0.98)' : 'rgba(245,245,245,0.98)',
-                borderRight: isDark ? '1.5px solid #222' : '1.5px solid #eee',
-                padding: 0,
+                width: 340,
+                height: 700,
+                borderRadius: 40,
+                background: isDark ? '#18181b' : '#fff',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.25)',
+                border: isDark ? '4px solid #222' : '4px solid #eee',
+                position: 'relative',
                 display: 'flex',
                 flexDirection: 'column',
+                overflow: 'hidden',
               }}>
-                <div style={{ padding: '24px 24px 12px 24px', fontWeight: 700, fontSize: 20, borderBottom: isDark ? '1.5px solid #222' : '1.5px solid #eee' }}>
-                  Itinerary Items
-                </div>
-                <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
-                  {itineraries.map((itin: any) => (
-                    <div key={itin.id} style={{
-                      marginBottom: 12,
-                      borderRadius: 12,
-                      background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)',
-                      border: isDark ? '1.5px solid #333' : '1.5px solid #ddd',
-                      boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.12)' : '0 2px 8px rgba(0,0,0,0.04)',
-                      cursor: 'pointer',
-                      overflow: 'hidden',
-                    }}>
-                      <div
-                        onClick={() => toggleItinCollapse(itin.id)}
-                        style={{
-                          padding: '16px 18px',
-                          fontWeight: 600,
-                          fontSize: 16,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                        }}
-                      >
-                        {itin.title}
-                        <span style={{ fontSize: 18, marginLeft: 8, transition: 'transform 0.2s', transform: collapsedItins[itin.id] ? 'rotate(0deg)' : 'rotate(180deg)' }}>▼</span>
-                      </div>
-                      {/* Collapsible content placeholder */}
-                      {!collapsedItins[itin.id] && (
-                        <div style={{ padding: '0 18px 12px 18px', color: isDark ? '#aaa' : '#666', fontSize: 14 }}>
-                          {/* Placeholder for future editing controls */}
-                          (Editing controls coming soon)
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                {/* Timeline Container - Full Screen */}
+                <TimelinePreview 
+                  ref={timelineRef}
+                  itineraries={itineraries} 
+                  isDark={isDark} 
+                />
               </div>
-              {/* Center: iPhone Mockup */}
-              <div style={{
-                flex: 1,
+            </div>
+
+            {/* Timeline Navigation Controls - Right of iPhone */}
+            <div style={{
+              position: 'absolute',
+              left: 'calc(50% + 200px)', // 10px right of iPhone (iPhone width 340px / 2 + 10px)
+              top: '50%',
+              transform: 'translateY(-50%)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 16,
+              zIndex: 3,
+            }}>
+              {/* Previous Button */}
+              <button
+                onClick={handleTimelinePrevious}
+                style={{
+                  width: 50,
+                  height: 50,
+                  borderRadius: '50%',
+                  border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)'}`,
+                  background: isDark 
+                    ? 'rgba(255, 255, 255, 0.1)' 
+                    : 'rgba(255, 255, 255, 0.9)',
+                  backdropFilter: 'blur(12px)',
+                  color: isDark ? '#fff' : '#000',
+                  fontSize: 20,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.2s ease',
+                  boxShadow: isDark 
+                    ? '0 4px 12px rgba(0, 0, 0, 0.3)' 
+                    : '0 4px 12px rgba(0, 0, 0, 0.1)',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'scale(1.05)';
+                  e.currentTarget.style.background = isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(255, 255, 255, 1)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'scale(1)';
+                  e.currentTarget.style.background = isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.9)';
+                }}
+              >
+                ↑
+              </button>
+
+              {/* Next Button */}
+              <button
+                onClick={handleTimelineNext}
+                style={{
+                  width: 50,
+                  height: 50,
+                  borderRadius: '50%',
+                  border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)'}`,
+                  background: isDark 
+                    ? 'rgba(255, 255, 255, 0.1)' 
+                    : 'rgba(255, 255, 255, 0.9)',
+                  backdropFilter: 'blur(12px)',
+                  color: isDark ? '#fff' : '#000',
+                  fontSize: 20,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.2s ease',
+                  boxShadow: isDark 
+                    ? '0 4px 12px rgba(0, 0, 0, 0.3)' 
+                    : '0 4px 12px rgba(0, 0, 0, 0.1)',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'scale(1.05)';
+                  e.currentTarget.style.background = isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(255, 255, 255, 1)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'scale(1)';
+                  e.currentTarget.style.background = isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.9)';
+                }}
+              >
+                ↓
+              </button>
+            </div>
+
+            {/* Close button */}
+            <button
+              onClick={() => setShowPreviewModal(false)}
+              style={{
+                position: 'absolute',
+                top: 24,
+                right: 32,
+                background: 'rgba(0,0,0,0.5)',
+                color: '#fff',
+                border: 'none',
+                borderRadius: 24,
+                width: 40,
+                height: 40,
+                fontSize: 22,
+                cursor: 'pointer',
+                zIndex: 10,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                background: isDark ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.12)',
-              }}>
-                <div style={{
-                  width: 340,
-                  height: 700,
-                  borderRadius: 40,
-                  background: isDark ? '#18181b' : '#fff',
-                  boxShadow: '0 8px 32px rgba(0,0,0,0.25)',
-                  border: isDark ? '4px solid #222' : '4px solid #eee',
-                  position: 'relative',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}>
-                  {/* Placeholder for timeline preview */}
-                  <div style={{ color: isDark ? '#fff' : '#222', fontSize: 20, textAlign: 'center', opacity: 0.5 }}>
-                    Timeline Preview<br/>(Wireframe coming soon)
-                  </div>
-                </div>
-              </div>
-              {/* Close button */}
-              <button
-                onClick={() => setShowPreviewModal(false)}
-                style={{
-                  position: 'absolute',
-                  top: 24,
-                  right: 32,
-                  background: 'rgba(0,0,0,0.5)',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: 24,
-                  width: 40,
-                  height: 40,
-                  fontSize: 22,
-                  cursor: 'pointer',
-                  zIndex: 10,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                ×
-              </button>
-            </div>
+              }}
+            >
+              ×
+            </button>
           </div>
         )}
 

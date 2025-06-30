@@ -240,7 +240,7 @@ const AppContent = () => {
           <Route path="/event/:id/add-guests" element={<ProtectedRoute><CreateGuests /></ProtectedRoute>} />
           <Route path="/event/:eventId/guests/edit/:guestIndex" element={<ProtectedRoute><CreateGuests /></ProtectedRoute>} />
           <Route path="/event/:eventId/itinerary/create" element={<ProtectedRoute><CreateItinerary /></ProtectedRoute>} />
-          <Route path="/event/:eventId/itinerary/edit/:itineraryIndex" element={<ProtectedRoute><CreateItinerary /></ProtectedRoute>} />
+          <Route path="/event/:eventId/itinerary/edit/:itineraryId" element={<ProtectedRoute><CreateItinerary /></ProtectedRoute>} />
           <Route path="/event/:eventId/modules" element={<ProtectedRoute><ModulesPage /></ProtectedRoute>} />
           <Route path="/realtime-test" element={<ProtectedRoute><RealtimeTestPage /></ProtectedRoute>} />
           <Route path="/teams" element={<ProtectedRoute><TeamsLayout /></ProtectedRoute>}>

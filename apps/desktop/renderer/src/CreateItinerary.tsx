@@ -153,7 +153,7 @@ const ITINERARY_MODULES = [
 
 // --- MAIN COMPONENT ---
 export default function CreateItinerary() {
-  const { eventId, itineraryIndex } = useParams();
+  const { eventId, itineraryId } = useParams();
   const navigate = useNavigate();
   const { theme } = useContext(ThemeContext);
   const isDark = theme === 'dark';
@@ -185,6 +185,11 @@ export default function CreateItinerary() {
   const [tempGroupName, setTempGroupName] = useState('');
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   
+  // Delete confirmation modal state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteItemIndex, setDeleteItemIndex] = useState<number | null>(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -212,18 +217,18 @@ export default function CreateItinerary() {
         }
 
         // Check if we're editing an existing itinerary
-        if (itineraryIndex !== undefined && eventId) {
+        if (itineraryId !== undefined && eventId) {
           setIsEditMode(true);
-          
           // Load itineraries from Supabase
           const itineraries = await getItineraries(eventId, currentUser?.company_id);
-          const itineraryToEdit = itineraries[parseInt(itineraryIndex)];
-          
+          console.log('Fetched itineraries:', itineraries);
+          console.log('Looking for itineraryId:', itineraryId);
+          const itineraryToEdit = itineraries.find(it => String(it.id) === String(itineraryId));
+          console.log('Found itineraryToEdit:', itineraryToEdit);
           if (itineraryToEdit) {
             setOriginalItinerary(itineraryToEdit);
-            
             // Convert database fields back to draft format
-            const draftItem: ItineraryItem = {
+            const draftItem = {
               id: `edit_${Date.now()}_${Math.random()}`,
               title: itineraryToEdit.title,
               arrivalTime: itineraryToEdit.arrival_time || '',
@@ -231,19 +236,17 @@ export default function CreateItinerary() {
               endTime: itineraryToEdit.end_time || '',
               location: itineraryToEdit.location || '',
               details: itineraryToEdit.description || '',
-              modules: {},
-              moduleValues: {},
+              modules: {} as Record<string, any>,
+              moduleValues: {} as Record<string, any>,
               date: itineraryToEdit.date || '',
               group_id: itineraryToEdit.group_id || undefined,
               group_name: itineraryToEdit.group_name || undefined,
             };
-
             // Reconstruct modules from database fields
             if (itineraryToEdit.document_file_name) {
               draftItem.modules.document = true;
               draftItem.moduleValues.document = itineraryToEdit.document_file_name;
             }
-
             if (itineraryToEdit.qrcode_url || itineraryToEdit.qrcode_image) {
               draftItem.modules.qrcode = true;
               draftItem.moduleValues.qrcode = {
@@ -251,7 +254,6 @@ export default function CreateItinerary() {
                 image: itineraryToEdit.qrcode_image || ''
               };
             }
-
             if (itineraryToEdit.contact_name || itineraryToEdit.contact_phone || itineraryToEdit.contact_email) {
               draftItem.modules.contact = true;
               draftItem.moduleValues.contact = {
@@ -261,16 +263,15 @@ export default function CreateItinerary() {
                 email: itineraryToEdit.contact_email || ''
               };
             }
-
             if (itineraryToEdit.notification_times && itineraryToEdit.notification_times.length > 0) {
               draftItem.modules.notifications = true;
               draftItem.moduleValues.notifications = itineraryToEdit.notification_times;
             }
-
+            console.log('Mapped draftItem:', draftItem);
             setDrafts([draftItem]);
-            
-            // Expand the first draft by default
             setExpandedDraftIndex(0);
+          } else {
+            console.warn('No itinerary found for editing with id:', itineraryId);
           }
         }
       } catch (error) {
@@ -280,7 +281,7 @@ export default function CreateItinerary() {
     };
 
     loadEventAndItinerary();
-  }, [eventId, itineraryIndex, realtimeEvents]);
+  }, [eventId, itineraryId, realtimeEvents]);
 
   const formatDateRange = (from: string, to: string) => {
       if (!from || !to) return '';
@@ -399,7 +400,25 @@ export default function CreateItinerary() {
   };
 
   const handleRemoveItem = (idx: number) => {
-    setItems(g => g.filter((_, i) => i !== idx));
+    setDeleteItemIndex(idx);
+    setShowDeleteConfirm(true);
+    setDeleteConfirmText('');
+  };
+
+  const handleConfirmDelete = () => {
+    if (deleteConfirmText.toLowerCase() === 'delete' && deleteItemIndex !== null) {
+      setItems(g => g.filter((_, i) => i !== deleteItemIndex));
+      setShowDeleteConfirm(false);
+      setDeleteItemIndex(null);
+      setDeleteConfirmText('');
+      setExpandedItemIndex(null);
+    }
+  };
+
+  const handleCancelDelete = () => {
+    setShowDeleteConfirm(false);
+    setDeleteItemIndex(null);
+    setDeleteConfirmText('');
   };
 
   const handleModuleDrop = (idx: number, e: React.DragEvent) => {
@@ -466,6 +485,16 @@ export default function CreateItinerary() {
         return;
       }
 
+      // Validate that all items have a date
+      const itemsWithoutDate = allItemsToSave.filter(item => 
+        !item.date || !item.date.trim()
+      );
+      
+      if (itemsWithoutDate.length > 0) {
+        alert('⚠️ Date Required\n\nPlease select a date for all itinerary items before saving. Each activity must have a specific date to help your guests plan their schedule.\n\nTip: Use the date picker for each item to set when the activity will take place.');
+        return;
+      }
+
       // If we're in edit mode, update the existing itinerary
       if (isEditMode && originalItinerary?.id) {
         const firstItem = allItemsToSave[0];
@@ -496,9 +525,9 @@ export default function CreateItinerary() {
           contact_email: contactModule?.email || undefined,
           // Notifications Timer Module
           notification_times: notificationsModule || [],
-          group_id: firstItem.group_id,
-          group_name: firstItem.group_name,
-          date: firstItem.date, // <-- FIX: Save the date field
+          group_id: firstItem.group_id || undefined,
+          group_name: firstItem.group_name || undefined,
+          date: firstItem.date && firstItem.date.trim() ? firstItem.date : undefined, // FIX: Convert empty string to undefined
           // Legacy content field for backward compatibility
           content: {
             items: allItemsToSave
@@ -542,9 +571,9 @@ export default function CreateItinerary() {
             contact_email: contactModule?.email || undefined,
             // Notifications Timer Module
             notification_times: notificationsModule || [],
-            group_id: item.group_id,
-            group_name: item.group_name,
-            date: item.date, // <-- FIX: Save the date field
+            group_id: item.group_id || undefined,
+            group_name: item.group_name || undefined,
+            date: item.date && item.date.trim() ? item.date : undefined, // FIX: Convert empty string to undefined
             // Legacy content field for backward compatibility
             content: {
               originalItem: item
@@ -686,15 +715,50 @@ export default function CreateItinerary() {
   };
 
   const handleEditItem = (idx: number) => {
-    const item = items[idx];
-    const newDraft: ItineraryItem = {
+    setExpandedItemIndex(idx);
+  };
+
+  const handleItemChange = (idx: number, key: keyof ItineraryItem, value: any) => {
+    setItems(items => items.map((item, i) => i === idx ? { ...item, [key]: value } : item));
+  };
+
+  const handleItemModuleDrop = (idx: number, e: React.DragEvent) => {
+    e.preventDefault();
+    const moduleKey = e.dataTransfer.getData('text/plain');
+    const module = ITINERARY_MODULES.find(m => m.key === moduleKey);
+    if (module) {
+      setItems(items => items.map((item, i) => i === idx ? {
+        ...item,
+        modules: { ...item.modules, [moduleKey]: true },
+        moduleValues: { ...item.moduleValues, [moduleKey]: getDefaultModuleValue(moduleKey) }
+      } : item));
+    }
+  };
+
+  const handleRemoveItemModule = (itemIdx: number, moduleKey: string) => {
+    setItems(items => items.map((item, i) => i === itemIdx ? {
       ...item,
-      id: `item_${Date.now()}_${Math.random()}`, // Generate new ID for draft
-    };
-    setDrafts(d => [newDraft, ...d]);
-    setItems(g => g.filter((_, i) => i !== idx));
-    setExpandedDraftIndex(null);
-    setEditingItemIndex(null);
+      modules: { ...item.modules, [moduleKey]: false },
+      moduleValues: { ...item.moduleValues, [moduleKey]: undefined }
+    } : item));
+  };
+
+  const handleItemModuleValueChange = (itemIdx: number, moduleKey: string, value: any) => {
+    setItems(items => items.map((item, i) => i === itemIdx ? {
+      ...item,
+      moduleValues: { ...item.moduleValues, [moduleKey]: value }
+    } : item));
+  };
+
+  const getDefaultModuleValue = (moduleKey: string) => {
+    switch (moduleKey) {
+      case 'contact':
+        return { name: '', countryCode: '', phone: '', email: '' };
+      case 'notifications':
+        return [];
+      default:
+        return null;
+    }
   };
 
   // When groupName changes, update all drafts
@@ -1247,58 +1311,46 @@ export default function CreateItinerary() {
                         handleRemoveDraft(idx);
                       }}
                       style={{
-                        background: isDark
-                          ? 'rgba(30, 30, 40, 0.35)'
-                          : 'rgba(255, 255, 255, 0.55)',
-                        color: isDark ? '#fff' : '#ef4444',
-                        border: isDark ? '1.5px solid rgba(255,255,255,0.18)' : '1.5px solid #ef4444',
-                        borderRadius: 12,
-                        fontWeight: 600,
-                        fontSize: 15,
+                        background: '#18181b',
+                        color: '#fff',
+                        border: '1.5px solid #444',
+                        borderRadius: 8,
+                        fontWeight: 500,
+                        fontSize: 16,
                         padding: '10px 24px',
                         cursor: 'pointer',
                         minWidth: '100px',
-                        boxShadow: isDark
-                          ? '0 4px 24px 0 rgba(0,0,0,0.25)'
-                          : '0 4px 24px 0 rgba(239,68,68,0.08)',
-                        backdropFilter: 'blur(10px)',
-                        WebkitBackdropFilter: 'blur(10px)',
-                        transition: 'all 0.2s',
-                        outline: 'none',
-                        marginTop: 8,
-                        marginBottom: 8,
-                        letterSpacing: 0.2,
+                        height: 48,
                         display: 'flex',
                         alignItems: 'center',
-                        gap: 8,
+                        justifyContent: 'center',
+                        marginRight: 8
                       }}
                     >
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{marginRight: 6}}>
-                        <rect x="3" y="6" width="18" height="14" rx="2" fill={isDark ? 'rgba(255,255,255,0.12)' : '#fff'} stroke={isDark ? '#fff' : '#ef4444'} strokeWidth="1.5"/>
-                        <path d="M8 10V16" stroke={isDark ? '#fff' : '#ef4444'} strokeWidth="1.5" strokeLinecap="round"/>
-                        <path d="M12 10V16" stroke={isDark ? '#fff' : '#ef4444'} strokeWidth="1.5" strokeLinecap="round"/>
-                        <path d="M16 10V16" stroke={isDark ? '#fff' : '#ef4444'} strokeWidth="1.5" strokeLinecap="round"/>
-                        <rect x="1" y="3" width="22" height="3" rx="1.5" fill={isDark ? 'rgba(255,255,255,0.18)' : '#ef4444'} />
-                      </svg>
                       Delete
                     </button>
                     <button
                       onClick={() => handleSaveDraft(idx)}
                       disabled={!draft.title || !draft.arrivalTime || !draft.startTime || !draft.endTime}
                       style={{
-                        background: draft.title && draft.arrivalTime && draft.startTime && draft.endTime ? '#222' : '#ccc',
+                        background: '#18181b',
                         color: '#fff',
-                        border: 'none',
+                        border: '1.5px solid #444',
                         borderRadius: 8,
                         fontWeight: 500,
                         fontSize: 16,
                         padding: '10px 24px',
                         cursor: draft.title && draft.arrivalTime && draft.startTime && draft.endTime ? 'pointer' : 'not-allowed',
-                        minWidth: '110px',
-                        height: 48, // Match Delete button height
+                        minWidth: '100px',
+                        height: 48,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginRight: 8,
+                        opacity: draft.title && draft.arrivalTime && draft.startTime && draft.endTime ? 1 : 0.6
                       }}
                     >
-                      Save Item
+                      Save
                     </button>
                   </div>
                 </div>
@@ -1327,16 +1379,20 @@ export default function CreateItinerary() {
                       }}
                       disabled={!draft.title || !draft.arrivalTime || !draft.startTime || !draft.endTime}
                       style={{
-                        background: draft.title && draft.arrivalTime && draft.startTime && draft.endTime ? '#222' : '#ccc',
+                        background: '#18181b',
                         color: '#fff',
-                        border: 'none',
-                        borderRadius: 6,
+                        border: '1.5px solid #444',
+                        borderRadius: 8,
                         fontWeight: 500,
-                        fontSize: 14,
-                        padding: '8px 16px',
-                        cursor: draft.title && draft.arrivalTime && draft.startTime && draft.endTime ? 'pointer' : 'not-allowed',
-                        minWidth: '85px',
-                        height: 48, // Match Delete button height
+                        fontSize: 16,
+                        padding: '10px 24px',
+                        cursor: 'pointer',
+                        minWidth: '100px',
+                        height: 48,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginRight: 8
                       }}
                     >
                       Save
@@ -1347,39 +1403,22 @@ export default function CreateItinerary() {
                         handleRemoveDraft(idx);
                       }}
                       style={{
-                        background: isDark
-                          ? 'rgba(30, 30, 40, 0.35)'
-                          : 'rgba(255, 255, 255, 0.55)',
-                        color: isDark ? '#fff' : '#ef4444',
-                        border: isDark ? '1.5px solid rgba(255,255,255,0.18)' : '1.5px solid #ef4444',
-                        borderRadius: 12,
-                        fontWeight: 600,
-                        fontSize: 15,
+                        background: '#18181b',
+                        color: '#fff',
+                        border: '1.5px solid #444',
+                        borderRadius: 8,
+                        fontWeight: 500,
+                        fontSize: 16,
                         padding: '10px 24px',
                         cursor: 'pointer',
                         minWidth: '100px',
-                        boxShadow: isDark
-                          ? '0 4px 24px 0 rgba(0,0,0,0.25)'
-                          : '0 4px 24px 0 rgba(239,68,68,0.08)',
-                        backdropFilter: 'blur(10px)',
-                        WebkitBackdropFilter: 'blur(10px)',
-                        transition: 'all 0.2s',
-                        outline: 'none',
-                        marginTop: 8,
-                        marginBottom: 8,
-                        letterSpacing: 0.2,
+                        height: 48,
                         display: 'flex',
                         alignItems: 'center',
-                        gap: 8,
+                        justifyContent: 'center',
+                        marginRight: 8
                       }}
                     >
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{marginRight: 6}}>
-                        <rect x="3" y="6" width="18" height="14" rx="2" fill={isDark ? 'rgba(255,255,255,0.12)' : '#fff'} stroke={isDark ? '#fff' : '#ef4444'} strokeWidth="1.5"/>
-                        <path d="M8 10V16" stroke={isDark ? '#fff' : '#ef4444'} strokeWidth="1.5" strokeLinecap="round"/>
-                        <path d="M12 10V16" stroke={isDark ? '#fff' : '#ef4444'} strokeWidth="1.5" strokeLinecap="round"/>
-                        <path d="M16 10V16" stroke={isDark ? '#fff' : '#ef4444'} strokeWidth="1.5" strokeLinecap="round"/>
-                        <rect x="1" y="3" width="22" height="3" rx="1.5" fill={isDark ? 'rgba(255,255,255,0.18)' : '#ef4444'} />
-                      </svg>
                       Delete
                     </button>
                   </div>
@@ -1395,7 +1434,7 @@ export default function CreateItinerary() {
             ...getGlassStyles(isDark),
             color: colors.text,
             border: expandedItemIndex === idx 
-              ? `2px solid ${isDark ? '#10b981' : '#10b981'}` 
+              ? `2px solid ${isDark ? '#ffffff' : '#000000'}` 
               : `2px solid ${colors.border}`,
             borderRadius: 14,
             marginBottom: 32,
@@ -1408,7 +1447,7 @@ export default function CreateItinerary() {
             transition: 'all 0.3s ease-in-out',
           }}>
             {expandedItemIndex === idx ? (
-              // EXPANDED VIEW
+              // EXPANDED VIEW - Match draft structure exactly
               <div style={{ padding: 32, position: 'relative' }}>
                 <button
                   onClick={() => setExpandedItemIndex(null)}
@@ -1417,7 +1456,7 @@ export default function CreateItinerary() {
                     position: 'absolute',
                     top: 24,
                     right: 76,
-                    background: '#f1f5f9',
+                    background: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)',
                     border: 'none',
                     borderRadius: '50%',
                     width: 44,
@@ -1427,11 +1466,17 @@ export default function CreateItinerary() {
                     alignItems: 'center',
                     justifyContent: 'center',
                     zIndex: 10,
-                    color: '#475569',
+                    color: colors.textSecondary,
                     fontSize: 24,
+                    backdropFilter: 'blur(10px)',
+                    transition: 'all 0.2s ease'
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = '#e2e8f0'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = '#f1f5f9'; }}
+                  onMouseEnter={(e) => { 
+                    e.currentTarget.style.background = isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)'; 
+                  }}
+                  onMouseLeave={(e) => { 
+                    e.currentTarget.style.background = isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)'; 
+                  }}
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                 </button>
@@ -1442,88 +1487,254 @@ export default function CreateItinerary() {
                     position: 'absolute',
                     top: 24,
                     right: 24,
-                    background: '#ef4444',
-                    border: 'none',
+                    ...getButtonStyles(isDark, 'danger'),
                     borderRadius: '50%',
                     width: 44,
                     height: 44,
-                    cursor: 'pointer',
+                    padding: 0,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    transition: 'all 0.2s ease',
                     zIndex: 10,
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = '#dc2626'; e.currentTarget.style.transform = 'scale(1.1)'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = '#ef4444'; e.currentTarget.style.transform = 'scale(1)'; }}
+                  onMouseEnter={(e) => { 
+                    e.currentTarget.style.transform = 'scale(1.1)'; 
+                  }}
+                  onMouseLeave={(e) => { 
+                    e.currentTarget.style.transform = 'scale(1)'; 
+                  }}
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3,6 5,6 21,6"></polyline><path d="m19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2"></path></svg>
                 </button>
 
                 <div style={{ paddingTop: '40px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-                    <div style={{
-                      background: '#10b981',
-                      color: '#fff',
-                      borderRadius: '50%',
-                      width: 32,
-                      height: 32,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: 16,
-                      fontWeight: 600
-                    }}>
-                      ✓
+                  {/* Title Field */}
+                  <div style={{ 
+                    fontWeight: 700, 
+                    fontSize: 15, 
+                    marginBottom: 8, 
+                    letterSpacing: 0.5, 
+                    color: colors.text 
+                  }}>
+                    TITLE
+                  </div>
+                  <input
+                    placeholder="Event Title"
+                    value={item.title}
+                    onChange={(e) => handleItemChange(idx, 'title', e.target.value)}
+                    style={{
+                      ...getInputStyles(isDark),
+                      width: '100%',
+                      padding: '12px 16px',
+                      fontSize: 18,
+                      height: 48,
+                      marginBottom: 14
+                    }}
+                  />
+
+                  {/* Date & Time Fields */}
+                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 8, letterSpacing: 0.5, color: colors.text }}>
+                    DATE & TIME
+                  </div>
+                  <div style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
+                    {/* Date Field */}
+                    <div style={{ flex: 1, position: 'relative' }}>
+                      <CustomDatePicker
+                        value={item.date}
+                        onChange={(value) => handleItemChange(idx, 'date', value)}
+                        placeholder="Date (DD/MM/YYYY)"
+                        isDark={isDark}
+                        colors={colors}
+                        id={`item-date-picker-${idx}`}
+                        openDropdown={openDropdown}
+                        setOpenDropdown={setOpenDropdown}
+                      />
                     </div>
-                    <div style={{ fontSize: 18, fontWeight: 600, color: '#10b981' }}>Saved Item</div>
+                    {/* Time Fields */}
+                    {([
+                      ['arrivalTime', 'Arrival Time'],
+                      ['startTime', 'Start Time'],
+                      ['endTime', 'End Time']
+                    ] as [keyof ItineraryItem, string][]).map(([key, label]) => (
+                      <div style={{ flex: 1, position: 'relative' }} key={key}>
+                        <CustomGlassTimePicker
+                          value={item[key] as string}
+                          onChange={value => handleItemChange(idx, key, value)}
+                          placeholder={label}
+                          isDark={isDark}
+                          colors={colors}
+                        />
+                      </div>
+                    ))}
                   </div>
 
-                  <div style={{ fontSize: 20, fontWeight: 600, marginBottom: 8 }}>{item.title}</div>
-                  <div style={{ fontSize: 16, color: '#666', marginBottom: 12 }}>
-                    {item.arrivalTime} - {item.startTime} - {item.endTime}
-                    {item.location && ` • ${item.location}`}
+                  {/* Location Field */}
+                  <div style={{ 
+                    fontWeight: 700, 
+                    fontSize: 15, 
+                    marginBottom: 8, 
+                    letterSpacing: 0.5, 
+                    color: colors.text 
+                  }}>
+                    LOCATION
                   </div>
-                  {item.details && (
-                    <div style={{ fontSize: 16, color: '#666', lineHeight: 1.5, marginBottom: 16 }}>
-                      {item.details}
-        </div>
+                  <input
+                    placeholder="Event Location"
+                    value={item.location}
+                    onChange={(e) => handleItemChange(idx, 'location', e.target.value)}
+                    style={{
+                      ...getInputStyles(isDark),
+                      width: '100%',
+                      padding: '12px 16px',
+                      fontSize: 18,
+                      height: 48,
+                      marginBottom: 14
+                    }}
+                  />
+
+                  {/* Description Field */}
+                  <div style={{ 
+                    fontWeight: 700, 
+                    fontSize: 15, 
+                    marginBottom: 8, 
+                    letterSpacing: 0.5, 
+                    color: colors.text 
+                  }}>
+                    DESCRIPTION
+                  </div>
+                  <textarea
+                    placeholder="Event Description"
+                    value={item.details}
+                    onChange={(e) => handleItemChange(idx, 'details', e.target.value)}
+                    style={{
+                      ...getInputStyles(isDark),
+                      width: '100%',
+                      padding: '12px 16px',
+                      fontSize: 18,
+                      minHeight: 100,
+                      marginBottom: 14,
+                      resize: 'vertical'
+                    }}
+                  />
+
+                  {/* Module Drop Zone with Glass Effect */}
+                  <div
+                    style={{ 
+                      ...getGlassStyles(isDark),
+                      padding: 24, 
+                      minHeight: 60, 
+                      display: 'flex', 
+                      justifyContent: 'center', 
+                      alignItems: 'center', 
+                      cursor: 'copy', 
+                      marginTop: 24,
+                      border: `2px dashed ${colors.border}`,
+                      background: isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'
+                    }}
+                    onDrop={e => handleItemModuleDrop(idx, e)}
+                    onDragOver={e => e.preventDefault()}
+                  >
+                    <span style={{ 
+                      color: colors.textSecondary, 
+                      fontSize: 16, 
+                      fontWeight: 500 
+                    }}>
+                      Drag modules here
+                    </span>
+                  </div>
+
+                  {/* Display Added Modules with Glass Effect */}
+                  {Object.entries(item.modules || {}).filter(([_, isActive]) => isActive).map(([moduleKey, _]) => {
+                    const module = ITINERARY_MODULES.find(m => m.key === moduleKey);
+                    if (!module) return null;
+                    return (
+                      <div key={moduleKey} style={{
+                        background: isDark ? 'rgba(30,30,30,0.75)' : '#fff',
+                        border: `2px solid ${isDark ? 'rgba(255,255,255,0.10)' : '#e5e7eb'}`,
+                        borderRadius: 16,
+                        padding: 20,
+                        marginTop: 16,
+                        position: 'relative',
+                        boxShadow: isDark ? '0 2px 12px #0006' : '0 1px 4px #0001',
+                        color: isDark ? '#fff' : '#111',
+                        backdropFilter: 'blur(16px)',
+                        WebkitBackdropFilter: 'blur(16px)'
+                      }}>
+                        <button
+                          onClick={() => handleRemoveItemModule(idx, moduleKey)}
+                          style={{
+                            position: 'absolute',
+                            top: 12,
+                            right: 12,
+                            background: '#ef4444',
+                            border: 'none',
+                            borderRadius: '50%',
+                            width: 28,
+                            height: 28,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: 14,
+                            color: 'white'
+                          }}
+                        >
+                          ×
+                        </button>
+                        <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 12 }}>
+                          {module.label}
+                        </div>
+                        
+                        {moduleKey === 'contact' && (
+                          <div>
+                            <input
+                              placeholder="Contact Name"
+                              value={item.moduleValues?.contact?.name || ''}
+                              onChange={(e) => handleItemModuleValueChange(idx, 'contact', { ...item.moduleValues?.contact, name: e.target.value })}
+                              style={{ ...getInputStyles(isDark), width: '100%', marginBottom: 8 }}
+                            />
+                            <div style={{ display: 'flex', gap: 8 }}>
+                              <input
+                                placeholder="Country Code"
+                                value={item.moduleValues?.contact?.countryCode || ''}
+                                onChange={(e) => handleItemModuleValueChange(idx, 'contact', { ...item.moduleValues?.contact, countryCode: e.target.value })}
+                                style={{ ...getInputStyles(isDark), width: '30%' }}
+                              />
+                              <input
+                                placeholder="Phone Number"
+                                value={item.moduleValues?.contact?.phone || ''}
+                                onChange={(e) => handleItemModuleValueChange(idx, 'contact', { ...item.moduleValues?.contact, phone: e.target.value })}
+                                style={{ ...getInputStyles(isDark), width: '70%' }}
+                              />
+                            </div>
+                            <input
+                              placeholder="Email Address"
+                              value={item.moduleValues?.contact?.email || ''}
+                              onChange={(e) => handleItemModuleValueChange(idx, 'contact', { ...item.moduleValues?.contact, email: e.target.value })}
+                              style={{ ...getInputStyles(isDark), width: '100%', marginTop: 8 }}
+                            />
+                          </div>
+                        )}
+                        
+                        {moduleKey === 'notifications' && (
+                          <div>
+                            <div style={{ fontSize: 14, color: colors.textSecondary, marginBottom: 8 }}>
+                              Notification times (minutes before event):
+                            </div>
+                            <input
+                              placeholder="e.g., 15,30,60"
+                              value={Array.isArray(item.moduleValues?.notifications) ? item.moduleValues.notifications.join(',') : ''}
+                              onChange={(e) => {
+                                const times = e.target.value.split(',').map(t => parseInt(t.trim())).filter(t => !isNaN(t));
+                                handleItemModuleValueChange(idx, 'notifications', times);
+                              }}
+                              style={{ ...getInputStyles(isDark), width: '100%' }}
+                            />
+                          </div>
       )}
-
-                  <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 24 }}>
-                    <button
-                      onClick={() => handleEditItem(idx)}
-                      style={{
-                        background: '#f0f9ff',
-                        color: '#0369a1',
-                        border: 'none',
-                        borderRadius: 8,
-                        fontWeight: 500,
-                        fontSize: 16,
-                        padding: '10px 24px',
-                        cursor: 'pointer',
-                        minWidth: '110px'
-                      }}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => handleRemoveItem(idx)}
-                      style={{
-                        background: '#fef2f2',
-                        color: '#ef4444',
-                        border: 'none',
-                        borderRadius: 8,
-                        fontWeight: 500,
-                        fontSize: 16,
-                        padding: '10px 24px',
-                        cursor: 'pointer',
-                        minWidth: '110px'
-                      }}
-                    >
-                      Delete
-                    </button>
-                  </div>
+    </div>
+  );
+                  })}
                 </div>
               </div>
             ) : (
@@ -1561,71 +1772,57 @@ export default function CreateItinerary() {
                   </div>
                   <div style={{ display: 'flex', gap: 8 }}>
                     <button
+                      style={{
+                        background: '#18181b',
+                        color: '#fff',
+                        border: '1.5px solid #444',
+                        borderRadius: 8,
+                        padding: '10px 24px',
+                        fontSize: 16,
+                        fontWeight: 500,
+                        cursor: 'pointer',
+                        marginRight: 8,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        minWidth: 80,
+                        height: 40
+                      }}
                       onClick={(e) => {
                         e.stopPropagation();
                         handleEditItem(idx);
-                      }}
-                      style={{
-                        background: '#f0f9ff',
-                        color: '#0369a1',
-                        border: 'none',
-                        borderRadius: 6,
-                        fontWeight: 500,
-                        fontSize: 14,
-                        padding: '8px 16px',
-                        cursor: 'pointer',
-                        minWidth: '65px',
-                        height: 48, // Match Delete button height
                       }}
                     >
                       Edit
                     </button>
                     <button
+                      style={{
+                        background: '#18181b',
+                        color: '#fff',
+                        border: '1.5px solid #444',
+                        borderRadius: 8,
+                        padding: '10px 24px',
+                        fontSize: 16,
+                        fontWeight: 500,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        minWidth: 80,
+                        height: 40
+                      }}
                       onClick={(e) => {
                         e.stopPropagation();
                         handleRemoveItem(idx);
                       }}
-                      style={{
-                        background: isDark
-                          ? 'rgba(30, 30, 40, 0.35)'
-                          : 'rgba(255, 255, 255, 0.55)',
-                        color: isDark ? '#fff' : '#ef4444',
-                        border: isDark ? '1.5px solid rgba(255,255,255,0.18)' : '1.5px solid #ef4444',
-                        borderRadius: 12,
-                        fontWeight: 600,
-                        fontSize: 15,
-                        padding: '10px 24px',
-                        cursor: 'pointer',
-                        minWidth: '100px',
-                        boxShadow: isDark
-                          ? '0 4px 24px 0 rgba(0,0,0,0.25)'
-                          : '0 4px 24px 0 rgba(239,68,68,0.08)',
-                        backdropFilter: 'blur(10px)',
-                        WebkitBackdropFilter: 'blur(10px)',
-                        transition: 'all 0.2s',
-                        outline: 'none',
-                        marginTop: 8,
-                        marginBottom: 8,
-                        letterSpacing: 0.2,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 8,
-                      }}
                     >
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{marginRight: 6}}>
-                        <rect x="3" y="6" width="18" height="14" rx="2" fill={isDark ? 'rgba(255,255,255,0.12)' : '#fff'} stroke={isDark ? '#fff' : '#ef4444'} strokeWidth="1.5"/>
-                        <path d="M8 10V16" stroke={isDark ? '#fff' : '#ef4444'} strokeWidth="1.5" strokeLinecap="round"/>
-                        <path d="M12 10V16" stroke={isDark ? '#fff' : '#ef4444'} strokeWidth="1.5" strokeLinecap="round"/>
-                        <path d="M16 10V16" stroke={isDark ? '#fff' : '#ef4444'} strokeWidth="1.5" strokeLinecap="round"/>
-                        <rect x="1" y="3" width="22" height="3" rx="1.5" fill={isDark ? 'rgba(255,255,255,0.18)' : '#ef4444'} />
-                      </svg>
                       Delete
                     </button>
                   </div>
                 </div>
               </div>
-      )}
-    </div>
+            )}
+          </div>
         ))}
 
         {/* No Items Message */}
@@ -1900,6 +2097,74 @@ export default function CreateItinerary() {
 
       {/* Module Sidebar with Glass Effect */}
       <ModuleSidebar isCollapsed={isModuleSidebarCollapsed} onToggle={() => setIsModuleSidebarCollapsed(!isModuleSidebarCollapsed)} />
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+        }}>
+          <div style={{
+            ...getGlassStyles(isDark),
+            padding: 32,
+            maxWidth: 400,
+            width: '90%',
+            textAlign: 'center',
+          }}>
+            <h3 style={{ color: colors.text, marginBottom: 16 }}>Delete Item</h3>
+            <p style={{ color: colors.textSecondary, marginBottom: 24 }}>
+              Are you sure you want to delete this itinerary item? This action cannot be undone.
+            </p>
+            <p style={{ color: colors.textSecondary, marginBottom: 16, fontSize: 14 }}>
+              Type "delete" to confirm:
+            </p>
+            <input
+              type="text"
+              value={deleteConfirmText}
+              onChange={(e) => setDeleteConfirmText(e.target.value)}
+              style={{
+                ...getInputStyles(isDark),
+                width: '100%',
+                marginBottom: 24,
+                textAlign: 'center',
+              }}
+              placeholder="Type 'delete'"
+              autoFocus
+            />
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+              <button
+                onClick={handleCancelDelete}
+                style={{
+                  ...getButtonStyles(isDark, 'secondary'),
+                  padding: '10px 20px',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                disabled={deleteConfirmText.toLowerCase() !== 'delete'}
+                style={{
+                  ...getButtonStyles(isDark, 'danger'),
+                  padding: '10px 20px',
+                  opacity: deleteConfirmText.toLowerCase() === 'delete' ? 1 : 0.5,
+                  cursor: deleteConfirmText.toLowerCase() === 'delete' ? 'pointer' : 'not-allowed',
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

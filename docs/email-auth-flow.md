@@ -137,3 +137,12 @@ This document outlines the recommended flow for secure, scalable user onboarding
 ```
 [User requests access] --> [Timely Staff Approves] --> [User logs in] --> [User connects email] --> [User can send emails]
 ``` 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 

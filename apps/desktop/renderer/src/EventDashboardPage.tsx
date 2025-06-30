@@ -189,16 +189,40 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
   const [csvUploadSuccess, setCsvUploadSuccess] = useState<string | null>(null);
 
   const [showModules, setShowModules] = useState(true);
-  const [itineraryToDelete, setItineraryToDelete] = useState<number | null>(null);
+  const [itineraryToDelete, setItineraryToDelete] = useState<string | null>(null);
+  const [ittinerariesExpandedCard, setIttinerariesExpandedCard] = useState<string | null>(null);
+  const [currentCard, setCurrentCard] = useState<string | null>(null);
+  const [isSelectModeActive, setIsSelectModeActive] = useState(false);
+  const [selectedItineraryIds, setSelectedItineraryIds] = useState<string[]>([]);
+  const [selectedGuestIds, setSelectedGuestIds] = useState<string[]>([]);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+  const [bulkDeleteText, setBulkDeleteText] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteText, setDeleteText] = useState('');
+  const [showGroupModal, setShowGroupModal] = useState(false);
+  const [showAddGuestModal, setShowAddGuestModal] = useState(false);
+  const [newGuestData, setNewGuestData] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    contactNumber: '',
+    countryCode: '+44',
+    idType: 'passport',
+    idNumber: '',
+    dob: '',
+    gender: 'prefer-not-to-say'
+  });
+  const [showDeleteEventModal, setShowDeleteEventModal] = useState(false);
+  const [deleteEventText, setDeleteEventText] = useState('');
+  const [drafts, setDrafts] = useState<any[]>([]);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [itineraryToShare, setItineraryToShare] = useState<string | null>(null);
+  const [shareRecipients, setShareRecipients] = useState<GuestType[]>([]);
+  const [shareSearchQuery, setShareSearchQuery] = useState('');
   
-  // New itinerary management states
-  const [selectedItineraryIds, setSelectedItineraryIds] = useState<string[]>([]);
-  const [showOptionsMenu, setShowOptionsMenu] = useState(false);
-  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
-  const [bulkDeleteText, setBulkDeleteText] = useState('');
-  const [isSelectModeActive, setIsSelectModeActive] = useState(false);
+  // New state for guest selection
+  const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
+  const [showGuestDeleteConfirm, setShowGuestDeleteConfirm] = useState(false);
   
   const [activeSection, setActiveSection] = useState('modules');
   const [activeModules, setActiveModules] = useState<{
@@ -218,26 +242,11 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
   });
   const [draggedModule, setDraggedModule] = useState<string | null>(null);
   const [dragOverCategory, setDragOverCategory] = useState<string | null>(null);
-
-  // Share Itinerary State
-  const [showShareModal, setShowShareModal] = useState(false);
-  const [itineraryToShare, setItineraryToShare] = useState<number | null>(null);
-  const [shareRecipients, setShareRecipients] = useState<GuestType[]>([]);
-  const [shareSearchQuery, setShareSearchQuery] = useState('');
-
-  // New state for guest selection
-  const [selectedGuestIds, setSelectedGuestIds] = useState<string[]>([]);
-  const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
-  const [showGuestDeleteConfirm, setShowGuestDeleteConfirm] = useState(false);
   
   // State for Send Form modal
   const [showSendFormModal, setShowSendFormModal] = useState(false);
   const [sendFormRecipients, setSendFormRecipients] = useState<string[]>([]);
   const [currentEmailInput, setCurrentEmailInput] = useState('');
-  
-  // State for delete event modal
-  const [showDeleteEventModal, setShowDeleteEventModal] = useState(false);
-  const [deleteEventText, setDeleteEventText] = useState('');
   
   // Ref to track shift key status
   const shiftKeyRef = useRef(false);
@@ -300,6 +309,24 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
 
   const [isSavingAddOns, setIsSavingAddOns] = useState(false);
   const [saveAddOnsMessage, setSaveAddOnsMessage] = useState<string | null>(null);
+  
+  // Success message state
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  
+  // Add missing state variables
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+  const [showOptionsMenu, setShowOptionsMenu] = useState(false);
+
+  // Success message function
+  const showSuccess = (message: string) => {
+    setSuccessMessage(message);
+    setShowSuccessMessage(true);
+    setTimeout(() => {
+      setShowSuccessMessage(false);
+      setSuccessMessage('');
+    }, 3000);
+  };
 
   // When the modal is closed, reset the state
   const handleCloseModal = () => {
@@ -648,7 +675,9 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
   const handleSendItinerary = () => {
     if (itineraryToShare === null || shareRecipients.length === 0) return;
 
-    const itinerary = savedItineraries[itineraryToShare];
+    const itinerary = savedItineraries.find(it => it.id === itineraryToShare);
+    if (!itinerary) return;
+    
     console.log('--- Sending Itinerary ---');
     console.log('Itinerary:', itinerary.title);
     console.log('Recipients:', shareRecipients.map(g => ({ name: `${g.firstName} ${g.lastName}`, email: g.email })));
@@ -784,39 +813,114 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
     </button>
   );
 
-  const handleDuplicate = async (idx: number) => {
-    if (!event) return;
+  const handleDuplicate = async (itinerary: ItineraryType) => {
+    if (!event || !currentUser) return;
     
-    const itinerary = savedItineraries[idx];
     if (!itinerary) return;
     
     try {
       const newItinerary = {
-        ...itinerary,
-        id: undefined,
+        event_id: event.id,
+        company_id: currentUser.company_id || '',
+        created_by: currentUser.id || '',
         title: `${itinerary.title} (Copy)`,
-        created_at: undefined,
-        updated_at: undefined
+        description: itinerary.description || '',
+        date: itinerary.date || '',
+        arrival_time: itinerary.arrival_time || '',
+        start_time: itinerary.start_time || '',
+        end_time: itinerary.end_time || '',
+        location: itinerary.location || '',
+        is_draft: false,
+        document_file_name: itinerary.document_file_name,
+        qrcode_url: itinerary.qrcode_url,
+        qrcode_image: itinerary.qrcode_image,
+        contact_name: itinerary.contact_name,
+        contact_country_code: itinerary.contact_country_code,
+        contact_phone: itinerary.contact_phone,
+        contact_email: itinerary.contact_email,
+        notification_times: itinerary.notification_times || [],
+        group_id: itinerary.group_id,
+        group_name: itinerary.group_name,
+        content: itinerary.content
       };
       
       await addItinerary(newItinerary);
       await refetchItineraries();
+      showSuccess('Itinerary duplicated successfully!');
     } catch (error) {
       console.error('Error duplicating itinerary:', error);
+      showSuccess('Error duplicating itinerary. Please try again.');
     }
   };
 
-  const handleMakeDraft = async (idx: number) => {
+  const handleMakeDraft = async (itineraryId: string) => {
     if (!event) return;
     
-    const itinerary = savedItineraries[idx];
+    const itinerary = savedItineraries.find(it => it.id === itineraryId);
     if (!itinerary) return;
     
     try {
       await updateItinerary(itinerary.id, { ...itinerary, is_draft: true });
       await refetchItineraries();
+      showSuccess('Itinerary moved to drafts successfully!');
     } catch (error) {
       console.error('Error making itinerary draft:', error);
+      showSuccess('Error moving to drafts. Please try again.');
+    }
+  };
+
+  const handleDeleteSingle = async () => {
+    if (!event || itineraryToDelete === null) {
+      console.error('Missing event or itinerary to delete');
+      alert('Error: Missing event or itinerary information');
+      return;
+    }
+    
+    console.log('itineraryToDelete:', itineraryToDelete, 'type:', typeof itineraryToDelete);
+    console.log('savedItineraries length:', savedItineraries.length);
+    
+    // itineraryToDelete should be a string ID
+    const itineraryId = itineraryToDelete;
+    if (!itineraryId) {
+      console.error('Could not find itinerary ID to delete');
+      alert('Error: Could not identify itinerary to delete');
+      return;
+    }
+    
+    // Verify the itinerary exists in our list
+    const itineraryExists = savedItineraries.find(it => it.id === itineraryId);
+    if (!itineraryExists) {
+      console.error('Itinerary not found in saved list:', itineraryId);
+      alert('Error: Itinerary not found');
+      return;
+    }
+    
+    try {
+      console.log('Attempting to delete itinerary:', itineraryId);
+      console.log('Itinerary details:', itineraryExists);
+      
+      await deleteItinerary(itineraryId);
+      console.log('Delete operation completed, refetching...');
+      
+      // Close modal immediately
+      setShowDeleteConfirm(false);
+      setDeleteText('');
+      setItineraryToDelete(null);
+      
+      // Refetch data
+      await refetchItineraries();
+      console.log('Refetch completed');
+      
+      showSuccess('Itinerary deleted successfully!');
+    } catch (error) {
+      console.error('Error deleting itinerary:', error);
+      
+      // Close modal on error too
+      setShowDeleteConfirm(false);
+      setDeleteText('');
+      setItineraryToDelete(null);
+      
+      alert(`Error deleting itinerary: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
@@ -860,13 +964,33 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
     if (selectedGuestIds.length === 0) return;
     
     try {
+      console.log('Deleting guests:', selectedGuestIds);
+      
       for (const guestId of selectedGuestIds) {
         await deleteGuest(guestId);
       }
+      
+      const deletedCount = selectedGuestIds.length;
+      console.log(`Successfully deleted ${deletedCount} guest(s)`);
+      
+      // Clear selections and close modal immediately
       setSelectedGuestIds([]);
+      setShowGuestDeleteConfirm(false);
+      
+      // Refetch guests data
       await refetchGuests();
+      
+      // Show success message
+      showSuccess(`Successfully deleted ${deletedCount} guest${deletedCount > 1 ? 's' : ''}!`);
+      
     } catch (error) {
       console.error('Error deleting guests:', error);
+      
+      // Close modal even on error
+      setShowGuestDeleteConfirm(false);
+      
+      // Show error message
+      alert(`Error deleting guests: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
@@ -879,8 +1003,10 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
     try {
       await updateItinerary(draft.id, { ...draft, is_draft: false });
       await refetchItineraries();
+      showSuccess('Draft published successfully!');
     } catch (error) {
       console.error('Error publishing draft:', error);
+      showSuccess('Error publishing draft. Please try again.');
     }
   };
 
@@ -1077,13 +1203,29 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
     if (selectedItineraryIds.length === 0) return;
     
     try {
+      console.log('Starting bulk delete for itineraries:', selectedItineraryIds);
+      
       for (const id of selectedItineraryIds) {
         await deleteItinerary(id);
+        console.log(`Successfully deleted itinerary: ${id}`);
       }
+      
+      // Clear selection and close modal immediately after starting deletion
       setSelectedItineraryIds([]);
+      setShowBulkDeleteConfirm(false);
+      
+      // Refresh the itinerary list
       await refetchItineraries();
+      
+      // Show success message
+      console.log(`Successfully deleted ${selectedItineraryIds.length} itineraries`);
+      // You could add a toast notification here if you have one implemented
+      
     } catch (error) {
       console.error('Error deleting itineraries:', error);
+      // Close modal even on error to prevent it from staying open
+      setShowBulkDeleteConfirm(false);
+      // You could show an error toast here
     }
   };
 
@@ -1358,6 +1500,55 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
   //   // Example: fetch enabled add-ons from Supabase and show/hide modules in the mobile UI
   // }
 
+  // 1. Standardize all main page titles
+  const mainTitleStyle = {
+    fontSize: 32,
+    fontWeight: 600,
+    margin: 0,
+    color: isDark ? '#fff' : '#333',
+    paddingTop: 32,
+    paddingLeft: 8,
+    paddingBottom: 16,
+    letterSpacing: '-0.02em',
+  };
+
+  // 2. Glassmorphic activity card style for Live Activity Feed
+  const activityCardStyle = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 16,
+    padding: 16,
+    background: isDark ? 'rgba(40,40,40,0.7)' : 'rgba(255,255,255,0.85)',
+    borderRadius: 12,
+    border: isDark ? '1px solid #444' : '1px solid #e2e8f0',
+    boxShadow: isDark ? '0 2px 8px #0003' : '0 2px 8px #0001',
+    marginBottom: 8,
+  };
+
+  // 3. Glassmorphic style for Quick Actions
+  const quickActionsStyle = {
+    ...getGlassStyles(isDark),
+    background: isDark ? 'rgba(30, 30, 30, 0.85)' : 'rgba(255,255,255,0.95)',
+    borderRadius: 16,
+    padding: 32,
+    boxShadow: isDark ? '0 4px 24px rgba(0,0,0,0.3)' : '0 4px 24px rgba(0,0,0,0.08)',
+    border: isDark ? '1px solid #333' : '1px solid #e5e7eb',
+    marginBottom: 32,
+    marginTop: 15,
+  };
+
+  // 4. Glassmorphic style for Event Settings
+  const eventSettingsStyle = {
+    ...getGlassStyles(isDark),
+    background: isDark ? 'rgba(30, 30, 30, 0.85)' : 'rgba(255,255,255,0.95)',
+    borderRadius: 16,
+    padding: 32,
+    boxShadow: isDark ? '0 4px 24px rgba(0,0,0,0.3)' : '0 4px 24px rgba(0,0,0,0.08)',
+    border: isDark ? '1px solid #333' : '1px solid #e5e7eb',
+    marginBottom: 32,
+    marginTop: 15,
+  };
+
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: isDark ? '#121212' : '#f8f9fa' }}>
       <div style={{ position: 'fixed', top: 0, left: 0, width: 260, height: '100vh', background: isDark ? '#1a1a1a' : '#222', color: '#fff', zIndex: 100, display: 'flex', flexDirection: 'column' }}>
@@ -1476,16 +1667,14 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
         <div style={{
           maxWidth: 1200,
           margin: '0 auto',
-          padding: '0 40px', // Only side padding for inner container
+          padding: '32px 16px 0 16px', // Add top padding, reduce side padding
           fontFamily: 'Roboto, Arial, system-ui, sans-serif',
           color: isDark ? '#ffffff' : '#222',
           width: '100%'
         }}>
           <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-              <h1 style={{ fontSize: 32, fontWeight: 600, margin: 0, color: isDark ? '#fff' : '#333' }}>
-                {currentEvent?.name || 'Event Dashboard'}
-              </h1>
+              <h1 style={mainTitleStyle}>{currentEvent?.name || 'Event Dashboard'}</h1>
               <span style={{
                 background: currentEvent ? getStatusColor(currentEvent) : '#6b7280',
                 color: '#fff',
@@ -1533,6 +1722,7 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
               </div>
             )}
           </div>
+          <div style={{ height: 32 }} />
           <hr style={{ margin: '7px 0 16px 0', border: 'none', borderTop: isDark ? '2px solid #444' : '2px solid #bbb' }} />
           <div style={{ display: 'flex', gap: 16, marginBottom: 32 }}>
             <TabButton id="settings" label="Event Dashboard" />
@@ -1544,10 +1734,7 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
           {activeTab === 'settings' && (
             <div style={{ marginBottom: 64, paddingBottom: 48 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                <h2 style={{ fontSize: 28, fontWeight: 600, margin: '0', display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <Icon name="report" style={{ fontSize: 32, color: isDark ? '#60A5FA' : '#3B82F6' }} />
-                  Event Dashboard
-                </h2>
+                <h2 style={mainTitleStyle}>Event Dashboard</h2>
                 <button
                   onClick={() => navigate(`/link-itineraries/${currentEvent?.id}`)}
                   style={{
@@ -1575,6 +1762,7 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                     minWidth: '140px',
                     maxWidth: '180px',
                     whiteSpace: 'nowrap' as const,
+                    marginBottom: 24, // Add this line for spacing
                   }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.background = isDark 
@@ -1678,7 +1866,74 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                 </div>
               </div>
 
-              {/* Guest Journey Tracking */}
+              {/* 2. Quick Actions moved above Guest Journey Checkpoints */}
+              <div style={quickActionsStyle}>
+                <h3 style={{ fontSize: 30, fontWeight: 600, marginBottom: 24 }}>Quick Actions</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
+                  <button style={{ 
+                    background: '#000', 
+                    color: '#fff', 
+                    border: 'none', 
+                    borderRadius: 12, 
+                    padding: '16px 20px',
+                    cursor: 'pointer',
+                    fontSize: 15,
+                    fontWeight: 500,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8
+                  }}>
+                    Export Report
+                  </button>
+                  <button style={{ 
+                    background: '#333', 
+                    color: '#fff', 
+                    border: 'none', 
+                    borderRadius: 12, 
+                    padding: '16px 20px',
+                    cursor: 'pointer',
+                    fontSize: 15,
+                    fontWeight: 500,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8
+                  }}>
+                    Send Announcement
+                  </button>
+                  <button style={{ 
+                    background: '#666', 
+                    color: '#fff', 
+                    border: 'none', 
+                    borderRadius: 12, 
+                    padding: '16px 20px',
+                    cursor: 'pointer',
+                    fontSize: 15,
+                    fontWeight: 500,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8
+                  }}>
+                    Emergency Alert
+                  </button>
+                  <button style={{ 
+                    background: '#999', 
+                    color: '#fff', 
+                    border: 'none', 
+                    borderRadius: 12, 
+                    padding: '16px 20px',
+                    cursor: 'pointer',
+                    fontSize: 15,
+                    fontWeight: 500,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8
+                  }}>
+                    Track Logistics
+                  </button>
+                </div>
+              </div>
+
+              {/* 3. Guest Journey Tracking (now above Live Activity Feed) */}
               <div style={{ 
                 background: isDark ? '#1e1e1e' : '#fff', 
                 borderRadius: 16, 
@@ -1687,10 +1942,7 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                 boxShadow: isDark ? '0 4px 24px rgba(0,0,0,0.3)' : '0 4px 24px rgba(0,0,0,0.08)',
                 border: isDark ? '1px solid #333' : '1px solid #e5e7eb'
               }}>
-                <h3 style={{ fontSize: 24, fontWeight: 600, marginBottom: 24, display: 'flex', alignItems: 'center', gap: 12, color: isDark ? '#ffffff' : '#222' }}>
-                  <Icon name="flight" style={{ fontSize: 28, color: isDark ? '#60A5FA' : '#3B82F6' }} />
-                  Guest Journey Checkpoints
-                </h3>
+                <h3 style={{ fontSize: 30, fontWeight: 600, marginBottom: 24 }}>Guest Journey Checkpoints</h3>
                 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 20 }}>
                   
@@ -1866,51 +2118,21 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                 </div>
               </div>
 
-              {/* Real-time Activity Feed */}
-              <div style={{ 
-                background: isDark ? '#1e1e1e' : '#fff', 
-                borderRadius: 16, 
-                padding: 32, 
-                marginBottom: 32,
-                boxShadow: isDark ? '0 4px 24px rgba(0,0,0,0.3)' : '0 4px 24px rgba(0,0,0,0.08)',
-                border: isDark ? '1px solid #333' : '1px solid #e5e7eb'
-              }}>
-                <h3 style={{ fontSize: 24, fontWeight: 600, marginBottom: 24, display: 'flex', alignItems: 'center', gap: 12, color: isDark ? '#ffffff' : '#222' }}>
-                  <Icon name="satellite" style={{ fontSize: 28, color: isDark ? '#60A5FA' : '#3B82F6' }} />
-                  Live Activity Feed
-                </h3>
-                
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxHeight: 400, overflowY: 'auto' }}>
-                  
-                  {/* Sample activity items */}
-                  <div style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    gap: 16, 
-                    padding: 16, 
-                    background: isDark ? '#2a2a2a' : '#f8fafc', 
-                    borderRadius: 12, 
-                    border: isDark ? '1px solid #444' : '1px solid #e2e8f0' 
-                  }}>
+              {/* 4. Live Activity Feed (now below Guest Journey Checkpoints) */}
+              <div style={{ ...getGlassStyles(isDark), marginBottom: 32, padding: 32 }}>
+                <h3 style={{ fontSize: 30, fontWeight: 700, marginBottom: 20, color: isDark ? '#fff' : '#222', letterSpacing: 0 }}>Live Activity Feed</h3>
+                <div>
+                  <div style={activityCardStyle}>
                     <div style={{ width: 12, height: 12, borderRadius: '50%', background: isDark ? '#fff' : '#000', flexShrink: 0 }}></div>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontWeight: 600, fontSize: 15, color: isDark ? '#ffffff' : '#000' }}>John Smith confirmed arrival</div>
                       <div style={{ color: isDark ? '#aaa' : '#666', fontSize: 13 }}>Through security checkpoint • 2 minutes ago</div>
                     </div>
                     <div style={{ fontSize: 20 }}>
-                      <Icon name="clipboard" style={{ fontSize: 18, color: '#22c55e' }} />
+                      <Icon name="clipboard" style={{ fontSize: 30, color: '#22c55e' }} />
                     </div>
                   </div>
-
-                  <div style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    gap: 16, 
-                    padding: 16, 
-                    background: isDark ? '#2a2a2a' : '#f8fafc', 
-                    borderRadius: 12, 
-                    border: isDark ? '1px solid #444' : '1px solid #e2e8f0' 
-                  }}>
+                  <div style={activityCardStyle}>
                     <div style={{ width: 12, height: 12, borderRadius: '50%', background: isDark ? '#ccc' : '#333', flexShrink: 0 }}></div>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontWeight: 600, fontSize: 15, color: isDark ? '#ffffff' : '#000' }}>Flight BA123 landed</div>
@@ -1920,8 +2142,7 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                       <Icon name="flight" style={{ fontSize: 18, color: '#fff' }} />
                     </div>
                   </div>
-
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 16, background: '#f8fafc', borderRadius: 12, border: '1px solid #e2e8f0' }}>
+                  <div style={activityCardStyle}>
                     <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#666', flexShrink: 0 }}></div>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontWeight: 600, fontSize: 15 }}>Driver assigned to Group Alpha</div>
@@ -1931,8 +2152,7 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                       <Icon name="pin" style={{ fontSize: 18, color: '#fff' }} />
                     </div>
                   </div>
-
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 16, background: '#f8fafc', borderRadius: 12, border: '1px solid #e2e8f0' }}>
+                  <div style={activityCardStyle}>
                     <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#888', flexShrink: 0 }}></div>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontWeight: 600, fontSize: 15 }}>Sarah Johnson checked into hotel</div>
@@ -1942,8 +2162,7 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                       <Icon name="hotel" style={{ fontSize: 18, color: '#fff' }} />
                     </div>
                   </div>
-
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 16, background: '#f8fafc', borderRadius: 12, border: '1px solid #e2e8f0' }}>
+                  <div style={activityCardStyle}>
                     <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#aaa', flexShrink: 0 }}></div>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontWeight: 600, fontSize: 15 }}>Emergency contact updated</div>
@@ -1954,169 +2173,99 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                 </div>
               </div>
 
-              {/* Quick Actions & Settings */}
-              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 32 }}>
-                
-                {/* Quick Actions */}
-                <div style={{ 
-                  background: '#fff', 
-                  borderRadius: 16, 
-                  padding: 32,
-                  boxShadow: '0 4px 24px rgba(0,0,0,0.08)',
-                  border: '1px solid #e5e7eb'
-                }}>
-                  <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 24 }}>Quick Actions</h3>
-                  
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
-                    <button style={{ 
-                      background: '#000', 
-                      color: '#fff', 
-                      border: 'none', 
-                      borderRadius: 12, 
-                      padding: '16px 20px',
-                      cursor: 'pointer',
-                      fontSize: 15,
-                      fontWeight: 500,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8
-                    }}>
-                      <Icon name="report" style={{ fontSize: 18, color: '#fff' }} />
-                      Export Report
-                    </button>
-                    
-                    <button style={{ 
-                      background: '#333', 
-                      color: '#fff', 
-                      border: 'none', 
-                      borderRadius: 12, 
-                      padding: '16px 20px',
-                      cursor: 'pointer',
-                      fontSize: 15,
-                      fontWeight: 500,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8
-                    }}>
-                      <span style={{ fontSize: 18, fontWeight: 'bold', color: '#ef4444' }}>!</span>
-                      Send Announcement
-                    </button>
-
-                    <button style={{ 
-                      background: '#666', 
-                      color: '#fff', 
-                      border: 'none', 
-                      borderRadius: 12, 
-                      padding: '16px 20px',
-                      cursor: 'pointer',
-                      fontSize: 15,
-                      fontWeight: 500,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8
-                    }}>
-                      <span style={{ fontSize: 18, fontWeight: 'bold', color: '#ef4444' }}>!</span>
-                      Emergency Alert
-                    </button>
-
-                    <button style={{ 
-                      background: '#999', 
-                      color: '#fff', 
-                      border: 'none', 
-                      borderRadius: 12, 
-                      padding: '16px 20px',
-                      cursor: 'pointer',
-                      fontSize: 15,
-                      fontWeight: 500,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8
-                    }}>
-                      <Icon name="pin" style={{ fontSize: 18, color: '#fff' }} />
-                      Track Logistics
-                    </button>
-                  </div>
+              {/* 5. Event Settings */}
+              <div style={eventSettingsStyle}>
+                <h3 style={{ fontSize: 30, fontWeight: 600, marginBottom: 28 }}>Event Settings</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                  <button style={{ 
+                    ...getGlassStyles(isDark),
+                    background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
+                    color: isDark ? '#fff' : '#374151',
+                    border: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid #d1d5db',
+                    borderRadius: 8, 
+                    padding: '16px 20px',
+                    cursor: 'pointer',
+                    fontSize: 16,
+                    fontWeight: 500,
+                    textAlign: 'left',
+                    boxShadow: 'none',
+                  }}>
+                    Notification Settings
+                  </button>
+                  <button style={{ 
+                    ...getGlassStyles(isDark),
+                    background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
+                    color: isDark ? '#fff' : '#374151',
+                    border: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid #d1d5db',
+                    borderRadius: 8, 
+                    padding: '16px 20px',
+                    cursor: 'pointer',
+                    fontSize: 16,
+                    fontWeight: 500,
+                    textAlign: 'left',
+                    boxShadow: 'none',
+                  }}>
+                    Privacy Settings
+                  </button>
+                  <button style={{ 
+                    ...getGlassStyles(isDark),
+                    background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
+                    color: isDark ? '#fff' : '#374151',
+                    border: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid #d1d5db',
+                    borderRadius: 8, 
+                    padding: '16px 20px',
+                    cursor: 'pointer',
+                    fontSize: 16,
+                    fontWeight: 500,
+                    textAlign: 'left',
+                    boxShadow: 'none',
+                  }}>
+                    Data Export
+                  </button>
                 </div>
-
-                {/* Event Settings & Danger Zone */}
+                {/* Danger Zone */}
                 <div style={{ 
-                  background: '#fff', 
-                  borderRadius: 16, 
-                  padding: 32,
-                  boxShadow: '0 4px 24px rgba(0,0,0,0.08)',
-                  border: '1px solid #e5e7eb'
+                  marginTop: 32, 
+                  padding: 20, 
+                  ...getGlassStyles(isDark),
+                  background: isDark ? 'rgba(239, 68, 68, 0.1)' : 'rgba(239, 68, 68, 0.05)', 
+                  border: isDark ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid rgba(239, 68, 68, 0.2)', 
+                  borderRadius: 12 
                 }}>
-                  <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 24 }}>Event Settings</h3>
-                  
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                    <button style={{ 
-                      background: '#f3f4f6', 
-                      color: '#374151', 
-                      border: '1px solid #d1d5db', 
-                      borderRadius: 8, 
-                      padding: '12px 16px',
-                      cursor: 'pointer',
+                  <h4 style={{ 
+                    color: isDark ? '#fca5a5' : '#dc2626', 
+                    marginBottom: 12, 
+                    fontSize: 16, 
+                    fontWeight: 600 
+                  }}>Danger Zone</h4>
+                  <p style={{ 
+                    color: isDark ? '#fecaca' : '#991b1b', 
+                    fontSize: 13, 
+                    marginBottom: 16 
+                  }}>Deleting this event is permanent and cannot be undone.</p>
+            <button
+              onClick={handleDeleteEvent}
+              style={{
+                background: isDark ? 'rgba(239, 68, 68, 0.2)' : 'rgba(239, 68, 68, 0.1)',
+                      color: isDark ? '#fca5a5' : '#dc2626',
+                      border: isDark ? '1px solid rgba(239, 68, 68, 0.4)' : '1px solid rgba(239, 68, 68, 0.3)',
+                borderRadius: 8,
+                      padding: '12px 20px',
                       fontSize: 14,
-                      fontWeight: 500,
-                      textAlign: 'left'
-                    }}>
-                      ✉ Notification Settings
-                    </button>
-                    
-                    <button style={{ 
-                      background: '#f3f4f6', 
-                      color: '#374151', 
-                      border: '1px solid #d1d5db', 
-                      borderRadius: 8, 
-                      padding: '12px 16px',
-                      cursor: 'pointer',
-                      fontSize: 14,
-                      fontWeight: 500,
-                      textAlign: 'left'
-                    }}>
-                      <Icon name="padlock" style={{ fontSize: 14, color: '#374151', marginRight: 8 }} /> Privacy Settings
-                    </button>
-
-                    <button style={{ 
-                      background: '#f3f4f6', 
-                      color: '#374151', 
-                      border: '1px solid #d1d5db', 
-                      borderRadius: 8, 
-                      padding: '12px 16px',
-                      cursor: 'pointer',
-                      fontSize: 14,
-                      fontWeight: 500,
-                      textAlign: 'left',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8
-                    }}>
-                      <Icon name="report" style={{ fontSize: 14, color: '#374151' }} />
-                      Data Export
-                    </button>
-                  </div>
-
-                  {/* Danger Zone */}
-                  <div style={{ marginTop: 32, padding: 20, background: '#f5f5f5', border: '1px solid #ccc', borderRadius: 12 }}>
-                    <h4 style={{ color: '#000', marginBottom: 12, fontSize: 16, fontWeight: 600 }}>Danger Zone</h4>
-                    <p style={{ color: '#333', fontSize: 13, marginBottom: 16 }}>Deleting this event is permanent and cannot be undone.</p>
-              <button
-                onClick={handleDeleteEvent}
-                style={{
-                  background: '#fff',
-                        color: '#000',
-                        border: '2px solid #000',
-                  borderRadius: 8,
-                        padding: '12px 20px',
-                        fontSize: 14,
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                        width: '100%'
-                }}
-              >
-                Delete Event
-              </button>
-                  </div>
+                fontWeight: 600,
+                cursor: 'pointer',
+                      width: '100%',
+                      transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = isDark ? 'rgba(239, 68, 68, 0.3)' : 'rgba(239, 68, 68, 0.2)';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = isDark ? 'rgba(239, 68, 68, 0.2)' : 'rgba(239, 68, 68, 0.1)';
+              }}
+            >
+              Delete Event
+            </button>
                 </div>
               </div>
             </div>
@@ -2125,12 +2274,7 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
           {activeTab === 'itineraries' && (
             <div style={{ marginBottom: 64, paddingBottom: 48 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-                <h2 style={{ 
-                  fontSize: 28, 
-                  fontWeight: 600, 
-                  margin: 0,
-                  color: isDark ? '#ffffff' : '#000000'
-                }}>Itineraries</h2>
+                <h2 style={mainTitleStyle}>Itineraries</h2>
                 
                 <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                   {/* Options Menu Button */}
@@ -2164,68 +2308,59 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                         marginTop: 8,
                         boxSizing: 'border-box',
                       }}>
-                        {isSelectModeActive && (
-                          <>
-                            <button
-                              onClick={handleSelectAllItineraries}
-                              style={{
-                                width: '100%',
-                                padding: '12px 16px',
-                                background: 'transparent',
-                                border: 'none',
-                                color: isDark ? '#ffffff' : '#000000',
-                                textAlign: 'left',
-                                cursor: 'pointer',
-                                borderRadius: 8,
-                                fontSize: 14,
-                                fontWeight: 500,
-                                marginBottom: 8,
-                                transition: 'background 0.2s ease'
-                              }}
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.background = isDark 
-                                  ? 'rgba(255, 255, 255, 0.1)' 
-                                  : 'rgba(0, 0, 0, 0.05)';
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.background = 'transparent';
-                              }}
-                            >
-                              {selectedItineraryIds.length === savedItineraries.length ? 'Deselect All' : 'Select All'}
-                            </button>
-                            
-                            {selectedItineraryIds.length > 0 && (
-                              <button
-                                onClick={() => {
-                                  setShowBulkDeleteConfirm(true);
-                                  setShowOptionsMenu(false);
-                                }}
-                                style={{
-                                  width: '100%',
-                                  padding: '12px 16px',
-                                  background: 'rgba(239, 68, 68, 0.1)',
-                                  border: '1px solid rgba(239, 68, 68, 0.3)',
-                                  color: '#ef4444',
-                                  textAlign: 'left',
-                                  cursor: 'pointer',
-                                  borderRadius: 8,
-                                  fontSize: 14,
-                                  fontWeight: 500,
-                                  marginBottom: 8,
-                                  transition: 'all 0.2s ease'
-                                }}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
-                                }}
-                              >
-                                Delete Selected ({selectedItineraryIds.length})
-                              </button>
-                            )}
-                          </>
-                        )}
+                        <button
+                          onClick={handleSelectAllItineraries}
+                          style={{
+                            width: '100%',
+                            padding: '12px 16px',
+                            background: 'transparent',
+                            border: 'none',
+                            color: isDark ? '#ffffff' : '#000000',
+                            textAlign: 'left',
+                            cursor: 'pointer',
+                            borderRadius: 8,
+                            fontSize: 14,
+                            fontWeight: 500,
+                            marginBottom: 8,
+                            transition: 'background 0.2s ease'
+                          }}
+                          onMouseEnter={e => {
+                            e.currentTarget.style.background = isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)';
+                          }}
+                          onMouseLeave={e => {
+                            e.currentTarget.style.background = 'transparent';
+                          }}
+                        >
+                          {selectedItineraryIds.length === savedItineraries.length ? 'Deselect All' : 'Select All'}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowBulkDeleteConfirm(true);
+                            setShowOptionsMenu(false);
+                          }}
+                          style={{
+                            width: '100%',
+                            padding: '12px 16px',
+                            background: 'rgba(239, 68, 68, 0.1)',
+                            border: '1px solid rgba(239, 68, 68, 0.3)',
+                            color: '#ef4444',
+                            textAlign: 'left',
+                            cursor: 'pointer',
+                            borderRadius: 8,
+                            fontSize: 14,
+                            fontWeight: 500,
+                            marginBottom: 8,
+                            transition: 'all 0.2s ease'
+                          }}
+                          onMouseEnter={e => {
+                            e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
+                          }}
+                          onMouseLeave={e => {
+                            e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
+                          }}
+                        >
+                          Delete All
+                        </button>
                         
                         <button
                           onClick={() => {
@@ -2246,12 +2381,10 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                             marginBottom: 8,
                             transition: 'background 0.2s ease'
                           }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.background = isDark 
-                              ? 'rgba(255, 255, 255, 0.1)' 
-                              : 'rgba(0, 0, 0, 0.05)';
+                          onMouseEnter={e => {
+                            e.currentTarget.style.background = isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)';
                           }}
-                          onMouseLeave={(e) => {
+                          onMouseLeave={e => {
                             e.currentTarget.style.background = 'transparent';
                           }}
                         >
@@ -2533,11 +2666,11 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                             </div>
                           </div>
                           <div style={{ marginTop: 20, display: 'flex', alignSelf: 'flex-end', gap: 16, alignItems: 'center' }}>
-                            <button title="Edit" onClick={() => navigate(`/event/${id}/itinerary/edit/${idx}`)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="edit" /></button>
-                            <button title="Duplicate" onClick={() => handleDuplicate(idx)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="duplicate" /></button>
-                            <button title="Share" onClick={() => { setItineraryToShare(idx); setShowShareModal(true); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="share" /></button>
-                            <button title="Save as Draft" onClick={() => handleMakeDraft(idx)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="saveAsDraft" /></button>
-                            <button title="Delete" onClick={() => { setItineraryToDelete(idx); setShowDeleteConfirm(true); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="delete" /></button>
+                            <button title="Edit" onClick={() => navigate(`/event/${id}/itinerary/edit/${it.id}`)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="edit" /></button>
+                            <button title="Duplicate" onClick={() => handleDuplicate(it)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="duplicate" /></button>
+                            <button title="Share" onClick={() => { setItineraryToShare(it.id); setShowShareModal(true); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="share" /></button>
+                            <button title="Save as Draft" onClick={() => handleMakeDraft(it.id)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="saveAsDraft" /></button>
+                            <button title="Delete" onClick={() => { setItineraryToDelete(it.id); setShowDeleteConfirm(true); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="delete" /></button>
                           </div>
                         </div>
                       ))}
@@ -2751,22 +2884,101 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                         </div>
                       </div>
                       <div style={{ marginTop: 20, display: 'flex', alignSelf: 'flex-end', gap: 16, alignItems: 'center' }}>
-                        <button title="Edit" onClick={() => navigate(`/event/${id}/itinerary/edit/${idx}`)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="edit" /></button>
-                        <button title="Duplicate" onClick={() => handleDuplicate(idx)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="duplicate" /></button>
-                        <button title="Share" onClick={() => { setItineraryToShare(idx); setShowShareModal(true); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="share" /></button>
-                        <button title="Save as Draft" onClick={() => handleMakeDraft(idx)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="saveAsDraft" /></button>
-                        <button title="Delete" onClick={() => { setItineraryToDelete(idx); setShowDeleteConfirm(true); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="delete" /></button>
+                        <button title="Edit" onClick={() => navigate(`/event/${id}/itinerary/edit/${it.id}`)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="edit" /></button>
+                        <button title="Duplicate" onClick={() => handleDuplicate(it)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="duplicate" /></button>
+                        <button title="Share" onClick={() => { setItineraryToShare(it.id); setShowShareModal(true); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="share" /></button>
+                        <button title="Save as Draft" onClick={() => handleMakeDraft(it.id)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="saveAsDraft" /></button>
+                        <button title="Delete" onClick={() => { setItineraryToDelete(it.id); setShowDeleteConfirm(true); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="delete" /></button>
                       </div>
                     </div>
                   </div>
                 ))}
+
+                {/* Drafts Section */}
+                {draftItineraries.length > 0 && (
+                  <div style={{ marginTop: 48, paddingTop: 32, borderTop: `2px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}` }}>
+                    <h3 style={mainTitleStyle}>Draft Itineraries</h3>
+                    
+                    <div style={{ display: 'grid', gap: 24 }}>
+                      {draftItineraries.map((draft, draftIdx) => (
+                        <div
+                          key={draft.id}
+                          style={{
+                            ...getGlassStyles(isDark),
+                            border: `2px dashed ${isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.15)'}`,
+                            borderRadius: 16,
+                            padding: 28,
+                            background: isDark ? 'rgba(40,40,40,0.5)' : 'rgba(245,245,245,0.7)',
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+                            <div>
+                              <h4 style={{ 
+                                fontSize: 20, 
+                                fontWeight: 600, 
+                                margin: 0, 
+                                marginBottom: 8,
+                                color: isDark ? '#ffffff' : '#000000'
+                              }}>
+                                {draft.title}
+                              </h4>
+                              <div style={{ 
+                                fontSize: 14, 
+                                color: isDark ? '#a1a1aa' : '#71717a',
+                                marginBottom: 8
+                              }}>
+                                Draft • {formatUK(draft.date || '')} • {draft.location}
+                              </div>
+                              {draft.description && (
+                                <p style={{ 
+                                  fontSize: 15, 
+                                  color: isDark ? '#d1d5db' : '#374151',
+                                  margin: 0,
+                                  lineHeight: 1.5
+                                }}>
+                                  {draft.description}
+                                </p>
+                              )}
+                            </div>
+                            
+                            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                              <button
+                                onClick={() => handlePublishDraft(draftIdx)}
+                                style={{
+                                  ...getButtonStyles(isDark, 'primary'),
+                                  fontSize: 14,
+                                  padding: '8px 16px',
+                                  minHeight: 36
+                                }}
+                              >
+                                Publish
+                              </button>
+                              
+                              <button
+                                onClick={() => navigate(`/event/${event?.id}/itinerary/edit/${draft.id}`)}
+                                style={{
+                                  ...getButtonStyles(isDark, 'secondary'),
+                                  fontSize: 14,
+                                  padding: '8px 16px',
+                                  minHeight: 36
+                                }}
+                              >
+                                Edit
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
 
           {activeTab === 'guests' && (
             <div style={{ marginBottom: 64, position: 'relative', paddingBottom: 48 }}>
-              <h2 style={{ fontSize: 28, fontWeight: 600, margin: '0 0 24px 0' }}>Guest List</h2>
+              <h2 style={mainTitleStyle}>Guest List</h2>
 
               {/* Top row of controls */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
@@ -2912,7 +3124,7 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                     }}
                     style={guestPageWhiteButtonStyle}
                   >
-                    Select
+                    {isSelectModeActive ? 'Unselect' : 'Select'}
                   </button>
                 </div>
               </div>
@@ -2947,24 +3159,75 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
               )}
 
               {showGuestDeleteConfirm && (
-                <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.6)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <div style={{ background: 'white', borderRadius: 16, padding: '40px 48px', minWidth: 400, boxShadow: '0 4px 32px rgba(0,0,0,0.2)', textAlign: 'center' }}>
-                    <h2 style={{ marginTop: 0, marginBottom: 16, fontSize: 24, fontWeight: 600 }}>Delete Guests?</h2>
-                    <p style={{ color: '#666', fontSize: 16, marginBottom: 32, lineHeight: 1.6 }}>
-                      Are you sure you want to permanently delete the {selectedGuestIds.length} selected guest(s)? This action cannot be undone.
-                    </p>
-                    <div style={{ display: 'flex', justifyContent: 'center', gap: 16 }}>
+                <div style={{
+                  position: 'fixed',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  background: 'rgba(0,0,0,0.6)',
+                  backdropFilter: 'blur(8px)',
+                  WebkitBackdropFilter: 'blur(8px)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  zIndex: 2000
+                }}>
+                  <div style={{
+                    ...getGlassStyles(isDark),
+                    padding: 32,
+                    minWidth: 400,
+                    maxWidth: 500
+                  }}>
+                    <div style={{ 
+                      fontSize: 24, 
+                      fontWeight: 600, 
+                      marginBottom: 8, 
+                      color: '#ef4444',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 12
+                    }}>
+                      <span style={{ fontSize: 28 }}>🗑️</span>
+                      Delete Guests
+                    </div>
+                    <div style={{ 
+                      fontSize: 16, 
+                      color: isDark ? '#a1a1aa' : '#71717a', 
+                      marginBottom: 24,
+                      lineHeight: 1.5
+                    }}>
+                      Are you sure you want to permanently delete <strong>{selectedGuestIds.length}</strong> selected guest{selectedGuestIds.length > 1 ? 's' : ''}? This action cannot be undone.
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 16 }}>
                       <button
-                        style={{ background: '#f5f5f5', color: '#222', fontWeight: 500, fontSize: 18, border: '2px solid #ddd', borderRadius: 8, padding: '12px 36px', minWidth: 120, cursor: 'pointer' }}
                         onClick={() => setShowGuestDeleteConfirm(false)}
+                        style={{
+                          ...getButtonStyles(isDark, 'secondary'),
+                          padding: '12px 24px',
+                          fontSize: 16
+                        }}
                       >
                         Cancel
                       </button>
                       <button
-                        style={{ background: '#ef4444', color: '#fff', fontWeight: 500, fontSize: 18, border: 'none', borderRadius: 8, padding: '13px 37px', minWidth: 120, cursor: 'pointer' }}
                         onClick={handleDeleteSelectedGuests}
+                        style={{
+                          background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                          color: '#ffffff',
+                          border: 'none',
+                          padding: '12px 24px',
+                          borderRadius: 12,
+                          fontSize: 16,
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          backdropFilter: 'blur(10px)',
+                          WebkitBackdropFilter: 'blur(10px)',
+                          transition: 'all 0.2s ease',
+                          boxShadow: '0 4px 16px rgba(239, 68, 68, 0.3)'
+                        }}
                       >
-                        Delete
+                        Delete Guest{selectedGuestIds.length > 1 ? 's' : ''}
                       </button>
                     </div>
                   </div>
@@ -3030,7 +3293,7 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
 
           {activeTab === 'addons' && (
             <div style={{ marginBottom: 64, position: 'relative', paddingBottom: 48 }}>
-              <h2 style={{ fontSize: 28, fontWeight: 600, margin: '0 0 24px 0' }}>Add Ons</h2>
+              <h2 style={mainTitleStyle}>Add Ons</h2>
               <div
                 style={{
                   border: '2px dashed #888',
@@ -3162,7 +3425,7 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                 Cancel
               </button>
               <button
-                onClick={handleDelete}
+                onClick={handleDeleteSingle}
                 disabled={deleteText !== 'delete'}
                 style={{
                   background: deleteText === 'delete' 
@@ -3295,7 +3558,7 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
       )}
 
       {showShareModal && (() => {
-        const itineraryDetails = itineraryToShare !== null ? savedItineraries[itineraryToShare] : null;
+        const itineraryDetails = itineraryToShare !== null ? savedItineraries.find(it => it.id === itineraryToShare) : null;
         return (
           <div style={{
             position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
@@ -3626,5 +3889,29 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
           </div>
         </div>
       )}
+
+      {/* Success Message Notification */}
+      {showSuccessMessage && (
+        <div style={{
+          position: 'fixed',
+          top: 20,
+          right: 20,
+          background: '#10b981',
+          color: '#fff',
+          padding: '16px 24px',
+          borderRadius: 8,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          zIndex: 10002,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          fontSize: 16,
+          fontWeight: 500
+        }}>
+          <span style={{ fontSize: 18 }}>✓</span>
+          {successMessage}
+        </div>
+      )}
     </div>
-  );}
+  );
+}
