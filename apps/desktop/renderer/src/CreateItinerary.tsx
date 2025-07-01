@@ -190,6 +190,10 @@ export default function CreateItinerary() {
   const [deleteItemIndex, setDeleteItemIndex] = useState<number | null>(null);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
 
+  // Add state for success message and glow effect
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [glowItineraryId, setGlowItineraryId] = useState<string | null>(null);
+
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -536,10 +540,16 @@ export default function CreateItinerary() {
 
         const updatedItinerary = await updateItinerary(originalItinerary.id, itineraryData);
         console.log('Itinerary updated successfully:', updatedItinerary);
-        navigate(`/event/${eventId}?tab=itineraries`);
+        setShowSuccess(true);
+        setGlowItineraryId(updatedItinerary.id);
+        setTimeout(() => {
+          setShowSuccess(false);
+          setGlowItineraryId(null);
+          navigate(`/event/${eventId}?tab=itineraries`, { state: { glowId: updatedItinerary.id } });
+        }, 2000);
       } else {
         // Create new itineraries (one for each item)
-        const createdItineraries = [];
+        const createdItineraries: any[] = [];
         
         for (const item of allItemsToSave) {
           // Extract module values for each item
@@ -585,7 +595,13 @@ export default function CreateItinerary() {
         }
         
         console.log(`${createdItineraries.length} itinerary items created successfully:`, createdItineraries);
-        navigate(`/event/${eventId}?tab=itineraries`);
+        setShowSuccess(true);
+        setGlowItineraryId(createdItineraries[0].id);
+        setTimeout(() => {
+          setShowSuccess(false);
+          setGlowItineraryId(null);
+          navigate(`/event/${eventId}?tab=itineraries`, { state: { glowId: createdItineraries[0].id } });
+        }, 2000);
       }
     } catch (error) {
       console.error('Error saving itinerary to Supabase:', error);
@@ -1445,6 +1461,7 @@ export default function CreateItinerary() {
             marginLeft: 'auto',
             marginRight: 'auto',
             transition: 'all 0.3s ease-in-out',
+            ...(item.id === glowItineraryId ? { animation: 'glowPulse 2s' } : {}),
           }}>
             {expandedItemIndex === idx ? (
               // EXPANDED VIEW - Match draft structure exactly
@@ -2093,6 +2110,37 @@ export default function CreateItinerary() {
             {isEditMode ? 'Update Itinerary' : `Publish ${drafts.length + items.length} Item${(drafts.length + items.length) !== 1 ? 's' : ''}`}
           </button>
         </div>
+
+        {/* Success Message and Glow Animation Style */}
+        {showSuccess && (
+          <div style={{
+            position: 'fixed',
+            left: '50%',
+            top: '50%',
+            transform: 'translate(-50%, -50%)',
+            zIndex: 5000,
+            background: isDark ? 'rgba(36,36,40,0.92)' : 'rgba(255,255,255,0.92)',
+            borderRadius: 18,
+            boxShadow: isDark ? '0 4px 16px rgba(0,0,0,0.25)' : '0 4px 16px rgba(0,0,0,0.08)',
+            border: isDark ? '1.5px solid rgba(255,255,255,0.10)' : '1.5px solid rgba(0,0,0,0.08)',
+            backdropFilter: 'blur(12px)',
+            padding: '18px 32px',
+            fontWeight: 700,
+            fontSize: 18,
+            color: isDark ? '#fff' : '#222',
+            textAlign: 'center',
+            pointerEvents: 'none',
+          }}>
+            {isEditMode ? 'Itinerary updated!' : 'Itinerary published!'}
+          </div>
+        )}
+        <style>{`
+        @keyframes glowPulse {
+          0% { box-shadow: 0 0 0 0 rgba(59,130,246,0.7); }
+          50% { box-shadow: 0 0 16px 8px rgba(59,130,246,0.25); }
+          100% { box-shadow: 0 0 0 0 rgba(59,130,246,0.0); }
+        }
+        `}</style>
       </div>
 
       {/* Module Sidebar with Glass Effect */}
