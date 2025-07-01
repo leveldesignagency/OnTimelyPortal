@@ -1,4 +1,4 @@
-import React, { useState, useContext, useEffect, useRef } from 'react';
+import React, { useState, useContext, useEffect, useRef, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ThemeContext } from '../ThemeContext';
 import TimelinePreview from '../components/TimelinePreview';
@@ -36,6 +36,14 @@ export default function EventPortalManagementPage() {
   const [collapsedCards, setCollapsedCards] = useState<{[guestId: string]: boolean}>({});
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [collapsedItins, setCollapsedItins] = useState<{[itinId: string]: boolean}>({});
+  const [showQuestionModal, setShowQuestionModal] = useState(false);
+  const [questionStep, setQuestionStep] = useState(1);
+  const [questionText, setQuestionText] = useState('');
+  const [questionTimeMode, setQuestionTimeMode] = useState<'now' | 'later'>('now');
+  const [questionTime, setQuestionTime] = useState<string>('');
+  const [questionDropTime, setQuestionDropTime] = useState<Date | null>(null);
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [confirmationMessage, setConfirmationMessage] = useState('');
 
   // Initialize collapsed cards when guests change
   useEffect(() => {
@@ -156,6 +164,16 @@ export default function EventPortalManagementPage() {
     }
   };
 
+  // Helper to open modal after drop
+  const handleShowQuestionModal = (dropTime: Date) => {
+    setShowQuestionModal(true);
+    setQuestionStep(1);
+    setQuestionText('');
+    setQuestionTimeMode('now');
+    setQuestionTime('');
+    setQuestionDropTime(dropTime);
+  };
+
   const getCardStyles = (isDark: boolean) => ({
     background: isDark 
       ? 'rgba(255, 255, 255, 0.05)' 
@@ -225,6 +243,15 @@ export default function EventPortalManagementPage() {
       timelineRef.current.goToNext();
     }
   };
+
+  // For itinerary list, sort itineraries by start_time ascending
+  const sortedItinerariesForList = useMemo(() => {
+    return [...itineraries].sort((a, b) => {
+      const [ah, am] = a.start_time.split(':').map(Number);
+      const [bh, bm] = b.start_time.split(':').map(Number);
+      return ah !== bh ? ah - bh : am - bm;
+    });
+  }, [itineraries]);
 
   if (!guests.length) {
     return (
@@ -977,6 +1004,71 @@ export default function EventPortalManagementPage() {
             width: '100vw',
             height: '100vh',
           }}>
+            {/* Update Timeline Button - Center Top */}
+            <button
+              style={{
+                position: 'absolute',
+                top: 32,
+                left: '50%',
+                transform: 'translateX(-50%)',
+                zIndex: 1001,
+                background: isDark ? 'rgba(36,36,40,0.7)' : 'rgba(255,255,255,0.7)',
+                color: isDark ? '#fff' : '#222',
+                border: isDark ? '1.5px solid rgba(255,255,255,0.12)' : '1.5px solid rgba(0,0,0,0.08)',
+                borderRadius: 16,
+                padding: '10px 0',
+                fontWeight: 700,
+                fontSize: 15,
+                boxShadow: isDark ? '0 2px 12px rgba(0,0,0,0.25)' : '0 2px 12px rgba(0,0,0,0.08)',
+                backdropFilter: 'blur(12px)',
+                cursor: 'pointer',
+                transition: 'background 0.2s',
+                minWidth: 0,
+                letterSpacing: 0.2,
+                width: 140,
+              }}
+              onClick={() => {/* TODO: implement update timeline logic */}}
+            >
+              Update Timeline
+            </button>
+
+            {/* Draggable Modules - Each in its own container */}
+            <div style={{
+              position: 'absolute',
+              right: 48,
+              top: 100,
+              zIndex: 1000,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 24,
+            }}>
+              {/* Question Field Module */}
+              <div
+                draggable
+                style={{
+                  background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(36,36,40,0.08)',
+                  border: `2px dashed ${isDark ? 'rgba(255,255,255,0.18)' : 'rgba(36,36,40,0.18)'}`,
+                  borderRadius: 18,
+                  padding: '20px 28px',
+                  minWidth: 160,
+                  fontWeight: 700,
+                  fontSize: 15,
+                  color: isDark ? '#fff' : '#222',
+                  boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.10)' : '0 2px 8px rgba(36,36,40,0.08)',
+                  cursor: 'grab',
+                  userSelect: 'none',
+                  textAlign: 'center',
+                  marginBottom: 8,
+                  backdropFilter: 'blur(8px)',
+                }}
+                onDragStart={e => {
+                  e.dataTransfer.setData('moduleType', 'question');
+                }}
+              >
+                + Question Field
+              </div>
+            </div>
+
             {/* Itinerary List - Left side, in a container */}
             <div style={{
               position: 'absolute',
@@ -1000,7 +1092,7 @@ export default function EventPortalManagementPage() {
               <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 12, color: isDark ? '#fff' : '#222', letterSpacing: 0.5 }}>
                 Itinerary Items
               </div>
-              {itineraries.map((itin: any) => (
+              {sortedItinerariesForList.map((itin: any, index: number) => (
                 <div key={itin.id} style={{
                   borderRadius: 12,
                   background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
@@ -1018,7 +1110,7 @@ export default function EventPortalManagementPage() {
                 }}
                 onClick={() => {
                   if (timelineRef.current && timelineRef.current.goToItem) {
-                    timelineRef.current.goToItem(itineraries.findIndex((i: any) => i.id === itin.id));
+                    timelineRef.current.goToItem(index);
                   }
                 }}
                 >
@@ -1031,16 +1123,28 @@ export default function EventPortalManagementPage() {
             </div>
 
             {/* Center: iPhone Mockup, dead center */}
-            <div style={{
-              position: 'absolute',
-              left: '50%',
-              top: '50%',
-              transform: 'translate(-50%, -50%)',
-              zIndex: 3,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}>
+            <div
+              style={{
+                position: 'absolute',
+                left: '50%',
+                top: '50%',
+                transform: 'translate(-50%, -50%)',
+                zIndex: 3,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              onDragOver={e => {
+                e.preventDefault();
+              }}
+              onDrop={e => {
+                const moduleType = e.dataTransfer.getData('moduleType');
+                if (moduleType === 'question') {
+                  // Use current time as drop time for now
+                  handleShowQuestionModal(new Date());
+                }
+              }}
+            >
               <div style={{
                 width: 340,
                 height: 700,
@@ -1167,21 +1271,333 @@ export default function EventPortalManagementPage() {
             >
               ×
             </button>
+
+            {/* Question Field Modal */}
+            {showQuestionModal && (
+              <div style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                width: '100vw',
+                height: '100vh',
+                background: 'rgba(0,0,0,0.25)',
+                zIndex: 3000,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
+                <div style={{
+                  background: isDark ? 'rgba(36,36,40,0.85)' : 'rgba(255,255,255,0.85)',
+                  borderRadius: 24,
+                  boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.35)' : '0 8px 32px rgba(0,0,0,0.10)',
+                  border: isDark ? '1.5px solid rgba(255,255,255,0.10)' : '1.5px solid rgba(0,0,0,0.08)',
+                  backdropFilter: 'blur(16px)',
+                  padding: '40px 32px 32px 32px',
+                  minWidth: 340,
+                  maxWidth: 400,
+                  width: '90vw',
+                  position: 'relative',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                }}>
+                  {/* Close Modal */}
+                  <button
+                    onClick={() => setShowQuestionModal(false)}
+                    style={{
+                      position: 'absolute',
+                      top: 18,
+                      right: 18,
+                      background: 'none',
+                      border: 'none',
+                      color: isDark ? '#fff' : '#222',
+                      fontSize: 22,
+                      cursor: 'pointer',
+                      borderRadius: 16,
+                      width: 32,
+                      height: 32,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'background 0.2s',
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(36,36,40,0.08)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                  >
+                    ×
+                  </button>
+                  {questionStep === 1 && (
+                    <>
+                      <div style={{ fontWeight: 800, fontSize: 22, marginBottom: 18, color: isDark ? '#fff' : '#222', letterSpacing: 0.2, textAlign: 'center' }}>
+                        What question do you want to ask your guests?
+                      </div>
+                      <textarea
+                        value={questionText}
+                        onChange={e => setQuestionText(e.target.value.slice(0, 1000))}
+                        maxLength={1000}
+                        placeholder="Type your question here..."
+                        style={{
+                          width: '100%',
+                          minHeight: 90,
+                          maxHeight: 180,
+                          borderRadius: 14,
+                          border: isDark ? '1.5px solid rgba(255,255,255,0.10)' : '1.5px solid rgba(0,0,0,0.08)',
+                          background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(36,36,40,0.04)',
+                          color: isDark ? '#fff' : '#222',
+                          fontSize: 16,
+                          padding: '14px 16px',
+                          marginBottom: 16,
+                          resize: 'vertical',
+                          outline: 'none',
+                          boxShadow: 'none',
+                          fontWeight: 500,
+                          letterSpacing: 0.1,
+                        }}
+                      />
+                      <div style={{ width: '100%', textAlign: 'right', fontSize: 12, color: isDark ? '#aaa' : '#666', marginBottom: 18 }}>
+                        {questionText.length}/1000
+                      </div>
+                      <button
+                        style={{
+                          width: '100%',
+                          padding: '12px 0',
+                          borderRadius: 14,
+                          background: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(36,36,40,0.10)',
+                          color: isDark ? '#fff' : '#222',
+                          fontWeight: 700,
+                          fontSize: 16,
+                          border: 'none',
+                          cursor: questionText.trim().length === 0 ? 'not-allowed' : 'pointer',
+                          opacity: questionText.trim().length === 0 ? 0.5 : 1,
+                          marginTop: 4,
+                          marginBottom: 2,
+                          transition: 'background 0.2s',
+                        }}
+                        disabled={questionText.trim().length === 0}
+                        onClick={() => setQuestionStep(2)}
+                      >
+                        Next
+                      </button>
+                    </>
+                  )}
+                  {questionStep === 2 && (
+                    <>
+                      <div style={{ fontWeight: 800, fontSize: 22, marginBottom: 18, color: isDark ? '#fff' : '#222', letterSpacing: 0.2, textAlign: 'center' }}>
+                        When should this question show?
+                      </div>
+                      <div style={{ display: 'flex', gap: 16, marginBottom: 18, width: '100%' }}>
+                        <button
+                          style={{
+                            flex: 1,
+                            padding: '12px 0',
+                            borderRadius: 12,
+                            background: questionTimeMode === 'now' ? (isDark ? 'rgba(255,255,255,0.18)' : 'rgba(36,36,40,0.18)') : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(36,36,40,0.08)'),
+                            color: isDark ? '#fff' : '#222',
+                            fontWeight: 700,
+                            fontSize: 15,
+                            border: 'none',
+                            cursor: 'pointer',
+                            transition: 'background 0.2s',
+                          }}
+                          onClick={() => setQuestionTimeMode('now')}
+                        >
+                          Now
+                        </button>
+                        <button
+                          style={{
+                            flex: 1,
+                            padding: '12px 0',
+                            borderRadius: 12,
+                            background: questionTimeMode === 'later' ? (isDark ? 'rgba(255,255,255,0.18)' : 'rgba(36,36,40,0.18)') : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(36,36,40,0.08)'),
+                            color: isDark ? '#fff' : '#222',
+                            fontWeight: 700,
+                            fontSize: 15,
+                            border: 'none',
+                            cursor: 'pointer',
+                            transition: 'background 0.2s',
+                          }}
+                          onClick={() => setQuestionTimeMode('later')}
+                        >
+                          Later
+                        </button>
+                      </div>
+                      {questionTimeMode === 'later' && (
+                        <div style={{ width: '100%', marginBottom: 18, display: 'flex', gap: 12, justifyContent: 'center' }}>
+                          {/* Custom time picker: hour and minute columns */}
+                          <div style={{ flex: 1, display: 'flex', gap: 8, background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(36,36,40,0.04)', borderRadius: 12, border: isDark ? '1.5px solid rgba(255,255,255,0.10)' : '1.5px solid rgba(0,0,0,0.08)', padding: '8px 0', justifyContent: 'center' }}>
+                            {/* Hour column */}
+                            <div style={{ flex: 1, maxHeight: 120, overflowY: 'auto', textAlign: 'center' }}>
+                              {Array.from({ length: 24 }).map((_, h) => (
+                                <div
+                                  key={h}
+                                  style={{
+                                    padding: '6px 0',
+                                    fontWeight: questionTime.split(':')[0] === String(h).padStart(2, '0') ? 700 : 500,
+                                    color: isDark ? '#fff' : '#222',
+                                    background: questionTime.split(':')[0] === String(h).padStart(2, '0') ? (isDark ? 'rgba(255,255,255,0.10)' : 'rgba(36,36,40,0.10)') : 'none',
+                                    borderRadius: 8,
+                                    cursor: 'pointer',
+                                    fontSize: 16,
+                                  }}
+                                  onClick={() => setQuestionTime(String(h).padStart(2, '0') + ':' + (questionTime.split(':')[1] || '00'))}
+                                >
+                                  {String(h).padStart(2, '0')}
+                                </div>
+                              ))}
+                            </div>
+                            <div style={{ width: 1, background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(36,36,40,0.08)' }} />
+                            {/* Minute column */}
+                            <div style={{ flex: 1, maxHeight: 120, overflowY: 'auto', textAlign: 'center' }}>
+                              {Array.from({ length: 60 }).map((_, m) => (
+                                <div
+                                  key={m}
+                                  style={{
+                                    padding: '6px 0',
+                                    fontWeight: questionTime.split(':')[1] === String(m).padStart(2, '0') ? 700 : 500,
+                                    color: isDark ? '#fff' : '#222',
+                                    background: questionTime.split(':')[1] === String(m).padStart(2, '0') ? (isDark ? 'rgba(255,255,255,0.10)' : 'rgba(36,36,40,0.10)') : 'none',
+                                    borderRadius: 8,
+                                    cursor: 'pointer',
+                                    fontSize: 16,
+                                  }}
+                                  onClick={() => setQuestionTime((questionTime.split(':')[0] || '00') + ':' + String(m).padStart(2, '0'))}
+                                >
+                                  {String(m).padStart(2, '0')}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', gap: 12, width: '100%' }}>
+                        <button
+                          style={{
+                            flex: 1,
+                            padding: '12px 0',
+                            borderRadius: 12,
+                            background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(36,36,40,0.08)',
+                            color: isDark ? '#fff' : '#222',
+                            fontWeight: 700,
+                            fontSize: 15,
+                            border: 'none',
+                            cursor: 'pointer',
+                            transition: 'background 0.2s',
+                          }}
+                          onClick={() => setQuestionStep(1)}
+                        >
+                          Back
+                        </button>
+                        <button
+                          style={{
+                            flex: 2,
+                            padding: '12px 0',
+                            borderRadius: 12,
+                            background: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(36,36,40,0.18)',
+                            color: isDark ? '#fff' : '#222',
+                            fontWeight: 700,
+                            fontSize: 15,
+                            border: 'none',
+                            cursor: (questionTimeMode === 'later' && !questionTime) ? 'not-allowed' : 'pointer',
+                            opacity: (questionTimeMode === 'later' && !questionTime) ? 0.5 : 1,
+                            transition: 'background 0.2s',
+                          }}
+                          disabled={questionTimeMode === 'later' && !questionTime}
+                          onClick={() => {
+                            // Add to timeline (localStorage for now)
+                            const modules = JSON.parse(localStorage.getItem('timelineModules') || '[]');
+                            const time = questionTimeMode === 'now' && questionDropTime
+                              ? `${questionDropTime.getHours().toString().padStart(2, '0')}:${questionDropTime.getMinutes().toString().padStart(2, '0')}`
+                              : questionTime;
+                            modules.push({
+                              type: 'question',
+                              question: questionText,
+                              time,
+                              createdAt: new Date().toISOString(),
+                            });
+                            localStorage.setItem('timelineModules', JSON.stringify(modules));
+                            setShowQuestionModal(false);
+                            setConfirmationMessage('Question added to timeline!');
+                            setShowConfirmation(true);
+                            setTimeout(() => setShowConfirmation(false), 2000);
+                          }}
+                        >
+                          Add to Timeline
+                        </button>
+                      </div>
+                    </>
+                  )}
+                  {/* Add border to all modal buttons */}
+                  <style>{`
+                    .modal-btn {
+                      border: 1.5px solid ${isDark ? 'rgba(255,255,255,0.18)' : 'rgba(36,36,40,0.18)'} !important;
+                    }
+                  `}</style>
+                </div>
+              </div>
+            )}
+
+            {/* Question Field Popup on Timeline */}
+            {(() => {
+              // Check if a question module should be shown now
+              const modules = JSON.parse(localStorage.getItem('timelineModules') || '[]');
+              const now = new Date();
+              const nowStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+              const activeModule = modules.find((m: any) => m.type === 'question' && m.time === nowStr);
+              if (activeModule) {
+                return (
+                  <div style={{
+                    position: 'fixed',
+                    left: '50%',
+                    top: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    zIndex: 4000,
+                    background: isDark ? 'rgba(36,36,40,0.92)' : 'rgba(255,255,255,0.92)',
+                    borderRadius: 24,
+                    boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.35)' : '0 8px 32px rgba(0,0,0,0.10)',
+                    border: isDark ? '1.5px solid rgba(255,255,255,0.10)' : '1.5px solid rgba(0,0,0,0.08)',
+                    backdropFilter: 'blur(16px)',
+                    padding: '40px 32px 32px 32px',
+                    minWidth: 340,
+                    maxWidth: 400,
+                    width: '90vw',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                  }}>
+                    <div style={{ fontWeight: 800, fontSize: 22, marginBottom: 18, color: isDark ? '#fff' : '#222', letterSpacing: 0.2, textAlign: 'center' }}>
+                      {activeModule.question}
+                    </div>
+                  </div>
+                );
+              }
+              return null;
+            })()}
+
+            {/* Confirmation Message */}
+            {showConfirmation && (
+              <div style={{
+                position: 'fixed',
+                left: '50%',
+                top: '10%',
+                transform: 'translate(-50%, 0)',
+                zIndex: 5000,
+                background: isDark ? 'rgba(36,36,40,0.92)' : 'rgba(255,255,255,0.92)',
+                borderRadius: 18,
+                boxShadow: isDark ? '0 4px 16px rgba(0,0,0,0.25)' : '0 4px 16px rgba(0,0,0,0.08)',
+                border: isDark ? '1.5px solid rgba(255,255,255,0.10)' : '1.5px solid rgba(0,0,0,0.08)',
+                backdropFilter: 'blur(12px)',
+                padding: '18px 32px',
+                fontWeight: 700,
+                fontSize: 18,
+                color: isDark ? '#fff' : '#222',
+                textAlign: 'center',
+              }}>
+                {confirmationMessage}
+              </div>
+            )}
           </div>
         )}
-
-        <style>{`
-          @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-          }
-          @keyframes successPulse {
-            0% { transform: scale(0.8); opacity: 0; }
-            50% { transform: scale(1.1); opacity: 1; }
-            100% { transform: scale(1); opacity: 1; }
-          }
-        `}</style>
       </div>
     </div>
   );
-} 
+}

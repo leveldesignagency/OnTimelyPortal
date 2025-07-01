@@ -22,6 +22,20 @@ interface TimelinePreviewRef {
   goToItem: (index: number) => void;
 }
 
+// Define a type for question modules
+interface QuestionModule {
+  type: 'question';
+  question: string;
+  time: string;
+  createdAt?: string;
+}
+
+const formatTime = (timeString: string) => {
+  if (!timeString) return '';
+  const [hours, minutes] = timeString.split(':');
+  return `${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}`;
+};
+
 const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ itineraries, isDark }, ref) => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [selectedEventIndex, setSelectedEventIndex] = useState<number | null>(null);
@@ -32,6 +46,13 @@ const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ 
 
   // State for animated viewport center position (timelinePosition, 0-100)
   const [animatedViewportCenter, setAnimatedViewportCenter] = useState<number | null>(null);
+
+  // Use this type for questionModules state
+  const [questionModules, setQuestionModules] = useState<QuestionModule[]>([]);
+  useEffect(() => {
+    const modules = JSON.parse(localStorage.getItem('timelineModules') || '[]');
+    setQuestionModules(modules.filter((m: any) => m.type === 'question'));
+  }, [currentTime]);
 
   // Debug logging
   useEffect(() => {
@@ -114,9 +135,36 @@ const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ 
     return sorted;
   }, [itineraries]);
 
+  // In sortedItineraries, merge questionModules as pseudo-itinerary items
+  const mergedItineraries = useMemo(() => {
+    const base = [...sortedItineraries];
+    questionModules.forEach((q: any, idx: number) => {
+      // Only add if not already in base (by time and question)
+      if (!base.some(e => e.timestamp && formatTime(e.start_time) === q.time && e.title === q.question)) {
+        // Create a pseudo-itinerary item for the question
+        const today = new Date();
+        const [h, m] = q.time.split(':').map(Number);
+        const dateTime = new Date(today);
+        dateTime.setHours(h, m, 0, 0);
+        base.push({
+          id: `question-${idx}`,
+          title: q.question,
+          date: today.toISOString().split('T')[0],
+          start_time: q.time,
+          end_time: q.time,
+          dateTime: dateTime,
+          endDateTime: dateTime,
+          timestamp: dateTime.getTime(),
+          endTimestamp: dateTime.getTime(),
+        });
+      }
+    });
+    return base.sort((a, b) => a.timestamp - b.timestamp);
+  }, [sortedItineraries, questionModules]);
+
   // For timeline display, show events in a reasonable time window
   const visibleEvents = useMemo(() => {
-    if (sortedItineraries.length === 0) return [];
+    if (mergedItineraries.length === 0) return [];
     
     const now = currentTime.getTime();
     const fourHoursAgo = now - (4 * 60 * 60 * 1000);
@@ -124,8 +172,8 @@ const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ 
     
     // For demo purposes, show all events but in a reasonable time window
     // If events are outside the window, we'll still show them for demo
-    return sortedItineraries;
-  }, [sortedItineraries, currentTime]);
+    return mergedItineraries;
+  }, [mergedItineraries, currentTime]);
 
   // Calculate timeline bounds based on actual event times
   const timelineBounds = useMemo(() => {
@@ -172,10 +220,10 @@ const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ 
 
   // On mount, start at the first itinerary item
   useEffect(() => {
-    if (sortedItineraries.length > 0) {
+    if (mergedItineraries.length > 0) {
       setSelectedEventIndex(0);
     }
-  }, [sortedItineraries.length]);
+  }, [mergedItineraries.length]);
 
   // Helper: get timeline position for a given event index
   const getEventTimelinePosition = (eventIndex: number) => {
@@ -263,20 +311,20 @@ const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ 
   };
 
   // Navigation functions for external controls
+  // Up arrow: move to previous (earlier) event
   const goToPrevious = () => {
     if (visibleEvents.length === 0) return;
     const currentIndex = selectedEventIndex ?? 0;
-    const newIndex = Math.max(0, currentIndex - 1);
+    const newIndex = Math.max(0, currentIndex - 1); // earlier event
     setSelectedEventIndex(newIndex);
-    // Do NOT triggerCardAnimation here
   };
 
+  // Down arrow: move to next (later) event
   const goToNext = () => {
     if (visibleEvents.length === 0) return;
     const currentIndex = selectedEventIndex ?? -1;
-    const newIndex = Math.min(visibleEvents.length - 1, currentIndex + 1);
+    const newIndex = Math.min(visibleEvents.length - 1, currentIndex + 1); // later event
     setSelectedEventIndex(newIndex);
-    // Do NOT triggerCardAnimation here
   };
 
   const goToItem = (index: number) => {
@@ -295,16 +343,6 @@ const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ 
     setShowEventCard(true);
     setTimeout(() => setAnimatingCard(false), 300);
     setTimeout(() => setShowEventCard(false), 4000);
-  };
-
-  // Format time for display
-  const formatTime = (timeString: string) => {
-    if (!timeString) return '';
-    const [hours, minutes] = timeString.split(':');
-    const hour = parseInt(hours);
-    const ampm = hour >= 12 ? 'PM' : 'AM';
-    const displayHour = hour % 12 || 12;
-    return `${displayHour}:${minutes} ${ampm}`;
   };
 
   // Format date for display
@@ -337,6 +375,32 @@ const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ 
     goToItem,
   }));
 
+  // Add state for map popup
+  const [showMapPopup, setShowMapPopup] = useState(false);
+  const [mapLocation, setMapLocation] = useState('');
+
+  // Handler for location click
+  const handleLocationClick = (location: string) => {
+    setMapLocation(location);
+    setShowMapPopup(true);
+  };
+
+  // Handler for map choice
+  const handleMapChoice = (type: 'google' | 'apple') => {
+    const query = encodeURIComponent(mapLocation);
+    let url = '';
+    if (type === 'google') {
+      url = `https://www.google.com/maps/search/?api=1&query=${query}`;
+    } else {
+      url = `http://maps.apple.com/?q=${query}`;
+    }
+    window.open(url, '_blank');
+    setShowMapPopup(false);
+  };
+
+  // Add state for delete success message
+  const [showDeleteSuccess, setShowDeleteSuccess] = useState(false);
+
   if (visibleEvents.length === 0) {
     return (
       <div style={{
@@ -353,17 +417,36 @@ const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ 
         <div style={{ marginBottom: 12, fontSize: 24 }}>⏰</div>
         <div style={{ marginBottom: 8 }}>No upcoming events</div>
         <div style={{ fontSize: 12, opacity: 0.7 }}>
-          {currentTime.toLocaleTimeString('en-US', { 
-            hour: 'numeric', 
-            minute: '2-digit',
-            hour12: true 
-          })}
+          {formatTime(currentTime.toLocaleTimeString('en-US', { 
+            hour: '2-digit', 
+            minute: '2-digit'
+          }))}
         </div>
       </div>
     );
   }
 
   const selectedEvent = selectedEventIndex !== null ? visibleEvents[selectedEventIndex] : null;
+
+  // When finding activeQuestion, type it as QuestionModule | undefined
+  const nowStr = `${currentTime.getHours().toString().padStart(2, '0')}:${currentTime.getMinutes().toString().padStart(2, '0')}`;
+  const activeQuestion: QuestionModule | undefined = questionModules.find((q) => q.time === nowStr);
+
+  // Delete handler for question modules
+  const handleDeleteQuestionModule = (q: any) => {
+    // TODO: SUPABASE - Replace this localStorage logic with a DELETE call to the supabase table 'timeline_modules' where id = q.id
+    const modules = JSON.parse(localStorage.getItem('timelineModules') || '[]');
+    const updated = modules.filter((m: any) => !(m.type === 'question' && m.time === q.time && m.question === q.question));
+    localStorage.setItem('timelineModules', JSON.stringify(updated));
+    // Optionally, force update state
+    setQuestionModules(updated.filter((m: any) => m.type === 'question'));
+  };
+
+  // In the event detail card/modal (showEventCard && selectedEvent):
+  // If selectedEvent matches a question module (by time and title), show a Delete button
+  const isQuestionEvent = questionModules.some(
+    (q) => q.time === selectedEvent?.start_time && q.question === selectedEvent?.title
+  );
 
   return (
     <div style={{
@@ -401,11 +484,7 @@ const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ 
                 fontWeight: 500,
               }}
             >
-              {time.toLocaleTimeString('en-US', { 
-                hour: 'numeric', 
-                minute: '2-digit',
-                hour12: true 
-              })}
+              {formatTime(time.getHours().toString().padStart(2, '0') + ':' + time.getMinutes().toString().padStart(2, '0'))}
             </div>
           );
         })}
@@ -567,12 +646,12 @@ const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ 
               color: isDark ? '#888' : '#666',
               fontSize: 18,
               cursor: 'pointer',
-              width: 24,
-              height: 24,
+              width: 36,
+              height: 36,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              borderRadius: '50%',
+              borderRadius: 12,
               transition: 'all 0.2s ease',
             }}
             onMouseEnter={(e) => {
@@ -626,8 +705,7 @@ const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ 
                 fontSize: 13,
                 color: isDark ? '#ccc' : '#555',
               }}>
-                <span style={{ marginRight: 8, fontSize: 14 }}>🕐</span>
-                <span><strong>Arrival:</strong> {formatTime(selectedEvent.arrival_time)}</span>
+                <span style={{ color: isDark ? '#3b82f6' : '#2563eb', textDecoration: 'underline', cursor: 'pointer' }} onClick={() => handleLocationClick(selectedEvent.arrival_time!)}>{selectedEvent.arrival_time}</span>
               </div>
             )}
             
@@ -639,8 +717,7 @@ const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ 
                 fontSize: 13,
                 color: isDark ? '#ccc' : '#555',
               }}>
-                <span style={{ marginRight: 8, fontSize: 14 }}>📍</span>
-                <span><strong>Location:</strong> {selectedEvent.location}</span>
+                <span style={{ color: isDark ? '#3b82f6' : '#2563eb', textDecoration: 'underline', cursor: 'pointer' }} onClick={() => handleLocationClick(selectedEvent.location!)}>{selectedEvent.location}</span>
               </div>
             )}
           </div>
@@ -707,6 +784,34 @@ const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ 
               )}
             </div>
           </div>
+
+          {isQuestionEvent && (
+            <button
+              style={{
+                marginTop: 14,
+                padding: '8px 18px',
+                borderRadius: 12,
+                background: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(36,36,40,0.10)',
+                color: isDark ? '#fff' : '#222',
+                fontWeight: 700,
+                fontSize: 14,
+                border: '1.5px solid #fff',
+                cursor: 'pointer',
+                transition: 'background 0.2s',
+              }}
+              onClick={() => {
+                // TODO: SUPABASE - Replace this localStorage logic with a DELETE call to the supabase table 'timeline_modules' where time and question match
+                const modules = JSON.parse(localStorage.getItem('timelineModules') || '[]');
+                const updated = modules.filter((m: any) => !(m.type === 'question' && m.time === selectedEvent.start_time && m.question === selectedEvent.title));
+                localStorage.setItem('timelineModules', JSON.stringify(updated));
+                setShowEventCard(false);
+                setShowDeleteSuccess(true);
+                setTimeout(() => setShowDeleteSuccess(false), 2000);
+              }}
+            >
+              Delete
+            </button>
+          )}
         </div>
       )}
 
@@ -751,6 +856,102 @@ const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ 
           }
         }
       `}</style>
+
+      {/* Active question popup */}
+      {activeQuestion && typeof activeQuestion === 'object' && 'question' in activeQuestion && (
+        <div style={{
+          position: 'absolute',
+          left: '50%',
+          top: '50%',
+          transform: 'translate(-50%, -50%)',
+          zIndex: 4000,
+          background: isDark ? 'rgba(36,36,40,0.92)' : 'rgba(255,255,255,0.92)',
+          borderRadius: 32,
+          boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.35)' : '0 8px 32px rgba(0,0,0,0.10)',
+          border: isDark ? '1.5px solid rgba(255,255,255,0.10)' : '1.5px solid rgba(0,0,0,0.08)',
+          backdropFilter: 'blur(16px)',
+          padding: '48px 40px 40px 40px',
+          minWidth: 420,
+          maxWidth: 520,
+          width: '95vw',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+        }}>
+          <div style={{ fontWeight: 800, fontSize: 26, marginBottom: 28, color: isDark ? '#fff' : '#222', letterSpacing: 0.2, textAlign: 'center' }}>
+            {activeQuestion.question}
+          </div>
+          <button
+            style={{
+              marginTop: 12,
+              padding: '12px 32px',
+              borderRadius: 14,
+              background: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(36,36,40,0.10)',
+              color: isDark ? '#fff' : '#222',
+              fontWeight: 700,
+              fontSize: 16,
+              border: '1.5px solid #fff',
+              cursor: 'pointer',
+              transition: 'background 0.2s',
+            }}
+            onClick={() => handleDeleteQuestionModule(activeQuestion)}
+          >
+            Delete
+          </button>
+        </div>
+      )}
+
+      {/* Map popup */}
+      {showMapPopup && (
+        <div style={{
+          position: 'fixed',
+          left: '50%',
+          top: '50%',
+          transform: 'translate(-50%, -50%)',
+          zIndex: 5000,
+          background: isDark ? 'rgba(36,36,40,0.97)' : 'rgba(255,255,255,0.97)',
+          borderRadius: 20,
+          boxShadow: isDark ? '0 4px 16px rgba(0,0,0,0.25)' : '0 4px 16px rgba(0,0,0,0.08)',
+          border: isDark ? '1.5px solid rgba(255,255,255,0.10)' : '1.5px solid rgba(0,0,0,0.08)',
+          backdropFilter: 'blur(12px)',
+          padding: '28px 32px',
+          fontWeight: 700,
+          fontSize: 18,
+          color: isDark ? '#fff' : '#222',
+          textAlign: 'center',
+          minWidth: 320,
+        }}>
+          <div style={{ marginBottom: 18 }}>Open location in:</div>
+          <div style={{ display: 'flex', gap: 16, justifyContent: 'center' }}>
+            <button style={{ padding: '10px 18px', borderRadius: 12, border: '1.5px solid #fff', background: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(36,36,40,0.10)', color: isDark ? '#fff' : '#222', fontWeight: 700, fontSize: 16, cursor: 'pointer' }} onClick={() => handleMapChoice('google')}>Google Maps</button>
+            <button style={{ padding: '10px 18px', borderRadius: 12, border: '1.5px solid #fff', background: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(36,36,40,0.10)', color: isDark ? '#fff' : '#222', fontWeight: 700, fontSize: 16, cursor: 'pointer' }} onClick={() => handleMapChoice('apple')}>Apple Maps</button>
+          </div>
+          <button style={{ marginTop: 18, border: 'none', background: 'none', color: isDark ? '#fff' : '#222', fontSize: 22, borderRadius: 12, cursor: 'pointer', width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowMapPopup(false)}>×</button>
+        </div>
+      )}
+
+      {/* Delete success message */}
+      {showDeleteSuccess && (
+        <div style={{
+          position: 'fixed',
+          left: '50%',
+          top: '10%',
+          transform: 'translate(-50%, 0)',
+          zIndex: 5000,
+          background: isDark ? 'rgba(36,36,40,0.92)' : 'rgba(255,255,255,0.92)',
+          borderRadius: 18,
+          boxShadow: isDark ? '0 4px 16px rgba(0,0,0,0.25)' : '0 4px 16px rgba(0,0,0,0.08)',
+          border: isDark ? '1.5px solid rgba(255,255,255,0.10)' : '1.5px solid rgba(0,0,0,0.08)',
+          backdropFilter: 'blur(12px)',
+          padding: '14px 28px',
+          fontWeight: 700,
+          fontSize: 16,
+          color: isDark ? '#fff' : '#222',
+          textAlign: 'center',
+        }}>
+          Question deleted!
+        </div>
+      )}
     </div>
   );
 });
