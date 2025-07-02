@@ -1054,6 +1054,9 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
       onSelect(guest.id);
     };
 
+    // Check if Stage 1 Travel Companion module is active
+    const hasStage1Module = guest.modules?.stage1TravelCompanion === true;
+
     return (
       <div
         onClick={handleNavigate}
@@ -1093,6 +1096,24 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
             />
           </div>
         )}
+        
+        {/* Stage 1: Active indicator */}
+        {hasStage1Module && (
+          <div style={{ 
+            position: 'absolute', 
+            top: 16, 
+            left: 16,
+            background: '#22c55e',
+            color: 'white',
+            padding: '4px 8px',
+            borderRadius: 4,
+            fontSize: 12,
+            fontWeight: 600
+          }}>
+            Stage 1: Active
+          </div>
+        )}
+        
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <div style={{ fontWeight: 600, fontSize: 18, color: isDark ? '#fff' : '#111', marginBottom: 2 }}>
             {guest.firstName} {guest.lastName}

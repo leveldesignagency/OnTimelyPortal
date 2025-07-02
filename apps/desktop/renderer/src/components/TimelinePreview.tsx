@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useEffect, useImperativeHandle, forwardRef, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useImperativeHandle, forwardRef, useRef, useCallback } from 'react';
+import { supabase } from '../lib/supabase';
 
 interface ItineraryItem {
   id: string;
@@ -9,17 +10,25 @@ interface ItineraryItem {
   arrival_time?: string;
   location?: string;
   description?: string;
+  // Module support
+  module?: string;
+  link?: string;
+  file?: string;
+  survey?: any;
+  feedback?: any;
 }
 
 interface TimelinePreviewProps {
   itineraries: ItineraryItem[];
   isDark: boolean;
+  eventId?: string; // Add eventId prop
 }
 
 interface TimelinePreviewRef {
   goToPrevious: () => void;
   goToNext: () => void;
   goToItem: (index: number) => void;
+  openModuleManagement: () => void;
 }
 
 // Define a type for question modules
@@ -36,7 +45,113 @@ const formatTime = (timeString: string) => {
   return `${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}`;
 };
 
-const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ itineraries, isDark }, ref) => {
+// StarRating component definition
+const StarRating = ({ rating, onRatingChange, isDark }: { rating: number, onRatingChange: (rating: number) => void, isDark: boolean }) => {
+  const [isInteracting, setIsInteracting] = useState(false);
+  const starContainerRef = useRef<HTMLDivElement>(null);
+
+  const handleStarInteraction = (e: React.MouseEvent | React.TouchEvent) => {
+    if (!starContainerRef.current) return;
+    
+    const rect = starContainerRef.current.getBoundingClientRect();
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const x = clientX - rect.left;
+    const percentage = Math.max(0, Math.min(1, x / rect.width));
+    const newRating = Math.round(percentage * 50) / 10; // 0-5 with 0.1 precision
+    
+    onRatingChange(newRating);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (isInteracting) {
+      handleStarInteraction(e);
+    }
+  };
+
+  const StarIcon = ({ filled, partial = 0 }: { filled: boolean, partial?: number }) => (
+    <div style={{ position: 'relative', display: 'inline-block' }}>
+      {/* Background star (hollow) */}
+      <svg width="20" height="20" viewBox="0 0 24 24" style={{ display: 'block' }}>
+        <path
+          d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
+          fill="none"
+          stroke={isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)'}
+          strokeWidth="1"
+        />
+      </svg>
+      
+      {/* Filled star overlay */}
+      {(filled || partial > 0) && (
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          overflow: 'hidden',
+          width: filled ? '100%' : `${partial * 100}%`,
+        }}>
+          <svg width="20" height="20" viewBox="0 0 24 24">
+            <path
+              d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
+              fill="#fbbf24"
+            />
+          </svg>
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+      <div
+        ref={starContainerRef}
+        style={{
+          display: 'flex',
+          gap: 3,
+          cursor: 'pointer',
+          userSelect: 'none',
+          padding: '6px 0',
+        }}
+        onMouseDown={(e) => {
+          setIsInteracting(true);
+          handleStarInteraction(e);
+        }}
+        onMouseMove={handleMouseMove}
+        onMouseUp={() => setIsInteracting(false)}
+        onMouseLeave={() => setIsInteracting(false)}
+        onTouchStart={(e) => {
+          setIsInteracting(true);
+          handleStarInteraction(e);
+        }}
+        onTouchMove={handleStarInteraction}
+        onTouchEnd={() => setIsInteracting(false)}
+      >
+        {[1, 2, 3, 4, 5].map((star) => {
+          const isFilled = rating >= star;
+          const partial = rating > star - 1 && rating < star ? rating - (star - 1) : 0;
+          
+          return (
+            <StarIcon
+              key={star}
+              filled={isFilled}
+              partial={partial}
+            />
+          );
+        })}
+      </div>
+      
+      <div style={{
+        fontSize: 14,
+        fontWeight: 700,
+        color: isDark ? '#fbbf24' : '#d97706',
+        minHeight: 20,
+      }}>
+        {rating > 0 ? rating.toFixed(1) : '0.0'}
+      </div>
+    </div>
+  );
+};
+
+const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ itineraries, isDark, eventId }, ref) => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [selectedEventIndex, setSelectedEventIndex] = useState<number | null>(null);
   const [showEventCard, setShowEventCard] = useState(false);
@@ -46,13 +161,6 @@ const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ 
 
   // State for animated viewport center position (timelinePosition, 0-100)
   const [animatedViewportCenter, setAnimatedViewportCenter] = useState<number | null>(null);
-
-  // Use this type for questionModules state
-  const [questionModules, setQuestionModules] = useState<QuestionModule[]>([]);
-  useEffect(() => {
-    const modules = JSON.parse(localStorage.getItem('timelineModules') || '[]');
-    setQuestionModules(modules.filter((m: any) => m.type === 'question'));
-  }, [currentTime]);
 
   // Debug logging
   useEffect(() => {
@@ -135,13 +243,156 @@ const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ 
     return sorted;
   }, [itineraries]);
 
-  // In sortedItineraries, merge questionModules as pseudo-itinerary items
+  // --- QR Code Module State ---
+  const [qrModules, setQrModules] = useState<any[]>([]);
+  // --- Survey Module State ---
+  const [surveyModules, setSurveyModules] = useState<any[]>([]);
+  // --- Question Module State ---
+  const [questionModules, setQuestionModules] = useState<QuestionModule[]>([]);
+  // --- Feedback Module State ---
+  const [feedbackModules, setFeedbackModules] = useState<any[]>([]);
+
+  // Add refresh trigger state
+  const [moduleRefreshTrigger, setModuleRefreshTrigger] = useState(0);
+
+  // Function to load all modules from database instead of localStorage
+  const loadModulesFromDatabase = useCallback(async () => {
+    if (!eventId) {
+      console.log('No eventId provided, clearing modules');
+      setQrModules([]);
+      setSurveyModules([]);
+      setQuestionModules([]);
+      setFeedbackModules([]);
+      return;
+    }
+
+    try {
+      console.log('Loading timeline modules for event:', eventId);
+      
+      const { data, error } = await supabase.rpc('get_event_timeline_modules', {
+        p_event_id: eventId
+      });
+
+      if (error) {
+        console.error('Error loading timeline modules:', error);
+        return;
+      }
+
+      console.log('Loaded timeline modules from database:', data);
+
+      // Separate modules by type
+      const qrData = data?.filter((m: any) => m.module_type === 'qrcode').map((m: any) => ({
+        id: m.id,
+        time: m.time,
+        label: m.label || m.title,
+        link: m.link,
+        file: m.file,
+        type: 'qrcode'
+      })) || [];
+
+      const surveyData = data?.filter((m: any) => m.module_type === 'survey').map((m: any) => ({
+        id: m.id,
+        time: m.time,
+        title: m.title,
+        survey_data: m.survey_data,
+        type: 'survey'
+      })) || [];
+
+      const questionData = data?.filter((m: any) => m.module_type === 'question').map((m: any) => ({
+        id: m.id,
+        time: m.time,
+        question: m.question || m.title,
+        type: 'question',
+        createdAt: m.created_at
+      })) || [];
+
+      const feedbackData = data?.filter((m: any) => m.module_type === 'feedback').map((m: any) => ({
+        id: m.id,
+        time: m.time,
+        question: m.question || m.title,
+        feedback_data: m.feedback_data,
+        type: 'feedback'
+      })) || [];
+
+      setQrModules(qrData);
+      setSurveyModules(surveyData);
+      setQuestionModules(questionData);
+      setFeedbackModules(feedbackData);
+
+      console.log('Modules loaded successfully:', {
+        qr: qrData.length,
+        survey: surveyData.length,
+        question: questionData.length,
+        feedback: feedbackData.length
+      });
+
+    } catch (error) {
+      console.error('Error loading timeline modules:', error);
+    }
+  }, [eventId]);
+
+  // Load modules on mount and when eventId changes
+  useEffect(() => {
+    loadModulesFromDatabase();
+  }, [loadModulesFromDatabase, eventId]);
+
+  // Listen for custom refresh events (for same-tab updates)
+  useEffect(() => {
+    const handleCustomRefresh = () => {
+      loadModulesFromDatabase();
+    };
+
+    window.addEventListener('refreshTimelineModules', handleCustomRefresh);
+    return () => window.removeEventListener('refreshTimelineModules', handleCustomRefresh);
+  }, [loadModulesFromDatabase]);
+
+  // --- Merge all modules into timeline events ---
   const mergedItineraries = useMemo(() => {
     const base = [...sortedItineraries];
+    // Add QR modules
+    qrModules.forEach((q: any, idx: number) => {
+      const today = new Date();
+      const [h, m] = q.time.split(':').map(Number);
+      const dateTime = new Date(today);
+      dateTime.setHours(h, m, 0, 0);
+      base.push({
+        id: `qrcode-${idx}`,
+        title: q.label || 'QR Code',
+        date: today.toISOString().split('T')[0],
+        start_time: q.time,
+        end_time: q.time,
+        dateTime: dateTime,
+        endDateTime: dateTime,
+        timestamp: dateTime.getTime(),
+        endTimestamp: dateTime.getTime(),
+        module: 'qrcode',
+        link: q.link,
+        file: q.file,
+      });
+    });
+    // Add Survey modules
+    surveyModules.forEach((s: any, idx: number) => {
+      const today = new Date();
+      const [h, m] = s.time.split(':').map(Number);
+      const dateTime = new Date(today);
+      dateTime.setHours(h, m, 0, 0);
+      base.push({
+        id: `survey-${idx}`,
+        title: s.title || 'Survey',
+        date: today.toISOString().split('T')[0],
+        start_time: s.time,
+        end_time: s.time,
+        dateTime: dateTime,
+        endDateTime: dateTime,
+        timestamp: dateTime.getTime(),
+        endTimestamp: dateTime.getTime(),
+        module: 'survey',
+        survey: s,
+      });
+    });
+    // Add Question modules
     questionModules.forEach((q: any, idx: number) => {
-      // Only add if not already in base (by time and question)
       if (!base.some(e => e.timestamp && formatTime(e.start_time) === q.time && e.title === q.question)) {
-        // Create a pseudo-itinerary item for the question
         const today = new Date();
         const [h, m] = q.time.split(':').map(Number);
         const dateTime = new Date(today);
@@ -156,11 +407,32 @@ const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ 
           endDateTime: dateTime,
           timestamp: dateTime.getTime(),
           endTimestamp: dateTime.getTime(),
+          module: 'question',
         });
       }
     });
+    // Add Feedback modules
+    feedbackModules.forEach((f: any, idx: number) => {
+      const today = new Date();
+      const [h, m] = f.time.split(':').map(Number);
+      const dateTime = new Date(today);
+      dateTime.setHours(h, m, 0, 0);
+      base.push({
+        id: `feedback-${idx}`,
+        title: f.question || 'Feedback',
+        date: today.toISOString().split('T')[0],
+        start_time: f.time,
+        end_time: f.time,
+        dateTime: dateTime,
+        endDateTime: dateTime,
+        timestamp: dateTime.getTime(),
+        endTimestamp: dateTime.getTime(),
+        module: 'feedback',
+        feedback: f,
+      });
+    });
     return base.sort((a, b) => a.timestamp - b.timestamp);
-  }, [sortedItineraries, questionModules]);
+  }, [sortedItineraries, qrModules, surveyModules, questionModules, feedbackModules]);
 
   // For timeline display, show events in a reasonable time window
   const visibleEvents = useMemo(() => {
@@ -174,6 +446,53 @@ const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ 
     // If events are outside the window, we'll still show them for demo
     return mergedItineraries;
   }, [mergedItineraries, currentTime]);
+
+  // Add collision detection for text labels
+  const shouldHideEventText = (eventIndex: number) => {
+    const currentEvent = visibleEvents[eventIndex];
+    if (!currentEvent) return false;
+    
+    // Only hide text for module events (not regular itinerary items)
+    if (!currentEvent.module) return false;
+    
+    // Always show text if this event is selected
+    if (selectedEventIndex === eventIndex) return false;
+    
+    const threeMinutes = 3 * 60 * 1000; // 3 minutes in milliseconds
+    
+    // Check if there's a regular itinerary item within 3 minutes
+    const hasNearbyItinerary = visibleEvents.some((otherEvent, otherIndex) => {
+      if (otherIndex === eventIndex) return false; // Don't compare with self
+      if (otherEvent.module) return false; // Don't hide based on other modules
+      
+      // Compare using start_time strings for more reliable comparison
+      const currentTime = currentEvent.start_time;
+      const otherTime = otherEvent.start_time;
+      
+      // Convert time strings to minutes for easier comparison
+      const [currentHours, currentMinutes] = currentTime.split(':').map(Number);
+      const [otherHours, otherMinutes] = otherTime.split(':').map(Number);
+      
+      const currentTotalMinutes = currentHours * 60 + currentMinutes;
+      const otherTotalMinutes = otherHours * 60 + otherMinutes;
+      
+      const timeDiffMinutes = Math.abs(currentTotalMinutes - otherTotalMinutes);
+      
+      // Debug logging
+      if (currentEvent.title.includes('rate')) {
+        console.log(`Collision check: ${currentEvent.title} (${currentTime}) vs ${otherEvent.title} (${otherTime}) = ${timeDiffMinutes} minutes`);
+      }
+      
+      // Hide if within 10 minutes
+      return timeDiffMinutes <= 10;
+    });
+    
+    if (hasNearbyItinerary && currentEvent.title.includes('rate')) {
+      console.log(`HIDING TEXT for: ${currentEvent.title}`);
+    }
+    
+    return hasNearbyItinerary;
+  };
 
   // Calculate timeline bounds based on actual event times
   const timelineBounds = useMemo(() => {
@@ -334,8 +653,26 @@ const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ 
 
   // Only show event card when user clicks milestone circle
   const handleMilestoneClick = (index: number) => {
+    const event = visibleEvents[index];
     setSelectedEventIndex(index);
-    triggerCardAnimation();
+    
+    // Handle different module types
+    if (event.module === 'qrcode') {
+      setSelectedQrModule(event);
+      setShowQrPopup(true);
+    } else if (event.module === 'survey') {
+      setSurveyModule(event);
+      setShowSurveyPopup(true);
+    } else if (event.module === 'feedback') {
+      setSelectedFeedbackModule(event);
+      setShowFeedbackPopup(true);
+    } else if (event.module === 'question') {
+      // Question modules show the current behavior
+      triggerCardAnimation();
+    } else {
+      // Regular itinerary items
+      triggerCardAnimation();
+    }
   };
 
   const triggerCardAnimation = () => {
@@ -368,13 +705,6 @@ const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ 
     }
   };
 
-  // Expose methods to parent component
-  useImperativeHandle(ref, () => ({
-    goToPrevious,
-    goToNext,
-    goToItem,
-  }));
-
   // Add state for map popup
   const [showMapPopup, setShowMapPopup] = useState(false);
   const [mapLocation, setMapLocation] = useState('');
@@ -400,6 +730,150 @@ const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ 
 
   // Add state for delete success message
   const [showDeleteSuccess, setShowDeleteSuccess] = useState(false);
+
+  // Add state for QR Code popup
+  const [showQrPopup, setShowQrPopup] = useState(false);
+  const [selectedQrModule, setSelectedQrModule] = useState<any>(null);
+
+  // Add state for Survey popup  
+  const [showSurveyPopup, setShowSurveyPopup] = useState(false);
+  const [selectedSurveyModule, setSurveyModule] = useState<any>(null);
+  const [surveyRating, setSurveyRating] = useState(0);
+  const [surveyComment, setSurveyComment] = useState('');
+
+  // Add state for Feedback popup
+  const [showFeedbackPopup, setShowFeedbackPopup] = useState(false);
+  const [selectedFeedbackModule, setSelectedFeedbackModule] = useState<any>(null);
+  const [feedbackRating, setFeedbackRating] = useState(0);
+  const [feedbackComment, setFeedbackComment] = useState('');
+
+  // Add state for module management popup
+  const [showModuleManagementPopup, setShowModuleManagementPopup] = useState(false);
+  const [selectedModulesForDeletion, setSelectedModulesForDeletion] = useState<Set<string>>(new Set());
+  
+  // Add state for confirmation dialog
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+
+  // Get all modules for management
+  const allModules = useMemo(() => {
+    const modules: Array<{
+      id: string;
+      type: string;
+      title: string;
+      time: string;
+      data: any;
+      moduleType: string;
+    }> = [];
+    
+    // Add QR modules
+    qrModules.forEach((module, index) => {
+      modules.push({
+        id: `qrcode-${index}`,
+        type: 'QR Code',
+        title: module.label || 'QR Code',
+        time: module.time,
+        data: module,
+        moduleType: 'qrcode'
+      });
+    });
+    
+    // Add Survey modules
+    surveyModules.forEach((module, index) => {
+      modules.push({
+        id: `survey-${index}`,
+        type: 'Survey',
+        title: module.title || 'Survey',
+        time: module.time,
+        data: module,
+        moduleType: 'survey'
+      });
+    });
+    
+    // Add Question modules
+    questionModules.forEach((module, index) => {
+      modules.push({
+        id: `question-${index}`,
+        type: 'Question',
+        title: module.question,
+        time: module.time,
+        data: module,
+        moduleType: 'question'
+      });
+    });
+    
+    // Add Feedback modules
+    feedbackModules.forEach((module, index) => {
+      modules.push({
+        id: `feedback-${index}`,
+        type: 'Feedback',
+        title: module.question || 'Feedback',
+        time: module.time,
+        data: module,
+        moduleType: 'feedback'
+      });
+    });
+    
+    return modules.sort((a, b) => a.time.localeCompare(b.time));
+  }, [qrModules, surveyModules, questionModules, feedbackModules]);
+
+  // Toggle module selection for deletion
+  const toggleModuleSelection = (moduleId: string) => {
+    const newSelection = new Set(selectedModulesForDeletion);
+    if (newSelection.has(moduleId)) {
+      newSelection.delete(moduleId);
+    } else {
+      newSelection.add(moduleId);
+    }
+    setSelectedModulesForDeletion(newSelection);
+  };
+
+  // Delete selected modules
+  const handleDeleteSelectedModules = () => {
+    if (selectedModulesForDeletion.size === 0) {
+      alert('Please select modules to delete');
+      return;
+    }
+
+    setShowConfirmDialog(true);
+  };
+
+  // Confirm deletion
+  const confirmDeletion = () => {
+    // Get current modules from localStorage
+    const modules = JSON.parse(localStorage.getItem('timelineModules') || '[]');
+    
+    // Filter out selected modules
+    const selectedModuleData = Array.from(selectedModulesForDeletion).map(id => {
+      return allModules.find(m => m.id === id);
+    });
+    
+    const updatedModules = modules.filter((module: any) => {
+      return !selectedModuleData.some(selected => {
+        if (!selected) return false;
+        return (
+          module.type === selected.moduleType &&
+          module.time === selected.time &&
+          (module.question === selected.data.question || 
+           module.title === selected.data.title ||
+           module.label === selected.data.label)
+        );
+      });
+    });
+    
+    localStorage.setItem('timelineModules', JSON.stringify(updatedModules));
+    
+    // Trigger refresh
+    window.dispatchEvent(new CustomEvent('refreshTimelineModules'));
+    
+    // Close popups and reset selection
+    setShowConfirmDialog(false);
+    setShowModuleManagementPopup(false);
+    setSelectedModulesForDeletion(new Set());
+    
+    // Show success message
+    setShowDeleteSuccess(true);
+    setTimeout(() => setShowDeleteSuccess(false), 2000);
+  };
 
   if (visibleEvents.length === 0) {
     return (
@@ -447,6 +921,90 @@ const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ 
   const isQuestionEvent = questionModules.some(
     (q) => q.time === selectedEvent?.start_time && q.question === selectedEvent?.title
   );
+
+  // Handler for QR code actions
+  const handleQrAction = (action: 'link' | 'file') => {
+    if (action === 'link' && selectedQrModule?.link) {
+      window.open(selectedQrModule.link, '_blank');
+    } else if (action === 'file' && selectedQrModule?.file) {
+      // Create a temporary anchor element to trigger download
+      const link = document.createElement('a');
+      link.href = selectedQrModule.file;
+      link.download = selectedQrModule.file.split('/').pop() || 'qr-code';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+    setShowQrPopup(false);
+  };
+
+  // Handler for survey submission
+  const handleSurveySubmit = () => {
+    if (surveyRating === 0) {
+      alert('Please provide a rating');
+      return;
+    }
+
+    // TODO: SUPABASE - Replace localStorage with INSERT to 'survey_responses' table
+    // Schema: { id, survey_id, rating, comment, created_at }
+    const responses = JSON.parse(localStorage.getItem('surveyResponses') || '[]');
+    const newResponse = {
+      id: Date.now().toString(),
+      survey_id: selectedSurveyModule?.id,
+      survey_title: selectedSurveyModule?.title,
+      rating: surveyRating,
+      comment: surveyComment,
+      created_at: new Date().toISOString(),
+    };
+    responses.push(newResponse);
+    localStorage.setItem('surveyResponses', JSON.stringify(responses));
+    
+    setShowSurveyPopup(false);
+    setSurveyRating(0);
+    setSurveyComment('');
+    
+    // Show success message
+    setShowDeleteSuccess(true);
+    setTimeout(() => setShowDeleteSuccess(false), 2000);
+  };
+
+  // Handler for feedback submission
+  const handleFeedbackSubmit = () => {
+    if (feedbackRating === 0) {
+      alert('Please provide a rating');
+      return;
+    }
+
+    // TODO: SUPABASE - Replace localStorage with INSERT to 'feedback_responses' table
+    // Schema: { id, feedback_id, rating, comment, created_at }
+    const responses = JSON.parse(localStorage.getItem('feedbackResponses') || '[]');
+    const newResponse = {
+      id: Date.now().toString(),
+      feedback_id: selectedFeedbackModule?.id,
+      feedback_question: selectedFeedbackModule?.feedback?.question,
+      rating: feedbackRating,
+      comment: feedbackComment,
+      created_at: new Date().toISOString(),
+    };
+    responses.push(newResponse);
+    localStorage.setItem('feedbackResponses', JSON.stringify(responses));
+    
+    setShowFeedbackPopup(false);
+    setFeedbackRating(0);
+    setFeedbackComment('');
+    
+    // Show success message
+    setShowDeleteSuccess(true);
+    setTimeout(() => setShowDeleteSuccess(false), 2000);
+  };
+
+  // Expose methods to parent component with new delete function
+  useImperativeHandle(ref, () => ({
+    goToPrevious,
+    goToNext,
+    goToItem,
+    openModuleManagement: () => setShowModuleManagementPopup(true),
+  }));
 
   return (
     <div style={{
@@ -497,7 +1055,7 @@ const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ 
           flex: 1,
           position: 'relative',
           marginLeft: 60,
-          paddingLeft: 20,
+          paddingLeft: 8, // Reduced from 20px to 8px to hug closer to time scale
           paddingRight: 20,
           height: '100%',
           overflow: 'auto', // Make it scrollable
@@ -506,7 +1064,7 @@ const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ 
         {/* Vertical timeline line */}
         <div style={{
           position: 'absolute',
-          left: '50%',
+          left: 16, // Reduced from 50% to a fixed position closer to the left
           top: 0,
           bottom: 0,
           width: 3,
@@ -516,7 +1074,7 @@ const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ 
             ${isDark ? '#374151' : '#d1d5db'} 90%, 
             transparent 100%)`,
           borderRadius: 2,
-          transform: 'translateX(-50%)',
+          transform: 'translateX(-50%)', // Keep the line centered on its position
           zIndex: 1,
         }} />
 
@@ -527,6 +1085,7 @@ const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ 
           if (screenPosition < 0) return null;
           const status = getEventStatus(event);
           const isSelected = selectedEventIndex === index;
+          const hideText = shouldHideEventText(index);
           return (
             <div
               key={event.id}
@@ -534,7 +1093,7 @@ const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ 
               onClick={() => handleMilestoneClick(index)}
               style={{
                 position: 'absolute',
-                left: '50%',
+                left: 16, // Changed from 50% to match the timeline line position
                 top: `${screenPosition}%`,
                 transform: 'translate(-50%, -50%)',
                 cursor: 'pointer',
@@ -565,31 +1124,33 @@ const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ 
                 position: 'relative',
               }} />
 
-              {/* Event label */}
-              <div style={{
-                position: 'absolute',
-                left: status === 'current' ? '35px' : isSelected ? '30px' : '25px',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                whiteSpace: 'nowrap',
-                opacity: status === 'past' ? 0.6 : 1,
-                transition: 'all 0.3s ease',
-              }}>
+              {/* Event label - conditionally hidden for modules near itinerary items */}
+              {!hideText && (
                 <div style={{
-                  fontSize: status === 'current' ? 13 : isSelected ? 12 : 11,
-                  fontWeight: status === 'current' ? 700 : isSelected ? 600 : 500,
-                  color: isDark ? '#fff' : '#000',
-                  marginBottom: 2,
+                  position: 'absolute',
+                  left: status === 'current' ? '35px' : isSelected ? '30px' : '25px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  whiteSpace: 'nowrap',
+                  opacity: status === 'past' ? 0.6 : 1,
+                  transition: 'all 0.3s ease',
                 }}>
-                  {event.title}
+                  <div style={{
+                    fontSize: status === 'current' ? 13 : isSelected ? 12 : 11,
+                    fontWeight: status === 'current' ? 700 : isSelected ? 600 : 500,
+                    color: isDark ? '#fff' : '#000',
+                    marginBottom: 2,
+                  }}>
+                    {event.title}
+                  </div>
+                  <div style={{
+                    fontSize: 9,
+                    color: isDark ? '#888' : '#666',
+                  }}>
+                    {formatTime(event.start_time)}
+                  </div>
                 </div>
-                <div style={{
-                  fontSize: 9,
-                  color: isDark ? '#888' : '#666',
-                }}>
-                  {formatTime(event.start_time)}
-                </div>
-              </div>
+              )}
 
               {/* Current event pulse animation */}
               {status === 'current' && (
@@ -904,52 +1465,872 @@ const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ 
       {/* Map popup */}
       {showMapPopup && (
         <div style={{
-          position: 'fixed',
+          position: 'absolute',
+          left: '50%',
+          top: '50%',
+          transform: 'translate(-50%, -50%)',
+          zIndex: 5000,
+          background: isDark ? 'rgba(36,36,40,0.97)' : 'rgba(255,255,255,0.97)',
+          borderRadius: 16,
+          boxShadow: isDark ? '0 4px 16px rgba(0,0,0,0.25)' : '0 4px 16px rgba(0,0,0,0.08)',
+          border: isDark ? '1.5px solid rgba(255,255,255,0.10)' : '1.5px solid rgba(0,0,0,0.08)',
+          backdropFilter: 'blur(12px)',
+          padding: '20px 24px',
+          fontWeight: 700,
+          fontSize: 16,
+          color: isDark ? '#fff' : '#222',
+          textAlign: 'center',
+          minWidth: 260,
+        }}>
+          <div style={{ marginBottom: 16 }}>Open location in:</div>
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+            <button style={{ padding: '8px 14px', borderRadius: 10, border: '1.5px solid #fff', background: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(36,36,40,0.10)', color: isDark ? '#fff' : '#222', fontWeight: 700, fontSize: 14, cursor: 'pointer' }} onClick={() => handleMapChoice('google')}>Google Maps</button>
+            <button style={{ padding: '8px 14px', borderRadius: 10, border: '1.5px solid #fff', background: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(36,36,40,0.10)', color: isDark ? '#fff' : '#222', fontWeight: 700, fontSize: 14, cursor: 'pointer' }} onClick={() => handleMapChoice('apple')}>Apple Maps</button>
+          </div>
+          <button style={{ marginTop: 16, border: 'none', background: 'none', color: isDark ? '#fff' : '#222', fontSize: 20, borderRadius: 10, cursor: 'pointer', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowMapPopup(false)}>×</button>
+        </div>
+      )}
+
+      {/* QR Code Popup */}
+      {showQrPopup && selectedQrModule && (
+        <div style={{
+          position: 'absolute',
           left: '50%',
           top: '50%',
           transform: 'translate(-50%, -50%)',
           zIndex: 5000,
           background: isDark ? 'rgba(36,36,40,0.97)' : 'rgba(255,255,255,0.97)',
           borderRadius: 20,
-          boxShadow: isDark ? '0 4px 16px rgba(0,0,0,0.25)' : '0 4px 16px rgba(0,0,0,0.08)',
+          boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.35)' : '0 8px 32px rgba(0,0,0,0.10)',
           border: isDark ? '1.5px solid rgba(255,255,255,0.10)' : '1.5px solid rgba(0,0,0,0.08)',
-          backdropFilter: 'blur(12px)',
-          padding: '28px 32px',
-          fontWeight: 700,
-          fontSize: 18,
-          color: isDark ? '#fff' : '#222',
-          textAlign: 'center',
-          minWidth: 320,
+          backdropFilter: 'blur(16px)',
+          padding: '24px',
+          minWidth: 280,
+          maxWidth: 320,
+          width: '85%',
+          maxHeight: '80%',
+          overflowY: 'auto',
         }}>
-          <div style={{ marginBottom: 18 }}>Open location in:</div>
-          <div style={{ display: 'flex', gap: 16, justifyContent: 'center' }}>
-            <button style={{ padding: '10px 18px', borderRadius: 12, border: '1.5px solid #fff', background: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(36,36,40,0.10)', color: isDark ? '#fff' : '#222', fontWeight: 700, fontSize: 16, cursor: 'pointer' }} onClick={() => handleMapChoice('google')}>Google Maps</button>
-            <button style={{ padding: '10px 18px', borderRadius: 12, border: '1.5px solid #fff', background: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(36,36,40,0.10)', color: isDark ? '#fff' : '#222', fontWeight: 700, fontSize: 16, cursor: 'pointer' }} onClick={() => handleMapChoice('apple')}>Apple Maps</button>
+          {/* Close button */}
+          <button
+            onClick={() => setShowQrPopup(false)}
+            style={{
+              position: 'absolute',
+              top: 12,
+              right: 12,
+              background: 'none',
+              border: 'none',
+              color: isDark ? '#888' : '#666',
+              fontSize: 20,
+              cursor: 'pointer',
+              width: 28,
+              height: 28,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: 6,
+            }}
+          >
+            ×
+          </button>
+
+          {/* QR Code header */}
+          <div style={{
+            fontWeight: 800,
+            fontSize: 20,
+            marginBottom: 6,
+            color: isDark ? '#fff' : '#222',
+            textAlign: 'center',
+          }}>
+            {selectedQrModule.title || selectedQrModule.label || 'QR Code'}
           </div>
-          <button style={{ marginTop: 18, border: 'none', background: 'none', color: isDark ? '#fff' : '#222', fontSize: 22, borderRadius: 12, cursor: 'pointer', width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowMapPopup(false)}>×</button>
+
+          {/* QR Code time */}
+          <div style={{
+            fontSize: 12,
+            color: isDark ? '#aaa' : '#666',
+            textAlign: 'center',
+            marginBottom: 20,
+          }}>
+            {formatTime(selectedQrModule.start_time)}
+          </div>
+
+          {/* QR Code actions */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {selectedQrModule.link && (
+              <button
+                onClick={() => handleQrAction('link')}
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  borderRadius: 10,
+                  background: isDark ? 'rgba(59, 130, 246, 0.2)' : 'rgba(59, 130, 246, 0.1)',
+                  color: '#3b82f6',
+                  fontWeight: 600,
+                  fontSize: 14,
+                  border: '1.5px solid #3b82f6',
+                  cursor: 'pointer',
+                  transition: 'background 0.2s',
+                }}
+              >
+                🔗 Open Link
+              </button>
+            )}
+            
+            {selectedQrModule.file && (
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 12,
+              }}>
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  width: '100%',
+                  maxWidth: 200,
+                  aspectRatio: '1',
+                  background: '#fff',
+                  borderRadius: 12,
+                  padding: 8,
+                  border: '2px solid #e5e7eb',
+                }}>
+                  <img
+                    src={selectedQrModule.file}
+                    alt="QR Code"
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'contain',
+                      borderRadius: 8,
+                    }}
+                    onError={(e) => {
+                      // Fallback to file name if image fails to load
+                      const target = e.target as HTMLImageElement;
+                      target.style.display = 'none';
+                      const parent = target.parentElement;
+                      if (parent) {
+                        parent.innerHTML = `
+                          <div style="
+                            display: flex;
+                            flex-direction: column;
+                            align-items: center;
+                            justify-content: center;
+                            height: 100%;
+                            color: #666;
+                            text-align: center;
+                            padding: 16px;
+                          ">
+                            <div style="font-size: 24px; margin-bottom: 8px;">📄</div>
+                            <div style="font-size: 12px; word-break: break-all;">
+                              ${selectedQrModule.file.split('/').pop() || 'QR Code File'}
+                            </div>
+                          </div>
+                        `;
+                      }
+                    }}
+                  />
+                </div>
+                <button
+                  onClick={() => handleQrAction('file')}
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    borderRadius: 10,
+                    background: isDark ? 'rgba(16, 185, 129, 0.2)' : 'rgba(16, 185, 129, 0.1)',
+                    color: '#10b981',
+                    fontWeight: 600,
+                    fontSize: 14,
+                    border: '1.5px solid #10b981',
+                    cursor: 'pointer',
+                    transition: 'background 0.2s',
+                  }}
+                >
+                  💾 Download
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      {/* Survey Popup */}
+      {showSurveyPopup && selectedSurveyModule && (
+        <div style={{
+          position: 'absolute',
+          left: '50%',
+          top: '50%',
+          transform: 'translate(-50%, -50%)',
+          zIndex: 5000,
+          background: isDark ? 'rgba(36,36,40,0.97)' : 'rgba(255,255,255,0.97)',
+          borderRadius: 20,
+          boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.35)' : '0 8px 32px rgba(0,0,0,0.10)',
+          border: isDark ? '1.5px solid rgba(255,255,255,0.10)' : '1.5px solid rgba(0,0,0,0.08)',
+          backdropFilter: 'blur(16px)',
+          padding: '24px',
+          minWidth: 280,
+          maxWidth: 320,
+          width: '85%',
+          maxHeight: '80%',
+          overflowY: 'auto',
+        }}>
+          {/* Close button */}
+          <button
+            onClick={() => {
+              setShowSurveyPopup(false);
+              setSurveyRating(0);
+              setSurveyComment('');
+            }}
+            style={{
+              position: 'absolute',
+              top: 12,
+              right: 12,
+              background: 'none',
+              border: 'none',
+              color: isDark ? '#888' : '#666',
+              fontSize: 20,
+              cursor: 'pointer',
+              width: 28,
+              height: 28,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: 6,
+            }}
+          >
+            ×
+          </button>
+
+          {/* Survey header */}
+          <div style={{
+            fontWeight: 800,
+            fontSize: 20,
+            marginBottom: 6,
+            color: isDark ? '#fff' : '#222',
+            textAlign: 'center',
+          }}>
+            {selectedSurveyModule.title}
+          </div>
+
+          {/* Survey time */}
+          <div style={{
+            fontSize: 12,
+            color: isDark ? '#aaa' : '#666',
+            textAlign: 'center',
+            marginBottom: 20,
+          }}>
+            {formatTime(selectedSurveyModule.start_time)}
+          </div>
+
+          {/* Survey question */}
+          {selectedSurveyModule.question && (
+            <div style={{
+              fontSize: 14,
+              color: isDark ? '#ccc' : '#555',
+              textAlign: 'center',
+              marginBottom: 20,
+              lineHeight: 1.3,
+            }}>
+              {selectedSurveyModule.question}
+            </div>
+          )}
+
+          {/* Star rating */}
+          <div style={{
+            textAlign: 'center',
+            marginBottom: 20,
+          }}>
+            <div style={{
+              fontSize: 12,
+              fontWeight: 600,
+              color: isDark ? '#fff' : '#222',
+              marginBottom: 10,
+            }}>
+              Rate your experience *
+            </div>
+            
+            <StarRating
+              rating={surveyRating}
+              onRatingChange={setSurveyRating}
+              isDark={isDark}
+            />
+          </div>
+
+          {/* Comment input */}
+          <div style={{ marginBottom: 20 }}>
+            <label style={{
+              display: 'block',
+              marginBottom: 6,
+              fontWeight: 600,
+              fontSize: 12,
+              color: isDark ? '#fff' : '#222',
+            }}>
+              Comments (optional)
+            </label>
+            <textarea
+              value={surveyComment}
+              onChange={(e) => setSurveyComment(e.target.value.slice(0, 500))}
+              placeholder="Tell us more..."
+              maxLength={500}
+              rows={3}
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                borderRadius: 8,
+                border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)'}`,
+                background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
+                color: isDark ? '#fff' : '#222',
+                fontSize: 12,
+                fontWeight: 500,
+                resize: 'vertical',
+                outline: 'none',
+              }}
+            />
+            <div style={{
+              textAlign: 'right',
+              fontSize: 10,
+              color: isDark ? '#888' : '#666',
+              marginTop: 3,
+            }}>
+              {surveyComment.length}/500
+            </div>
+          </div>
+
+          {/* Submit button */}
+          <button
+            onClick={handleSurveySubmit}
+            disabled={surveyRating === 0}
+            style={{
+              width: '100%',
+              padding: '12px',
+              borderRadius: 10,
+              background: surveyRating === 0 
+                ? (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)')
+                : (isDark ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.9)'),
+              color: surveyRating === 0 
+                ? (isDark ? '#666' : '#999')
+                : (isDark ? '#000' : '#000'),
+              fontWeight: 600,
+              fontSize: 14,
+              border: surveyRating === 0
+                ? `1.5px solid ${isDark ? '#666' : '#999'}`
+                : '1.5px solid rgba(255,255,255,0.9)',
+              cursor: surveyRating === 0 ? 'not-allowed' : 'pointer',
+              transition: 'all 0.2s',
+            }}
+          >
+            Submit Feedback
+          </button>
+        </div>
+      )}
+
+      {/* Feedback Popup */}
+      {showFeedbackPopup && selectedFeedbackModule && (
+        <div style={{
+          position: 'absolute',
+          left: '50%',
+          top: '50%',
+          transform: 'translate(-50%, -50%)',
+          zIndex: 5000,
+          background: isDark ? 'rgba(36,36,40,0.97)' : 'rgba(255,255,255,0.97)',
+          borderRadius: 20,
+          boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.35)' : '0 8px 32px rgba(0,0,0,0.10)',
+          border: isDark ? '1.5px solid rgba(255,255,255,0.10)' : '1.5px solid rgba(0,0,0,0.08)',
+          backdropFilter: 'blur(16px)',
+          padding: '24px',
+          minWidth: 280,
+          maxWidth: 320,
+          width: '85%',
+          maxHeight: '80%',
+          overflowY: 'auto',
+        }}>
+          {/* Close button */}
+          <button
+            onClick={() => {
+              setShowFeedbackPopup(false);
+              setFeedbackRating(0);
+              setFeedbackComment('');
+            }}
+            style={{
+              position: 'absolute',
+              top: 12,
+              right: 12,
+              background: 'none',
+              border: 'none',
+              color: isDark ? '#888' : '#666',
+              fontSize: 20,
+              cursor: 'pointer',
+              width: 28,
+              height: 28,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: 6,
+            }}
+          >
+            ×
+          </button>
+
+          {/* Feedback header */}
+          <div style={{
+            fontWeight: 800,
+            fontSize: 20,
+            marginBottom: 6,
+            color: isDark ? '#fff' : '#222',
+            textAlign: 'center',
+          }}>
+            Feedback
+          </div>
+
+          {/* Feedback time */}
+          <div style={{
+            fontSize: 12,
+            color: isDark ? '#aaa' : '#666',
+            textAlign: 'center',
+            marginBottom: 20,
+          }}>
+            {formatTime(selectedFeedbackModule.start_time)}
+          </div>
+
+          {/* Feedback question */}
+          {selectedFeedbackModule.feedback?.question && (
+            <div style={{
+              fontSize: 14,
+              color: isDark ? '#ccc' : '#555',
+              textAlign: 'center',
+              marginBottom: 20,
+              lineHeight: 1.3,
+            }}>
+              {selectedFeedbackModule.feedback.question}
+            </div>
+          )}
+
+          {/* Star rating with precise decimal selection */}
+          <div style={{
+            textAlign: 'center',
+            marginBottom: 20,
+          }}>
+            <div style={{
+              fontSize: 12,
+              fontWeight: 600,
+              color: isDark ? '#fff' : '#222',
+              marginBottom: 10,
+            }}>
+              Rate your experience *
+            </div>
+            
+            <StarRating
+              rating={feedbackRating}
+              onRatingChange={setFeedbackRating}
+              isDark={isDark}
+            />
+          </div>
+
+          {/* Comment input */}
+          <div style={{ marginBottom: 20 }}>
+            <label style={{
+              display: 'block',
+              marginBottom: 6,
+              fontWeight: 600,
+              fontSize: 12,
+              color: isDark ? '#fff' : '#222',
+            }}>
+              Comments (optional)
+            </label>
+            <textarea
+              value={feedbackComment}
+              onChange={(e) => setFeedbackComment(e.target.value.slice(0, 500))}
+              placeholder="Share your feedback..."
+              maxLength={500}
+              rows={3}
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                borderRadius: 8,
+                border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)'}`,
+                background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
+                color: isDark ? '#fff' : '#222',
+                fontSize: 12,
+                fontWeight: 500,
+                resize: 'vertical',
+                outline: 'none',
+              }}
+            />
+            <div style={{
+              textAlign: 'right',
+              fontSize: 10,
+              color: isDark ? '#888' : '#666',
+              marginTop: 3,
+            }}>
+              {feedbackComment.length}/500
+            </div>
+          </div>
+
+          {/* Submit button */}
+          <button
+            onClick={handleFeedbackSubmit}
+            disabled={feedbackRating === 0}
+            style={{
+              width: '100%',
+              padding: '12px',
+              borderRadius: 10,
+              background: feedbackRating === 0 
+                ? (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)')
+                : (isDark ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.9)'),
+              color: feedbackRating === 0 
+                ? (isDark ? '#666' : '#999')
+                : (isDark ? '#000' : '#000'),
+              fontWeight: 600,
+              fontSize: 14,
+              border: feedbackRating === 0
+                ? `1.5px solid ${isDark ? '#666' : '#999'}`
+                : '1.5px solid rgba(255,255,255,0.9)',
+              cursor: feedbackRating === 0 ? 'not-allowed' : 'pointer',
+              transition: 'all 0.2s',
+            }}
+          >
+            Submit Feedback
+          </button>
+        </div>
+      )}
+
+      {/* Module Management Popup */}
+      {showModuleManagementPopup && (
+        <div style={{
+          position: 'absolute',
+          left: '50%',
+          top: '50%',
+          transform: 'translate(-50%, -50%)',
+          zIndex: 6000,
+          background: isDark ? 'rgba(36,36,40,0.97)' : 'rgba(255,255,255,0.97)',
+          borderRadius: 20,
+          boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.35)' : '0 8px 32px rgba(0,0,0,0.10)',
+          border: isDark ? '1.5px solid rgba(255,255,255,0.10)' : '1.5px solid rgba(0,0,0,0.08)',
+          backdropFilter: 'blur(16px)',
+          padding: '24px',
+          minWidth: 320,
+          maxWidth: 400,
+          width: '90%',
+          maxHeight: '80%',
+          overflowY: 'auto',
+        }}>
+          {/* Close button */}
+          <button
+            onClick={() => {
+              setShowModuleManagementPopup(false);
+              setSelectedModulesForDeletion(new Set());
+            }}
+            style={{
+              position: 'absolute',
+              top: 12,
+              right: 12,
+              background: 'none',
+              border: 'none',
+              color: isDark ? '#888' : '#666',
+              fontSize: 20,
+              cursor: 'pointer',
+              width: 28,
+              height: 28,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: 6,
+            }}
+          >
+            ×
+          </button>
+
+          {/* Header */}
+          <div style={{
+            fontWeight: 800,
+            fontSize: 20,
+            marginBottom: 6,
+            color: isDark ? '#fff' : '#222',
+            textAlign: 'center',
+          }}>
+            Manage Modules
+          </div>
+
+          <div style={{
+            fontSize: 12,
+            color: isDark ? '#aaa' : '#666',
+            textAlign: 'center',
+            marginBottom: 20,
+          }}>
+            Select and delete modules from your timeline
+          </div>
+
+          {/* Module list */}
+          {allModules.length === 0 ? (
+            <div style={{
+              textAlign: 'center',
+              color: isDark ? '#666' : '#999',
+              fontSize: 14,
+              padding: '40px 20px',
+            }}>
+              <div style={{ marginBottom: 8, fontSize: 24 }}>📋</div>
+              <div>No modules added yet</div>
+            </div>
+          ) : (
+            <>
+              <div style={{
+                maxHeight: '300px',
+                overflowY: 'auto',
+                marginBottom: 20,
+              }}>
+                {allModules.map((module) => (
+                  <div
+                    key={module.id}
+                    onClick={() => toggleModuleSelection(module.id)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: '12px',
+                      marginBottom: '8px',
+                      borderRadius: 10,
+                      border: `1.5px solid ${
+                        selectedModulesForDeletion.has(module.id)
+                          ? '#ef4444'
+                          : isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'
+                      }`,
+                      background: selectedModulesForDeletion.has(module.id)
+                        ? (isDark ? 'rgba(239,68,68,0.1)' : 'rgba(239,68,68,0.05)')
+                        : (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.02)'),
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    {/* Checkbox */}
+                    <div style={{
+                      width: 18,
+                      height: 18,
+                      borderRadius: 4,
+                      border: `2px solid ${
+                        selectedModulesForDeletion.has(module.id) ? '#ef4444' : (isDark ? '#666' : '#ccc')
+                      }`,
+                      background: selectedModulesForDeletion.has(module.id) ? '#ef4444' : 'transparent',
+                      marginRight: 12,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 10,
+                      color: '#fff',
+                    }}>
+                      {selectedModulesForDeletion.has(module.id) && '✓'}
+                    </div>
+
+                    {/* Module info */}
+                    <div style={{ flex: 1 }}>
+                      <div style={{
+                        fontSize: 14,
+                        fontWeight: 600,
+                        color: isDark ? '#fff' : '#222',
+                        marginBottom: 2,
+                      }}>
+                        {module.title}
+                      </div>
+                      <div style={{
+                        fontSize: 11,
+                        color: isDark ? '#aaa' : '#666',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                      }}>
+                        <span style={{
+                          padding: '2px 6px',
+                          borderRadius: 4,
+                          background: isDark ? 'rgba(59,130,246,0.2)' : 'rgba(59,130,246,0.1)',
+                          color: '#3b82f6',
+                          fontSize: 10,
+                          fontWeight: 600,
+                        }}>
+                          {module.type}
+                        </span>
+                        <span>{formatTime(module.time)}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Action buttons */}
+              <div style={{ display: 'flex', gap: 12 }}>
+                <button
+                  onClick={() => setSelectedModulesForDeletion(
+                    selectedModulesForDeletion.size === allModules.length 
+                      ? new Set() 
+                      : new Set(allModules.map(m => m.id))
+                  )}
+                  style={{
+                    flex: 1,
+                    padding: '10px',
+                    borderRadius: 8,
+                    background: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+                    color: isDark ? '#fff' : '#222',
+                    fontWeight: 600,
+                    fontSize: 12,
+                    border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)'}`,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  {selectedModulesForDeletion.size === allModules.length ? 'Deselect All' : 'Select All'}
+                </button>
+
+                <button
+                  onClick={handleDeleteSelectedModules}
+                  disabled={selectedModulesForDeletion.size === 0}
+                  style={{
+                    flex: 1,
+                    padding: '10px',
+                    borderRadius: 8,
+                    background: selectedModulesForDeletion.size === 0
+                      ? (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.02)')
+                      : '#ef4444',
+                    color: selectedModulesForDeletion.size === 0
+                      ? (isDark ? '#666' : '#999')
+                      : '#fff',
+                    fontWeight: 600,
+                    fontSize: 12,
+                    border: selectedModulesForDeletion.size === 0
+                      ? `1.5px solid ${isDark ? '#666' : '#ccc'}`
+                      : '1.5px solid #ef4444',
+                    cursor: selectedModulesForDeletion.size === 0 ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  Delete Selected ({selectedModulesForDeletion.size})
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Confirmation Dialog */}
+      {showConfirmDialog && (
+        <div style={{
+          position: 'absolute',
+          left: '50%',
+          top: '50%',
+          transform: 'translate(-50%, -50%)',
+          zIndex: 7000,
+          background: isDark ? 'rgba(36,36,40,0.97)' : 'rgba(255,255,255,0.97)',
+          borderRadius: 20,
+          boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.35)' : '0 8px 32px rgba(0,0,0,0.10)',
+          border: isDark ? '1.5px solid rgba(255,255,255,0.10)' : '1.5px solid rgba(0,0,0,0.08)',
+          backdropFilter: 'blur(16px)',
+          padding: '32px 28px',
+          minWidth: 300,
+          maxWidth: 380,
+          width: '85%',
+          textAlign: 'center',
+        }}>
+          {/* Close button */}
+          <button
+            onClick={() => setShowConfirmDialog(false)}
+            style={{
+              position: 'absolute',
+              top: 12,
+              right: 12,
+              background: 'none',
+              border: 'none',
+              color: isDark ? '#888' : '#666',
+              fontSize: 20,
+              cursor: 'pointer',
+              width: 28,
+              height: 28,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: 6,
+            }}
+          >
+            ×
+          </button>
+
+          {/* Confirmation message */}
+          <div style={{
+            fontWeight: 800,
+            fontSize: 18,
+            marginBottom: 12,
+            color: isDark ? '#fff' : '#222',
+          }}>
+            Confirm Deletion
+          </div>
+
+          <div style={{
+            fontSize: 14,
+            color: isDark ? '#ccc' : '#555',
+            marginBottom: 24,
+            lineHeight: 1.4,
+          }}>
+            Are you sure you want to delete {selectedModulesForDeletion.size} module{selectedModulesForDeletion.size !== 1 ? 's' : ''}?
+            <br />
+            <span style={{ fontSize: 12, opacity: 0.8 }}>This action cannot be undone.</span>
+          </div>
+
+          {/* Action buttons */}
+          <div style={{ display: 'flex', gap: 12 }}>
+            <button
+              onClick={() => setShowConfirmDialog(false)}
+              style={{
+                flex: 1,
+                padding: '12px',
+                borderRadius: 10,
+                background: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+                color: isDark ? '#fff' : '#222',
+                fontWeight: 600,
+                fontSize: 14,
+                border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)'}`,
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+              }}
+            >
+              Cancel
+            </button>
+
+            <button
+              onClick={confirmDeletion}
+              style={{
+                flex: 1,
+                padding: '12px',
+                borderRadius: 10,
+                background: '#ef4444',
+                color: '#fff',
+                fontWeight: 600,
+                fontSize: 14,
+                border: '1.5px solid #ef4444',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+              }}
+            >
+              Delete
+            </button>
+          </div>
         </div>
       )}
 
       {/* Delete success message */}
       {showDeleteSuccess && (
         <div style={{
-          position: 'fixed',
+          position: 'absolute',
           left: '50%',
-          top: '10%',
+          top: '15%',
           transform: 'translate(-50%, 0)',
           zIndex: 5000,
           background: isDark ? 'rgba(36,36,40,0.92)' : 'rgba(255,255,255,0.92)',
-          borderRadius: 18,
+          borderRadius: 14,
           boxShadow: isDark ? '0 4px 16px rgba(0,0,0,0.25)' : '0 4px 16px rgba(0,0,0,0.08)',
           border: isDark ? '1.5px solid rgba(255,255,255,0.10)' : '1.5px solid rgba(0,0,0,0.08)',
           backdropFilter: 'blur(12px)',
-          padding: '14px 28px',
+          padding: '12px 20px',
           fontWeight: 700,
-          fontSize: 16,
+          fontSize: 14,
           color: isDark ? '#fff' : '#222',
           textAlign: 'center',
         }}>
-          Question deleted!
+          {selectedSurveyModule || selectedFeedbackModule ? 'Feedback submitted!' : 'Modules deleted successfully!'}
         </div>
       )}
     </div>

@@ -2,6 +2,7 @@ import React, { useState, useContext, useEffect, useRef, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ThemeContext } from '../ThemeContext';
 import TimelinePreview from '../components/TimelinePreview';
+import { supabase } from '../lib/supabase';
 
 interface GuestLogin {
   id: string;
@@ -54,6 +55,50 @@ export default function EventPortalManagementPage() {
     setCollapsedCards(collapsed);
   }, [guests]);
 
+  // Load existing guest logins from database
+  useEffect(() => {
+    // Only run if eventId is available
+    if (!eventId) return;
+
+    async function loadExistingGuestLogins() {
+      try {
+        console.log('Loading existing guest logins for event:', eventId);
+        
+        // Call the backend function to get all guest logins for this event
+        const { data, error } = await supabase.rpc('get_guest_login_status', {
+          p_event_id: eventId,
+        });
+
+        if (error) {
+          console.error('Error loading guest logins:', error);
+          return;
+        }
+
+        if (data && Array.isArray(data) && data.length > 0) {
+          console.log('Found existing guest logins:', data);
+          
+          // Map the backend data to your GuestLogin type
+          const existingLogins = data.map((row: any) => ({
+            id: row.guest_id,
+            email: row.email,
+            temporaryPassword: row.password,
+            loginUrl: `timely://guest-login?email=${row.email}&password=${row.password}`,
+            status: row.status as 'pending' | 'sent' | 'accessed',
+          }));
+          
+          setGuestLogins(existingLogins);
+          console.log('Loaded guest logins into UI:', existingLogins);
+        } else {
+          console.log('No existing guest logins found for this event');
+        }
+      } catch (error) {
+        console.error('Error loading guest logins:', error);
+      }
+    }
+
+    loadExistingGuestLogins();
+  }, [eventId]);
+
   // Toggle card collapse state
   const toggleCardCollapse = (guestId: string) => {
     setCollapsedCards(prev => ({
@@ -70,35 +115,65 @@ export default function EventPortalManagementPage() {
     }));
   };
 
-  // Helper function to generate random password
-  const generatePassword = () => {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
-    let password = '';
-    for (let i = 0; i < 8; i++) {
-      password += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return password;
-  };
-
   // Generate logins for all guests
   const handleGenerateLogins = async () => {
     setIsGeneratingLogins(true);
     setShowGenerateLoginsModal(false); // Close the initial modal
     
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    const newLogins: GuestLogin[] = guests.map((guest: any) => ({
-      id: guest.id,
-      email: guest.email,
-      temporaryPassword: generatePassword(),
-      loginUrl: `https://app.timely.com/guest-login/${eventId}/${guest.id}`,
-      status: 'pending' as const
-    }));
-    
-    setGuestLogins(newLogins);
-    setIsGeneratingLogins(false);
-    setShowSuccessModal(true);
+    try {
+      // First, check if we have guests
+      if (!guests || guests.length === 0) {
+        throw new Error('No guests found for this event');
+      }
+
+      console.log('Generating logins for guests:', guests);
+
+      // Use the database function to create guest logins
+      const newLogins: GuestLogin[] = [];
+      
+      for (const guest of guests) {
+        console.log(`Creating login for guest: ${guest.email} (ID: ${guest.id})`);
+        
+        // Call the database function to create guest login
+        const { data, error } = await supabase.rpc('create_guest_login', {
+          p_guest_id: guest.id,
+          p_event_id: eventId,
+          p_email: guest.email
+        });
+
+        if (error) {
+          console.error(`Error creating login for ${guest.email}:`, error);
+          throw new Error(`Failed to create login for ${guest.email}: ${error.message}`);
+        }
+
+        if (!data || data.length === 0) {
+          throw new Error(`No login data returned for ${guest.email}`);
+        }
+
+        // The function returns a single row with the login details
+        const loginData = data[0];
+        
+        newLogins.push({
+          id: guest.id,
+          email: loginData.email,
+          temporaryPassword: loginData.password,
+          loginUrl: loginData.login_url,
+          status: 'pending' as const
+        });
+      }
+      
+      setGuestLogins(newLogins);
+      setIsGeneratingLogins(false);
+      setShowSuccessModal(true);
+      
+      console.log('Successfully created guest logins:', newLogins);
+    } catch (error) {
+      console.error('Failed to generate guest logins:', error);
+      setIsGeneratingLogins(false);
+      
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      alert(`Failed to generate guest logins: ${errorMessage}`);
+    }
   };
 
   // Regenerate logins for selected guests
@@ -108,24 +183,74 @@ export default function EventPortalManagementPage() {
     setIsGeneratingLogins(true);
     setShowRegenerateModal(false);
     
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    // Update existing logins for selected guests
-    setGuestLogins(prev => prev.map(login => {
-      if (selectedGuestsForRegenerate.includes(login.id)) {
-        return {
-          ...login,
-          temporaryPassword: generatePassword(),
+    try {
+      // Get selected guests
+      const selectedGuests = guests.filter((guest: any) => 
+        selectedGuestsForRegenerate.includes(guest.id)
+      );
+
+      console.log('Regenerating logins for guests:', selectedGuests);
+
+      // Use the database function to create new guest logins
+      const updatedLogins: GuestLogin[] = [];
+      
+      for (const guest of selectedGuests) {
+        console.log(`Regenerating login for guest: ${guest.email} (ID: ${guest.id})`);
+        
+        // Call the database function to create new guest login
+        const { data, error } = await supabase.rpc('create_guest_login', {
+          p_guest_id: guest.id,
+          p_event_id: eventId,
+          p_email: guest.email
+        });
+
+        if (error) {
+          console.error(`Error regenerating login for ${guest.email}:`, error);
+          throw new Error(`Failed to regenerate login for ${guest.email}: ${error.message}`);
+        }
+
+        if (!data || data.length === 0) {
+          throw new Error(`No login data returned for ${guest.email}`);
+        }
+
+        // The function returns a single row with the login details
+        const loginData = data[0];
+        
+        updatedLogins.push({
+          id: guest.id,
+          email: loginData.email,
+          temporaryPassword: loginData.password,
+          loginUrl: loginData.login_url,
           status: 'pending' as const
-        };
+        });
       }
-      return login;
-    }));
-    
-    setIsGeneratingLogins(false);
-    setShowSuccessModal(true);
-    setSelectedGuestsForRegenerate([]);
+      
+      // Update existing logins with new ones
+      setGuestLogins(prev => {
+        const updated = [...prev];
+        updatedLogins.forEach(newLogin => {
+          const index = updated.findIndex(login => login.id === newLogin.id);
+          if (index >= 0) {
+            updated[index] = newLogin;
+          } else {
+            updated.push(newLogin);
+          }
+        });
+        return updated;
+      });
+      
+      setIsGeneratingLogins(false);
+      setShowSuccessModal(true);
+      setSelectedGuestsForRegenerate([]);
+      
+      console.log('Successfully regenerated guest logins:', updatedLogins);
+    } catch (error) {
+      console.error('Failed to regenerate guest logins:', error);
+      setIsGeneratingLogins(false);
+      
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      alert(`Failed to regenerate guest logins: ${errorMessage}`);
+    }
   };
 
   // Toggle guest selection for regeneration
@@ -1161,7 +1286,8 @@ export default function EventPortalManagementPage() {
                 <TimelinePreview 
                   ref={timelineRef}
                   itineraries={itineraries} 
-                  isDark={isDark} 
+                  isDark={isDark}
+                  eventId={eventId}
                 />
               </div>
             </div>
@@ -1502,23 +1628,46 @@ export default function EventPortalManagementPage() {
                             transition: 'background 0.2s',
                           }}
                           disabled={questionTimeMode === 'later' && !questionTime}
-                          onClick={() => {
-                            // Add to timeline (localStorage for now)
-                            const modules = JSON.parse(localStorage.getItem('timelineModules') || '[]');
-                            const time = questionTimeMode === 'now' && questionDropTime
-                              ? `${questionDropTime.getHours().toString().padStart(2, '0')}:${questionDropTime.getMinutes().toString().padStart(2, '0')}`
-                              : questionTime;
-                            modules.push({
-                              type: 'question',
-                              question: questionText,
-                              time,
-                              createdAt: new Date().toISOString(),
-                            });
-                            localStorage.setItem('timelineModules', JSON.stringify(modules));
-                            setShowQuestionModal(false);
-                            setConfirmationMessage('Question added to timeline!');
-                            setShowConfirmation(true);
-                            setTimeout(() => setShowConfirmation(false), 2000);
+                          onClick={async () => {
+                            // Add to database instead of localStorage
+                            if (!eventId) {
+                              console.error('No eventId available');
+                              return;
+                            }
+
+                            try {
+                              const time = questionTimeMode === 'now' && questionDropTime
+                                ? `${questionDropTime.getHours().toString().padStart(2, '0')}:${questionDropTime.getMinutes().toString().padStart(2, '0')}`
+                                : questionTime;
+
+                              const { data, error } = await supabase.rpc('add_timeline_module', {
+                                p_event_id: eventId,
+                                p_module_type: 'question',
+                                p_time: time,
+                                p_question: questionText
+                              });
+
+                              if (error) {
+                                console.error('Error adding question module:', error);
+                                setConfirmationMessage('Error adding question!');
+                              } else {
+                                console.log('Question module added successfully:', data);
+                                setConfirmationMessage('Question added to timeline!');
+                                
+                                // Trigger refresh of timeline modules
+                                window.dispatchEvent(new CustomEvent('refreshTimelineModules'));
+                              }
+
+                              setShowQuestionModal(false);
+                              setShowConfirmation(true);
+                              setTimeout(() => setShowConfirmation(false), 2000);
+                            } catch (error) {
+                              console.error('Error adding question module:', error);
+                              setConfirmationMessage('Error adding question!');
+                              setShowQuestionModal(false);
+                              setShowConfirmation(true);
+                              setTimeout(() => setShowConfirmation(false), 2000);
+                            }
                           }}
                         >
                           Add to Timeline
@@ -1536,8 +1685,8 @@ export default function EventPortalManagementPage() {
               </div>
             )}
 
-            {/* Question Field Popup on Timeline */}
-            {(() => {
+            {/* Question Field Popup on Timeline - Commented out for now, needs proper state management for database */}
+            {false && (() => {
               // Check if a question module should be shown now
               const modules = JSON.parse(localStorage.getItem('timelineModules') || '[]');
               const now = new Date();

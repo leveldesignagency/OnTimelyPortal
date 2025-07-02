@@ -12,6 +12,16 @@ export default function AssignOverviewPage() {
   // Expecting navigation state: { guestAssignments, guests, itineraries, eventAddOns }
   const { guestAssignments = {}, guests = [], itineraries = [], eventAddOns = [] } = location.state || {};
 
+  console.log('AssignOverviewPage received state:', {
+    guestAssignments,
+    guests: guests.length,
+    itineraries: itineraries.length,
+    eventAddOns: eventAddOns.length
+  });
+
+  console.log('Raw guestAssignments:', guestAssignments);
+  console.log('Sample itinerary IDs:', itineraries.slice(0, 3).map((i: any) => ({ id: i.id, title: i.title })));
+
   if (!guests.length || !itineraries.length) {
     return (
       <div style={{ padding: 48, background: isDark ? '#121212' : '#f8f9fa', minHeight: '100vh', color: isDark ? '#fff' : '#222' }}>
@@ -31,7 +41,7 @@ export default function AssignOverviewPage() {
               } 
             })}
           >
-            Assign
+            Confirm
           </button>
         </div>
         <h1 style={{ fontSize: 32, fontWeight: 700, marginBottom: 32, paddingRight: 40 }}>Assign Overview</h1>
@@ -58,14 +68,14 @@ export default function AssignOverviewPage() {
             } 
           })}
         >
-          Assign
+          Confirm
         </button>
       </div>
       <h1 style={{ fontSize: 36, fontWeight: 800, marginBottom: 40, letterSpacing: 1 }}>Assign Overview</h1>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 48 }}>
         {guests.map((guest: any) => {
           const assignedItins = (guestAssignments[guest.id] || []).map((itinId: string) =>
-            itineraries.find((itin: any) => itin.id === itinId)
+            itineraries.find((itin: any) => String(itin.id) === itinId)
           ).filter(Boolean);
           return (
             <div key={guest.id} style={{ minWidth: 420, maxWidth: 600, background: 'rgba(30,30,30,0.7)', borderRadius: 20, boxShadow: '0 8px 32px rgba(0,0,0,0.25)', border: '1.5px solid rgba(255,255,255,0.08)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', padding: 44, color: '#fff', marginBottom: 24, display: 'flex', flexDirection: 'column', gap: 18 }}>

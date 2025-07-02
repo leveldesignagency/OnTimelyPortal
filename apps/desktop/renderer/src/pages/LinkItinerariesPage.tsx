@@ -4,12 +4,15 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ThemeContext } from '../ThemeContext';
 import { useRealtimeGuests, useRealtimeItineraries } from '../hooks/useRealtime';
 import { getEventModules } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
 
 export default function EventLauncher() {
   const { theme } = useContext(ThemeContext);
   const isDark = theme === 'dark';
   const navigate = useNavigate();
   const { id: eventId } = useParams();
+
+  console.log('EventLauncher component mounted/rendered, eventId:', eventId);
 
   const { guests, loading: guestsLoading } = useRealtimeGuests(eventId || null);
   const { itineraries, loading: itinerariesLoading } = useRealtimeItineraries(eventId || null);
@@ -20,37 +23,173 @@ export default function EventLauncher() {
   const [selectedItineraries, setSelectedItineraries] = useState<string[]>([]);
   const [draggedItineraryIds, setDraggedItineraryIds] = useState<string[]>([]);
   const [activeAddOns, setActiveAddOns] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [assignmentsSaved, setAssignmentsSaved] = useState(false);
 
-  // Load existing assignments from localStorage (will be Supabase later)
+  // Load existing assignments from database
   useEffect(() => {
-    const savedAssignments = localStorage.getItem(`guest_assignments_${eventId}`);
-    if (savedAssignments) {
-      setGuestAssignments(JSON.parse(savedAssignments));
+    console.log('useEffect triggered, eventId:', eventId, 'assignmentsSaved:', assignmentsSaved);
+    if (!eventId) {
+      console.log('No eventId, skipping loadAssignments');
+      return;
     }
-  }, [eventId]);
 
-  // Save assignments to localStorage (will be Supabase later)
-  const saveAssignments = (assignments: {[guestId: string]: string[]}) => {
+    // Only load on initial mount (when assignments are empty) or after successful save
+    const hasAssignments = Object.values(guestAssignments).some(arr => arr && arr.length > 0);
+    if (hasAssignments && !assignmentsSaved) {
+      console.log('Skipping loadAssignments - has unsaved local changes');
+      return;
+    }
+
+    console.log('About to call loadAssignments with eventId:', eventId);
+
+    const loadAssignments = async () => {
+      try {
+        setIsLoading(true);
+        console.log('Loading assignments for event:', eventId);
+        
+        // Call the database function to get all assignments for this event
+        const { data, error } = await supabase.rpc('get_event_assignments', {
+          event_identifier: eventId
+        });
+
+        console.log('Raw database response:', { data, error });
+
+        if (error) {
+          console.error('Error loading assignments:', error, JSON.stringify(error));
+          alert('Error loading assignments: ' + (error.message || JSON.stringify(error)));
+          return;
+        }
+
+        // Convert database results to the format expected by the UI
+        const assignments: {[guestId: string]: string[]} = {};
+        
+        if (data && Array.isArray(data)) {
+          console.log('Processing', data.length, 'assignment records');
+          data.forEach((row: any) => {
+            const guestId = row.guest_id;
+            const itineraryId = row.itinerary_id.toString(); // Convert bigint to string for UI
+            
+            console.log('Processing assignment:', { guestId, itineraryId, row });
+            
+            if (!assignments[guestId]) {
+              assignments[guestId] = [];
+            }
+            
+            assignments[guestId].push(itineraryId);
+          });
+        } else {
+          console.log('No data returned or data is not an array:', data);
+        }
+
+        console.log('Final assignments object:', assignments);
+        console.log('Setting guestAssignments state to:', assignments);
     setGuestAssignments(assignments);
-    // TODO: Save to Supabase instead of localStorage
-    localStorage.setItem(`guest_assignments_${eventId}`, JSON.stringify(assignments));
+        setAssignmentsSaved(true); // Mark as saved since we loaded from DB
+      } catch (error) {
+        console.error('Error loading assignments:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadAssignments();
+  }, [eventId]); // Remove assignmentsSaved from dependencies to prevent loops
+
+  // Save assignments to database
+  const saveAssignments = async (assignments: {[guestId: string]: string[]}) => {
+    if (!eventId) return false;
+    try {
+      setIsLoading(true);
+      
+      for (const guestId of Object.keys(assignments)) {
+        await supabase.rpc('clear_guest_assignments', {
+          guest_identifier: guestId,
+          event_identifier: eventId
+        });
+      }
+      
+      for (const [guestId, itineraryIds] of Object.entries(assignments)) {
+        if (itineraryIds && itineraryIds.length > 0) {
+          const bigintItineraryIds = itineraryIds.map(id => parseInt(id));
+          
+          const { error } = await supabase.rpc('assign_itineraries_to_guests', {
+            guest_identifiers: [guestId],
+            itinerary_identifiers: bigintItineraryIds,
+            event_identifier: eventId,
+            assigned_by_identifier: null
+          });
+          
+          if (error) {
+            console.error('Error saving assignment for guest:', guestId, error);
+            alert('Failed to save assignments: ' + error.message);
+            setIsLoading(false);
+            return false;
+          }
+        }
+      }
+      
+      // Don't override state here - it's already been set in assignItinerariesToGuests
+      return true;
+    } catch (error: any) {
+      console.error('Error saving assignments:', error);
+      alert('Unexpected error: ' + error.message);
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Assign itinerary(ies) to guest(s)
-  const assignItinerariesToGuests = (guestIds: string[], itineraryIds: string[]) => {
+  const assignItinerariesToGuests = async (guestIds: string[], itineraryIds: string[]) => {
+    console.log('assignItinerariesToGuests called with:', { guestIds, itineraryIds });
+    
     const newAssignments = { ...guestAssignments };
     guestIds.forEach(guestId => {
       const current = newAssignments[guestId] || [];
       newAssignments[guestId] = Array.from(new Set([...current, ...itineraryIds]));
     });
-    saveAssignments(newAssignments);
+    
+    console.log('Setting state to:', newAssignments);
+    
+    // Mark as unsaved immediately to prevent useEffect from overriding
+    setAssignmentsSaved(false);
+    
+    // Update state immediately so tags appear right away
+    setGuestAssignments(newAssignments);
+    
+    // Then save to database
+    const success = await saveAssignments(newAssignments);
+    if (success !== false) {
+      setAssignmentsSaved(true);
+    }
   };
 
   // Remove itinerary from guest
-  const removeItineraryFromGuest = (guestId: string, itineraryId: string) => {
-    const newAssignments = { ...guestAssignments };
-    newAssignments[guestId] = (newAssignments[guestId] || []).filter(id => id !== itineraryId);
-    saveAssignments(newAssignments);
+  const removeItineraryFromGuest = async (guestId: string, itineraryId: string) => {
+    try {
+      setIsLoading(true);
+      
+      // Remove from database directly
+      const { error } = await supabase.rpc('remove_guest_assignment', {
+        guest_identifier: guestId,
+        itinerary_identifier: parseInt(itineraryId)
+      });
+
+      if (error) {
+        console.error('Error removing assignment:', error);
+        return;
+      }
+
+      // Update local state
+      const newAssignments = { ...guestAssignments };
+      newAssignments[guestId] = (newAssignments[guestId] || []).filter(id => id !== itineraryId);
+      setGuestAssignments(newAssignments);
+    } catch (error) {
+      console.error('Error removing assignment:', error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Drag and drop handlers
@@ -62,18 +201,26 @@ export default function EventLauncher() {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
   };
-  const handleGuestDrop = (e: React.DragEvent, guestId: string) => {
+  const handleGuestDrop = async (e: React.DragEvent, guestId: string) => {
     e.preventDefault();
+    console.log('🎯 DRAG DROP STARTED for guest:', guestId, 'with itineraries:', draggedItineraryIds);
+    
     // If multiple guests are selected, assign to all selected guests; otherwise, just the one dropped on
     const targetGuests = selectedGuests.length > 1 ? selectedGuests : [guestId];
-    assignItinerariesToGuests(targetGuests, draggedItineraryIds);
+    
+    console.log('🎯 Target guests:', targetGuests);
+    console.log('🎯 Current guestAssignments before drop:', guestAssignments);
+    
+    await assignItinerariesToGuests(targetGuests, draggedItineraryIds);
     setDraggedItineraryIds([]);
+    
+    console.log('🎯 DRAG DROP COMPLETED');
   };
 
   // Bulk assign button
-  const handleBulkAssign = () => {
+  const handleBulkAssign = async () => {
     if (selectedGuests.length && selectedItineraries.length) {
-      assignItinerariesToGuests(selectedGuests, selectedItineraries);
+      await assignItinerariesToGuests(selectedGuests, selectedItineraries);
     }
   };
 
@@ -148,6 +295,13 @@ export default function EventLauncher() {
     fetchAddOns();
   }, [eventId]);
 
+  const handleAssignClick = async () => {
+    const success = await saveAssignments(guestAssignments);
+    if (success !== false) {
+      setAssignmentsSaved(true);
+    }
+  };
+
   return (
     <>
       <div style={{ minHeight: '100vh', background: isDark ? '#121212' : '#f8f9fa', color: isDark ? '#fff' : '#222', padding: 0 }}>
@@ -161,21 +315,37 @@ export default function EventLauncher() {
             </button>
             <div style={{ display: 'flex', gap: 12 }}>
               <button
-                onClick={() => {
+                onClick={async () => {
                   const cleared: {[guestId: string]: string[]} = {};
                   guests.forEach(g => { cleared[g.id] = []; });
-                  saveAssignments(cleared);
+                  // Update state immediately so UI updates right away
+                  setGuestAssignments(cleared);
+                  // Reset assignment saved state
+                  setAssignmentsSaved(false);
+                  // Then save to database
+                  await saveAssignments(cleared);
                 }}
                 style={{ width: 140, fontSize: 16, background: isDark ? '#232323' : '#fff', color: isDark ? '#fff' : '#222', border: '1.5px solid', borderColor: isDark ? '#444' : '#bbb', borderRadius: 8, cursor: 'pointer', padding: '10px 0', fontWeight: 600 }}
+                disabled={isLoading}
               >
-                Remove All
+                {isLoading ? 'Removing...' : 'Remove All'}
               </button>
               <button
-                onClick={() => navigate(`/link-itineraries/${eventId}/assign-overview`, { state: { guestAssignments, guests, itineraries, eventAddOns: activeAddOns } })}
-                disabled={!Object.values(guestAssignments).some(arr => arr && arr.length > 0)}
+                onClick={assignmentsSaved ? () => {
+                  console.log('Navigating to overview with state:', {
+                    guestAssignments,
+                    guests: guests.length,
+                    itineraries: itineraries.length,
+                    eventAddOns: activeAddOns.length
+                  });
+                  navigate(`/link-itineraries/${eventId}/assign-overview`, { 
+                    state: { guestAssignments, guests, itineraries, eventAddOns: activeAddOns } 
+                  });
+                } : handleAssignClick}
+                disabled={!Object.values(guestAssignments).some(arr => arr && arr.length > 0) || isLoading}
                 style={{ width: 140, fontSize: 16, background: Object.values(guestAssignments).some(arr => arr && arr.length > 0) ? (isDark ? '#fff' : '#000') : '#888', color: Object.values(guestAssignments).some(arr => arr && arr.length > 0) ? (isDark ? '#000' : '#fff') : '#fff', border: 'none', borderRadius: 8, cursor: Object.values(guestAssignments).some(arr => arr && arr.length > 0) ? 'pointer' : 'not-allowed', fontWeight: 700, boxShadow: 'none', opacity: Object.values(guestAssignments).some(arr => arr && arr.length > 0) ? 1 : 0.7, transition: 'background 0.2s, opacity 0.2s', padding: '10px 0' }}
               >
-                Assign
+                {assignmentsSaved ? 'Next' : 'Assign'}
               </button>
             </div>
           </div>
@@ -209,32 +379,41 @@ export default function EventLauncher() {
                     <div style={{ color: '#aaa', fontSize: 13 }}>{guest.email}</div>
                     {/* Assigned itinerary tags */}
                     <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                      {(guestAssignments[guest.id] || []).map(itinId => {
-                        const itin = itineraries.find(i => i.id === itinId);
-                        if (!itin) return null;
-                        return (
-                          <span key={itinId} style={{
-                            background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
-                            color: isDark ? '#fff' : '#222',
-                            borderRadius: 8,
-                            padding: '4px 10px',
-                            fontSize: 13,
+                      {(() => {
+                        const assignments = guestAssignments[guest.id] || [];
+                        console.log(`🏷️ Rendering tags for guest ${guest.first_name} ${guest.last_name}:`, assignments);
+                        return assignments.map(itinId => {
+                          // Fix data type mismatch - try both string and numeric comparison
+                          const itin = itineraries.find(i => String(i.id) === String(itinId) || Number(i.id) === Number(itinId));
+                          if (!itin) {
+                            console.log(`🏷️ Could not find itinerary for ID ${itinId}, available IDs:`, itineraries.map(i => ({ id: i.id, type: typeof i.id })));
+                            return null;
+                          }
+                          console.log(`🏷️ Rendering tag for itinerary: ${itin.title}`);
+                          return (
+                            <span key={itinId} style={{
+                              background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+                              color: isDark ? '#fff' : '#222',
+                              borderRadius: 8,
+                              padding: '4px 10px',
+                              fontSize: 13,
           display: 'flex',
           alignItems: 'center',
-                            gap: 4,
-                            border: isDark ? '1.5px solid #bbb' : '1.5px solid #bbb',
-                            boxShadow: '0 0 4px 1px #fff',
-                          }}>
-                            {itin.title}
-                            <span
-                              style={{ marginLeft: 6, cursor: 'pointer', color: statusColors.completed, fontWeight: 700 }}
-                              onClick={e => { e.stopPropagation(); removeItineraryFromGuest(guest.id, itinId); }}
-                            >×</span>
-                          </span>
-                        );
-                      })}
+                              gap: 4,
+                              border: isDark ? '1.5px solid #bbb' : '1.5px solid #bbb',
+                              boxShadow: '0 0 4px 1px #fff',
+                            }}>
+                              {itin.title}
+                              <span
+                                style={{ marginLeft: 6, cursor: 'pointer', color: statusColors.completed, fontWeight: 700 }}
+                                onClick={e => { e.stopPropagation(); removeItineraryFromGuest(guest.id, itinId); }}
+                              >×</span>
+                            </span>
+                          );
+                        });
+                      })()}
+                    </div>
             </div>
-                  </div>
                 ))}
           </div>
         </div>

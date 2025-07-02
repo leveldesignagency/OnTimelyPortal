@@ -329,6 +329,19 @@ export default function CreateGuests() {
   const [countryDropdownOpen, setCountryDropdownOpen] = useState<number | null>(null);
   const countryDropdownRef = useRef<HTMLDivElement>(null);
 
+  // Success message state
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+
+  // Success message function
+  const showSuccess = (message: string) => {
+    setSuccessMessage(message);
+    setShowSuccessMessage(true);
+    setTimeout(() => {
+      setShowSuccessMessage(false);
+    }, 3000);
+  };
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -991,13 +1004,16 @@ export default function CreateGuests() {
     addMultipleGuests(guestsForSupabase)
       .then(() => {
         console.log('Guests saved to Supabase successfully');
-        // Reset state and navigate
-        setGuests([]);
-        setDrafts([]);
-        setIsGroup(false);
-        setGroupName('');
-        setGroupNameConfirmed(false);
-        navigate(`/event/${eventId}?tab=guests`, { replace: true });
+        showSuccess('Guests saved successfully!');
+        // Reset state and navigate after a short delay
+        setTimeout(() => {
+          setGuests([]);
+          setDrafts([]);
+          setIsGroup(false);
+          setGroupName('');
+          setGroupNameConfirmed(false);
+          navigate(`/event/${eventId}?tab=guests`, { replace: true });
+        }, 1500);
       })
       .catch(error => {
         console.error('Error saving guests to Supabase:', error);
@@ -2184,6 +2200,36 @@ export default function CreateGuests() {
         )}
       </div>
       {isCsvModalOpen && <CsvUploadModal />}
+      
+      {/* Success Message Notification */}
+      {showSuccessMessage && (
+        <div
+          style={{
+            position: 'fixed',
+            top: '20px',
+            right: '20px',
+            background: isDark ? 'rgba(34, 197, 94, 0.9)' : 'rgba(34, 197, 94, 0.95)',
+            color: 'white',
+            padding: '16px 24px',
+            borderRadius: '12px',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            fontSize: '16px',
+            fontWeight: '500',
+            zIndex: 1000,
+          }}
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <polyline points="20,6 9,17 4,12"></polyline>
+          </svg>
+          {successMessage}
+        </div>
+      )}
     </div>
   );
 }
