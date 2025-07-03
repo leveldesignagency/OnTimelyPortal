@@ -2,7 +2,9 @@ import React, { useState, useContext, useEffect, useRef, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ThemeContext } from '../ThemeContext';
 import TimelinePreview from '../components/TimelinePreview';
-import { supabase } from '../lib/supabase';
+import { supabase, getEvent, type Event } from '../lib/supabase';
+import FeedbackModuleModal from '../components/FeedbackModuleModal';
+import FeedbackGuestSelectionModal from '../components/FeedbackGuestSelectionModal';
 
 interface GuestLogin {
   id: string;
@@ -28,6 +30,11 @@ export default function EventPortalManagementPage() {
     eventId 
   } = location.state || {};
 
+  // Add state for event and selected date
+  const [event, setEvent] = useState<Event | null>(null);
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [eventDates, setEventDates] = useState<Date[]>([]);
+
   const [showGenerateLoginsModal, setShowGenerateLoginsModal] = useState(false);
   const [showRegenerateModal, setShowRegenerateModal] = useState(false);
   const [selectedGuestsForRegenerate, setSelectedGuestsForRegenerate] = useState<string[]>([]);
@@ -45,6 +52,9 @@ export default function EventPortalManagementPage() {
   const [questionDropTime, setQuestionDropTime] = useState<Date | null>(null);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [confirmationMessage, setConfirmationMessage] = useState('');
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [feedbackModalTime, setFeedbackModalTime] = useState<Date>(new Date());
+  const [feedbackStep2, setFeedbackStep2] = useState<{ title: string; defaultRating: number; time: Date } | null>(null);
 
   // Initialize collapsed cards when guests change
   useEffect(() => {
@@ -97,6 +107,49 @@ export default function EventPortalManagementPage() {
     }
 
     loadExistingGuestLogins();
+  }, [eventId]);
+
+  // Load event information
+  useEffect(() => {
+    const loadEvent = async () => {
+      if (!eventId) {
+        console.log('No eventId provided to loadEvent');
+        return;
+      }
+      
+      try {
+        console.log('Loading event data for eventId:', eventId);
+        const eventData = await getEvent(eventId);
+        console.log('Loaded event data:', eventData);
+        setEvent(eventData);
+        
+        // Generate array of dates between event start and end
+        const startDate = new Date(eventData.from);
+        const endDate = new Date(eventData.to);
+        console.log('Event date range:', { from: eventData.from, to: eventData.to, startDate, endDate });
+        
+        const dates: Date[] = [];
+        
+        const currentDate = new Date(startDate);
+        while (currentDate <= endDate) {
+          dates.push(new Date(currentDate));
+          currentDate.setDate(currentDate.getDate() + 1);
+        }
+        
+        console.log('Generated event dates:', dates);
+        setEventDates(dates);
+        // Set selected date to today if within event range, otherwise to event start
+        const today = new Date();
+        today.setHours(0,0,0,0);
+        const inRange = today >= startDate && today <= endDate;
+        setSelectedDate(inRange ? today : startDate);
+        console.log('Selected date set to:', inRange ? today : startDate);
+      } catch (error) {
+        console.error('Error loading event:', error);
+      }
+    };
+
+    loadEvent();
   }, [eventId]);
 
   // Toggle card collapse state
@@ -377,6 +430,108 @@ export default function EventPortalManagementPage() {
       return ah !== bh ? ah - bh : am - bm;
     });
   }, [itineraries]);
+
+  // Date slider component
+  const DateSlider = () => {
+    if (eventDates.length === 0) return null;
+
+    const currentIndex = eventDates.findIndex(date => 
+      date.toDateString() === selectedDate.toDateString()
+    );
+    
+    const canGoPrev = currentIndex > 0;
+    const canGoNext = currentIndex < eventDates.length - 1;
+    
+    const goToPrevDate = () => {
+      if (canGoPrev) {
+        setSelectedDate(eventDates[currentIndex - 1]);
+      }
+    };
+    
+    const goToNextDate = () => {
+      if (canGoNext) {
+        setSelectedDate(eventDates[currentIndex + 1]);
+      }
+    };
+
+    return (
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 16,
+        padding: '12px 20px',
+        background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
+        borderRadius: 12,
+        border: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(0,0,0,0.1)',
+        width: '100%',
+        minWidth: 0,
+      }}>
+        {/* Previous Date Button */}
+        <button
+          onClick={goToPrevDate}
+          disabled={!canGoPrev}
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: '50%',
+            border: 'none',
+            background: canGoPrev 
+              ? (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)')
+              : (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'),
+            color: canGoPrev ? (isDark ? '#fff' : '#000') : (isDark ? '#666' : '#ccc'),
+            fontSize: 16,
+            cursor: canGoPrev ? 'pointer' : 'not-allowed',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'all 0.2s ease',
+          }}
+        >
+          ←
+        </button>
+
+        {/* Current Date Display */}
+        <div style={{
+          fontSize: 13,
+          fontWeight: 600,
+          color: isDark ? '#fff' : '#000',
+          minWidth: 80,
+          textAlign: 'center',
+        }}>
+          {selectedDate.toLocaleDateString('en-US', { 
+            month: 'short', 
+            day: 'numeric',
+            weekday: 'short' 
+          })}
+        </div>
+
+        {/* Next Date Button */}
+        <button
+          onClick={goToNextDate}
+          disabled={!canGoNext}
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: '50%',
+            border: 'none',
+            background: canGoNext 
+              ? (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)')
+              : (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'),
+            color: canGoNext ? (isDark ? '#fff' : '#000') : (isDark ? '#666' : '#ccc'),
+            fontSize: 16,
+            cursor: canGoNext ? 'pointer' : 'not-allowed',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'all 0.2s ease',
+          }}
+        >
+          →
+        </button>
+      </div>
+    );
+  };
 
   if (!guests.length) {
     return (
@@ -1157,6 +1312,20 @@ export default function EventPortalManagementPage() {
               Update Timeline
             </button>
 
+            {/* Date Slider - Below Update Timeline Button */}
+            <div style={{
+              position: 'absolute',
+              top: 90,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              zIndex: 1001,
+              width: 180,
+              maxWidth: 180,
+              minWidth: 120,
+            }}>
+              <DateSlider />
+            </div>
+
             {/* Draggable Modules - Each in its own container */}
             <div style={{
               position: 'absolute',
@@ -1234,9 +1403,10 @@ export default function EventPortalManagementPage() {
                   gap: 2,
                 }}
                 onClick={() => {
-                  if (timelineRef.current && timelineRef.current.goToItem) {
-                    timelineRef.current.goToItem(index);
-                  }
+                  // if (timelineRef.current && timelineRef.current.goToItem) {
+                  //   timelineRef.current.goToItem(index);
+                  // }
+                  console.log('Navigate to itinerary item:', index);
                 }}
                 >
                   <span>{itin.title}</span>
@@ -1252,12 +1422,14 @@ export default function EventPortalManagementPage() {
               style={{
                 position: 'absolute',
                 left: '50%',
-                top: '50%',
+                top: 'calc(50% + 10px)', // push down 10px
                 transform: 'translate(-50%, -50%)',
                 zIndex: 3,
                 display: 'flex',
+                flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
+                gap: 20,
               }}
               onDragOver={e => {
                 e.preventDefault();
@@ -1265,8 +1437,11 @@ export default function EventPortalManagementPage() {
               onDrop={e => {
                 const moduleType = e.dataTransfer.getData('moduleType');
                 if (moduleType === 'question') {
-                  // Use current time as drop time for now
-                  handleShowQuestionModal(new Date());
+                  // Use selectedDate as drop time
+                  handleShowQuestionModal(selectedDate);
+                } else if (moduleType === 'feedback') {
+                  setFeedbackModalTime(selectedDate);
+                  setShowFeedbackModal(true);
                 }
               }}
             >
@@ -1284,10 +1459,11 @@ export default function EventPortalManagementPage() {
               }}>
                 {/* Timeline Container - Full Screen */}
                 <TimelinePreview 
-                  ref={timelineRef}
                   itineraries={itineraries} 
                   isDark={isDark}
                   eventId={eventId}
+                  selectedDate={selectedDate}
+                  ref={timelineRef}
                 />
               </div>
             </div>
@@ -1685,43 +1861,6 @@ export default function EventPortalManagementPage() {
               </div>
             )}
 
-            {/* Question Field Popup on Timeline - Commented out for now, needs proper state management for database */}
-            {false && (() => {
-              // Check if a question module should be shown now
-              const modules = JSON.parse(localStorage.getItem('timelineModules') || '[]');
-              const now = new Date();
-              const nowStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-              const activeModule = modules.find((m: any) => m.type === 'question' && m.time === nowStr);
-              if (activeModule) {
-                return (
-                  <div style={{
-                    position: 'fixed',
-                    left: '50%',
-                    top: '50%',
-                    transform: 'translate(-50%, -50%)',
-                    zIndex: 4000,
-                    background: isDark ? 'rgba(36,36,40,0.92)' : 'rgba(255,255,255,0.92)',
-                    borderRadius: 24,
-                    boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.35)' : '0 8px 32px rgba(0,0,0,0.10)',
-                    border: isDark ? '1.5px solid rgba(255,255,255,0.10)' : '1.5px solid rgba(0,0,0,0.08)',
-                    backdropFilter: 'blur(16px)',
-                    padding: '40px 32px 32px 32px',
-                    minWidth: 340,
-                    maxWidth: 400,
-                    width: '90vw',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                  }}>
-                    <div style={{ fontWeight: 800, fontSize: 22, marginBottom: 18, color: isDark ? '#fff' : '#222', letterSpacing: 0.2, textAlign: 'center' }}>
-                      {activeModule.question}
-                    </div>
-                  </div>
-                );
-              }
-              return null;
-            })()}
-
             {/* Confirmation Message */}
             {showConfirmation && (
               <div style={{
@@ -1746,6 +1885,56 @@ export default function EventPortalManagementPage() {
             )}
           </div>
         )}
+
+        {/* Feedback Module Button */}
+        <button
+          style={{
+            margin: '32px 0 24px 0',
+            padding: '16px 36px',
+            borderRadius: 12,
+            border: 'none',
+            background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+            color: isDark ? '#fff' : '#222',
+            fontWeight: 700,
+            fontSize: 20,
+            boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.2)' : '0 2px 8px rgba(0,0,0,0.08)',
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+            letterSpacing: 1
+          }}
+          onClick={() => setShowFeedbackModal(true)}
+        >
+          + Create Feedback Module
+        </button>
+
+        {/* Feedback Module Modal */}
+        <FeedbackModuleModal
+          open={showFeedbackModal}
+          onClose={() => setShowFeedbackModal(false)}
+          onNext={data => {
+            setShowFeedbackModal(false);
+            setFeedbackStep2({ ...data, time: feedbackModalTime });
+          }}
+        />
+
+        {/* Feedback Guest Selection Modal */}
+        {feedbackStep2 && (
+          <FeedbackGuestSelectionModal
+            open={!!feedbackStep2}
+            onClose={() => setFeedbackStep2(null)}
+            guests={guests}
+            onSave={(selectedGuests: string[]) => {
+              // --- SUPABASE: Insert feedback module with guest assignments
+              // Table: timeline_modules, Fields: event_id, module_type: 'feedback', time, title, default_rating, assigned_guests
+              // Use Supabase function 'add_timeline_module'
+              // TODO: Implement Supabase save logic here
+              setFeedbackStep2(null);
+              // TODO: refresh modules after save
+            }}
+            moduleData={feedbackStep2}
+          />
+        )}
+
       </div>
     </div>
   );

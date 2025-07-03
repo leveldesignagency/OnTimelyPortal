@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useImperativeHandle, forwardRef, useRef, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback, useImperativeHandle, forwardRef } from 'react';
 import { supabase } from '../lib/supabase';
 
 interface ItineraryItem {
@@ -21,7 +21,8 @@ interface ItineraryItem {
 interface TimelinePreviewProps {
   itineraries: ItineraryItem[];
   isDark: boolean;
-  eventId?: string; // Add eventId prop
+  eventId?: string;
+  selectedDate?: Date;
 }
 
 interface TimelinePreviewRef {
@@ -151,7 +152,20 @@ const StarRating = ({ rating, onRatingChange, isDark }: { rating: number, onRati
   );
 };
 
-const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ itineraries, isDark, eventId }, ref) => {
+const TimelinePreview = forwardRef(function TimelinePreview({ 
+  itineraries, 
+  isDark, 
+  eventId, 
+  selectedDate = new Date() 
+}: TimelinePreviewProps, ref) {
+  console.log('TimelinePreview props:', { 
+    itineraries: itineraries?.length, 
+    isDark, 
+    eventId, 
+    selectedDate,
+    itinerariesData: itineraries
+  });
+
   const [currentTime, setCurrentTime] = useState(new Date());
   const [selectedEventIndex, setSelectedEventIndex] = useState<number | null>(null);
   const [showEventCard, setShowEventCard] = useState(false);
@@ -176,72 +190,92 @@ const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ 
     return () => clearInterval(interval);
   }, []);
 
-  // Process and sort itineraries by date and time
-  const sortedItineraries = useMemo(() => {
-    if (!itineraries || itineraries.length === 0) {
-      console.log('No itineraries available');
+  // Process and sort itineraries for the selected date
+  const processedItineraries = useMemo(() => {
+    if (!itineraries?.length) {
+      console.log('No itineraries provided to processedItineraries');
       return [];
     }
     
-    console.log('Processing itineraries:', itineraries);
+    const targetDate = selectedDate || new Date();
+    const targetDateString = targetDate.toISOString().split('T')[0]; // YYYY-MM-DD format
     
-    // Parse actual times from itinerary data
-    const processed = itineraries.map((item) => {
-      // Parse the date and time properly
-      let dateTime: Date;
-      let endDateTime: Date;
+    console.log('TimelinePreview filtering:', {
+      selectedDate,
+      targetDateString,
+      totalItineraries: itineraries.length,
+      itineraryDates: itineraries.map(item => ({ id: item.id, date: item.date, title: item.title }))
+    });
+    
+    // Filter itineraries for the selected date
+    const dayItineraries = itineraries.filter(item => {
+      if (!item.date) {
+        console.log('Item has no date:', item);
+        return false;
+      }
       
-      try {
-        // Handle different date formats
-        const dateStr = item.date;
-        const startTimeStr = item.start_time;
-        const endTimeStr = item.end_time;
+      // Convert dd/mm/yyyy to YYYY-MM-DD for comparison
+      let itemDateString;
+      if (item.date.includes('/')) {
+        // Handle dd/mm/yyyy format
+        const [day, month, year] = item.date.split('/');
+        itemDateString = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+      } else {
+        // Handle YYYY-MM-DD format (fallback)
+        itemDateString = item.date.split('T')[0];
+      }
+      
+      const matches = itemDateString === targetDateString;
+      console.log('Date comparison:', { 
+        itemId: item.id, 
+        itemDate: item.date, 
+        itemDateString, 
+        targetDateString, 
+        matches 
+      });
+      return matches;
+    });
+
+    console.log('Filtered itineraries for date:', {
+      targetDateString,
+      filteredCount: dayItineraries.length,
+      filteredItems: dayItineraries.map(item => ({ id: item.id, title: item.title, date: item.date }))
+    });
+
+    try {
+      // Add timestamps to itineraries and sort by time
+      const withTimestamps = dayItineraries.map(item => {
+        const [h, m] = (item.start_time || '00:00').split(':').map(Number);
+        const dateTime = new Date(targetDate);
+        dateTime.setHours(h, m, 0, 0);
         
-        // Create date objects from the actual data
-        if (dateStr && startTimeStr) {
-          const [startHours, startMinutes] = startTimeStr.split(':').map(Number);
-          const [endHours, endMinutes] = endTimeStr ? endTimeStr.split(':').map(Number) : [startHours + 1, startMinutes];
-          
-          // Use today's date if the date parsing fails, for demo purposes
-          const baseDate = new Date(dateStr) || new Date();
-          
-          dateTime = new Date(baseDate);
-          dateTime.setHours(startHours, startMinutes, 0, 0);
-          
-          endDateTime = new Date(baseDate);
-          endDateTime.setHours(endHours, endMinutes, 0, 0);
-        } else {
-          // Fallback to current time if parsing fails
-          dateTime = new Date();
-          endDateTime = new Date(dateTime.getTime() + 60 * 60 * 1000); // 1 hour later
-        }
+        const [endH, endM] = (item.end_time || item.start_time || '00:00').split(':').map(Number);
+        const endDateTime = new Date(targetDate);
+        endDateTime.setHours(endH, endM, 0, 0);
         
         return {
           ...item,
           dateTime,
           endDateTime,
           timestamp: dateTime.getTime(),
-          endTimestamp: endDateTime.getTime()
+          endTimestamp: endDateTime.getTime(),
         };
-      } catch (error) {
-        console.error('Error parsing date/time for item:', item, error);
-        // Fallback
-        const now = new Date();
-        return {
-          ...item,
-          dateTime: now,
-          endDateTime: new Date(now.getTime() + 60 * 60 * 1000),
-          timestamp: now.getTime(),
-          endTimestamp: now.getTime() + 60 * 60 * 1000
-        };
-      }
-    });
-    
-    // Sort by actual time
-    const sorted = processed.sort((a, b) => a.timestamp - b.timestamp);
-    console.log('Processed and sorted itineraries:', sorted);
-    return sorted;
-  }, [itineraries]);
+      });
+      
+      const sorted = withTimestamps.sort((a, b) => a.timestamp - b.timestamp);
+      console.log('Sorted itineraries with timestamps:', sorted.map(item => ({ 
+        id: item.id, 
+        title: item.title, 
+        start_time: item.start_time,
+        timestamp: item.timestamp,
+        dateTime: item.dateTime 
+      })));
+      return sorted;
+    } catch (error) {
+      console.error('Error sorting itineraries:', error);
+      return dayItineraries;
+    }
+  }, [itineraries, selectedDate]);
 
   // --- QR Code Module State ---
   const [qrModules, setQrModules] = useState<any[]>([]);
@@ -314,6 +348,14 @@ const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ 
         type: 'feedback'
       })) || [];
 
+      console.log('Module type counts:', {
+        qr: qrData.length,
+        survey: surveyData.length,
+        question: questionData.length,
+        feedback: feedbackData.length,
+        questionData,
+      });
+
       setQrModules(qrData);
       setSurveyModules(surveyData);
       setQuestionModules(questionData);
@@ -348,91 +390,120 @@ const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ 
 
   // --- Merge all modules into timeline events ---
   const mergedItineraries = useMemo(() => {
-    const base = [...sortedItineraries];
-    // Add QR modules
+    const targetDate = selectedDate || new Date();
+    const targetDateString = targetDate.toISOString().split('T')[0]; // YYYY-MM-DD format
+    
+    const base = [...processedItineraries];
+    
+    // Add QR modules for the selected date
     qrModules.forEach((q: any, idx: number) => {
-      const today = new Date();
-      const [h, m] = q.time.split(':').map(Number);
-      const dateTime = new Date(today);
-      dateTime.setHours(h, m, 0, 0);
-      base.push({
-        id: `qrcode-${idx}`,
-        title: q.label || 'QR Code',
-        date: today.toISOString().split('T')[0],
-        start_time: q.time,
-        end_time: q.time,
-        dateTime: dateTime,
-        endDateTime: dateTime,
-        timestamp: dateTime.getTime(),
-        endTimestamp: dateTime.getTime(),
-        module: 'qrcode',
-        link: q.link,
-        file: q.file,
-      });
-    });
-    // Add Survey modules
-    surveyModules.forEach((s: any, idx: number) => {
-      const today = new Date();
-      const [h, m] = s.time.split(':').map(Number);
-      const dateTime = new Date(today);
-      dateTime.setHours(h, m, 0, 0);
-      base.push({
-        id: `survey-${idx}`,
-        title: s.title || 'Survey',
-        date: today.toISOString().split('T')[0],
-        start_time: s.time,
-        end_time: s.time,
-        dateTime: dateTime,
-        endDateTime: dateTime,
-        timestamp: dateTime.getTime(),
-        endTimestamp: dateTime.getTime(),
-        module: 'survey',
-        survey: s,
-      });
-    });
-    // Add Question modules
-    questionModules.forEach((q: any, idx: number) => {
-      if (!base.some(e => e.timestamp && formatTime(e.start_time) === q.time && e.title === q.question)) {
-        const today = new Date();
+      // Use the actual date from the module
+      const moduleDate = q.date ? new Date(q.date) : targetDate;
+      const moduleDateString = moduleDate.toISOString().split('T')[0];
+      
+      if (moduleDateString === targetDateString) {
         const [h, m] = q.time.split(':').map(Number);
-        const dateTime = new Date(today);
+        const dateTime = new Date(targetDate);
         dateTime.setHours(h, m, 0, 0);
         base.push({
-          id: `question-${idx}`,
-          title: q.question,
-          date: today.toISOString().split('T')[0],
+          id: `qrcode-${idx}`,
+          title: q.label || 'QR Code',
+          date: targetDate.toISOString().split('T')[0],
           start_time: q.time,
           end_time: q.time,
           dateTime: dateTime,
           endDateTime: dateTime,
           timestamp: dateTime.getTime(),
           endTimestamp: dateTime.getTime(),
-          module: 'question',
-        });
+          module: 'qrcode',
+          link: q.link,
+          file: q.file,
+        } as any);
       }
     });
-    // Add Feedback modules
-    feedbackModules.forEach((f: any, idx: number) => {
-      const today = new Date();
-      const [h, m] = f.time.split(':').map(Number);
-      const dateTime = new Date(today);
-      dateTime.setHours(h, m, 0, 0);
-      base.push({
-        id: `feedback-${idx}`,
-        title: f.question || 'Feedback',
-        date: today.toISOString().split('T')[0],
-        start_time: f.time,
-        end_time: f.time,
-        dateTime: dateTime,
-        endDateTime: dateTime,
-        timestamp: dateTime.getTime(),
-        endTimestamp: dateTime.getTime(),
-        module: 'feedback',
-        feedback: f,
-      });
+    
+    // Add Survey modules for the selected date
+    surveyModules.forEach((s: any, idx: number) => {
+      // Use the actual date from the module
+      const moduleDate = s.date ? new Date(s.date) : targetDate;
+      const moduleDateString = moduleDate.toISOString().split('T')[0];
+      
+      if (moduleDateString === targetDateString) {
+        const [h, m] = s.time.split(':').map(Number);
+        const dateTime = new Date(targetDate);
+        dateTime.setHours(h, m, 0, 0);
+        base.push({
+          id: `survey-${idx}`,
+          title: s.title || 'Survey',
+          date: targetDate.toISOString().split('T')[0],
+          start_time: s.time,
+          end_time: s.time,
+          dateTime: dateTime,
+          endDateTime: dateTime,
+          timestamp: dateTime.getTime(),
+          endTimestamp: dateTime.getTime(),
+          module: 'survey',
+          survey: s,
+        } as any);
+      }
     });
-    return base.sort((a, b) => a.timestamp - b.timestamp);
-  }, [sortedItineraries, qrModules, surveyModules, questionModules, feedbackModules]);
+    
+    // Add Question modules for the selected date
+    questionModules.forEach((q: any, idx: number) => {
+      // Use the actual date from the module
+      const moduleDate = q.date ? new Date(q.date) : targetDate;
+      const moduleDateString = moduleDate.toISOString().split('T')[0];
+      
+      if (moduleDateString === targetDateString) {
+        if (!base.some(e => (e as any).timestamp && formatTime(e.start_time) === q.time && e.title === q.question)) {
+          const [h, m] = q.time.split(':').map(Number);
+          const dateTime = new Date(targetDate);
+          dateTime.setHours(h, m, 0, 0);
+          base.push({
+            id: `question-${idx}`,
+            title: q.question,
+            date: targetDate.toISOString().split('T')[0],
+            start_time: q.time,
+            end_time: q.time,
+            dateTime: dateTime,
+            endDateTime: dateTime,
+            timestamp: dateTime.getTime(),
+            endTimestamp: dateTime.getTime(),
+            module: 'question',
+          } as any);
+        }
+      }
+    });
+    
+    // Add Feedback modules for the selected date
+    feedbackModules.forEach((f: any, idx: number) => {
+      // Use the actual date from the module
+      const moduleDate = f.date ? new Date(f.date) : targetDate;
+      const moduleDateString = moduleDate.toISOString().split('T')[0];
+      
+      if (moduleDateString === targetDateString) {
+        const [h, m] = f.time.split(':').map(Number);
+        const dateTime = new Date(targetDate);
+        dateTime.setHours(h, m, 0, 0);
+        base.push({
+          id: `feedback-${idx}`,
+          title: f.question || 'Feedback',
+          date: targetDate.toISOString().split('T')[0],
+          start_time: f.time,
+          end_time: f.time,
+          dateTime: dateTime,
+          endDateTime: dateTime,
+          timestamp: dateTime.getTime(),
+          endTimestamp: dateTime.getTime(),
+          module: 'feedback',
+          feedback: f,
+        } as any);
+      }
+    });
+    
+    console.log('Merged timeline events:', base);
+    return base.sort((a, b) => (a as any).timestamp - (b as any).timestamp);
+  }, [processedItineraries, qrModules, surveyModules, questionModules, feedbackModules, selectedDate]);
 
   // For timeline display, show events in a reasonable time window
   const visibleEvents = useMemo(() => {
@@ -496,12 +567,12 @@ const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ 
 
   // Calculate timeline bounds based on actual event times
   const timelineBounds = useMemo(() => {
-    // Create a full 24-hour timeline canvas (like 2400cm behind the phone)
-    const today = new Date();
-    const startOfDay = new Date(today);
+    // Create a full 24-hour timeline canvas for the selected date
+    const targetDate = selectedDate || new Date();
+    const startOfDay = new Date(targetDate);
     startOfDay.setHours(0, 0, 0, 0);
     
-    const endOfDay = new Date(today);
+    const endOfDay = new Date(targetDate);
     endOfDay.setHours(23, 59, 59, 999);
     
     return {
@@ -509,45 +580,58 @@ const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ 
       endTime: endOfDay.getTime(),
       totalDuration: 24 * 60 * 60 * 1000 // Full 24 hours in milliseconds
     };
-  }, [currentTime]);
+  }, [selectedDate]); // Changed from currentTime to selectedDate
 
   // Generate time scale for left side - 15 minute intervals for full 24 hours
   const timeScale = useMemo(() => {
-    const { startTime, endTime } = timelineBounds;
     const times = [];
-    const interval = 15 * 60 * 1000; // 15 minute intervals
+    const targetDate = selectedDate || new Date();
     
-    for (let time = startTime; time <= endTime; time += interval) {
-      times.push(new Date(time));
+    for (let hour = 0; hour < 24; hour++) {
+      for (let minute = 0; minute < 60; minute += 15) {
+        const time = new Date(targetDate);
+        time.setHours(hour, minute, 0, 0);
+        
+        const position = ((time.getTime() - timelineBounds.startTime) / timelineBounds.totalDuration) * 100;
+        
+        times.push({
+          time: time.toLocaleTimeString('en-US', { 
+            hour: 'numeric', 
+            minute: '2-digit',
+            hour12: true 
+          }),
+          position
+        });
+      }
     }
-    
     return times;
-  }, [timelineBounds]);
+  }, [timelineBounds, selectedDate]); // Added selectedDate to dependencies
 
   // Calculate position on the 24-hour timeline canvas (0-100% of the full day)
   const getTimelinePosition = (timestamp: number) => {
     const { startTime, totalDuration } = timelineBounds;
-    const eventDate = new Date(timestamp);
-    
-    // Create a time today with the same hours/minutes as the event
-    const todayWithEventTime = new Date();
-    todayWithEventTime.setHours(eventDate.getHours(), eventDate.getMinutes(), 0, 0);
-    
-    const positionInDay = ((todayWithEventTime.getTime() - startTime) / totalDuration) * 100;
-    return Math.max(0, Math.min(100, positionInDay));
+    const position = ((timestamp - startTime) / totalDuration) * 100;
+    return Math.max(0, Math.min(100, position));
   };
 
   // On mount, start at the first itinerary item
   useEffect(() => {
     if (mergedItineraries.length > 0) {
       setSelectedEventIndex(0);
+    } else {
+      setSelectedEventIndex(null);
     }
   }, [mergedItineraries.length]);
 
   // Helper: get timeline position for a given event index
   const getEventTimelinePosition = (eventIndex: number) => {
-    if (!visibleEvents[eventIndex]) return 0;
-    return getTimelinePosition(visibleEvents[eventIndex].timestamp);
+    const event = visibleEvents[eventIndex];
+    if (!event) return 0;
+    
+    const timestamp = (event as any).timestamp;
+    if (!timestamp) return 0;
+    
+    return getTimelinePosition(timestamp);
   };
 
   // Animate viewport center when selectedEventIndex changes
@@ -632,7 +716,7 @@ const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ 
   // Navigation functions for external controls
   // Up arrow: move to previous (earlier) event
   const goToPrevious = () => {
-    if (visibleEvents.length === 0) return;
+    if (mergedItineraries.length === 0) return;
     const currentIndex = selectedEventIndex ?? 0;
     const newIndex = Math.max(0, currentIndex - 1); // earlier event
     setSelectedEventIndex(newIndex);
@@ -640,15 +724,16 @@ const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ 
 
   // Down arrow: move to next (later) event
   const goToNext = () => {
-    if (visibleEvents.length === 0) return;
+    if (mergedItineraries.length === 0) return;
     const currentIndex = selectedEventIndex ?? -1;
-    const newIndex = Math.min(visibleEvents.length - 1, currentIndex + 1); // later event
+    const newIndex = Math.min(mergedItineraries.length - 1, currentIndex + 1); // later event
     setSelectedEventIndex(newIndex);
   };
 
   const goToItem = (index: number) => {
-    setSelectedEventIndex(index);
-    // Do NOT triggerCardAnimation here
+    if (index >= 0 && index < mergedItineraries.length) {
+      setSelectedEventIndex(index);
+    }
   };
 
   // Only show event card when user clicks milestone circle
@@ -838,82 +923,52 @@ const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ 
   };
 
   // Confirm deletion
-  const confirmDeletion = () => {
-    // Get current modules from localStorage
-    const modules = JSON.parse(localStorage.getItem('timelineModules') || '[]');
-    
-    // Filter out selected modules
-    const selectedModuleData = Array.from(selectedModulesForDeletion).map(id => {
-      return allModules.find(m => m.id === id);
-    });
-    
-    const updatedModules = modules.filter((module: any) => {
-      return !selectedModuleData.some(selected => {
-        if (!selected) return false;
-        return (
-          module.type === selected.moduleType &&
-          module.time === selected.time &&
-          (module.question === selected.data.question || 
-           module.title === selected.data.title ||
-           module.label === selected.data.label)
-        );
-      });
-    });
-    
-    localStorage.setItem('timelineModules', JSON.stringify(updatedModules));
-    
-    // Trigger refresh
-    window.dispatchEvent(new CustomEvent('refreshTimelineModules'));
-    
-    // Close popups and reset selection
+  const confirmDeletion = async () => {
+    // Delete selected modules from Supabase
+    const idsToDelete = Array.from(selectedModulesForDeletion).map(id => {
+      const mod = allModules.find(m => m.id === id);
+      return mod ? mod.data.id : null;
+    }).filter(Boolean);
+    if (idsToDelete.length > 0) {
+      await supabase.from('timeline_modules').delete().in('id', idsToDelete);
+      // Optionally, refresh modules
+      loadModulesFromDatabase();
+    }
     setShowConfirmDialog(false);
     setShowModuleManagementPopup(false);
     setSelectedModulesForDeletion(new Set());
-    
-    // Show success message
     setShowDeleteSuccess(true);
     setTimeout(() => setShowDeleteSuccess(false), 2000);
   };
 
-  if (visibleEvents.length === 0) {
-    return (
-      <div style={{
-        flex: 1,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: isDark ? '#666' : '#999',
-        fontSize: 16,
-        textAlign: 'center',
-        padding: 20,
-      }}>
-        <div style={{ marginBottom: 12, fontSize: 24 }}>⏰</div>
-        <div style={{ marginBottom: 8 }}>No upcoming events</div>
-        <div style={{ fontSize: 12, opacity: 0.7 }}>
-          {formatTime(currentTime.toLocaleTimeString('en-US', { 
-            hour: '2-digit', 
-            minute: '2-digit'
-          }))}
-        </div>
-      </div>
-    );
-  }
+  // Calculate current time position for the indicator line
+  const getCurrentTimePosition = () => {
+    const now = new Date();
+    // Only show current time indicator if we're viewing today
+    const today = new Date();
+    const viewingDate = selectedDate || today;
+    const isToday = today.toDateString() === viewingDate.toDateString();
+    
+    if (!isToday) return null;
+    
+    return getTimelinePosition(now.getTime());
+  };
 
-  const selectedEvent = selectedEventIndex !== null ? visibleEvents[selectedEventIndex] : null;
+  const currentTimePosition = getCurrentTimePosition();
+
+  // Always render the timeline, even without events
+  const selectedEvent = selectedEventIndex !== null && visibleEvents.length > 0 ? visibleEvents[selectedEventIndex] : null;
 
   // When finding activeQuestion, type it as QuestionModule | undefined
   const nowStr = `${currentTime.getHours().toString().padStart(2, '0')}:${currentTime.getMinutes().toString().padStart(2, '0')}`;
   const activeQuestion: QuestionModule | undefined = questionModules.find((q) => q.time === nowStr);
 
   // Delete handler for question modules
-  const handleDeleteQuestionModule = (q: any) => {
-    // TODO: SUPABASE - Replace this localStorage logic with a DELETE call to the supabase table 'timeline_modules' where id = q.id
-    const modules = JSON.parse(localStorage.getItem('timelineModules') || '[]');
-    const updated = modules.filter((m: any) => !(m.type === 'question' && m.time === q.time && m.question === q.question));
-    localStorage.setItem('timelineModules', JSON.stringify(updated));
-    // Optionally, force update state
-    setQuestionModules(updated.filter((m: any) => m.type === 'question'));
+  const handleDeleteQuestionModule = async (q: any) => {
+    // Delete from Supabase
+    await supabase.from('timeline_modules').delete().eq('id', q.id);
+    // Optionally, refresh modules
+    loadModulesFromDatabase();
   };
 
   // In the event detail card/modal (showEventCard && selectedEvent):
@@ -998,7 +1053,6 @@ const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ 
     setTimeout(() => setShowDeleteSuccess(false), 2000);
   };
 
-  // Expose methods to parent component with new delete function
   useImperativeHandle(ref, () => ({
     goToPrevious,
     goToNext,
@@ -1022,9 +1076,8 @@ const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ 
         width: 60,
         zIndex: 5,
       }}>
-        {timeScale.map((time, index) => {
-          const timelinePosition = getTimelinePosition(time.getTime());
-          const screenPosition = getScreenPosition(timelinePosition);
+        {timeScale.map((timeItem, index) => {
+          const screenPosition = getScreenPosition(timeItem.position);
           if (screenPosition < 0) return null;
           return (
             <div
@@ -1042,7 +1095,7 @@ const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ 
                 fontWeight: 500,
               }}
             >
-              {formatTime(time.getHours().toString().padStart(2, '0') + ':' + time.getMinutes().toString().padStart(2, '0'))}
+              {timeItem.time}
             </div>
           );
         })}
@@ -1080,7 +1133,7 @@ const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ 
 
         {/* Timeline events - only show those visible in viewport */}
         {visibleEvents.map((event, index) => {
-          const timelinePosition = getTimelinePosition(event.timestamp);
+          const timelinePosition = getTimelinePosition((event as any).timestamp);
           const screenPosition = getScreenPosition(timelinePosition);
           if (screenPosition < 0) return null;
           const status = getEventStatus(event);
@@ -1170,6 +1223,21 @@ const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ 
             </div>
           );
         })}
+
+        {/* Current time indicator line - horizontal glowing line */}
+        {currentTimePosition !== null && (
+          <div style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            top: `${getScreenPosition(currentTimePosition)}%`,
+            height: 1,
+            background: '#3b82f6',
+            boxShadow: '0 0 8px rgba(59, 130, 246, 0.6), 0 0 16px rgba(59, 130, 246, 0.3)',
+            zIndex: 20,
+            transform: 'translateY(-50%)',
+          }} />
+        )}
       </div>
 
       {/* Event Detail Card - Animated expansion from milestone */}
@@ -2336,7 +2404,5 @@ const TimelinePreview = forwardRef<TimelinePreviewRef, TimelinePreviewProps>(({ 
     </div>
   );
 });
-
-TimelinePreview.displayName = 'TimelinePreview';
 
 export default TimelinePreview; 

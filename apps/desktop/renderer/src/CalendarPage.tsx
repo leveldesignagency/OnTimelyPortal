@@ -1070,7 +1070,7 @@ Check the browser console for detailed diagnostic information.`);
                             date: date,
                             events: dayEvents
                           });
-                        }, 500); // 500ms long press
+                        }, 500) as unknown as NodeJS.Timeout;
                         setLongPressTimer(timer);
                       }
                     }}

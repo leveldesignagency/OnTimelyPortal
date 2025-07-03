@@ -54,6 +54,36 @@ function CustomDatePicker({ value, onChange, placeholder, isDark, colors, requir
     onChange(`${year}-${mm}-${dd}`);
     setShow(false);
   }
+  // Generate a 6-row calendar grid for consistent height
+  const calendarCells = [];
+  let dayCounter = 1;
+  for (let week = 0; week < 6; week++) {
+    for (let day = 0; day < 7; day++) {
+      const cellIndex = week * 7 + day;
+      if (cellIndex < firstDay || dayCounter > daysInMonth) {
+        calendarCells.push(null);
+      } else {
+        calendarCells.push(dayCounter);
+        dayCounter++;
+      }
+    }
+  }
+  function handlePrev() {
+    if (month === 0) {
+      setMonth(11);
+      setYear(y => y - 1);
+    } else {
+      setMonth(m => m - 1);
+    }
+  }
+  function handleNext() {
+    if (month === 11) {
+      setMonth(0);
+      setYear(y => y + 1);
+    } else {
+      setMonth(m => m + 1);
+    }
+  }
   return (
     <div style={{ position: 'relative', width: '100%' }}>
       <div
@@ -89,26 +119,36 @@ function CustomDatePicker({ value, onChange, placeholder, isDark, colors, requir
           width: 340,
           minWidth: 340,
           maxWidth: 340,
+          height: 390, // fixed height for 6 weeks
           ...getGlassStyles(isDark),
           padding: 20,
           boxSizing: 'border-box',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12, gap: 12 }}>
-            <button type="button" onClick={() => setMonth(m => m === 0 ? 11 : m - 1)} style={{ background: 'none', border: 'none', color: colors.text, fontSize: 20, cursor: 'pointer', boxShadow: 'none', outline: 'none', padding: 0, margin: 0 }}>←</button>
-            <span style={{ fontWeight: 600, fontSize: 16, textAlign: 'center', flex: 1, whiteSpace: 'nowrap' }}>{monthNames[month]} {year}</span>
-            <button type="button" onClick={() => setMonth(m => m === 11 ? 0 : m + 1)} style={{ background: 'none', border: 'none', color: colors.text, fontSize: 20, cursor: 'pointer', boxShadow: 'none', outline: 'none', padding: 0, margin: 0 }}>→</button>
+          {/* Single navigation row */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16, width: '100%' }}>
+            <button type="button" onClick={handlePrev} style={{ flex: '0 0 48px', height: 40, background: colors.hover, border: 'none', borderRadius: 8, color: colors.text, fontSize: 22, cursor: 'pointer', marginRight: 12, fontWeight: 700, transition: 'background 0.2s' }}>←</button>
+            <span style={{ flex: '1 1 auto', fontWeight: 700, fontSize: 18, textAlign: 'center', letterSpacing: 1, color: colors.text, background: 'none', height: 40, lineHeight: '40px', borderRadius: 8 }}>{monthNames[month]} {year}</span>
+            <button type="button" onClick={handleNext} style={{ flex: '0 0 48px', height: 40, background: colors.hover, border: 'none', borderRadius: 8, color: colors.text, fontSize: 22, cursor: 'pointer', marginLeft: 12, fontWeight: 700, transition: 'background 0.2s' }}>→</button>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, marginBottom: 8 }}>
+          {/* Days of week header */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, marginBottom: 8, width: '100%' }}>
             {[...Array(7)].map((_, i) => (
               <div key={i} style={{ textAlign: 'center', fontWeight: 600, color: colors.textSecondary, fontSize: 13 }}>{['S','M','T','W','T','F','S'][i]}</div>
             ))}
-            {Array(firstDay).fill(null).map((_, i) => <div key={'empty'+i} />)}
-            {Array(daysInMonth).fill(null).map((_, i) => {
-              const day = i + 1;
+          </div>
+          {/* Calendar grid (6 rows, 7 columns) */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, width: '100%', flex: 1 }}>
+            {calendarCells.map((day, idx) => {
+              if (!day) {
+                return <div key={idx} style={{ width: 36, height: 36 }} />;
+              }
               const isToday = year === today.getFullYear() && month === today.getMonth() && day === today.getDate();
               return (
                 <button
-                  key={day}
+                  key={idx}
                   type="button"
                   onClick={() => selectDate(day)}
                   style={{
