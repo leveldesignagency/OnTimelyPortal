@@ -1316,6 +1316,35 @@ export default function EventPortalManagementPage() {
             width: '100vw',
             height: '100vh',
           }}>
+            {/* Close (X) Button - Top Right */}
+            <button
+              onClick={() => setShowPreviewModal(false)}
+              style={{
+                position: 'absolute',
+                top: 32,
+                right: 40,
+                zIndex: 2100,
+                background: isDark ? 'rgba(36,36,40,0.85)' : 'rgba(255,255,255,0.95)',
+                color: isDark ? '#fff' : '#222',
+                border: isDark ? '1.5px solid #222' : '1.5px solid #eee',
+                borderRadius: '50%',
+                width: 44,
+                height: 44,
+                fontSize: 26,
+                fontWeight: 700,
+                boxShadow: isDark ? '0 2px 12px rgba(0,0,0,0.25)' : '0 2px 12px rgba(0,0,0,0.08)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'background 0.2s',
+                outline: 'none',
+              }}
+              aria-label="Close Preview Timeline"
+            >
+              ×
+            </button>
+
             {/* Update Timeline Button - Center Top */}
             <button
               style={{
