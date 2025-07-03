@@ -1361,6 +1361,31 @@ export default function EventPortalManagementPage() {
               >
                 + Question Field
               </div>
+              {/* Feedback Module */}
+              <div
+                draggable
+                style={{
+                  background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(36,36,40,0.08)',
+                  border: `2px dashed ${isDark ? 'rgba(255,255,255,0.18)' : 'rgba(36,36,40,0.18)'}`,
+                  borderRadius: 18,
+                  padding: '20px 28px',
+                  minWidth: 160,
+                  fontWeight: 700,
+                  fontSize: 15,
+                  color: isDark ? '#fff' : '#222',
+                  boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.10)' : '0 2px 8px rgba(36,36,40,0.08)',
+                  cursor: 'grab',
+                  userSelect: 'none',
+                  textAlign: 'center',
+                  marginBottom: 8,
+                  backdropFilter: 'blur(8px)',
+                }}
+                onDragStart={e => {
+                  e.dataTransfer.setData('moduleType', 'feedback');
+                }}
+              >
+                + Feedback Module
+              </div>
             </div>
 
             {/* Itinerary List - Left side, in a container */}
