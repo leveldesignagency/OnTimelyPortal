@@ -566,4 +566,23 @@ export const convertCsvToGuests = (csvData: any[], eventId: string, companyId: s
     status: 'pending',
     created_by: createdBy
   }));
-} 
+}
+
+// Fetch guest-itinerary assignments for an event
+export const getEventAssignments = async (eventId: string) => {
+  const { data, error } = await supabase.rpc('get_event_assignments', {
+    event_identifier: eventId
+  });
+  if (error) throw error;
+  // Convert to { [guestId]: string[] }
+  const assignments: { [guestId: string]: string[] } = {};
+  if (data && Array.isArray(data)) {
+    data.forEach((row: any) => {
+      const guestId = row.guest_id;
+      const itineraryId = row.itinerary_id.toString();
+      if (!assignments[guestId]) assignments[guestId] = [];
+      assignments[guestId].push(itineraryId);
+    });
+  }
+  return assignments;
+}; 

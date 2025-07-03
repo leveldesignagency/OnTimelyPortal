@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useContext } from 'react';
 import { ThemeContext } from '../ThemeContext';
+import { getGuests, getItineraries, getEventAssignments } from '../lib/supabase';
 
 export default function AssignOverviewPage() {
   const { theme } = useContext(ThemeContext);
@@ -9,8 +10,35 @@ export default function AssignOverviewPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { id: eventId } = useParams();
-  // Expecting navigation state: { guestAssignments, guests, itineraries, eventAddOns }
-  const { guestAssignments = {}, guests = [], itineraries = [], eventAddOns = [] } = location.state || {};
+  const [guests, setGuests] = useState<any[]>([]);
+  const [itineraries, setItineraries] = useState<any[]>([]);
+  const [guestAssignments, setGuestAssignments] = useState<{ [guestId: string]: string[] }>({});
+  const [eventAddOns, setEventAddOns] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchData() {
+      if (!eventId) return;
+      setLoading(true);
+      try {
+        const [guestsData, itinerariesData, assignmentsData] = await Promise.all([
+          getGuests(eventId),
+          getItineraries(eventId),
+          getEventAssignments(eventId)
+        ]);
+        setGuests(guestsData);
+        setItineraries(itinerariesData);
+        setGuestAssignments(assignmentsData);
+        // Optionally: setEventAddOns from location.state if needed
+        if (location.state && location.state.eventAddOns) setEventAddOns(location.state.eventAddOns);
+      } catch (e) {
+        // handle error
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchData();
+  }, [eventId]);
 
   console.log('AssignOverviewPage received state:', {
     guestAssignments,
@@ -22,6 +50,7 @@ export default function AssignOverviewPage() {
   console.log('Raw guestAssignments:', guestAssignments);
   console.log('Sample itinerary IDs:', itineraries.slice(0, 3).map((i: any) => ({ id: i.id, title: i.title })));
 
+  if (loading) return <div style={{ color: isDark ? '#fff' : '#222', padding: 48 }}>Loading...</div>;
   if (!guests.length || !itineraries.length) {
     return (
       <div style={{ padding: 48, background: isDark ? '#121212' : '#f8f9fa', minHeight: '100vh', color: isDark ? '#fff' : '#222' }}>

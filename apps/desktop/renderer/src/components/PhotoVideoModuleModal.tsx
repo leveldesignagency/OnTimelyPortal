@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { ThemeContext } from '../ThemeContext';
 
 const getGlassStyles = (isDark: boolean) => ({
@@ -15,9 +15,9 @@ const getGlassStyles = (isDark: boolean) => ({
 
 // --- Local Glassmorphic Date Picker ---
 function GlassDatePicker({ value, onChange, isDark }) {
-  const [show, setShow] = useState(false);
-  const [month, setMonth] = useState(() => value ? new Date(value).getMonth() : new Date().getMonth());
-  const [year, setYear] = useState(() => value ? new Date(value).getFullYear() : new Date().getFullYear());
+  const [show, setShow] = React.useState(false);
+  const [month, setMonth] = React.useState(() => value ? new Date(value).getMonth() : new Date().getMonth());
+  const [year, setYear] = React.useState(() => value ? new Date(value).getFullYear() : new Date().getFullYear());
   const today = new Date();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const firstDay = new Date(year, month, 1).getDay();
@@ -25,7 +25,7 @@ function GlassDatePicker({ value, onChange, isDark }) {
     'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December'
   ];
-  const ref = useRef();
+  const ref = React.useRef();
   React.useEffect(() => {
     function handleClick(e) {
       if (ref.current && !ref.current.contains(e.target)) setShow(false);
@@ -39,7 +39,6 @@ function GlassDatePicker({ value, onChange, isDark }) {
     onChange(`${year}-${mm}-${dd}`);
     setShow(false);
   }
-  // Format value as dd/MM/yyyy for display
   let displayValue = value;
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     const [yyyy, mm, dd] = value.split('-');
@@ -128,10 +127,10 @@ function GlassDatePicker({ value, onChange, isDark }) {
 
 // --- Local Glassmorphic Time Picker ---
 function GlassTimePicker({ value, onChange, isDark }) {
-  const [open, setOpen] = useState(false);
-  const [hour, setHour] = useState('');
-  const [minute, setMinute] = useState('');
-  const ref = useRef();
+  const [open, setOpen] = React.useState(false);
+  const [hour, setHour] = React.useState('');
+  const [minute, setMinute] = React.useState('');
+  const ref = React.useRef();
   React.useEffect(() => {
     function handleClick(e) {
       if (ref.current && !ref.current.contains(e.target)) setOpen(false);
@@ -260,35 +259,19 @@ function GlassTimePicker({ value, onChange, isDark }) {
   );
 }
 
-export default function FeedbackModuleModal({ open, onClose, onNext, guests }) {
+export default function PhotoVideoModuleModal({ open, onClose, onNext, guests }) {
   const { theme } = React.useContext(ThemeContext);
   const isDark = theme === 'dark';
-  const [title, setTitle] = useState('');
-  const [rating, setRating] = useState(0);
-  const [dragging, setDragging] = useState(false);
-  const barRef = useRef<HTMLDivElement>(null);
+  const [prompt, setPrompt] = useState('');
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [time, setTime] = useState(() => {
     const now = new Date();
     return now.toTimeString().slice(0,5);
   });
-  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const [step, setStep] = useState(1);
+  const [selectedGuests, setSelectedGuests] = useState([]);
 
   if (!open) return null;
-
-  // Swiping logic for granular rating
-  const handleBarClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!barRef.current) return;
-    const rect = barRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    let percent = x / rect.width;
-    percent = Math.max(0, Math.min(1, percent));
-    setRating(Math.round(percent * 50) / 10); // 0.0 to 5.0, step 0.1
-  };
-  const handleBarDrag = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!dragging) return;
-    handleBarClick(e);
-  };
 
   return (
     <div style={{
@@ -306,70 +289,52 @@ export default function FeedbackModuleModal({ open, onClose, onNext, guests }) {
         alignItems: 'center',
         boxSizing: 'border-box',
       }}>
-        <h2 style={{ color: isDark ? '#fff' : '#111', fontWeight: 700, fontSize: 24, marginBottom: 24 }}>Create Feedback Module</h2>
-        <div style={{ width: '100%', boxSizing: 'border-box', marginBottom: 28 }}>
-          <label style={{ color: isDark ? '#aaa' : '#444', fontWeight: 600, fontSize: 15, marginBottom: 8, alignSelf: 'flex-start' }}>Title</label>
-          <input
-            value={title}
-            onChange={e => setTitle(e.target.value)}
-            placeholder="Feedback title..."
-            style={{ width: '100%', padding: '14px 18px', borderRadius: 10, border: `2px solid ${isDark ? '#333' : '#ddd'}`, background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', color: isDark ? '#fff' : '#111', fontSize: 18, marginBottom: 0, outline: 'none', boxSizing: 'border-box', marginTop: 4, transition: 'all 0.2s', backdropFilter: 'blur(10px)' }}
-          />
-        </div>
-        <div style={{ width: '100%', boxSizing: 'border-box', marginBottom: 28 }}>
-          <label style={{ color: isDark ? '#aaa' : '#444', fontWeight: 600, fontSize: 15, marginBottom: 8, alignSelf: 'flex-start' }}>Date</label>
-          <GlassDatePicker value={date} onChange={setDate} isDark={isDark} />
-        </div>
-        <div style={{ width: '100%', boxSizing: 'border-box', marginBottom: 28 }}>
-          <label style={{ color: isDark ? '#aaa' : '#444', fontWeight: 600, fontSize: 15, marginBottom: 8, alignSelf: 'flex-start' }}>Time</label>
-          <GlassTimePicker value={time} onChange={setTime} isDark={isDark} />
-        </div>
-        <div style={{ color: isDark ? '#aaa' : '#444', fontWeight: 600, fontSize: 15, marginBottom: 8, alignSelf: 'flex-start' }}>Default Rating</div>
-        <div style={{ width: '100%', marginBottom: 32 }}>
-          <div
-            ref={barRef}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 4,
-              marginBottom: 8,
-              cursor: 'pointer',
-              userSelect: 'none',
-              background: 'none',
-              padding: 0,
-            }}
-            onClick={handleBarClick}
-            onMouseDown={e => { setDragging(true); handleBarClick(e); }}
-            onMouseUp={() => setDragging(false)}
-            onMouseMove={handleBarDrag}
-            onMouseLeave={() => setDragging(false)}
-          >
-            {[0,1,2,3,4].map(i => {
-              const fillPercent = Math.max(0, Math.min(1, rating - i));
-              return (
-                <svg key={i} width={28} height={28} viewBox="0 0 24 24" style={{ margin: 0, display: 'block' }}>
-                  <defs>
-                    <linearGradient id={`star-fill-${i}`} x1="0" x2="1" y1="0" y2="0">
-                      <stop offset={`${fillPercent * 100}%`} stopColor="#FFD600" />
-                      <stop offset={`${fillPercent * 100}%`} stopColor="none" />
-                    </linearGradient>
-                  </defs>
-                  <polygon points="12,2 15,9 22,9.3 17,14.1 18.5,21 12,17.5 5.5,21 7,14.1 2,9.3 9,9"
-                    fill={`url(#star-fill-${i})`}
-                    stroke="#FFD600" strokeWidth={1.2} strokeLinecap="round" strokeLinejoin="round"
-                    style={{ filter: fillPercent === 0 ? 'grayscale(1) opacity(0.5)' : '' }}
-                  />
-                </svg>
-              );
-            })}
+        {step === 1 && <>
+          <h2 style={{ color: isDark ? '#fff' : '#111', fontWeight: 700, fontSize: 24, marginBottom: 24 }}>Create Photo/Video Module</h2>
+          <div style={{ width: '100%', marginBottom: 24 }}>
+            <label style={{ color: isDark ? '#aaa' : '#444', fontWeight: 600, fontSize: 15, marginBottom: 8 }}>Prompt</label>
+            <input
+              value={prompt}
+              onChange={e => setPrompt(e.target.value)}
+              placeholder="Prompt the guest to upload a photo or video..."
+              style={{ width: '100%', padding: '14px 18px', borderRadius: 10, border: `2px solid ${isDark ? '#333' : '#ddd'}`, background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', color: isDark ? '#fff' : '#111', fontSize: 18, outline: 'none', marginTop: 4, transition: 'all 0.2s', backdropFilter: 'blur(10px)' }}
+            />
           </div>
-          <div style={{ textAlign: 'center', color: isDark ? '#FFD600' : '#FFD600', fontWeight: 600, fontSize: 18 }}>{rating.toFixed(1)} / 5.0</div>
-        </div>
-        <div style={{ display: 'flex', gap: 16, width: '100%', justifyContent: 'flex-end' }}>
-          <button onClick={onClose} style={{ padding: '12px 28px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.18)', background: isDark ? '#222' : '#eee', color: isDark ? '#fff' : '#222', fontWeight: 600, fontSize: 16, cursor: 'pointer', marginRight: 8 }}>Cancel</button>
-          <button onClick={() => onNext({ title, defaultRating: rating, date, time })} disabled={!title} style={{ padding: '12px 28px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.18)', background: isDark ? '#444' : '#f3f4f6', color: isDark ? '#fff' : '#222', fontWeight: 700, fontSize: 16, cursor: title ? 'pointer' : 'not-allowed', opacity: title ? 1 : 0.7 }}>Next</button>
-        </div>
+          <div style={{ width: '100%', marginBottom: 24 }}>
+            <label style={{ color: isDark ? '#aaa' : '#444', fontWeight: 600, fontSize: 15, marginBottom: 8 }}>Date</label>
+            <GlassDatePicker value={date} onChange={setDate} isDark={isDark} />
+          </div>
+          <div style={{ width: '100%', marginBottom: 24 }}>
+            <label style={{ color: isDark ? '#aaa' : '#444', fontWeight: 600, fontSize: 15, marginBottom: 8 }}>Time</label>
+            <GlassTimePicker value={time} onChange={setTime} isDark={isDark} />
+          </div>
+          <div style={{ display: 'flex', gap: 16, width: '100%', justifyContent: 'flex-end' }}>
+            <button onClick={onClose} style={{ padding: '12px 28px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.18)', background: isDark ? '#222' : '#eee', color: isDark ? '#fff' : '#222', fontWeight: 600, fontSize: 16, cursor: 'pointer', marginRight: 8 }}>Cancel</button>
+            <button onClick={() => setStep(2)} disabled={!prompt} style={{ padding: '12px 28px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.18)', background: isDark ? '#444' : '#f3f4f6', color: isDark ? '#fff' : '#222', fontWeight: 700, fontSize: 16, cursor: !prompt ? 'not-allowed' : 'pointer', opacity: !prompt ? 0.7 : 1 }}>Next</button>
+          </div>
+        </>}
+        {step === 2 && <div style={{ width: '100%' }}>
+          <h2 style={{ color: isDark ? '#fff' : '#111', fontWeight: 700, fontSize: 22, marginBottom: 24 }}>Select Guests for Module</h2>
+          <div style={{ width: '100%', marginBottom: 18, display: 'flex', gap: 8 }}>
+            <button onClick={() => setSelectedGuests(guests.map(g => g.id))} style={{ flex: 1, padding: '10px 0', borderRadius: 8, border: '1px solid rgba(255,255,255,0.18)', background: isDark ? '#222' : '#eee', color: isDark ? '#fff' : '#222', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>Select All</button>
+            <button onClick={() => setSelectedGuests([])} style={{ flex: 1, padding: '10px 0', borderRadius: 8, border: '1px solid rgba(255,255,255,0.18)', background: isDark ? '#222' : '#eee', color: isDark ? '#fff' : '#222', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>Clear All</button>
+          </div>
+          <div style={{ width: '100%', maxHeight: 260, overflowY: 'auto', marginBottom: 24 }}>
+            {guests.map(g => (
+              <label key={g.id} style={{ display: 'flex', alignItems: 'center', padding: 10, borderRadius: 8, background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', marginBottom: 6, cursor: 'pointer' }}>
+                <input type="checkbox" checked={selectedGuests.includes(g.id)} onChange={() => setSelectedGuests(sel => sel.includes(g.id) ? sel.filter(i => i !== g.id) : [...sel, g.id])} style={{ marginRight: 12, width: 16, height: 16 }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 600, fontSize: 15 }}>{g.first_name || g.last_name ? `${g.first_name || ''} ${g.last_name || ''}`.trim() : g.email}</div>
+                  <div style={{ fontSize: 12, color: isDark ? '#aaa' : '#666' }}>{g.email}</div>
+                </div>
+              </label>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 16, width: '100%', justifyContent: 'flex-end' }}>
+            <button onClick={onClose} style={{ padding: '12px 28px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.18)', background: isDark ? '#222' : '#eee', color: isDark ? '#fff' : '#222', fontWeight: 600, fontSize: 16, cursor: 'pointer', marginRight: 8 }}>Cancel</button>
+            <button onClick={() => onNext({ prompt, date, time, guests: selectedGuests })} disabled={selectedGuests.length === 0} style={{ padding: '12px 28px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.18)', background: isDark ? '#444' : '#f3f4f6', color: isDark ? '#fff' : '#222', fontWeight: 700, fontSize: 16, cursor: selectedGuests.length ? 'pointer' : 'not-allowed', opacity: selectedGuests.length ? 1 : 0.7 }}>Save & Post</button>
+          </div>
+        </div>}
       </div>
     </div>
   );

@@ -2,9 +2,12 @@ import React, { useState, useContext, useEffect, useRef, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ThemeContext } from '../ThemeContext';
 import TimelinePreview from '../components/TimelinePreview';
-import { supabase, getEvent, type Event } from '../lib/supabase';
+import { supabase, getEvent, getGuests, getItineraries, getEventAssignments, type Event } from '../lib/supabase';
 import FeedbackModuleModal from '../components/FeedbackModuleModal';
 import FeedbackGuestSelectionModal from '../components/FeedbackGuestSelectionModal';
+import MultipleChoiceModuleModal from '../components/MultipleChoiceModuleModal';
+import PhotoVideoModuleModal from '../components/PhotoVideoModuleModal';
+import QuestionModal from '../components/QuestionModuleModal';
 
 interface GuestLogin {
   id: string;
@@ -21,14 +24,37 @@ export default function EventPortalManagementPage() {
   const isDark = theme === 'dark';
   const timelineRef = useRef<any>(null);
   
-  // Get data from navigation state
-  const { 
-    guestAssignments = {}, 
-    guests = [], 
-    itineraries = [], 
-    eventAddOns = [],
-    eventId 
-  } = location.state || {};
+  // Get eventId from location.state or fallback
+  const eventId = location.state?.eventId;
+
+  // Add state for guests, itineraries, assignments, and loading
+  const [guests, setGuests] = useState<any[]>([]);
+  const [itineraries, setItineraries] = useState<any[]>([]);
+  const [guestAssignments, setGuestAssignments] = useState<{ [guestId: string]: string[] }>({});
+  const [eventAddOns, setEventAddOns] = useState<any[]>(location.state?.eventAddOns || []);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchData() {
+      if (!eventId) return;
+      setLoading(true);
+      try {
+        const [guestsData, itinerariesData, assignmentsData] = await Promise.all([
+          getGuests(eventId),
+          getItineraries(eventId),
+          getEventAssignments(eventId)
+        ]);
+        setGuests(guestsData);
+        setItineraries(itinerariesData);
+        setGuestAssignments(assignmentsData);
+      } catch (e) {
+        // handle error
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchData();
+  }, [eventId]);
 
   // Add state for event and selected date
   const [event, setEvent] = useState<Event | null>(null);
@@ -55,6 +81,8 @@ export default function EventPortalManagementPage() {
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [feedbackModalTime, setFeedbackModalTime] = useState<Date>(new Date());
   const [feedbackStep2, setFeedbackStep2] = useState<{ title: string; defaultRating: number; time: Date } | null>(null);
+  const [showMultipleChoiceModal, setShowMultipleChoiceModal] = useState(false);
+  const [showPhotoVideoModal, setShowPhotoVideoModal] = useState(false);
 
   // Initialize collapsed cards when guests change
   useEffect(() => {
@@ -472,13 +500,13 @@ export default function EventPortalManagementPage() {
           onClick={goToPrevDate}
           disabled={!canGoPrev}
           style={{
-            width: 32,
-            height: 32,
-            borderRadius: '50%',
+            width: 28,
+            height: 28,
+            background: 'none',
             border: 'none',
-            background: canGoPrev 
-              ? (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)')
-              : (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'),
+            borderRadius: 0,
+            boxShadow: 'none',
+            outline: 'none',
             color: canGoPrev ? (isDark ? '#fff' : '#000') : (isDark ? '#666' : '#ccc'),
             fontSize: 16,
             cursor: canGoPrev ? 'pointer' : 'not-allowed',
@@ -486,6 +514,7 @@ export default function EventPortalManagementPage() {
             alignItems: 'center',
             justifyContent: 'center',
             transition: 'all 0.2s ease',
+            marginRight: 4,
           }}
         >
           ←
@@ -511,13 +540,13 @@ export default function EventPortalManagementPage() {
           onClick={goToNextDate}
           disabled={!canGoNext}
           style={{
-            width: 32,
-            height: 32,
-            borderRadius: '50%',
+            width: 28,
+            height: 28,
+            background: 'none',
             border: 'none',
-            background: canGoNext 
-              ? (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)')
-              : (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'),
+            borderRadius: 0,
+            boxShadow: 'none',
+            outline: 'none',
             color: canGoNext ? (isDark ? '#fff' : '#000') : (isDark ? '#666' : '#ccc'),
             fontSize: 16,
             cursor: canGoNext ? 'pointer' : 'not-allowed',
@@ -525,6 +554,7 @@ export default function EventPortalManagementPage() {
             alignItems: 'center',
             justifyContent: 'center',
             transition: 'all 0.2s ease',
+            marginLeft: 4,
           }}
         >
           →
@@ -532,6 +562,8 @@ export default function EventPortalManagementPage() {
       </div>
     );
   };
+
+  if (loading) return <div style={{ color: isDark ? '#fff' : '#222', padding: 48 }}>Loading...</div>;
 
   if (!guests.length) {
     return (
@@ -1312,19 +1344,8 @@ export default function EventPortalManagementPage() {
               Update Timeline
             </button>
 
-            {/* Date Slider - Below Update Timeline Button */}
-            <div style={{
-              position: 'absolute',
-              top: 90,
-              left: '50%',
-              transform: 'translateX(-50%)',
-              zIndex: 1001,
-              width: 180,
-              maxWidth: 180,
-              minWidth: 120,
-            }}>
-              <DateSlider />
-            </div>
+            {/* Timeline Controller: draggable container for date picker and navigation arrows */}
+            <DraggableTimelineController isDark={isDark} DateSlider={DateSlider} handleTimelinePrevious={handleTimelinePrevious} handleTimelineNext={handleTimelineNext} />
 
             {/* Draggable Modules - Each in its own container */}
             <div style={{
@@ -1335,7 +1356,14 @@ export default function EventPortalManagementPage() {
               display: 'flex',
               flexDirection: 'column',
               gap: 24,
+              minWidth: 220,
             }}>
+              {/* Title and subtitle above modules */}
+              <div style={{ marginBottom: 8 }}>
+                <div style={{ fontWeight: 800, fontSize: 18, color: isDark ? '#fff' : '#222', letterSpacing: 0.5 }}>Modules</div>
+                <div style={{ fontSize: 13, color: isDark ? '#aaa' : '#666', fontWeight: 500, marginTop: 2 }}>Drag the modules onto the mobile to create.</div>
+              </div>
+              {/* Draggable Module Buttons (restored) */}
               {/* Question Field Module */}
               <div
                 draggable
@@ -1359,7 +1387,12 @@ export default function EventPortalManagementPage() {
                   e.dataTransfer.setData('moduleType', 'question');
                 }}
               >
-                + Question Field
+                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>
+                  + Question
+                </div>
+                <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 400 }}>
+                  Drag to phone to ask guests
+                </div>
               </div>
               {/* Feedback Module */}
               <div
@@ -1384,63 +1417,99 @@ export default function EventPortalManagementPage() {
                   e.dataTransfer.setData('moduleType', 'feedback');
                 }}
               >
-                + Feedback Module
-              </div>
-            </div>
-
-            {/* Itinerary List - Left side, in a container */}
-            <div style={{
-              position: 'absolute',
-              left: 48,
-              top: '50%',
-              transform: 'translateY(-50%)',
-              width: 260,
-              minHeight: 400,
-              maxHeight: 600,
-              background: isDark ? 'rgba(24,24,27,0.95)' : 'rgba(255,255,255,0.95)',
-              borderRadius: 24,
-              boxShadow: isDark ? '0 4px 24px rgba(0,0,0,0.4)' : '0 4px 24px rgba(0,0,0,0.08)',
-              border: isDark ? '1.5px solid #222' : '1.5px solid #eee',
-              padding: 24,
-              overflowY: 'auto',
-              zIndex: 3,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 12,
-            }}>
-              <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 12, color: isDark ? '#fff' : '#222', letterSpacing: 0.5 }}>
-                Itinerary Items
-              </div>
-              {sortedItinerariesForList.map((itin: any, index: number) => (
-                <div key={itin.id} style={{
-                  borderRadius: 12,
-                  background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
-                  border: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
-                  padding: '12px 14px',
-                  marginBottom: 4,
-                  fontSize: 15,
-                  fontWeight: 600,
-                  color: isDark ? '#fff' : '#222',
-                  cursor: 'pointer',
-                  transition: 'background 0.2s',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 2,
-                }}
-                onClick={() => {
-                  // if (timelineRef.current && timelineRef.current.goToItem) {
-                  //   timelineRef.current.goToItem(index);
-                  // }
-                  console.log('Navigate to itinerary item:', index);
-                }}
-                >
-                  <span>{itin.title}</span>
-                  <span style={{ fontSize: 12, color: isDark ? '#aaa' : '#666', fontWeight: 400 }}>
-                    {itin.start_time} - {itin.end_time} {itin.location ? `• ${itin.location}` : ''}
-                  </span>
+                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>
+                  + Feedback Module
                 </div>
-              ))}
+                <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 400 }}>
+                  Drag to phone for ratings
+                </div>
+              </div>
+              {/* Multiple Choice Module */}
+              <div
+                draggable
+                style={{
+                  background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(36,36,40,0.08)',
+                  border: `2px dashed ${isDark ? 'rgba(255,255,255,0.18)' : 'rgba(36,36,40,0.18)'}`,
+                  borderRadius: 18,
+                  padding: '20px 28px',
+                  minWidth: 160,
+                  fontWeight: 700,
+                  fontSize: 15,
+                  color: isDark ? '#fff' : '#222',
+                  boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.10)' : '0 2px 8px rgba(36,36,40,0.08)',
+                  cursor: 'grab',
+                  userSelect: 'none',
+                  textAlign: 'center',
+                  marginBottom: 8,
+                  backdropFilter: 'blur(8px)',
+                }}
+                onDragStart={e => {
+                  e.dataTransfer.setData('moduleType', 'multiple-choice');
+                }}
+              >
+                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>
+                  + Multiple Choice Module
+                </div>
+                <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 400 }}>
+                  Drag to phone for polls
+                </div>
+              </div>
+              {/* Photo/Video Module */}
+              <div
+                draggable
+                style={{
+                  background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(36,36,40,0.08)',
+                  border: `2px dashed ${isDark ? 'rgba(255,255,255,0.18)' : 'rgba(36,36,40,0.18)'}`,
+                  borderRadius: 18,
+                  padding: '20px 28px',
+                  minWidth: 160,
+                  fontWeight: 700,
+                  fontSize: 15,
+                  color: isDark ? '#fff' : '#222',
+                  boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.10)' : '0 2px 8px rgba(36,36,40,0.08)',
+                  cursor: 'grab',
+                  userSelect: 'none',
+                  textAlign: 'center',
+                  marginBottom: 8,
+                  backdropFilter: 'blur(8px)',
+                }}
+                onDragStart={e => {
+                  e.dataTransfer.setData('moduleType', 'photo-video');
+                }}
+              >
+                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>
+                  + Photo/Video Module
+                </div>
+                <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 400 }}>
+                  Drag to phone for media
+                </div>
+              </div>
             </div>
+            {/* View Modules button at bottom right of Preview Modal (fixed width and style) */}
+            <button
+              style={{
+                position: 'fixed',
+                right: 48,
+                bottom: 48,
+                zIndex: 3000,
+                background: isDark ? 'rgba(36,36,40,0.85)' : 'rgba(255,255,255,0.95)',
+                color: isDark ? '#fff' : '#222',
+                border: isDark ? '1.5px solid #222' : '1.5px solid #eee',
+                borderRadius: 16,
+                padding: '10px 0',
+                fontWeight: 700,
+                fontSize: 15,
+                boxShadow: isDark ? '0 2px 12px rgba(0,0,0,0.25)' : '0 2px 12px rgba(0,0,0,0.08)',
+                cursor: 'pointer',
+                letterSpacing: 0.2,
+                transition: 'background 0.2s',
+                width: 140,
+                textAlign: 'center',
+              }}
+              onClick={() => alert('View Modules clicked!')}
+            >
+              View Modules
+            </button>
 
             {/* Center: iPhone Mockup, dead center */}
             <div
@@ -1467,6 +1536,10 @@ export default function EventPortalManagementPage() {
                 } else if (moduleType === 'feedback') {
                   setFeedbackModalTime(selectedDate);
                   setShowFeedbackModal(true);
+                } else if (moduleType === 'multiple-choice') {
+                  setShowMultipleChoiceModal(true);
+                } else if (moduleType === 'photo-video') {
+                  setShowPhotoVideoModal(true);
                 }
               }}
             >
@@ -1492,455 +1565,44 @@ export default function EventPortalManagementPage() {
                 />
               </div>
             </div>
-
-            {/* Timeline Navigation Controls - Right of iPhone */}
-            <div style={{
-              position: 'absolute',
-              left: 'calc(50% + 200px)', // 10px right of iPhone (iPhone width 340px / 2 + 10px)
-              top: '50%',
-              transform: 'translateY(-50%)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 16,
-              zIndex: 3,
-            }}>
-              {/* Previous Button */}
-              <button
-                onClick={handleTimelinePrevious}
-                style={{
-                  width: 50,
-                  height: 50,
-                  borderRadius: '50%',
-                  border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)'}`,
-                  background: isDark 
-                    ? 'rgba(255, 255, 255, 0.1)' 
-                    : 'rgba(255, 255, 255, 0.9)',
-                  backdropFilter: 'blur(12px)',
-                  color: isDark ? '#fff' : '#000',
-                  fontSize: 20,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transition: 'all 0.2s ease',
-                  boxShadow: isDark 
-                    ? '0 4px 12px rgba(0, 0, 0, 0.3)' 
-                    : '0 4px 12px rgba(0, 0, 0, 0.1)',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'scale(1.05)';
-                  e.currentTarget.style.background = isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(255, 255, 255, 1)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'scale(1)';
-                  e.currentTarget.style.background = isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.9)';
-                }}
-              >
-                ↑
-              </button>
-
-              {/* Next Button */}
-              <button
-                onClick={handleTimelineNext}
-                style={{
-                  width: 50,
-                  height: 50,
-                  borderRadius: '50%',
-                  border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)'}`,
-                  background: isDark 
-                    ? 'rgba(255, 255, 255, 0.1)' 
-                    : 'rgba(255, 255, 255, 0.9)',
-                  backdropFilter: 'blur(12px)',
-                  color: isDark ? '#fff' : '#000',
-                  fontSize: 20,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transition: 'all 0.2s ease',
-                  boxShadow: isDark 
-                    ? '0 4px 12px rgba(0, 0, 0, 0.3)' 
-                    : '0 4px 12px rgba(0, 0, 0, 0.1)',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'scale(1.05)';
-                  e.currentTarget.style.background = isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(255, 255, 255, 1)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'scale(1)';
-                  e.currentTarget.style.background = isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.9)';
-                }}
-              >
-                ↓
-              </button>
-            </div>
-
-            {/* Close button */}
-            <button
-              onClick={() => setShowPreviewModal(false)}
-              style={{
-                position: 'absolute',
-                top: 24,
-                right: 32,
-                background: 'rgba(0,0,0,0.5)',
-                color: '#fff',
-                border: 'none',
-                borderRadius: 24,
-                width: 40,
-                height: 40,
-                fontSize: 22,
-                cursor: 'pointer',
-                zIndex: 10,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              ×
-            </button>
-
-            {/* Question Field Modal */}
-            {showQuestionModal && (
-              <div style={{
-                position: 'fixed',
-                top: 0,
-                left: 0,
-                width: '100vw',
-                height: '100vh',
-                background: 'rgba(0,0,0,0.25)',
-                zIndex: 3000,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}>
-                <div style={{
-                  background: isDark ? 'rgba(36,36,40,0.85)' : 'rgba(255,255,255,0.85)',
-                  borderRadius: 24,
-                  boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.35)' : '0 8px 32px rgba(0,0,0,0.10)',
-                  border: isDark ? '1.5px solid rgba(255,255,255,0.10)' : '1.5px solid rgba(0,0,0,0.08)',
-                  backdropFilter: 'blur(16px)',
-                  padding: '40px 32px 32px 32px',
-                  minWidth: 340,
-                  maxWidth: 400,
-                  width: '90vw',
-                  position: 'relative',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                }}>
-                  {/* Close Modal */}
-                  <button
-                    onClick={() => setShowQuestionModal(false)}
-                    style={{
-                      position: 'absolute',
-                      top: 18,
-                      right: 18,
-                      background: 'none',
-                      border: 'none',
-                      color: isDark ? '#fff' : '#222',
-                      fontSize: 22,
-                      cursor: 'pointer',
-                      borderRadius: 16,
-                      width: 32,
-                      height: 32,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      transition: 'background 0.2s',
-                    }}
-                    onMouseEnter={e => e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(36,36,40,0.08)'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'none'}
-                  >
-                    ×
-                  </button>
-                  {questionStep === 1 && (
-                    <>
-                      <div style={{ fontWeight: 800, fontSize: 22, marginBottom: 18, color: isDark ? '#fff' : '#222', letterSpacing: 0.2, textAlign: 'center' }}>
-                        What question do you want to ask your guests?
-                      </div>
-                      <textarea
-                        value={questionText}
-                        onChange={e => setQuestionText(e.target.value.slice(0, 1000))}
-                        maxLength={1000}
-                        placeholder="Type your question here..."
-                        style={{
-                          width: '100%',
-                          minHeight: 90,
-                          maxHeight: 180,
-                          borderRadius: 14,
-                          border: isDark ? '1.5px solid rgba(255,255,255,0.10)' : '1.5px solid rgba(0,0,0,0.08)',
-                          background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(36,36,40,0.04)',
-                          color: isDark ? '#fff' : '#222',
-                          fontSize: 16,
-                          padding: '14px 16px',
-                          marginBottom: 16,
-                          resize: 'vertical',
-                          outline: 'none',
-                          boxShadow: 'none',
-                          fontWeight: 500,
-                          letterSpacing: 0.1,
-                        }}
-                      />
-                      <div style={{ width: '100%', textAlign: 'right', fontSize: 12, color: isDark ? '#aaa' : '#666', marginBottom: 18 }}>
-                        {questionText.length}/1000
-                      </div>
-                      <button
-                        style={{
-                          width: '100%',
-                          padding: '12px 0',
-                          borderRadius: 14,
-                          background: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(36,36,40,0.10)',
-                          color: isDark ? '#fff' : '#222',
-                          fontWeight: 700,
-                          fontSize: 16,
-                          border: 'none',
-                          cursor: questionText.trim().length === 0 ? 'not-allowed' : 'pointer',
-                          opacity: questionText.trim().length === 0 ? 0.5 : 1,
-                          marginTop: 4,
-                          marginBottom: 2,
-                          transition: 'background 0.2s',
-                        }}
-                        disabled={questionText.trim().length === 0}
-                        onClick={() => setQuestionStep(2)}
-                      >
-                        Next
-                      </button>
-                    </>
-                  )}
-                  {questionStep === 2 && (
-                    <>
-                      <div style={{ fontWeight: 800, fontSize: 22, marginBottom: 18, color: isDark ? '#fff' : '#222', letterSpacing: 0.2, textAlign: 'center' }}>
-                        When should this question show?
-                      </div>
-                      <div style={{ display: 'flex', gap: 16, marginBottom: 18, width: '100%' }}>
-                        <button
-                          style={{
-                            flex: 1,
-                            padding: '12px 0',
-                            borderRadius: 12,
-                            background: questionTimeMode === 'now' ? (isDark ? 'rgba(255,255,255,0.18)' : 'rgba(36,36,40,0.18)') : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(36,36,40,0.08)'),
-                            color: isDark ? '#fff' : '#222',
-                            fontWeight: 700,
-                            fontSize: 15,
-                            border: 'none',
-                            cursor: 'pointer',
-                            transition: 'background 0.2s',
-                          }}
-                          onClick={() => setQuestionTimeMode('now')}
-                        >
-                          Now
-                        </button>
-                        <button
-                          style={{
-                            flex: 1,
-                            padding: '12px 0',
-                            borderRadius: 12,
-                            background: questionTimeMode === 'later' ? (isDark ? 'rgba(255,255,255,0.18)' : 'rgba(36,36,40,0.18)') : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(36,36,40,0.08)'),
-                            color: isDark ? '#fff' : '#222',
-                            fontWeight: 700,
-                            fontSize: 15,
-                            border: 'none',
-                            cursor: 'pointer',
-                            transition: 'background 0.2s',
-                          }}
-                          onClick={() => setQuestionTimeMode('later')}
-                        >
-                          Later
-                        </button>
-                      </div>
-                      {questionTimeMode === 'later' && (
-                        <div style={{ width: '100%', marginBottom: 18, display: 'flex', gap: 12, justifyContent: 'center' }}>
-                          {/* Custom time picker: hour and minute columns */}
-                          <div style={{ flex: 1, display: 'flex', gap: 8, background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(36,36,40,0.04)', borderRadius: 12, border: isDark ? '1.5px solid rgba(255,255,255,0.10)' : '1.5px solid rgba(0,0,0,0.08)', padding: '8px 0', justifyContent: 'center' }}>
-                            {/* Hour column */}
-                            <div style={{ flex: 1, maxHeight: 120, overflowY: 'auto', textAlign: 'center' }}>
-                              {Array.from({ length: 24 }).map((_, h) => (
-                                <div
-                                  key={h}
-                                  style={{
-                                    padding: '6px 0',
-                                    fontWeight: questionTime.split(':')[0] === String(h).padStart(2, '0') ? 700 : 500,
-                                    color: isDark ? '#fff' : '#222',
-                                    background: questionTime.split(':')[0] === String(h).padStart(2, '0') ? (isDark ? 'rgba(255,255,255,0.10)' : 'rgba(36,36,40,0.10)') : 'none',
-                                    borderRadius: 8,
-                                    cursor: 'pointer',
-                                    fontSize: 16,
-                                  }}
-                                  onClick={() => setQuestionTime(String(h).padStart(2, '0') + ':' + (questionTime.split(':')[1] || '00'))}
-                                >
-                                  {String(h).padStart(2, '0')}
-                                </div>
-                              ))}
-                            </div>
-                            <div style={{ width: 1, background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(36,36,40,0.08)' }} />
-                            {/* Minute column */}
-                            <div style={{ flex: 1, maxHeight: 120, overflowY: 'auto', textAlign: 'center' }}>
-                              {Array.from({ length: 60 }).map((_, m) => (
-                                <div
-                                  key={m}
-                                  style={{
-                                    padding: '6px 0',
-                                    fontWeight: questionTime.split(':')[1] === String(m).padStart(2, '0') ? 700 : 500,
-                                    color: isDark ? '#fff' : '#222',
-                                    background: questionTime.split(':')[1] === String(m).padStart(2, '0') ? (isDark ? 'rgba(255,255,255,0.10)' : 'rgba(36,36,40,0.10)') : 'none',
-                                    borderRadius: 8,
-                                    cursor: 'pointer',
-                                    fontSize: 16,
-                                  }}
-                                  onClick={() => setQuestionTime((questionTime.split(':')[0] || '00') + ':' + String(m).padStart(2, '0'))}
-                                >
-                                  {String(m).padStart(2, '0')}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                      <div style={{ display: 'flex', gap: 12, width: '100%' }}>
-                        <button
-                          style={{
-                            flex: 1,
-                            padding: '12px 0',
-                            borderRadius: 12,
-                            background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(36,36,40,0.08)',
-                            color: isDark ? '#fff' : '#222',
-                            fontWeight: 700,
-                            fontSize: 15,
-                            border: 'none',
-                            cursor: 'pointer',
-                            transition: 'background 0.2s',
-                          }}
-                          onClick={() => setQuestionStep(1)}
-                        >
-                          Back
-                        </button>
-                        <button
-                          style={{
-                            flex: 2,
-                            padding: '12px 0',
-                            borderRadius: 12,
-                            background: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(36,36,40,0.18)',
-                            color: isDark ? '#fff' : '#222',
-                            fontWeight: 700,
-                            fontSize: 15,
-                            border: 'none',
-                            cursor: (questionTimeMode === 'later' && !questionTime) ? 'not-allowed' : 'pointer',
-                            opacity: (questionTimeMode === 'later' && !questionTime) ? 0.5 : 1,
-                            transition: 'background 0.2s',
-                          }}
-                          disabled={questionTimeMode === 'later' && !questionTime}
-                          onClick={async () => {
-                            // Add to database instead of localStorage
-                            if (!eventId) {
-                              console.error('No eventId available');
-                              return;
-                            }
-
-                            try {
-                              const time = questionTimeMode === 'now' && questionDropTime
-                                ? `${questionDropTime.getHours().toString().padStart(2, '0')}:${questionDropTime.getMinutes().toString().padStart(2, '0')}`
-                                : questionTime;
-
-                              const { data, error } = await supabase.rpc('add_timeline_module', {
-                                p_event_id: eventId,
-                                p_module_type: 'question',
-                                p_time: time,
-                                p_question: questionText
-                              });
-
-                              if (error) {
-                                console.error('Error adding question module:', error);
-                                setConfirmationMessage('Error adding question!');
-                              } else {
-                                console.log('Question module added successfully:', data);
-                                setConfirmationMessage('Question added to timeline!');
-                                
-                                // Trigger refresh of timeline modules
-                                window.dispatchEvent(new CustomEvent('refreshTimelineModules'));
-                              }
-
-                              setShowQuestionModal(false);
-                              setShowConfirmation(true);
-                              setTimeout(() => setShowConfirmation(false), 2000);
-                            } catch (error) {
-                              console.error('Error adding question module:', error);
-                              setConfirmationMessage('Error adding question!');
-                              setShowQuestionModal(false);
-                              setShowConfirmation(true);
-                              setTimeout(() => setShowConfirmation(false), 2000);
-                            }
-                          }}
-                        >
-                          Add to Timeline
-                        </button>
-                      </div>
-                    </>
-                  )}
-                  {/* Add border to all modal buttons */}
-                  <style>{`
-                    .modal-btn {
-                      border: 1.5px solid ${isDark ? 'rgba(255,255,255,0.18)' : 'rgba(36,36,40,0.18)'} !important;
-                    }
-                  `}</style>
-                </div>
-              </div>
-            )}
-
-            {/* Confirmation Message */}
-            {showConfirmation && (
-              <div style={{
-                position: 'fixed',
-                left: '50%',
-                top: '10%',
-                transform: 'translate(-50%, 0)',
-                zIndex: 5000,
-                background: isDark ? 'rgba(36,36,40,0.92)' : 'rgba(255,255,255,0.92)',
-                borderRadius: 18,
-                boxShadow: isDark ? '0 4px 16px rgba(0,0,0,0.25)' : '0 4px 16px rgba(0,0,0,0.08)',
-                border: isDark ? '1.5px solid rgba(255,255,255,0.10)' : '1.5px solid rgba(0,0,0,0.08)',
-                backdropFilter: 'blur(12px)',
-                padding: '18px 32px',
-                fontWeight: 700,
-                fontSize: 18,
-                color: isDark ? '#fff' : '#222',
-                textAlign: 'center',
-              }}>
-                {confirmationMessage}
-              </div>
-            )}
           </div>
         )}
 
-        {/* Feedback Module Button */}
-        <button
-          style={{
-            margin: '32px 0 24px 0',
-            padding: '16px 36px',
-            borderRadius: 12,
-            border: 'none',
-            background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
-            color: isDark ? '#fff' : '#222',
-            fontWeight: 700,
-            fontSize: 20,
-            boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.2)' : '0 2px 8px rgba(0,0,0,0.08)',
-            cursor: 'pointer',
-            transition: 'all 0.2s',
-            letterSpacing: 1
-          }}
-          onClick={() => setShowFeedbackModal(true)}
-        >
-          + Create Feedback Module
-        </button>
+        {/* Question Field Modal */}
+        {showQuestionModal && (
+          <QuestionModal
+            open={showQuestionModal}
+            onClose={() => setShowQuestionModal(false)}
+            onNext={(data: any) => {
+              setShowQuestionModal(false);
+              // TODO: handle saving the question (call supabase, refresh timeline, etc.)
+            }}
+            guests={guests}
+          />
+        )}
 
-        {/* Feedback Module Modal */}
-        <FeedbackModuleModal
-          open={showFeedbackModal}
-          onClose={() => setShowFeedbackModal(false)}
-          onNext={data => {
-            setShowFeedbackModal(false);
-            setFeedbackStep2({ ...data, time: feedbackModalTime });
-          }}
-        />
+        {/* Confirmation Message */}
+        {showConfirmation && (
+          <div style={{
+            position: 'fixed',
+            left: '50%',
+            top: '10%',
+            transform: 'translate(-50%, 0)',
+            zIndex: 5000,
+            background: isDark ? 'rgba(36,36,40,0.92)' : 'rgba(255,255,255,0.92)',
+            borderRadius: 18,
+            boxShadow: isDark ? '0 4px 16px rgba(0,0,0,0.25)' : '0 4px 16px rgba(0,0,0,0.08)',
+            border: isDark ? '1.5px solid rgba(255,255,255,0.10)' : '1.5px solid rgba(0,0,0,0.08)',
+            backdropFilter: 'blur(12px)',
+            padding: '18px 32px',
+            fontWeight: 700,
+            fontSize: 18,
+            color: isDark ? '#fff' : '#222',
+            textAlign: 'center',
+          }}>
+            {confirmationMessage}
+          </div>
+        )}
 
         {/* Feedback Guest Selection Modal */}
         {feedbackStep2 && (
@@ -1960,6 +1622,197 @@ export default function EventPortalManagementPage() {
           />
         )}
 
+        {showFeedbackModal && (
+          <FeedbackModuleModal
+            open={showFeedbackModal}
+            onClose={() => setShowFeedbackModal(false)}
+            onNext={(data: { title: string; defaultRating: number }) => {
+              setShowFeedbackModal(false);
+              setFeedbackStep2({
+                title: data.title,
+                defaultRating: data.defaultRating,
+                time: feedbackModalTime,
+              });
+            }}
+            guests={guests}
+          />
+        )}
+
+        {showMultipleChoiceModal && (
+          <MultipleChoiceModuleModal
+            open={showMultipleChoiceModal}
+            onClose={() => setShowMultipleChoiceModal(false)}
+            onNext={(data: any) => {
+              setShowMultipleChoiceModal(false);
+              // TODO: handle step 2 for multiple choice
+            }}
+            guests={guests}
+          />
+        )}
+
+        {showPhotoVideoModal && (
+          <PhotoVideoModuleModal
+            open={showPhotoVideoModal}
+            onClose={() => setShowPhotoVideoModal(false)}
+            onNext={(data: any) => {
+              setShowPhotoVideoModal(false);
+              // TODO: handle step 2 for photo/video
+            }}
+            guests={guests}
+          />
+        )}
+
+        {/* 1. Add title and subtitle above modules */}
+        <div style={{
+          position: 'absolute',
+          right: 48,
+          top: 100,
+          zIndex: 1000,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 24,
+        }}>
+          <div style={{ marginBottom: 8 }}>
+            <div style={{ fontWeight: 800, fontSize: 18, color: isDark ? '#fff' : '#222', letterSpacing: 0.5 }}>Module</div>
+            <div style={{ fontSize: 13, color: isDark ? '#aaa' : '#666', fontWeight: 500, marginTop: 2 }}>Drag the modules onto the mobile to create.</div>
+          </div>
+          {/* ...existing module buttons... */}
+        </div>
+
+        {/* 2. Timeline Controller: draggable container for date picker and navigation arrows */}
+        {/* Find the date picker and navigation arrows, and wrap them in a new absolutely positioned, draggable container called Timeline Controller. Do not change their logic or handlers. */}
+
+      </div>
+    </div>
+  );
+}
+
+// Add this component above the main export
+function DraggableTimelineController({ isDark, DateSlider, handleTimelinePrevious, handleTimelineNext }: { isDark: boolean, DateSlider: React.FC, handleTimelinePrevious: () => void, handleTimelineNext: () => void }) {
+  const [position, setPosition] = React.useState({ x: 0, y: 0 });
+  const dragging = React.useRef(false);
+  const dragStart = React.useRef({ mouseX: 0, mouseY: 0, startX: 0, startY: 0 });
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
+  // Only allow drag when handle is pressed
+  const onHandleMouseDown = (e: React.MouseEvent) => {
+    dragging.current = true;
+    dragStart.current = {
+      mouseX: e.clientX,
+      mouseY: e.clientY,
+      startX: position.x,
+      startY: position.y,
+    };
+    document.body.style.userSelect = 'none';
+  };
+  const onMouseMove = (e: MouseEvent) => {
+    if (!dragging.current) return;
+    const dx = e.clientX - dragStart.current.mouseX;
+    const dy = e.clientY - dragStart.current.mouseY;
+    setPosition({
+      x: dragStart.current.startX + dx,
+      y: dragStart.current.startY + dy,
+    });
+  };
+  const onMouseUp = () => {
+    dragging.current = false;
+    document.body.style.userSelect = '';
+  };
+  React.useEffect(() => {
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+  }, [position]);
+  return (
+    <div
+      ref={containerRef}
+      style={{
+        position: 'absolute',
+        top: 90 + position.y,
+        left: `calc(50% + ${position.x}px)`,
+        transform: 'translateX(-50%)',
+        zIndex: 1002,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        background: isDark ? 'rgba(36,36,40,0.85)' : 'rgba(255,255,255,0.95)',
+        borderRadius: 16,
+        boxShadow: isDark ? '0 2px 12px rgba(0,0,0,0.25)' : '0 2px 12px rgba(0,0,0,0.08)',
+        border: isDark ? '1.5px solid #222' : '1.5px solid #eee',
+        padding: 12,
+        minWidth: 180,
+        userSelect: 'none',
+      }}
+    >
+      {/* Grab handle */}
+      <div
+        onMouseDown={onHandleMouseDown}
+        style={{
+          width: 48,
+          height: 10,
+          borderRadius: 5,
+          background: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(36,36,40,0.18)',
+          marginBottom: 10,
+          cursor: 'grab',
+          alignSelf: 'center',
+        }}
+        title="Drag to move"
+      />
+      <DateSlider />
+      <div style={{ display: 'flex', flexDirection: 'row', gap: 16, marginTop: 12 }}>
+        <button
+          onClick={handleTimelinePrevious}
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: '50%',
+            border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)'}`,
+            background: isDark 
+              ? 'rgba(255, 255, 255, 0.1)' 
+              : 'rgba(255, 255, 255, 0.9)',
+            backdropFilter: 'blur(12px)',
+            color: isDark ? '#fff' : '#000',
+            fontSize: 20,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'all 0.2s ease',
+            boxShadow: isDark 
+              ? '0 4px 12px rgba(0, 0, 0, 0.3)' 
+              : '0 4px 12px rgba(0, 0, 0, 0.1)',
+          }}
+        >
+          ↑
+        </button>
+        <button
+          onClick={handleTimelineNext}
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: '50%',
+            border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)'}`,
+            background: isDark 
+              ? 'rgba(255, 255, 255, 0.1)' 
+              : 'rgba(255, 255, 255, 0.9)',
+            backdropFilter: 'blur(12px)',
+            color: isDark ? '#fff' : '#000',
+            fontSize: 20,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'all 0.2s ease',
+            boxShadow: isDark 
+              ? '0 4px 12px rgba(0, 0, 0, 0.3)' 
+              : '0 4px 12px rgba(0, 0, 0, 0.1)',
+          }}
+        >
+          ↓
+        </button>
       </div>
     </div>
   );
