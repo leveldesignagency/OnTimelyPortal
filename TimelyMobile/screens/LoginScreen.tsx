@@ -9,22 +9,60 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Dimensions,
 } from 'react-native'
-import { signIn, signInAsGuest } from '../lib/auth'
+import { signIn, signInAsGuest, guestLogin } from '../lib/auth'
+import { getGlassCardStyle } from '../lib/glassmorphic'
+import { LinearGradient } from 'expo-linear-gradient'
+import { useFonts, Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold } from '@expo-google-fonts/poppins'
+import { BlurView } from 'expo-blur'
+import GuestDashboard from './GuestDashboard'
+import { supabase } from '../lib/supabase'
 
 interface LoginScreenProps {
   onLogin: (user: any) => void
 }
 
+const { width, height } = Dimensions.get('window')
+
+// Add Neumorphic style helpers
+const neumorphicShadow = {
+  shadowColor: '#fff',
+  shadowOffset: { width: -4, height: -4 },
+  shadowOpacity: 0.7,
+  shadowRadius: 8,
+  elevation: 4,
+};
+const neumorphicShadowDark = {
+  shadowColor: '#000',
+  shadowOffset: { width: 4, height: 4 },
+  shadowOpacity: 0.15,
+  shadowRadius: 8,
+  elevation: 4,
+};
+
+function LoginBackground() {
+  return (
+    <View style={{ position: 'absolute', width, height, top: 0, left: 0, backgroundColor: '#131419' }} />
+  );
+}
+
 export default function LoginScreen({ onLogin }: LoginScreenProps) {
-  const [activeTab, setActiveTab] = useState<'admin' | 'guest'>('admin')
-  // Admin login state
-  const [adminEmail, setAdminEmail] = useState('')
-  const [adminPassword, setAdminPassword] = useState('')
-  // Guest login state
-  const [guestEmail, setGuestEmail] = useState('')
-  const [guestPassword, setGuestPassword] = useState('')
-  const [loading, setLoading] = useState(false)
+  // All hooks at the top!
+  const [activeTab, setActiveTab] = useState<'admin' | 'guest'>('admin');
+  const [adminEmail, setAdminEmail] = useState('');
+  const [adminPassword, setAdminPassword] = useState('');
+  const [guestEmail, setGuestEmail] = useState('');
+  const [guestPassword, setGuestPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [buttonPressed, setButtonPressed] = useState(false);
+  let [fontsLoaded] = useFonts({
+    Poppins_400Regular,
+    Poppins_500Medium,
+    Poppins_600SemiBold,
+    Poppins_700Bold,
+  });
+  if (!fontsLoaded) return null;
 
   const handleAdminLogin = async () => {
     if (!adminEmail || !adminPassword) {
@@ -53,11 +91,21 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
     }
     setLoading(true)
     try {
-      const { user, error } = await signInAsGuest(guestEmail, guestPassword)
+      const { error, loginResult } = await guestLogin(guestEmail, guestPassword)
       if (error) {
         Alert.alert('Guest Login Failed', error.message)
-      } else if (user) {
-        onLogin(user)
+      } else if (loginResult) {
+        const { guest_id } = loginResult
+        const { data: guest, error: guestError } = await supabase
+          .from('guests')
+          .select('*')
+          .eq('id', guest_id)
+          .single()
+        if (guestError || !guest) {
+          Alert.alert('Error', 'Failed to fetch guest profile')
+        } else {
+          onLogin(guest)
+        }
       }
     } catch (error) {
       Alert.alert('Error', 'An unexpected error occurred')
@@ -77,262 +125,274 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Timely</Text>
-          <Text style={styles.subtitle}>Event Management</Text>
-        </View>
-        {/* Tab Selector */}
-        <View style={styles.tabContainer}>
+    <View style={{ flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' }}>
+      <View style={{ width: 340 }}>
+        {/* TIMELY title */}
+        <Text style={{
+          color: '#fff',
+          fontSize: 32,
+          fontWeight: 'bold',
+          fontFamily: 'Poppins_700Bold',
+          textAlign: 'center',
+          letterSpacing: 8,
+          marginTop: 0,
+          marginBottom: 70,
+        }}>TIMELY</Text>
+        {/* Admin/Guest Tabs */}
+        <View style={{ flexDirection: 'row', width: '100%', marginBottom: 32 }}>
           <TouchableOpacity
-            style={[styles.tab, activeTab === 'admin' && styles.activeTab]}
+            style={{
+              flex: 1,
+              backgroundColor: activeTab === 'admin' ? '#fff' : '#111',
+              borderTopLeftRadius: 8,
+              borderBottomLeftRadius: 8,
+              borderTopRightRadius: 0,
+              borderBottomRightRadius: 0,
+              alignItems: 'center',
+              justifyContent: 'center',
+              height: 44,
+              borderWidth: 1,
+              borderColor: '#222',
+            }}
             onPress={() => setActiveTab('admin')}
           >
-            <Text style={[styles.tabText, activeTab === 'admin' && styles.activeTabText]}>
-              Admin Login
-            </Text>
+            <Text style={{
+              color: activeTab === 'admin' ? '#000' : '#fff',
+              fontWeight: '700',
+              fontFamily: 'Poppins_700Bold',
+              fontSize: 16,
+              letterSpacing: 1,
+            }}>Admin Login</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.tab, activeTab === 'guest' && styles.activeTab]}
+            style={{
+              flex: 1,
+              backgroundColor: activeTab === 'guest' ? '#fff' : '#111',
+              borderTopRightRadius: 8,
+              borderBottomRightRadius: 8,
+              borderTopLeftRadius: 0,
+              borderBottomLeftRadius: 0,
+              alignItems: 'center',
+              justifyContent: 'center',
+              height: 44,
+              borderWidth: 1,
+              borderColor: '#222',
+            }}
             onPress={() => setActiveTab('guest')}
           >
-            <Text style={[styles.tabText, activeTab === 'guest' && styles.activeTabText]}>
-              Guest Login
-            </Text>
+            <Text style={{
+              color: activeTab === 'guest' ? '#000' : '#fff',
+              fontWeight: '700',
+              fontFamily: 'Poppins_700Bold',
+              fontSize: 16,
+              letterSpacing: 1,
+            }}>Guest Login</Text>
           </TouchableOpacity>
         </View>
-        {/* Admin Login Form */}
-        {activeTab === 'admin' && (
-          <View style={styles.formContainer}>
-            <View style={styles.formHeader}>
-              <Text style={styles.formTitle}>Agency Admin</Text>
-              <Text style={styles.formSubtitle}>
-                Login with your agency credentials
-              </Text>
-            </View>
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Email</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="admin@company.com"
-                value={adminEmail}
-                onChangeText={setAdminEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                placeholderTextColor="#9ca3af"
-              />
-            </View>
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Password</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter your password"
-                value={adminPassword}
-                onChangeText={setAdminPassword}
-                secureTextEntry
-                placeholderTextColor="#9ca3af"
-              />
-            </View>
-            <TouchableOpacity
-              style={styles.loginButton}
-              onPress={handleAdminLogin}
-              disabled={loading}
-            >
-              <Text style={styles.loginButtonText}>{loading ? 'Logging in...' : 'Login'}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.testButton}
-              onPress={() => fillTestCredentials('admin')}
-            >
-              <Text style={styles.testButtonText}>Fill Test Credentials</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-        {/* Guest Login Form */}
-        {activeTab === 'guest' && (
-          <View style={styles.formContainer}>
-            <View style={styles.formHeader}>
-              <Text style={styles.formTitle}>Guest</Text>
-              <Text style={styles.formSubtitle}>
-                Login with your guest credentials
-              </Text>
-            </View>
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Email</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="guest@event.com"
-                value={guestEmail}
-                onChangeText={setGuestEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                placeholderTextColor="#9ca3af"
-              />
-            </View>
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Password</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter your password"
-                value={guestPassword}
-                onChangeText={setGuestPassword}
-                secureTextEntry
-                placeholderTextColor="#9ca3af"
-              />
-            </View>
-            <TouchableOpacity
-              style={styles.loginButton}
-              onPress={handleGuestLogin}
-              disabled={loading}
-            >
-              <Text style={styles.loginButtonText}>{loading ? 'Logging in...' : 'Login'}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.testButton}
-              onPress={() => fillTestCredentials('guest')}
-            >
-              <Text style={styles.testButtonText}>Fill Test Credentials</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      </ScrollView>
-    </KeyboardAvoidingView>
+        {/* Email field */}
+        <Text style={{ color: '#fff', fontSize: 16, marginBottom: 8 }}>Email</Text>
+        <TextInput
+          style={{
+            width: '100%',
+            height: 48,
+            backgroundColor: '#111',
+            color: '#fff',
+            borderRadius: 8,
+            paddingHorizontal: 12,
+            marginBottom: 20,
+            fontSize: 16,
+            borderWidth: 1,
+            borderColor: '#222',
+          }}
+          placeholder="example@xyz.com"
+          placeholderTextColor="#888"
+          value={activeTab === 'admin' ? adminEmail : guestEmail}
+          onChangeText={activeTab === 'admin' ? setAdminEmail : setGuestEmail}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+        {/* Password field */}
+        <Text style={{ color: '#fff', fontSize: 16, marginBottom: 8 }}>Password</Text>
+        <TextInput
+          style={{
+            width: '100%',
+            height: 48,
+            backgroundColor: '#111',
+            color: '#fff',
+            borderRadius: 8,
+            paddingHorizontal: 12,
+            marginBottom: 28,
+            fontSize: 16,
+            borderWidth: 1,
+            borderColor: '#222',
+          }}
+          placeholder="······"
+          placeholderTextColor="#888"
+          value={activeTab === 'admin' ? adminPassword : guestPassword}
+          onChangeText={activeTab === 'admin' ? setAdminPassword : setGuestPassword}
+          secureTextEntry
+        />
+        {/* Login button */}
+        <TouchableOpacity
+          style={{
+            width: '100%',
+            height: 48,
+            backgroundColor: '#fff',
+            borderRadius: 8,
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: 18,
+          }}
+          onPress={activeTab === 'admin' ? handleAdminLogin : handleGuestLogin}
+          disabled={loading}
+        >
+          <Text style={{ color: '#000', fontSize: 18, fontWeight: '700' }}>{loading ? 'Logging in...' : 'Login'}</Text>
+        </TouchableOpacity>
+        {/* Forgot password */}
+        <Text style={{ color: '#fff', fontSize: 15, textAlign: 'center', marginTop: 18 }}>
+          Forgot Password? <Text style={{ fontWeight: '700' }}>Contact your event host.</Text>
+        </Text>
+      </View>
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
-  container: {
+  gradientBg: {
     flex: 1,
-    backgroundColor: '#f8fafc',
   },
-  scrollContainer: {
-    flexGrow: 1,
+  centeredContainer: {
+    flex: 1,
     justifyContent: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 40,
-  },
-  header: {
     alignItems: 'center',
-    marginBottom: 40,
   },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#1f2937',
-    marginBottom: 8,
+  glassCardModern: {
+    width: 360,
+    borderRadius: 18,
+    paddingVertical: 36,
+    paddingHorizontal: 28,
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.13)',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.18)',
+    shadowColor: '#fff',
+    shadowOpacity: 0.10,
+    shadowRadius: 32,
+    shadowOffset: { width: 0, height: 8 },
   },
-  subtitle: {
-    fontSize: 16,
-    color: '#6b7280',
-  },
-  tabContainer: {
+  tabPillGroupModern: {
     flexDirection: 'row',
-    backgroundColor: '#e5e7eb',
+    width: '100%',
+    height: 48,
     borderRadius: 12,
-    padding: 4,
+    overflow: 'hidden',
     marginBottom: 32,
+    backgroundColor: 'transparent',
   },
-  tab: {
+  tabPillModern: {
     flex: 1,
-    paddingVertical: 12,
+    height: '100%',
     alignItems: 'center',
-    borderRadius: 8,
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.13)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.18)',
   },
-  activeTab: {
-    backgroundColor: '#ffffff',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
+  tabPillModernLeft: {
+    borderTopLeftRadius: 12,
+    borderBottomLeftRadius: 12,
+    borderTopRightRadius: 0,
+    borderBottomRightRadius: 0,
   },
-  tabText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#6b7280',
+  tabPillModernRight: {
+    borderTopRightRadius: 12,
+    borderBottomRightRadius: 12,
+    borderTopLeftRadius: 0,
+    borderBottomLeftRadius: 0,
   },
-  activeTabText: {
-    color: '#1f2937',
+  tabPillModernActive: {
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    borderColor: '#fff',
   },
-  formContainer: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 24,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 4,
+  tabPillModernInactive: {
+    backgroundColor: 'rgba(255,255,255,0.13)',
+    borderColor: 'rgba(255,255,255,0.18)',
   },
-  formHeader: {
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  formTitle: {
-    fontSize: 20,
+  tabPillModernText: {
+    color: '#fff',
+    fontSize: 16,
     fontWeight: '600',
-    color: '#1f2937',
-    marginBottom: 4,
+    letterSpacing: 1,
+    opacity: 0.7,
   },
-  formSubtitle: {
-    fontSize: 14,
-    color: '#6b7280',
+  tabPillModernTextActive: {
+    color: '#fff',
+    opacity: 1,
+    fontWeight: '700',
+  },
+  inputBoxModern: {
+    marginTop: 18,
+    width: '100%',
+  },
+  labelModern: {
+    color: '#fff',
+    marginBottom: 7,
+    fontSize: 16,
+    opacity: 0.8,
+  },
+  inputModernWrapper: {
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.13)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.18)',
+    marginBottom: 0,
+    overflow: 'hidden',
+  },
+  inputModern: {
+    width: '100%',
+    height: 48,
+    color: '#fff',
+    backgroundColor: 'transparent',
+    borderRadius: 8,
+    paddingHorizontal: 15,
+    fontSize: 17,
+    borderWidth: 0,
+    marginBottom: 0,
+  },
+  loginButtonModernWrapper: {
+    width: '100%',
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.13)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.18)',
+    marginTop: 32,
+    marginBottom: 18,
+  },
+  loginButtonModern: {
+    width: '100%',
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    backgroundColor: 'transparent',
+  },
+  loginButtonModernText: {
+    color: '#000',
+    fontSize: 18,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  forgotModern: {
+    color: '#fff',
+    fontSize: 15,
+    opacity: 0.7,
     textAlign: 'center',
   },
-  inputGroup: {
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#374151',
-    marginBottom: 8,
-  },
-  input: {
-    backgroundColor: '#f9fafb',
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: '#1f2937',
-  },
-  loginButton: {
-    backgroundColor: '#3b82f6',
-    borderRadius: 8,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  loginButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  testButton: {
-    marginTop: 16,
-    paddingVertical: 12,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 8,
-  },
-  testButtonText: {
-    color: '#6b7280',
-    fontSize: 14,
-    fontWeight: '500',
+  forgotModernLink: {
+    color: '#fff',
+    fontWeight: '700',
+    opacity: 1,
   },
 }) 

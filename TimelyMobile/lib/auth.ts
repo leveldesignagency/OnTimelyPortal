@@ -170,4 +170,26 @@ export async function getCurrentUser(): Promise<AuthResponse> {
     console.error('Unexpected error getting current user:', error);
     return { user: null, error: error as Error };
   }
+}
+
+export async function guestLogin(email: string, password: string) {
+  // Validate guest login
+  const { data: loginResult, error: loginError } = await supabase.rpc('validate_guest_login', {
+    p_email: email,
+    p_password: password,
+  });
+  if (loginError || !loginResult || !loginResult[0]?.is_valid) {
+    return { error: loginError || new Error('Invalid login'), loginResult: null, guest: null };
+  }
+  const guest_id = loginResult[0].guest_id;
+  // Fetch guest profile by guest_id
+  const { data: guest, error: guestError } = await supabase
+    .from('guests')
+    .select('*')
+    .eq('id', guest_id)
+    .single();
+  if (guestError) {
+    return { error: guestError, loginResult, guest: null };
+  }
+  return { error: null, loginResult: loginResult[0], guest };
 } 

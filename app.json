@@ -4,12 +4,18 @@
     "slug": "timely",
     "version": "1.0.0",
     "sdkVersion": "50.0.0",
+    "jsEngine": "jsc",
     "platforms": [
       "ios",
       "android"
     ],
     "ios": {
       "bundleIdentifier": "com.leveldesign.timely"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "43068d9e-6fdc-417f-bacd-8c3efbaf834d"
+      }
     }
   }
 }
