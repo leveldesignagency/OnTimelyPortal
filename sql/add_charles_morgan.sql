@@ -213,3 +213,4 @@ WHERE u.email = 'charles@timely.com';
 -- Clean up the function (optional)
 DROP FUNCTION IF EXISTS create_charles_morgan; 
  
+ 
