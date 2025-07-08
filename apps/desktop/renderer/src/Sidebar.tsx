@@ -1,8 +1,9 @@
 import React, { useState, useContext } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import styles from './Sidebar.module.css';
 import { EventType } from './types';
 import { ThemeContext } from './ThemeContext';
+import { supabase } from './lib/supabase';
 
 const PAGE_LINKS = [
   { label: 'Dashboard', to: '/' },
@@ -35,6 +36,8 @@ export default function Sidebar({ events = [], isOverlay, isOpen, setOpen }: Sid
   const { theme, toggleTheme } = useContext(ThemeContext);
   const liveEvents = events.filter(e => getEventStatus(e, today) === 'live');
   const upcomingEvents = events.filter(e => getEventStatus(e, today) === 'upcoming');
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const navigate = useNavigate();
 
   // Update selectedPage when route changes
   React.useEffect(() => {
@@ -59,6 +62,11 @@ export default function Sidebar({ events = [], isOverlay, isOpen, setOpen }: Sid
     setTimeout(() => {
       setIsAnimating(false);
     }, 500);
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    navigate('/login');
   };
 
   return (
@@ -127,7 +135,9 @@ export default function Sidebar({ events = [], isOverlay, isOpen, setOpen }: Sid
         <div style={{ flex: 1 }} />
         <div className={styles.footer}>
           <div className={styles.footerItem}>Settings</div>
-          <div className={styles.footerItem}>Sign Out/Switch User</div>
+          <div className={styles.footerItem} onClick={() => setShowLogoutModal(true)} style={{ cursor: 'pointer', whiteSpace: 'nowrap', minWidth: 140 }}>
+            Sign Out/Switch User
+          </div>
           <div className={styles.footerItem}>
             <div 
               onClick={handleThemeToggle} 
@@ -180,6 +190,79 @@ export default function Sidebar({ events = [], isOverlay, isOpen, setOpen }: Sid
           </div>
         </div>
       </aside>
+      {showLogoutModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          background: theme === 'dark' ? 'rgba(0,0,0,0.32)' : 'rgba(0,0,0,0.18)',
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}>
+          <div style={{
+            minWidth: 320,
+            background: theme === 'dark' ? 'rgba(30,32,38,0.92)' : 'rgba(255,255,255,0.22)',
+            backdropFilter: 'blur(18px)',
+            WebkitBackdropFilter: 'blur(18px)',
+            borderRadius: 20,
+            boxShadow: '0 8px 32px #0005',
+            padding: '32px 32px 24px 32px',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            border: '1.5px solid rgba(255,255,255,0.25)',
+          }}>
+            <div style={{ fontSize: 19, fontWeight: 700, marginBottom: 14, color: theme === 'dark' ? '#fff' : '#222', letterSpacing: 0.5 }}>Sign Out?</div>
+            <div style={{ fontSize: 14, color: theme === 'dark' ? '#ccc' : '#444', marginBottom: 24, textAlign: 'center', maxWidth: 260 }}>
+              Are you sure you want to sign out or switch user?
+            </div>
+            <div style={{ display: 'flex', gap: 14 }}>
+              <button
+                onClick={handleLogout}
+                style={{
+                  background: 'linear-gradient(90deg, #ef4444 0%, #f87171 100%)',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 10,
+                  fontWeight: 700,
+                  fontSize: 15,
+                  padding: '10px 26px',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 8px #0002',
+                  letterSpacing: 0.2,
+                  whiteSpace: 'nowrap',
+                  minWidth: 100,
+                }}
+              >
+                Sign Out
+              </button>
+              <button
+                onClick={() => setShowLogoutModal(false)}
+                style={{
+                  background: theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+                  color: theme === 'dark' ? '#fff' : '#222',
+                  border: '1.5px solid #bbb',
+                  borderRadius: 10,
+                  fontWeight: 600,
+                  fontSize: 15,
+                  padding: '10px 26px',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 8px #0001',
+                  letterSpacing: 0.2,
+                  whiteSpace: 'nowrap',
+                  minWidth: 100,
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 } 

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Event } from './lib/supabase';
 import { ThemeContext } from './ThemeContext';
 import ThemedIcon from './components/ThemedIcon';
+import { getCurrentUser } from './lib/auth';
 
 // Glass and color helpers (copy from CalendarPage if not imported)
 const getGlassStyles = (isDark: boolean) => ({
@@ -170,6 +171,151 @@ function CustomDatePicker({ value, onChange, placeholder, isDark, colors, requir
   );
 }
 
+// Utility to get current offset for a time zone
+function getTimeZoneOffsetLabel(tz: string): string {
+  try {
+    const now = new Date();
+    const dtf = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      hour12: false,
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZoneName: 'shortOffset',
+    });
+    // e.g. "15:00 GMT+2"
+    const parts = dtf.formatToParts(now);
+    const offset = parts.find(p => p.type === 'timeZoneName')?.value || '';
+    if (offset.startsWith('GMT') || offset.startsWith('UTC')) return offset;
+    return 'GMT' + offset.replace('UTC', '');
+  } catch {
+    return '';
+  }
+}
+
+interface TimeZoneOption {
+  value: string;
+  label: string;
+}
+
+const IANA_TIME_ZONES = [
+  'UTC', 'Europe/London', 'Europe/Paris', 'Europe/Berlin', 'Europe/Moscow',
+  'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
+  'America/Sao_Paulo', 'Asia/Tokyo', 'Asia/Shanghai', 'Asia/Singapore', 'Asia/Hong_Kong',
+  'Asia/Kolkata', 'Australia/Sydney', 'Australia/Perth', 'Africa/Johannesburg',
+  'Pacific/Auckland', 'Pacific/Honolulu', 'Etc/GMT+12', 'Etc/GMT-14',
+];
+
+const timeZoneOptions: TimeZoneOption[] = IANA_TIME_ZONES.map(tz => {
+  const offset = getTimeZoneOffsetLabel(tz);
+  return {
+    value: tz,
+    label: `${tz} (${offset})`,
+  };
+});
+
+interface GlassTimeZoneDropdownProps {
+  value: string;
+  onChange: (tz: string) => void;
+  colors: any;
+}
+
+function GlassTimeZoneDropdown({ value, onChange, colors }: GlassTimeZoneDropdownProps) {
+  const [open, setOpen] = useState(false);
+  const [filter, setFilter] = useState('');
+  const filtered = timeZoneOptions.filter(opt =>
+    opt.label.toLowerCase().includes(filter.toLowerCase())
+  );
+  return (
+    <div style={{ position: 'relative', width: '100%' }}>
+      <div
+        onClick={() => setOpen(o => !o)}
+        style={{
+          width: '100%',
+          padding: '16px 20px',
+          borderRadius: '12px',
+          border: `2px solid ${colors.border}`,
+          background: colors.inputBg,
+          color: colors.text,
+          fontSize: '20px',
+          minHeight: '56px',
+          boxSizing: 'border-box',
+          marginTop: 4,
+          transition: 'all 0.2s',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          position: 'relative',
+        }}
+      >
+        <span>{timeZoneOptions.find(opt => opt.value === value)?.label || value}</span>
+        <span style={{ marginLeft: 12, fontSize: 18, opacity: 0.5 }}>▼</span>
+      </div>
+      {open && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '110%',
+            left: 0,
+            width: '100%',
+            maxHeight: 260,
+            overflowY: 'auto',
+            background: '#000',
+            border: '2px solid #fff',
+            borderRadius: '12px',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.30)',
+            zIndex: 100,
+            color: '#fff',
+          }}
+        >
+          <input
+            type="text"
+            value={filter}
+            onChange={e => setFilter(e.target.value)}
+            placeholder="Search time zone..."
+            style={{
+              width: '100%',
+              padding: '12px 16px',
+              border: 'none',
+              outline: 'none',
+              background: '#111',
+              color: '#fff',
+              fontSize: 16,
+              borderTopLeftRadius: 12,
+              borderTopRightRadius: 12,
+              boxSizing: 'border-box',
+            }}
+          />
+          {filtered.length === 0 && (
+            <div style={{ padding: 16, color: '#aaa', fontSize: 15 }}>No results</div>
+          )}
+          {filtered.map(opt => (
+            <div
+              key={opt.value}
+              onClick={() => { onChange(opt.value); setOpen(false); setFilter(''); }}
+              style={{
+                padding: '12px 20px',
+                cursor: 'pointer',
+                color: '#fff',
+                background: opt.value === value ? '#222' : 'transparent',
+                fontWeight: opt.value === value ? 700 : 400,
+                fontSize: 18,
+                border: opt.value === value ? '2px solid #fff' : '2px solid transparent',
+                borderRadius: 8,
+                margin: '4px 8px',
+                transition: 'border 0.2s',
+              }}
+              onMouseDown={e => e.preventDefault()}
+            >
+              {opt.label}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface CreateEventPageProps {
   onCreate: (event: Omit<Event, 'id' | 'created_at' | 'updated_at'>) => Promise<Event>;
 }
@@ -184,6 +330,7 @@ export default function CreateEventPage({ onCreate }: CreateEventPageProps) {
   const [to, setTo] = useState('');
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState('');
+  const [timeZone, setTimeZone] = useState('UTC');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
@@ -195,15 +342,23 @@ export default function CreateEventPage({ onCreate }: CreateEventPageProps) {
     }
     setLoading(true);
     try {
+      const currentUser = getCurrentUser();
+      if (!currentUser) {
+        alert('No authenticated user found. Please log in again.');
+        setLoading(false);
+        return;
+      }
+      console.log('Creating event with user:', currentUser);
       const eventData: Omit<Event, 'id' | 'created_at' | 'updated_at'> = {
-      name,
-      from,
-      to,
-      status: 'Upcoming',
+        name,
+        from,
+        to,
+        status: 'Upcoming',
         description: description || undefined,
         location: location || undefined,
-        company_id: '',
-        created_by: '',
+        company_id: currentUser.company_id,
+        created_by: currentUser.id,
+        time_zone: timeZone,
       };
       const newEvent = await onCreate(eventData);
       navigate(`/event/${newEvent.id}`);
@@ -216,87 +371,117 @@ export default function CreateEventPage({ onCreate }: CreateEventPageProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit} style={{
-      minHeight: '100vh',
-      width: '100vw',
-      background: colors.bg,
-      color: colors.text,
+    <div style={{
       display: 'flex',
-      flexDirection: 'column',
       alignItems: 'center',
       justifyContent: 'center',
-      padding: 0,
-      fontFamily: 'inherit',
-      transition: 'background 0.3s, color 0.3s',
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      zIndex: 1
+      minHeight: '100vh',
+      width: '100%',
     }}>
-      <div style={{ ...glassStyle, width: '100%', maxWidth: 640, padding: '56px 40px', boxSizing: 'border-box', margin: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-        <h1 style={{ fontSize: 36, color: colors.text, marginBottom: 40, fontWeight: 700, letterSpacing: 0.5, textAlign: 'center' }}>Create New Event</h1>
-        <label htmlFor="event-name" style={{ color: colors.textSecondary, fontWeight: 600, fontSize: 15, marginBottom: 8, display: 'block', alignSelf: 'flex-start' }}>EVENT NAME *</label>
-        <input
-          id="event-name"
-          value={name}
-          onChange={e => setName(e.target.value)}
-          placeholder="What is your event called?"
-          style={{ width: '100%', padding: '16px 20px', borderRadius: '12px', border: `2px solid ${colors.border}`, background: colors.inputBg, color: colors.text, fontSize: 20, marginBottom: 28, outline: 'none', boxSizing: 'border-box', marginTop: 4, transition: 'all 0.2s', backdropFilter: 'blur(10px)' }}
-          required
-        />
-        <label htmlFor="event-location" style={{ color: colors.textSecondary, fontWeight: 600, fontSize: 15, marginBottom: 8, display: 'block', alignSelf: 'flex-start' }}>LOCATION</label>
-        <input
-          id="event-location"
-          value={location}
-          onChange={e => setLocation(e.target.value)}
-          placeholder="Where will the event take place? (optional)"
-          style={{ width: '100%', padding: '16px 20px', borderRadius: '12px', border: `2px solid ${colors.border}`, background: colors.inputBg, color: colors.text, fontSize: 20, marginBottom: 28, outline: 'none', boxSizing: 'border-box', marginTop: 4, transition: 'all 0.2s', backdropFilter: 'blur(10px)' }}
-        />
-        <label style={{ color: colors.textSecondary, fontWeight: 600, fontSize: 15, marginBottom: 8, display: 'block', marginTop: 12, alignSelf: 'flex-start' }} htmlFor="event-from">DATES/DURATION *</label>
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 40, gap: 20, width: '100%' }}>
-          <CustomDatePicker
-            value={from}
-            onChange={setFrom}
-            placeholder="Start date"
-            isDark={isDark}
-            colors={colors}
-            required
-          />
-          <span style={{ fontSize: 32, color: colors.textSecondary, margin: '0 12px', userSelect: 'none' }}>&#9654;</span>
-          <CustomDatePicker
-            value={to}
-            onChange={setTo}
-            placeholder="End date"
-            isDark={isDark}
-            colors={colors}
-            required
-          />
-        </div>
-        <button 
-          type="submit" 
-          disabled={loading}
-          style={{ 
-            width: '100%', 
-            marginTop: 12, 
-            height: 60, 
-            fontSize: 22,
-            fontWeight: 700,
-            borderRadius: '12px',
-            border: 'none',
-            background: colors.text,
-            color: isDark ? '#000' : '#fff',
-            opacity: loading ? 0.7 : 1,
-            cursor: loading ? 'not-allowed' : 'pointer',
-            boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.2)' : '0 2px 8px rgba(0,0,0,0.08)',
-            transition: 'all 0.2s',
-            letterSpacing: 1
-          }}
-        >
-          {loading ? 'CREATING...' : 'CREATE'}
-        </button>
+      <div style={{ maxWidth: 520, width: '100%', ...glassStyle, padding: 32, zIndex: 1000, position: 'relative', margin: '40px auto' }}>
+        <form onSubmit={handleSubmit} style={{ width: '100%' }}>
+          <h2 style={{ color: colors.text, fontWeight: 700, fontSize: 28, marginBottom: 24 }}>Create New Event</h2>
+          {/* Event Name field */}
+          <div style={{ marginBottom: 20, width: '100%' }}>
+            <label style={{ color: colors.text, fontWeight: 600, fontSize: 16, marginBottom: 8, display: 'block' }}>Event Name *</label>
+            <input
+              type="text"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '16px 20px',
+                borderRadius: '12px',
+                border: `2px solid ${colors.border}`,
+                background: colors.inputBg,
+                color: colors.text,
+                fontSize: '20px',
+                marginBottom: 0,
+                minHeight: '56px',
+                boxSizing: 'border-box',
+                marginTop: 4,
+                transition: 'all 0.2s',
+                backdropFilter: 'blur(10px)'
+              }}
+              placeholder="What is your event called?"
+              required
+            />
+          </div>
+          {/* Location field */}
+          <div style={{ marginBottom: 20, width: '100%' }}>
+            <label style={{ color: colors.text, fontWeight: 600, fontSize: 16, marginBottom: 8, display: 'block' }}>Location</label>
+            <input
+              type="text"
+              value={location}
+              onChange={e => setLocation(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '16px 20px',
+                borderRadius: '12px',
+                border: `2px solid ${colors.border}`,
+                background: colors.inputBg,
+                color: colors.text,
+                fontSize: '20px',
+                marginBottom: 0,
+                minHeight: '56px',
+                boxSizing: 'border-box',
+                marginTop: 4,
+                transition: 'all 0.2s',
+                backdropFilter: 'blur(10px)'
+              }}
+              placeholder="Event location"
+              required
+            />
+          </div>
+          {/* Time Zone field - match location field UI */}
+          <div style={{ marginBottom: 20, width: '100%' }}>
+            <label style={{ color: colors.text, fontWeight: 600, fontSize: 16, marginBottom: 8, display: 'block' }}>Time Zone</label>
+            <GlassTimeZoneDropdown value={timeZone} onChange={setTimeZone} colors={colors} />
+          </div>
+          <label style={{ color: colors.textSecondary, fontWeight: 600, fontSize: 15, marginBottom: 8, display: 'block', marginTop: 12, alignSelf: 'flex-start' }} htmlFor="event-from">DATES/DURATION *</label>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 40, gap: 20, width: '100%' }}>
+            <CustomDatePicker
+              value={from}
+              onChange={setFrom}
+              placeholder="Start date"
+              isDark={isDark}
+              colors={colors}
+              required
+            />
+            <span style={{ fontSize: 32, color: colors.textSecondary, margin: '0 12px', userSelect: 'none' }}>&#9654;</span>
+            <CustomDatePicker
+              value={to}
+              onChange={setTo}
+              placeholder="End date"
+              isDark={isDark}
+              colors={colors}
+              required
+            />
+          </div>
+          <button 
+            type="submit" 
+            disabled={loading}
+            style={{ 
+              width: '100%', 
+              marginTop: 12, 
+              height: 60, 
+              fontSize: 22,
+              fontWeight: 700,
+              borderRadius: '12px',
+              border: 'none',
+              background: colors.text,
+              color: isDark ? '#000' : '#fff',
+              opacity: loading ? 0.7 : 1,
+              cursor: loading ? 'not-allowed' : 'pointer',
+              boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.2)' : '0 2px 8px rgba(0,0,0,0.08)',
+              transition: 'all 0.2s',
+              letterSpacing: 1
+            }}
+          >
+            {loading ? 'CREATING...' : 'CREATE'}
+          </button>
+        </form>
       </div>
-    </form>
+    </div>
   );
 } 

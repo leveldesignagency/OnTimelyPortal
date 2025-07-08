@@ -65,3 +65,4 @@ SELECT id, title, event_id FROM itineraries LIMIT 3;
 SELECT 'SAMPLE EVENTS DATA:' as info;
 SELECT id, name FROM events LIMIT 3; 
  
+ 

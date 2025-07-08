@@ -1,10 +1,10 @@
 import React, { useState, useContext, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ThemeContext } from '../ThemeContext';
-import { supabase, getEvent, type Event, uploadImageToStorage } from '../lib/supabase';
+import { supabase, getEvent, type Event, uploadImageToStorage, validateImageFile } from '../lib/supabase';
 import ImageCollageModal, { LAYOUTS } from '../components/ImageCollageModal';
 import TOSModal from '../components/TOSModal';
-import { getCurrentUser } from '../lib/auth';
+import { getCurrentUser, getCurrentUserCompanyId } from '../lib/auth';
 
 interface HomepageModule {
   id: string;
@@ -18,6 +18,30 @@ interface HomepageData {
   welcomeTitle: string;
   welcomeDescription: string;
   modules: HomepageModule[];
+}
+
+// Helper to count total images for the event homepage
+function countTotalImages(
+  coverImageFile: File | null,
+  moduleImageFiles: File[],
+  collageImageFiles: File[],
+  homepageData: HomepageData
+): number {
+  let count = 0;
+  // Cover photo (if present or already uploaded)
+  if (coverImageFile || homepageData.eventImage) count += 1;
+  // Image modules (new uploads or existing)
+  count += homepageData.modules.filter((m: HomepageModule) => m.type === 'image' && (m.content.url || m.content.file)).length;
+  // Collage modules (all images in collages)
+  homepageData.modules.forEach((m: HomepageModule) => {
+    if (m.type === 'collage' && m.content.images) {
+      count += m.content.images.length;
+    }
+  });
+  // Add new files staged for upload
+  count += moduleImageFiles.length;
+  count += collageImageFiles.length;
+  return count;
 }
 
 export default function EventHomepageBuilderPage() {
@@ -57,11 +81,34 @@ export default function EventHomepageBuilderPage() {
   const [moduleImageFiles, setModuleImageFiles] = useState<File[]>([]);
   const [collageImageFiles, setCollageImageFiles] = useState<File[]>([]);
   const [coverImagePreview, setCoverImagePreview] = useState<string | null>(null);
+  const [showSuccessToast, setShowSuccessToast] = useState(false);
+  // Add to the top-level state:
+  const [draggingImageModuleId, setDraggingImageModuleId] = useState<string | null>(null);
+  const [imageModuleStartY, setImageModuleStartY] = useState(0);
+  const [imageModuleStartOffsetY, setImageModuleStartOffsetY] = useState(0);
+
+  // Drag logic for image modules using refs
+  const draggingImageModuleIdRef = useRef<string | null>(null);
+  const imageModuleStartYRef = useRef(0);
+  const imageModuleStartOffsetYRef = useRef(0);
+
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [companyId, setCompanyId] = useState<string | null>(null);
 
   // Load event data
   useEffect(() => {
+    (async () => {
+      const id = await getCurrentUserCompanyId();
+      setCompanyId(id);
+      if (!id) {
+        console.warn('No company_id found for current user! Multi-tenant data will not load.');
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
     const loadEvent = async () => {
-      if (!eventId) return;
+      if (!eventId || !companyId) return;
       try {
         const eventData = await getEvent(eventId);
         setEvent(eventData);
@@ -71,6 +118,7 @@ export default function EventHomepageBuilderPage() {
           .from('event_homepage_data')
           .select('*')
           .eq('event_id', eventId)
+          .eq('company_id', companyId)
           .single();
           
         if (existingData) {
@@ -87,10 +135,25 @@ export default function EventHomepageBuilderPage() {
       }
     };
     loadEvent();
+  }, [eventId, companyId]);
+
+  // Debug: Log current session and eventId
+  useEffect(() => {
+    (async () => {
+      const session = await supabase.auth.getSession();
+      console.log('Supabase session:', session);
+    })();
+  }, []);
+
+  useEffect(() => {
+    console.log('EventHomepageBuilderPage eventId:', eventId);
   }, [eventId]);
 
   const handleSave = async () => {
-    if (!eventId) return;
+    if (!eventId || !companyId) {
+      alert('Missing event or company ID. Cannot save homepage.');
+      return;
+    }
     setIsSaving(true);
     
     try {
@@ -145,6 +208,7 @@ export default function EventHomepageBuilderPage() {
         .from('event_homepage_data')
         .upsert({
           event_id: eventId,
+          company_id: companyId,
           event_image: coverUrl || homepageData.eventImage,
           welcome_title: homepageData.welcomeTitle,
           welcome_description: homepageData.welcomeDescription,
@@ -157,11 +221,12 @@ export default function EventHomepageBuilderPage() {
       
       // Update local state with the uploaded URLs
       setHomepageData(prev => ({ ...prev, modules: updatedModules }));
-      
-      alert('Homepage saved successfully!');
+      // Show custom success toast
+      setShowSuccessToast(true);
+      setTimeout(() => setShowSuccessToast(false), 3000);
     } catch (error) {
       console.error('Error saving homepage:', error);
-      alert('Error saving homepage. Please try again.');
+      alert('Failed to save homepage. Please try again.');
     } finally {
       setIsSaving(false);
       setCoverImageFile(null);
@@ -295,6 +360,18 @@ export default function EventHomepageBuilderPage() {
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && eventId) {
+      // Enforce 15 image cap
+      const totalImages = countTotalImages(file, moduleImageFiles, collageImageFiles, homepageData);
+      if (totalImages > 15) {
+        alert('You can only add up to 15 images per event homepage.');
+        return;
+      }
+      // Validate file before accepting
+      const validationError = validateImageFile(file);
+      if (validationError) {
+        alert(validationError);
+        return;
+      }
       setCoverImageFile(file);
       setCoverImagePreview(URL.createObjectURL(file));
       setImageOffsetY(0);
@@ -303,6 +380,12 @@ export default function EventHomepageBuilderPage() {
 
   const handleImageContainerClick = () => {
     if (tosAcceptedForSession) { imageInputRef.current?.click(); } else { checkTOSAcceptance(() => imageInputRef.current?.click()); }
+  };
+
+  const handleImageDoubleClick = () => {
+    if (coverImagePreview || homepageData.eventImage) {
+      handleImageContainerClick();
+    }
   };
 
   const handleImageMouseDown = (e: React.MouseEvent) => {
@@ -345,6 +428,41 @@ export default function EventHomepageBuilderPage() {
       window.removeEventListener('mouseup', handleImageMouseUp);
     };
   }, [dragging, startY, startOffsetY]);
+
+  const handleImageModuleMouseDown = (e: React.MouseEvent, moduleId: string, offsetY: number = 0) => {
+    console.log('MouseDown on image module', moduleId, 'offsetY:', offsetY);
+    draggingImageModuleIdRef.current = moduleId;
+    imageModuleStartYRef.current = e.clientY;
+    imageModuleStartOffsetYRef.current = offsetY;
+    window.addEventListener('mousemove', handleImageModuleMouseMove);
+    window.addEventListener('mouseup', handleImageModuleMouseUp);
+  };
+
+  const handleImageModuleMouseMove = (e: MouseEvent) => {
+    const moduleId = draggingImageModuleIdRef.current;
+    if (!moduleId) return;
+    const module = homepageData.modules.find(m => m.id === moduleId);
+    if (!module || module.type !== 'image') return;
+    const container = document.getElementById(`image-module-container-${moduleId}`);
+    const img = document.getElementById(`image-module-img-${moduleId}`) as HTMLImageElement | null;
+    if (!container || !img) return;
+    const containerHeight = container.offsetHeight;
+    const imgHeight = img.naturalHeight * (container.offsetWidth / img.naturalWidth);
+    let maxOffset = Math.max(0, imgHeight - containerHeight);
+    // Allow a minimum drag range of 40px for feedback
+    if (maxOffset < 40) maxOffset = 40;
+    let newOffset = imageModuleStartOffsetYRef.current + (e.clientY - imageModuleStartYRef.current);
+    newOffset = Math.max(-maxOffset, Math.min(0, newOffset));
+    console.log('handleMove called', { containerHeight, imgHeight, maxOffset, newOffset, module });
+    updateModule(module.id, { ...module.content, offsetY: newOffset });
+  };
+
+  const handleImageModuleMouseUp = () => {
+    console.log('MouseUp on image module', draggingImageModuleIdRef.current);
+    draggingImageModuleIdRef.current = null;
+    window.removeEventListener('mousemove', handleImageModuleMouseMove);
+    window.removeEventListener('mouseup', handleImageModuleMouseUp);
+  };
 
   // --- Module Renderers ---
   const renderModule = (module: HomepageModule) => {
@@ -466,15 +584,20 @@ export default function EventHomepageBuilderPage() {
         );
       case 'image':
         return (
-          <div style={{
-            position: 'relative',
-            ...getGlassStyles(isDark),
-            padding: 32,
-            paddingTop: 80,
-            borderRadius: 16,
-            boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.3)' : '0 8px 32px rgba(0,0,0,0.1)',
-            minHeight: 120,
-          }}>
+          <div
+            id={`image-module-container-${module.id}`}
+            style={{
+              position: 'relative',
+              ...getGlassStyles(isDark),
+              padding: 0,
+              borderRadius: 16,
+              boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.3)' : '0 8px 32px rgba(0,0,0,0.1)',
+              minHeight: 0,
+              height: 320,
+              overflow: 'hidden',
+              marginBottom: 40,
+            }}
+          >
             <div style={{
               position: 'absolute',
               top: 16,
@@ -495,59 +618,103 @@ export default function EventHomepageBuilderPage() {
                 onClick={() => removeModule(module.id)}
                 style={{ background: isDark ? 'rgba(255,0,0,0.08)' : 'rgba(255,0,0,0.04)', border: '1.5px solid #ef4444', borderRadius: 8, color: '#ef4444', width: 36, height: 36, fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, boxShadow: '0 1px 4px #0001', transition: 'border 0.2s, background 0.2s' }} title="Delete module">×</button>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
-              <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 18, letterSpacing: 1, color: isDark ? '#fff' : '#222' }}>Image</div>
-              {module.content.url ? (
-                <img
-                  src={module.content.url}
-                  alt="Preview"
-                  style={{
-                    width: '100%',
-                    height: 320,
-                    objectFit: 'cover',
-                    borderRadius: 12,
-                    display: 'block',
-                  }}
-                />
-              ) : (
-                <div
-                  onClick={() => checkTOSAcceptance(() => {
-                    const input = document.createElement('input');
-                    input.type = 'file';
-                    input.accept = 'image/*';
-                    input.onchange = (e) => {
-                      const file = (e.target as HTMLInputElement).files?.[0];
-                      if (file) {
-                        // Create a preview URL for immediate display
-                        const previewUrl = URL.createObjectURL(file);
-                        updateModule(module.id, { ...module.content, url: previewUrl });
-                        // Store the file for later upload
-                        setModuleImageFiles(prev => [...prev, file]);
+            {module.content.url ? (
+              <img
+                id={`image-module-img-${module.id}`}
+                src={module.content.url}
+                alt="Preview"
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  top: module.content.offsetY || 0,
+                  width: '100%',
+                  height: 'auto',
+                  minHeight: '100%',
+                  minWidth: '100%',
+                  objectFit: 'cover',
+                  borderRadius: 16,
+                  display: 'block',
+                  cursor: 'grab',
+                  userSelect: 'none',
+                  zIndex: 1,
+                  transition: draggingImageModuleId === module.id ? 'none' : 'top 0.2s',
+                }}
+                draggable={false}
+                onMouseDown={e => handleImageModuleMouseDown(e, module.id, module.content.offsetY || 0)}
+                onLoad={e => {
+                  const img = e.currentTarget;
+                  console.log('Image loaded', { naturalHeight: img.naturalHeight, naturalWidth: img.naturalWidth });
+                }}
+              />
+            ) : (
+              <div
+                onClick={() => checkTOSAcceptance(() => {
+                  const input = document.createElement('input');
+                  input.type = 'file';
+                  input.accept = 'image/jpeg,image/png,image/webp';
+                  input.onchange = (e) => {
+                    const file = (e.target as HTMLInputElement).files?.[0];
+                    if (file) {
+                      // Enforce 15 image cap
+                      const totalImages = countTotalImages(coverImageFile, [...moduleImageFiles, file], collageImageFiles, homepageData);
+                      if (totalImages > 15) {
+                        alert('You can only add up to 15 images per event homepage.');
+                        return;
                       }
-                    };
-                    input.click();
-                  })}
-                  style={{
-                    width: '100%',
-                    height: 320,
-                    border: isDark ? '2.5px dashed #fff' : '2.5px dashed #bbb',
-                    borderRadius: 12,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: isDark ? '#fff' : '#222',
-                    fontSize: 20,
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    background: getGlassStyles(isDark).background,
-                    textAlign: 'center',
-                    transition: 'background 0.2s',
-                  }}
-                >
-                  Click to upload image
-                </div>
-              )}
-            </div>
+                      // Validate file before accepting
+                      const validationError = validateImageFile(file);
+                      if (validationError) {
+                        alert(validationError);
+                        return;
+                      }
+                      
+                      // Create a preview URL for immediate display
+                      const previewUrl = URL.createObjectURL(file);
+                      updateModule(module.id, { ...module.content, url: previewUrl });
+                      // Store the file for later upload
+                      setModuleImageFiles(prev => [...prev, file]);
+                    }
+                  };
+                  input.click();
+                })}
+                style={{
+                  width: '100%',
+                  height: 320,
+                  border: isDark ? '2.5px dashed #fff' : '2.5px dashed #bbb',
+                  borderRadius: 16,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: isDark ? '#fff' : '#222',
+                  fontSize: 20,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  background: getGlassStyles(isDark).background,
+                  textAlign: 'center',
+                  transition: 'background 0.2s',
+                }}
+              >
+                <div style={{ fontSize: 18, marginBottom: 8 }}>Upload Image</div>
+                <div style={{ fontSize: 12, opacity: 0.8 }}>JPEG, PNG, WebP • Max 2MB</div>
+              </div>
+            )}
+            {/* Drag overlay feedback for image module */}
+            {draggingImageModuleId === module.id && (
+              <div style={{
+                position: 'absolute',
+                left: 0,
+                top: 0,
+                width: '100%',
+                height: '100%',
+                background: 'rgba(0,0,0,0.08)',
+                border: '2px dashed #fff',
+                borderRadius: 16,
+                zIndex: 2,
+                pointerEvents: 'none',
+                transition: 'background 0.2s',
+              }} />
+            )}
           </div>
         );
       case 'video':
@@ -839,6 +1006,7 @@ export default function EventHomepageBuilderPage() {
                   border: isDark ? '2.5px dashed #fff' : '2.5px dashed #bbb',
                   borderRadius: 12,
                   display: 'flex',
+                  flexDirection: 'column',
                   alignItems: 'center',
                   justifyContent: 'center',
                   color: isDark ? '#fff' : '#222',
@@ -850,7 +1018,8 @@ export default function EventHomepageBuilderPage() {
                   transition: 'background 0.2s',
                 }}
               >
-                Click to upload image
+                <div style={{ fontSize: 16, marginBottom: 4 }}>Create Image Collage</div>
+                <div style={{ fontSize: 10, opacity: 0.8 }}>Up to 6 images • Max 2MB each</div>
               </div>
             )}
             {/* Thumbnails below preview if images exist */}
@@ -906,7 +1075,7 @@ export default function EventHomepageBuilderPage() {
       cb();
       return;
     }
-    const user = getCurrentUser();
+    const user = await getCurrentUser();
     setTosModalCallback(() => async () => {
       if (user) {
         await supabase.from('tos_acceptance').upsert({ user_id: user.id, user_name: user.name, user_email: user.email, accepted_at: new Date().toISOString(), tos_version: 1 });
@@ -1039,6 +1208,53 @@ export default function EventHomepageBuilderPage() {
       color: isDark ? '#fff' : '#000',
       padding: '48px 24px',
     }}>
+      {/* Success Toast */}
+      {showSuccessToast && (
+        <div style={{
+          position: 'fixed',
+          top: 32,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: '#222',
+          color: '#fff',
+          borderRadius: 12,
+          boxShadow: '0 4px 24px #0006',
+          padding: '18px 36px 18px 24px',
+          fontSize: 18,
+          fontWeight: 600,
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          minWidth: 320,
+          maxWidth: '90vw',
+        }}>
+          <span style={{ marginRight: 18, fontSize: 22 }}>✅</span>
+          Homepage saved successfully!
+          <div style={{
+            position: 'absolute',
+            left: 0,
+            bottom: 0,
+            height: 4,
+            width: '100%',
+            background: 'rgba(0,255,100,0.18)',
+            borderRadius: '0 0 12px 12px',
+            overflow: 'hidden',
+          }}>
+            <div style={{
+              height: '100%',
+              width: '100%',
+              background: 'linear-gradient(90deg, #22c55e 0%, #16a34a 100%)',
+              animation: 'homepage-toast-timer 3s linear forwards',
+            }} />
+          </div>
+          <style>{`
+            @keyframes homepage-toast-timer {
+              from { width: 100%; }
+              to { width: 0%; }
+            }
+          `}</style>
+        </div>
+      )}
       <div style={{ maxWidth: 1400, margin: '0 auto' }}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
@@ -1075,25 +1291,26 @@ export default function EventHomepageBuilderPage() {
             width: '100%',
             height: 320,
             borderRadius: 24,
-            background: isDark
-              ? 'linear-gradient(90deg, #232526 0%, #414345 100%)'
-              : 'linear-gradient(90deg, #e0eafc 0%, #cfdef3 100%)',
+            background: getGlassStyles(isDark).background,
             marginBottom: 40,
             position: 'relative',
             display: 'flex',
-            alignItems: 'flex-end',
-            justifyContent: 'flex-end',
+            alignItems: 'center',
+            justifyContent: 'center',
             overflow: 'hidden',
             boxShadow: isDark
               ? '0 4px 32px rgba(0,0,0,0.4)'
               : '0 4px 32px rgba(0,0,0,0.08)',
             userSelect: dragging ? 'none' : 'auto',
+            cursor: !homepageData.eventImage && !coverImagePreview ? 'pointer' : 'default',
           }}
+          onClick={!homepageData.eventImage && !coverImagePreview ? handleImageContainerClick : undefined}
+          onDoubleClick={handleImageDoubleClick}
         >
           <input
             ref={imageInputRef}
             type="file"
-            accept="image/*"
+            accept="image/jpeg,image/png,image/webp"
             style={{ display: 'none' }}
             onChange={handleImageChange}
           />
@@ -1147,6 +1364,7 @@ export default function EventHomepageBuilderPage() {
               width: '100%',
               height: '100%',
               display: 'flex',
+              flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
               color: isDark ? '#aaa' : '#888',
@@ -1157,33 +1375,47 @@ export default function EventHomepageBuilderPage() {
               letterSpacing: 1,
               background: isDark ? 'rgba(30,32,38,0.85)' : 'rgba(255,255,255,0.85)',
             }}>
-              No image uploaded
+              <div style={{ fontSize: 24, fontWeight: 600, marginBottom: 8 }}>Event Cover Photo</div>
+              <div style={{ fontSize: 14, fontWeight: 400, opacity: 0.8, textAlign: 'center', maxWidth: 200 }}>
+                Click to upload • JPEG, PNG, WebP • Max 2MB
+              </div>
             </div>
           )}
-          {/* Change Image Button */}
-          <button
-            onClick={handleImageContainerClick}
-            style={{
-              position: 'absolute',
-              top: 16,
-              right: 16,
-              background: 'rgba(0,0,0,0.7)',
-              color: '#fff',
-              border: 'none',
-              borderRadius: 8,
-              padding: '6px 12px',
-              fontSize: 12,
-              fontWeight: 600,
-              cursor: 'pointer',
-              zIndex: 3,
-              backdropFilter: 'blur(10px)',
-              transition: 'background 0.2s',
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.8)'}
-            onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.7)'}
-          >
-            Change
-          </button>
+          {/* Change Image Button - Only show when image exists */}
+          {(coverImagePreview || homepageData.eventImage) && (
+            <button
+              onClick={handleImageContainerClick}
+              style={{
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                background: 'rgba(0,0,0,0.7)',
+                color: '#fff',
+                border: '2px dashed #fff',
+                borderRadius: 8,
+                padding: '8px 16px',
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: 'pointer',
+                zIndex: 3,
+                backdropFilter: 'blur(10px)',
+                transition: 'background 0.2s',
+                opacity: 0,
+                pointerEvents: 'none',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(0,0,0,0.8)';
+                e.currentTarget.style.opacity = '1';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'rgba(0,0,0,0.7)';
+                e.currentTarget.style.opacity = '0';
+              }}
+            >
+              Change Image
+            </button>
+          )}
           {/* Drag overlay feedback */}
           {dragging && (
             <div style={{
@@ -1199,6 +1431,22 @@ export default function EventHomepageBuilderPage() {
               pointerEvents: 'none',
               transition: 'background 0.2s',
             }} />
+          )}
+        </div>
+
+        {/* Usage Instructions */}
+        <div style={{
+          textAlign: 'center',
+          marginTop: -32,
+          marginBottom: 40,
+          fontSize: 12,
+          color: isDark ? '#888' : '#666',
+          fontStyle: 'italic',
+        }}>
+          {!homepageData.eventImage && !coverImagePreview ? (
+            'Click to upload a cover photo for your event'
+          ) : (
+            'Click to upload • Drag to reposition • Double-click to change'
           )}
         </div>
 

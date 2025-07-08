@@ -141,6 +141,7 @@ function formatFlightTime(dateTimeString: string, timeZone: string) {
 }
 
 const GUEST_MODULES = [
+  { key: 'stage1TravelCompanion', label: 'Stage 1: Travel Companion', type: 'group', placeholder: '', description: 'Complete travel tracking from airport to hotel with GPS and notifications' },
   { key: 'flightNumber', label: 'Flight Tracker', type: 'text', placeholder: 'e.g. BA2490', description: 'Auto-detects flight details' },
   { key: 'seatNumber', label: 'Seat Number', type: 'text', placeholder: 'e.g. 14A' },
   { key: 'eventReference', label: 'Event Reference', type: 'text', placeholder: 'Enter reference number' },
@@ -1838,6 +1839,106 @@ export default function CreateGuests() {
                         ×
                       </button>
                       {/* Module-specific fields */}
+                      {key === 'stage1TravelCompanion' && (
+                        <div>
+                          <div style={{ 
+                            fontSize: 16, 
+                            fontWeight: 600, 
+                            color: isDark ? '#fff' : '#000', 
+                            marginBottom: 8,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 8
+                          }}>
+                            Stage 1: Travel Companion
+                            <div style={{
+                              background: isDark ? '#10b981' + '20' : '#059669' + '20',
+                              color: isDark ? '#10b981' : '#059669',
+                              padding: '2px 6px',
+                              borderRadius: 4,
+                              fontSize: 10,
+                              fontWeight: 500,
+                              border: `1px solid ${isDark ? '#10b981' + '40' : '#059669' + '40'}`
+                            }}>
+                              PREMIUM
+                            </div>
+                          </div>
+                          <div style={{ 
+                            color: isDark ? '#aaa' : '#666', 
+                            fontSize: 12, 
+                            marginBottom: 12,
+                            lineHeight: 1.4 
+                          }}>
+                            Complete travel tracking from airport to hotel with GPS monitoring, driver verification, and real-time notifications.
+                          </div>
+                          
+                          <label style={labelStyle(isDark)}>Flight Number</label>
+                          <input
+                            type="text"
+                            value={draft.moduleValues?.[key]?.[index]?.flightNumber || ''}
+                            onChange={e => {
+                              const newVals = Array.isArray(draft.moduleValues?.[key]) ? [...draft.moduleValues[key]] : [];
+                              newVals[index] = { ...newVals[index], flightNumber: e.target.value };
+                              handleDraftChange(idx, 'moduleValues', { ...draft.moduleValues, [key]: newVals });
+                            }}
+                            style={{
+                              width: '100%',
+                              borderRadius: 6,
+                              background: isDark ? 'rgba(0,0,0,0)' : '#f9fafb',
+                              border: '1px solid #d1d5db',
+                              padding: '10px 12px',
+                              fontSize: 14,
+                              outline: 'none',
+                              marginBottom: 8
+                            }}
+                            placeholder="e.g. BA2490"
+                          />
+                          
+                          <label style={labelStyle(isDark)}>Hotel Name</label>
+                          <input
+                            type="text"
+                            value={draft.moduleValues?.[key]?.[index]?.hotelName || ''}
+                            onChange={e => {
+                              const newVals = Array.isArray(draft.moduleValues?.[key]) ? [...draft.moduleValues[key]] : [];
+                              newVals[index] = { ...newVals[index], hotelName: e.target.value };
+                              handleDraftChange(idx, 'moduleValues', { ...draft.moduleValues, [key]: newVals });
+                            }}
+                            style={{
+                              width: '100%',
+                              borderRadius: 6,
+                              background: isDark ? 'rgba(0,0,0,0)' : '#f9fafb',
+                              border: '1px solid #d1d5db',
+                              padding: '10px 12px',
+                              fontSize: 14,
+                              outline: 'none',
+                              marginBottom: 8
+                            }}
+                            placeholder="Enter hotel name"
+                          />
+                          
+                          <label style={labelStyle(isDark)}>Driver Verification Code</label>
+                          <input
+                            type="text"
+                            value={draft.moduleValues?.[key]?.[index]?.driverCode || ''}
+                            onChange={e => {
+                              const newVals = Array.isArray(draft.moduleValues?.[key]) ? [...draft.moduleValues[key]] : [];
+                              newVals[index] = { ...newVals[index], driverCode: e.target.value };
+                              handleDraftChange(idx, 'moduleValues', { ...draft.moduleValues, [key]: newVals });
+                            }}
+                            style={{
+                              width: '100%',
+                              borderRadius: 6,
+                              background: isDark ? 'rgba(0,0,0,0)' : '#f9fafb',
+                              border: '1px solid #d1d5db',
+                              padding: '10px 12px',
+                              fontSize: 14,
+                              outline: 'none',
+                              marginBottom: 4
+                            }}
+                            placeholder="Enter driver verification code"
+                          />
+                        </div>
+                      )}
                       {key === 'flightNumber' && (
                         <div>
                           <div style={{ fontSize: 16, fontWeight: 600, color: '#000', marginBottom: 4 }}>Flight Tracker</div>

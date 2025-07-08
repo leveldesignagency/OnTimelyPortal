@@ -242,12 +242,12 @@ const convertSupabaseChat = (supabaseChat: SupabaseChat): Chat => ({
 
 // Mock data with enhanced features
 const MOCK_USERS: User[] = [
-  { id: 'user_1', name: 'Leon JENKINGS!', avatar: 'LJ', status: 'online', email: 'leon@example.com', company_id: 'company_1', role: 'admin' },
-  { id: 'user_2', name: 'Luis', avatar: 'L', status: 'away', email: 'luis@example.com', company_id: 'company_1', role: 'member' },
-  { id: 'user_3', name: 'Vanilla Gorilla', avatar: 'VG', status: 'offline', lastSeen: '2 hours ago', company_id: 'company_1', role: 'member' },
-  { id: 'user_4', name: 'Alice Johnson', avatar: 'AJ', status: 'online', email: 'alice@example.com', company_id: 'company_1', role: 'member' },
-  { id: 'user_5', name: 'Bob Smith', avatar: 'BS', status: 'busy', email: 'bob@example.com', company_id: 'company_1', role: 'member' },
-  { id: 'user_6', name: 'Charlie Brown', avatar: 'CB', status: 'online', email: 'charlie@example.com', company_id: 'company_1', role: 'member' },
+  { id: 'user_1', name: 'Leon JENKINGS!', avatar: 'LJ', status: 'online', email: 'leon@example.com', company_id: CURRENT_USER?.company_id || 'mock_company', role: 'admin' },
+  { id: 'user_2', name: 'Luis', avatar: 'L', status: 'away', email: 'luis@example.com', company_id: CURRENT_USER?.company_id || 'mock_company', role: 'member' },
+  { id: 'user_3', name: 'Vanilla Gorilla', avatar: 'VG', status: 'offline', lastSeen: '2 hours ago', company_id: CURRENT_USER?.company_id || 'mock_company', role: 'member' },
+  { id: 'user_4', name: 'Alice Johnson', avatar: 'AJ', status: 'online', email: 'alice@example.com', company_id: CURRENT_USER?.company_id || 'mock_company', role: 'member' },
+  { id: 'user_5', name: 'Bob Smith', avatar: 'BS', status: 'busy', email: 'bob@example.com', company_id: CURRENT_USER?.company_id || 'mock_company', role: 'member' },
+  { id: 'user_6', name: 'Charlie Brown', avatar: 'CB', status: 'online', email: 'charlie@example.com', company_id: CURRENT_USER?.company_id || 'mock_company', role: 'member' },
 ];
 
 // Enhanced components

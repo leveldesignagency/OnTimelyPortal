@@ -90,14 +90,12 @@ export default function TeamInvitationsPage() {
   useEffect(() => {
     const loadUserAndInvitations = async () => {
       try {
-        const currentUser = getCurrentUser();
+        const currentUser = await getCurrentUser();
         if (!currentUser) {
           navigate('/login');
           return;
         }
-        
         setUser(currentUser);
-        
         // Load pending invitations
         const pendingInvitations = await getUserPendingInvitations(currentUser.email);
         setInvitations(pendingInvitations);
@@ -108,7 +106,6 @@ export default function TeamInvitationsPage() {
         setIsLoading(false);
       }
     };
-
     loadUserAndInvitations();
   }, [navigate]);
 

@@ -1559,19 +1559,24 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
             console.log('🔄 Delete result:', success);
             
             if (success) {
-              console.log('✅ Group deleted successfully');
-              // Remove from local state and navigate away
-              onUpdateChats(prevChats => prevChats.filter(c => c.id !== chat.id));
-              onSetActiveChat('');
+              console.log('✅ Group deleted successfully from backend');
               onAddNotification(`Group "${chat.name}" has been deleted`, 'success');
-    } else {
-              console.error('❌ Failed to delete group - deleteChat returned false');
-              onAddNotification('Failed to delete group. Please try again.', 'error');
+            } else {
+              console.warn('⚠️ Backend deletion failed, but updating UI anyway (group may have been removed from backend)');
+              onAddNotification(`Group "${chat.name}" removed from your chat list`, 'info');
             }
           } catch (error) {
             console.error('💥 Error deleting group:', error);
-            onAddNotification('An error occurred while deleting the group.', 'error');
+            console.warn('⚠️ Backend deletion failed, but updating UI anyway (group may have been removed from backend)');
+            onAddNotification(`Group "${chat.name}" removed from your chat list`, 'info');
           }
+          
+          // Always update UI regardless of backend success/failure
+          // This handles cases where the group or users were deleted from backend
+          console.log('🔄 Updating UI: Removing group from local state');
+          onUpdateChats(prevChats => prevChats.filter(c => c.id !== chat.id));
+          onSetActiveChat('');
+          
           // Close the modal
           onShowConfirmation({
             isOpen: false,
@@ -1635,19 +1640,24 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
             console.log('🔄 Delete result:', success);
             
             if (success) {
-              console.log('✅ Direct chat deleted successfully');
-              // Remove from local state and navigate away
-              onUpdateChats(prevChats => prevChats.filter(c => c.id !== chat.id));
-              onSetActiveChat('');
+              console.log('✅ Direct chat deleted successfully from backend');
               onAddNotification(`Conversation with ${otherParticipantName} has been deleted`, 'success');
             } else {
-              console.error('❌ Failed to delete direct chat - deleteChat returned false');
-              onAddNotification('Failed to delete conversation. Please try again.', 'error');
+              console.warn('⚠️ Backend deletion failed, but updating UI anyway (user may have been removed from backend)');
+              onAddNotification(`Conversation with ${otherParticipantName} removed from your chat list`, 'info');
             }
           } catch (error) {
             console.error('💥 Error deleting direct chat:', error);
-            onAddNotification('An error occurred while deleting the conversation.', 'error');
+            console.warn('⚠️ Backend deletion failed, but updating UI anyway (user may have been removed from backend)');
+            onAddNotification(`Conversation with ${otherParticipantName} removed from your chat list`, 'info');
           }
+          
+          // Always update UI regardless of backend success/failure
+          // This handles cases where the other user was deleted from backend
+          console.log('🔄 Updating UI: Removing chat from local state');
+          onUpdateChats(prevChats => prevChats.filter(c => c.id !== chat.id));
+          onSetActiveChat('');
+          
           // Close the modal
           onShowConfirmation({
             isOpen: false,
@@ -2886,7 +2896,7 @@ export default function TeamChatPage() {
   // Initialize data on component mount
   useEffect(() => {
     const initializeData = async () => {
-      const user = getCurrentUser();
+      const user = await getCurrentUser();
       if (!user) {
         // Redirect to login if no user (this should be handled at app level)
         navigate('/login');
@@ -2915,7 +2925,7 @@ export default function TeamChatPage() {
       setChats(convertedChats);
       
       // Load company users and teams
-      const authUser = getCurrentUser();
+      const authUser = await getCurrentUser();
       if (authUser) {
         console.log('🔍 Loading company users for company:', authUser.company_id);
         try {
@@ -2964,31 +2974,35 @@ export default function TeamChatPage() {
 
     const subscriptions: any[] = [];
 
-    // Subscribe to messages for ALL user chats
-    chats.forEach(chat => {
-      console.log(`🔔 Subscribing to messages for chat: ${chat.name} (${chat.id})`);
-      try {
-        const subscription = subscribeToMessages(chat.id, handleNewMessage);
-        if (subscription) {
-          subscriptions.push(subscription);
+    const setupSubscriptions = async () => {
+      // Subscribe to messages for ALL user chats
+      chats.forEach(chat => {
+        console.log(`🔔 Subscribing to messages for chat: ${chat.name} (${chat.id})`);
+        try {
+          const subscription = subscribeToMessages(chat.id, handleNewMessage);
+          if (subscription) {
+            subscriptions.push(subscription);
+          }
+        } catch (error) {
+          console.error(`Failed to subscribe to chat ${chat.id}:`, error);
         }
-      } catch (error) {
-        console.error(`Failed to subscribe to chat ${chat.id}:`, error);
-      }
-    });
+      });
 
-    // Subscribe to user status changes
-    const currentAuthUser = getCurrentUser();
-    if (currentAuthUser) {
-      try {
-        const statusSubscription = subscribeToUserStatus(currentAuthUser.company_id, handleUserStatusChange);
-        if (statusSubscription) {
-          subscriptions.push(statusSubscription);
+      // Subscribe to user status changes
+      const currentAuthUser = await getCurrentUser();
+      if (currentAuthUser) {
+        try {
+          const statusSubscription = subscribeToUserStatus(currentAuthUser.company_id, handleUserStatusChange);
+          if (statusSubscription) {
+            subscriptions.push(statusSubscription);
+          }
+        } catch (error) {
+          console.error('Failed to subscribe to user status:', error);
         }
-      } catch (error) {
-        console.error('Failed to subscribe to user status:', error);
       }
-    }
+    };
+
+    setupSubscriptions();
 
     // Cleanup function
     return () => {
@@ -3258,16 +3272,18 @@ export default function TeamChatPage() {
       console.error('No current user found')
       return
     }
-
-    const authUser = getCurrentUser()
+    const authUser = await getCurrentUser();
     if (!authUser) {
       console.error('No authenticated user found')
       return
     }
-
+    if (!user?.id) {
+      console.error('Recipient user ID is missing!')
+      return
+    }
+    console.log('Creating direct chat:', { user1Id: CURRENT_USER.id, user2Id: user.id, companyId: authUser.company_id });
     try {
       const newChat = await createDirectChat(CURRENT_USER.id, user.id, authUser.company_id)
-      
       if (newChat) {
         const convertedChat = convertSupabaseChat(newChat)
         setChats(prev => {
@@ -3295,7 +3311,7 @@ export default function TeamChatPage() {
       return;
     }
 
-    const authUser = getCurrentUser();
+    const authUser = await getCurrentUser();
     if (!authUser) {
       console.error('❌ No authenticated user found');
       addNotification('Authentication error: Please log in again', 'error');
@@ -3390,7 +3406,7 @@ export default function TeamChatPage() {
 
     try {
       console.log('🔍 Getting authenticated user...');
-      const authUser = getCurrentUser();
+      const authUser = await getCurrentUser();
       console.log('👤 Auth user:', authUser);
       
       if (!authUser) {

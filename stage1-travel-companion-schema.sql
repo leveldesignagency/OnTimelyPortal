@@ -875,3 +875,4 @@ COMMENT ON FUNCTION create_default_checkpoints(UUID) IS 'Creates standard checkp
 COMMENT ON FUNCTION calculate_journey_quality_score(UUID) IS 'Calculates a quality score (0-100) based on journey performance metrics';
 COMMENT ON FUNCTION create_sample_travel_profile(UUID, UUID, VARCHAR, DATE) IS 'Creates a sample travel profile with default checkpoints for testing'; 
  
+ 

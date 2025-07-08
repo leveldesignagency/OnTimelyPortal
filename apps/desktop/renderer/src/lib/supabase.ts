@@ -6,6 +6,11 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIU
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
+// Expose supabase to window for debugging
+if (typeof window !== 'undefined') {
+  (window as any).supabase = supabase;
+}
+
 // Types for your database tables
 export type Event = {
   id: string
@@ -19,6 +24,7 @@ export type Event = {
   created_by?: string
   created_at?: string
   updated_at?: string
+  time_zone?: string
 }
 
 export type Guest = {
@@ -585,4 +591,40 @@ export const getEventAssignments = async (eventId: string) => {
     });
   }
   return assignments;
-}; 
+};
+
+// Validate image file before upload
+export function validateImageFile(file: File): string | null {
+  // Check file size (2MB = 2 * 1024 * 1024 bytes)
+  const maxSize = 2 * 1024 * 1024;
+  if (file.size > maxSize) {
+    return 'File size must be less than 2MB';
+  }
+  
+  // Check file type
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+  if (!allowedTypes.includes(file.type)) {
+    return 'Only JPEG, PNG, and WebP images are allowed';
+  }
+  
+  return null; // File is valid
+}
+
+// Upload an image to Supabase Storage and return the public URL
+export async function uploadImageToStorage(file: File, pathPrefix: string): Promise<string> {
+  // Validate file before upload
+  const validationError = validateImageFile(file);
+  if (validationError) {
+    throw new Error(validationError);
+  }
+  
+  const fileExt = file.name.split('.').pop();
+  const filePath = `${pathPrefix}/${Date.now()}.${fileExt}`;
+  const { data, error } = await supabase.storage
+    .from('event-images')
+    .upload(filePath, file, { upsert: true });
+  if (error) throw error;
+  // For public buckets:
+  const { publicUrl } = supabase.storage.from('event-images').getPublicUrl(filePath).data;
+  return publicUrl;
+} 

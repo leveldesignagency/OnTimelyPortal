@@ -46,6 +46,10 @@ export const login = async (email: string, password: string): Promise<{ user: Us
     localStorage.setItem('currentUser', JSON.stringify(userProfile))
 
     console.log(`✅ User logged in successfully to company: ${userProfile.company_name}`)
+
+    // Log the Supabase session after login
+    supabase.auth.getSession().then(console.log)
+
     return { user: userProfile, error: null }
 
   } catch (error) {
@@ -56,7 +60,7 @@ export const login = async (email: string, password: string): Promise<{ user: Us
 
 export const logout = async (): Promise<void> => {
   try {
-    const currentUser = getCurrentUser()
+    const currentUser = await getCurrentUser()
     if (currentUser) {
       // Update status to offline before logout
       await updateUserStatus(currentUser.id, 'offline')
@@ -73,16 +77,26 @@ export const logout = async (): Promise<void> => {
   }
 }
 
-export const getCurrentUser = (): User | null => {
+// New async getCurrentUser implementation
+export const getCurrentUser = async (): Promise<User | null> => {
   try {
-    // This will be replaced by a proper auth state listener
-    const userStr = localStorage.getItem('currentUser')
-    return userStr ? JSON.parse(userStr) : null
+    const { data: { user: authUser } } = await supabase.auth.getUser();
+    if (!authUser) return null;
+    const { data: userProfile, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', authUser.id)
+      .single();
+    if (error || !userProfile) {
+      console.error('Failed to fetch user profile:', error);
+      return null;
+    }
+    return userProfile;
   } catch (error) {
-    console.error('Failed to get current user:', error)
-    return null
+    console.error('Failed to get current user:', error);
+    return null;
   }
-}
+};
 
 // New function to get current Supabase user
 export const getCurrentSupabaseUser = async (): Promise<User | null> => {
@@ -160,7 +174,7 @@ export const getCompanyUsers = async (companyId: string): Promise<User[]> => {
     console.log(`🔍 Loading company users for company: ${companyId}`)
     
     // Validate current user has access to this company
-    const currentUser = getCurrentUser()
+    const currentUser = await getCurrentUser()
     if (!currentUser) {
       throw new Error('No authenticated user')
     }
@@ -193,32 +207,30 @@ export const getCompanyUsers = async (companyId: string): Promise<User[]> => {
 }
 
 // New function to validate company access
-export const validateCompanyAccess = (targetCompanyId: string): boolean => {
-  const currentUser = getCurrentUser()
+export const validateCompanyAccess = async (targetCompanyId: string): Promise<boolean> => {
+  const currentUser = await getCurrentUser();
   if (!currentUser) {
-    console.error('❌ No authenticated user for company access validation')
-    return false
+    console.error('❌ No authenticated user for company access validation');
+    return false;
   }
-
-  const hasAccess = currentUser.company_id === targetCompanyId
+  const hasAccess = currentUser.company_id === targetCompanyId;
   if (!hasAccess) {
-    console.error(`❌ Access denied: User company ${currentUser.company_id} cannot access ${targetCompanyId}`)
+    console.error(`❌ Access denied: User company ${currentUser.company_id} cannot access ${targetCompanyId}`);
   }
-
-  return hasAccess
-}
+  return hasAccess;
+};
 
 // New function to get current user's company ID
-export const getCurrentUserCompanyId = (): string | null => {
-  const currentUser = getCurrentUser()
-  return currentUser?.company_id || null
-}
+export const getCurrentUserCompanyId = async (): Promise<string | null> => {
+  const currentUser = await getCurrentUser();
+  return currentUser?.company_id || null;
+};
 
 // New function to search users within company only
 export const searchCompanyUsers = async (companyId: string, searchQuery: string): Promise<User[]> => {
   try {
     // Validate company access
-    if (!validateCompanyAccess(companyId)) {
+    if (!await validateCompanyAccess(companyId)) {
       return []
     }
 
@@ -284,7 +296,7 @@ export const createNewCompany = async (
 // Enhanced function to validate team member access
 export const validateTeamMemberAccess = async (teamId: string, userId: string): Promise<boolean> => {
   try {
-    const currentUser = getCurrentUser()
+    const currentUser = await getCurrentUser()
     if (!currentUser) return false
 
     // Check if the team belongs to the current user's company
@@ -337,14 +349,14 @@ export const getCompanyEvents = async (companyId: string): Promise<Event[]> => {
   try {
     console.log(`📅 Loading events for company: ${companyId}`)
     
-    const currentUser = getCurrentUser()
+    const currentUser = await getCurrentUser()
     if (!currentUser) {
       console.error('❌ No authenticated user found')
       return []
     }
 
     // Validate company access
-    if (!validateCompanyAccess(companyId)) {
+    if (!await validateCompanyAccess(companyId)) {
       console.error('❌ Access denied: User does not belong to specified company')
       return []
     }

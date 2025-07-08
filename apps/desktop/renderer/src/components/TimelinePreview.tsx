@@ -664,13 +664,17 @@ const TimelinePreview = forwardRef(function TimelinePreview({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedEventIndex]);
 
-  // Calculate the viewport window (centered on animatedViewportCenter if set, else selected event)
+  // Calculate the viewport window (centered on current time if today and no event is selected)
   const getViewportWindow = () => {
-    if (visibleEvents.length === 0) {
-      // fallback to current time if no events
+    const today = new Date();
+    const viewingDate = selectedDate || today;
+    const isToday = today.toDateString() === viewingDate.toDateString();
+    const windowSizePercent = (4 * 60 * 60 * 1000) / timelineBounds.totalDuration * 100;
+
+    // If today and no event is actively selected, center on current time
+    if (isToday && (selectedEventIndex === null || selectedEventIndex === undefined)) {
       const now = new Date();
       const currentTimePosition = getTimelinePosition(now.getTime());
-      const windowSizePercent = (4 * 60 * 60 * 1000) / timelineBounds.totalDuration * 100;
       let windowStart = currentTimePosition - (windowSizePercent / 2);
       let windowEnd = currentTimePosition + (windowSizePercent / 2);
       if (windowStart < 0) {
@@ -683,10 +687,9 @@ const TimelinePreview = forwardRef(function TimelinePreview({
       }
       return { start: Math.max(0, windowStart), end: Math.min(100, windowEnd) };
     }
-    // Center on animatedViewportCenter if set, else selected event
+    // Otherwise, center on selected event (or first event)
     const eventIndex = selectedEventIndex ?? 0;
     const eventPosition = animatedViewportCenter !== null ? animatedViewportCenter : getEventTimelinePosition(eventIndex);
-    const windowSizePercent = (4 * 60 * 60 * 1000) / timelineBounds.totalDuration * 100;
     let windowStart = eventPosition - (windowSizePercent / 2);
     let windowEnd = eventPosition + (windowSizePercent / 2);
     if (windowStart < 0) {

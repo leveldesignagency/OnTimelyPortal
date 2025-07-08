@@ -1,4 +1,4 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import CreateEventPage from './CreateEventPage';
 import EventDashboardPage from './EventDashboardPage';
@@ -17,11 +17,12 @@ import RealtimeTestPage from './pages/realtime-test';
 import LoginPage from './pages/LoginPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import { ThemeProvider, ThemeContext } from './ThemeContext';
-import { getCurrentUser } from './lib/auth';
+import { getCurrentUser, getCompanyEvents } from './lib/auth';
 import { getEvents, createEvent, Event } from './lib/supabase';
 import LinkItinerariesPage from './pages/LinkItinerariesPage';
 import AssignOverviewPage from './pages/AssignOverviewPage';
 import EventPortalManagementPage from './pages/EventPortalManagementPage';
+import EventHomepageBuilderPage from './pages/EventHomepageBuilderPage';
 
 // Update EventType to match Supabase Event type
 export type EventType = Event;
@@ -29,9 +30,9 @@ export type EventType = Event;
 const AppContent = () => {
   const { theme } = useContext(ThemeContext);
   const isDark = theme === 'dark';
-  const [events, setEvents] = React.useState<EventType[]>([]);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
+  const [events, setEvents] = useState<EventType[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const location = useLocation();
 
   const [isSidebarOpen, setSidebarOpen] = useState(true);
@@ -153,45 +154,46 @@ const AppContent = () => {
     };
   }, [isDark]);
 
-  // Load events from Supabase on mount
-  React.useEffect(() => {
-    const loadEvents = async () => {
+  useEffect(() => {
+    // Don't load events on login page
+    if (isLoginPage) {
+      setLoading(false);
+      return;
+    }
+
+    (async () => {
+      setLoading(true);
+      setError(null);
       try {
-        const user = getCurrentUser();
-        if (user && !isLoginPage) {
-          const supabaseEvents = await getEvents(user.company_id);
-          setEvents(supabaseEvents || []);
+        const user = await getCurrentUser();
+        if (!user) {
+          // Don't show error on login page, let ProtectedRoute handle it
+          setLoading(false);
+          return;
         }
-        setLoading(false);
-      } catch (error) {
-        console.error('Failed to load events:', error);
+        const events = await getCompanyEvents(user.company_id);
+        setEvents(events);
+      } catch (err) {
+        console.error('Failed to load events:', err);
         setError('Failed to load events');
+      } finally {
         setLoading(false);
       }
-    };
-
-    loadEvents();
-
-    // On teams pages, the sidebar should be closed by default.
-    if (isTeamsPage) {
-      setSidebarOpen(false);
-    }
-  }, [isTeamsPage, isLoginPage]);
+    })();
+  }, [isLoginPage]);
 
   // Event creation handler
   const handleCreateEvent = async (eventData: Omit<EventType, 'id' | 'created_at' | 'updated_at'>) => {
     try {
-      const user = getCurrentUser();
+      const user = await getCurrentUser();
       if (!user) {
         throw new Error('User not authenticated');
       }
-
       const newEvent = await createEvent({
         ...eventData,
         company_id: user.company_id,
         created_by: user.id
       });
-
       setEvents(prev => [newEvent, ...prev]);
       return newEvent;
     } catch (error) {
@@ -200,10 +202,10 @@ const AppContent = () => {
     }
   };
 
-  if (loading) {
+  if (loading && !isLoginPage) {
     return <div style={{ padding: 64, fontFamily: 'Roboto, Arial, system-ui, sans-serif', color: isDark ? '#fff' : '#222' }}>Loading events...</div>;
   }
-  if (error) {
+  if (error && !isLoginPage) {
     return <div style={{ padding: 64, color: isDark ? '#ff6b6b' : 'red', fontFamily: 'Roboto, Arial, system-ui, sans-serif' }}>{error}</div>;
   }
 
@@ -255,6 +257,7 @@ const AppContent = () => {
           <Route path="/link-itineraries/:id" element={<LinkItinerariesPage />} />
           <Route path="/link-itineraries/:id/assign-overview" element={<AssignOverviewPage />} />
           <Route path="/event-portal-management" element={<ProtectedRoute><EventPortalManagementPage /></ProtectedRoute>} />
+          <Route path="/event-homepage-builder" element={<ProtectedRoute><EventHomepageBuilderPage /></ProtectedRoute>} />
         </Routes>
       </main>
     </div>

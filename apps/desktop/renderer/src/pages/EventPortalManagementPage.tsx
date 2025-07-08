@@ -727,6 +727,87 @@ export default function EventPortalManagementPage() {
           </div>
         </div>
 
+        {/* Event Information & Placeholder - Two Columns */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 32, marginBottom: 48, alignItems: 'stretch' }}>
+          {/* Event Information Section */}
+          <div style={{ ...getSectionStyles(isDark), marginBottom: 0, display: 'flex', flexDirection: 'column', height: '100%' }}>
+            <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 24, borderBottom: `2px solid ${isDark ? '#333' : '#e5e7eb'}`, paddingBottom: 12 }}>
+              Event Information
+            </h2>
+            <p style={{ fontSize: 16, color: isDark ? '#ccc' : '#666', marginBottom: 0, marginRight: 0 }}>
+              Create a custom homepage for your guests with all the need to knows about the event.
+            </p>
+            <div style={{ flex: 1 }} />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 24 }}>
+              <button
+                style={{
+                  borderRadius: 8,
+                  padding: '10px 0',
+                  width: 140,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 4,
+                  background: isDark 
+                    ? 'rgba(255, 255, 255, 0.1)' 
+                    : 'rgba(255, 255, 255, 0.2)',
+                  backdropFilter: 'blur(8px)',
+                  border: isDark 
+                    ? '1px solid rgba(255, 255, 255, 0.2)' 
+                    : '1px solid rgba(0, 0, 0, 0.1)',
+                  color: isDark ? '#ffffff' : '#000000',
+                }}
+                onClick={() => navigate('/event-homepage-builder', { state: { eventId } })}
+              >
+                Create
+              </button>
+            </div>
+          </div>
+
+          {/* Placeholder Section */}
+          <div style={{ ...getSectionStyles(isDark), display: 'flex', flexDirection: 'column', height: '100%' }}>
+            <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 24, borderBottom: `2px solid ${isDark ? '#333' : '#e5e7eb'}`, paddingBottom: 12 }}>
+              Coming Soon
+            </h2>
+            <p style={{ fontSize: 16, color: isDark ? '#ccc' : '#666', marginBottom: 0, marginRight: 0 }}>
+              More powerful features are coming to enhance your event management experience.
+            </p>
+            <div style={{ flex: 1 }} />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 24 }}>
+              <button
+                style={{
+                  borderRadius: 8,
+                  padding: '10px 0',
+                  width: 140,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: 'not-allowed',
+                  transition: 'all 0.2s ease',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 4,
+                  background: isDark 
+                    ? 'rgba(255, 255, 255, 0.05)' 
+                    : 'rgba(255, 255, 255, 0.1)',
+                  backdropFilter: 'blur(8px)',
+                  border: isDark 
+                    ? '1px solid rgba(255, 255, 255, 0.1)' 
+                    : '1px solid rgba(0, 0, 0, 0.05)',
+                  color: isDark ? 'rgba(255, 255, 255, 0.5)' : 'rgba(0, 0, 0, 0.5)',
+                }}
+                disabled
+              >
+                Disabled
+              </button>
+            </div>
+          </div>
+        </div>
+
         {/* Guest Access Management */}
         <div style={getSectionStyles(isDark)}>
           <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 24, borderBottom: `2px solid ${isDark ? '#333' : '#e5e7eb'}`, paddingBottom: 12 }}>
@@ -1718,7 +1799,8 @@ export default function EventPortalManagementPage() {
 
 // Add this component above the main export
 function DraggableTimelineController({ isDark, DateSlider, handleTimelinePrevious, handleTimelineNext }: { isDark: boolean, DateSlider: React.FC, handleTimelinePrevious: () => void, handleTimelineNext: () => void }) {
-  const [position, setPosition] = React.useState({ x: 0, y: 0 });
+  // Start position on the left side (negative x to move left from center)
+  const [position, setPosition] = React.useState({ x: -400, y: 0 });
   const dragging = React.useRef(false);
   const dragStart = React.useRef({ mouseX: 0, mouseY: 0, startX: 0, startY: 0 });
   const containerRef = React.useRef<HTMLDivElement>(null);

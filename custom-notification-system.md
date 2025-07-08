@@ -151,3 +151,4 @@ window.confirm = (message) => showCustomConfirm(message);
 
 This would make your app feel much more professional and desktop-native! 
  
+ 

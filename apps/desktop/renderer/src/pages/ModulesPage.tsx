@@ -7,36 +7,24 @@ import { getEventModules, saveEventModules } from '../lib/supabase';
 
 export const ModulesPage: React.FC = () => {
   const [activeModules, setActiveModules] = useState<ModuleType[]>([]);
+  const [currentUser, setCurrentUser] = useState(null);
   
-  // Get current user for company context
-  const currentUser = getCurrentUser();
-
   // Load active modules from Supabase on mount
   useEffect(() => {
-    const loadModules = async () => {
-      if (!currentUser) return;
-      
+    (async () => {
+      const user = await getCurrentUser();
+      setCurrentUser(user);
+      if (!user) return;
       try {
-        const modules = await getEventModules(currentUser.company_id);
+        const modules = await getEventModules(user.company_id);
         if (modules && modules.modules) {
           setActiveModules(modules.modules);
         }
       } catch (error) {
         console.error('Failed to load modules from Supabase:', error);
-        // Fallback to localStorage
-        try {
-          const savedModules = localStorage.getItem('activeModules');
-          if (savedModules) {
-            setActiveModules(JSON.parse(savedModules));
-          }
-        } catch (fallbackError) {
-          console.error('Fallback to localStorage also failed:', fallbackError);
-        }
       }
-    };
-
-    loadModules();
-  }, [currentUser]);
+    })();
+  }, []);
 
   // Save active modules to Supabase whenever they change
   useEffect(() => {
@@ -48,13 +36,6 @@ export const ModulesPage: React.FC = () => {
         console.log('Modules saved to Supabase');
       } catch (error) {
         console.error('Failed to save modules to Supabase:', error);
-        // Fallback to localStorage
-        try {
-          localStorage.setItem('activeModules', JSON.stringify(activeModules));
-          console.log('Modules saved to localStorage as fallback');
-        } catch (fallbackError) {
-          console.error('Fallback save to localStorage also failed:', fallbackError);
-        }
       }
     };
 

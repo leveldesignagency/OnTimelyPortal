@@ -523,7 +523,7 @@ export const createDirectChat = async (user1Id: string, user2Id: string, company
     console.log('🔧 Creating direct chat:', { user1Id, user2Id, companyId });
     
     // Get current user for debugging
-    const currentUser = getCurrentUser();
+    const currentUser = await getCurrentUser();
     console.log('👤 Current user:', currentUser);
     
     // Validate company access
@@ -795,7 +795,7 @@ export const getUserChats = async (userId: string): Promise<Chat[]> => {
   try {
     console.log('🔍 getUserChats called for user:', userId);
     
-    const currentUser = getCurrentUser()
+    const currentUser = await getCurrentUser()
     if (!currentUser || currentUser.id !== userId) {
       console.error('❌ Access denied: Can only fetch chats for current user');
       throw new Error('Access denied: Can only fetch chats for current user')
@@ -878,7 +878,7 @@ export const getChatMessages = async (chatId: string, limit: number = 50): Promi
     console.log('🔍 getChatMessages called for chat:', chatId);
     
     // Validate user has access to this chat
-    const currentUser = getCurrentUser()
+    const currentUser = await getCurrentUser()
     if (!currentUser) {
       console.error('❌ No authenticated user found');
       throw new Error('No authenticated user')
@@ -953,7 +953,7 @@ export const sendMessage = async (
   replyToId?: string
 ): Promise<Message | null> => {
   try {
-    const currentUser = getCurrentUser()
+    const currentUser = await getCurrentUser()
     if (!currentUser || currentUser.id !== senderId) {
       throw new Error('Access denied: Can only send messages as current user')
     }

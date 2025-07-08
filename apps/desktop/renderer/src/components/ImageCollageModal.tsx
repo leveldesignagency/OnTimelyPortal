@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { validateImageFile } from '../lib/supabase';
 
 const getGlassStyles = (isDark: boolean) => ({
   background: isDark 
@@ -141,8 +142,22 @@ export default function ImageCollageModal({ open, onClose, onSave, isDark }) {
   // Handle file upload
   const handleFiles = (files: FileList | File[]) => {
     const arr = Array.from(files).slice(0, 6 - images.length);
-    setImages(prev => [...prev, ...arr]);
+    
+    // Validate each file before adding
+    const validFiles: File[] = [];
     arr.forEach(file => {
+      const validationError = validateImageFile(file);
+      if (validationError) {
+        alert(validationError);
+        return;
+      }
+      validFiles.push(file);
+    });
+    
+    if (validFiles.length === 0) return;
+    
+    setImages(prev => [...prev, ...validFiles]);
+    validFiles.forEach(file => {
       const reader = new FileReader();
       reader.onload = (e) => {
         setImagePreviews(prev => [...prev, e.target?.result as string]);
@@ -196,7 +211,6 @@ export default function ImageCollageModal({ open, onClose, onSave, isDark }) {
       >
         {images.length === 0 ? (
           <>
-            <div style={{ fontSize: 32, marginBottom: 8 }}>🖼️</div>
             <div>Click or drag images here to upload (max 6)</div>
           </>
         ) : (
@@ -224,7 +238,7 @@ export default function ImageCollageModal({ open, onClose, onSave, isDark }) {
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*"
+          accept="image/jpeg,image/png,image/webp"
           multiple
           style={{ display: 'none' }}
           onChange={e => e.target.files && handleFiles(e.target.files)}
@@ -238,47 +252,123 @@ export default function ImageCollageModal({ open, onClose, onSave, isDark }) {
   );
 
   // Step 2: Choose layout
-  const renderStep2 = () => (
-    <div style={{ width: 700, maxWidth: '98vw' }}>
-      <h2 style={{ fontWeight: 700, fontSize: 22, marginBottom: 18 }}>Choose Collage Layout</h2>
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(2, 1fr)',
-        gap: 32,
-        justifyItems: 'center',
-        marginBottom: 32,
-      }}>
-        {LAYOUTS.map(layout => (
-          <div
-            key={layout.id}
-            onClick={() => setSelectedLayout(layout.id)}
-            style={{
-              cursor: 'pointer',
-              padding: 8,
-              borderRadius: 20,
-              border: selectedLayout === layout.id ? '2.5px solid #3b82f6' : '2.5px solid transparent',
-              background: selectedLayout === layout.id ? 'rgba(59,130,246,0.08)' : 'rgba(0,0,0,0.03)',
-              boxShadow: selectedLayout === layout.id ? '0 2px 8px #3b82f633' : 'none',
-              transition: 'all 0.2s',
-              width: 180,
-              height: 200,
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <CollagePreview images={[]} layout={layout} size={160} rounded={true} previewOnly={true} gap={8} modalBg={isDark ? '#18191b' : '#f8f9fa'} />
-            <div style={{ marginTop: 14, fontWeight: 600, fontSize: 16, color: '#fff', textAlign: 'center' }}>{layout.name}</div>
+  const renderStep2 = () => {
+    // Suggest layouts based on image count
+    const getSuggestedLayouts = () => {
+      const count = images.length;
+      if (count === 1) return ['grid', 'hero'];
+      if (count === 2) return ['grid', 'side-by-side'];
+      if (count === 3) return ['grid', 'hero-side'];
+      if (count === 4) return ['grid', 'quad'];
+      if (count === 5) return ['grid', 'hero-quad'];
+      if (count === 6) return ['grid', 'hex'];
+      return ['grid']; // Default fallback
+    };
+    
+    const suggestedLayouts = getSuggestedLayouts();
+    
+    return (
+      <div style={{ width: 700, maxWidth: '98vw' }}>
+        <h2 style={{ fontWeight: 700, fontSize: 22, marginBottom: 18 }}>Choose Collage Layout</h2>
+        
+        {/* Layout recommendations */}
+        <div style={{
+          background: isDark ? 'rgba(59,130,246,0.08)' : 'rgba(59,130,246,0.05)',
+          border: '1px solid rgba(59,130,246,0.2)',
+          borderRadius: 12,
+          padding: 16,
+          marginBottom: 24,
+        }}>
+          <div style={{ fontWeight: 600, fontSize: 16, color: isDark ? '#3b82f6' : '#2563eb', marginBottom: 8 }}>
+            Recommended layouts for {images.length} image{images.length !== 1 ? 's' : ''}:
           </div>
-        ))}
+          <div style={{ fontSize: 14, color: isDark ? '#a1a1aa' : '#6b7280' }}>
+            {suggestedLayouts.map(layoutId => {
+              const layout = LAYOUTS.find(l => l.id === layoutId);
+              return layout ? layout.name : layoutId;
+            }).join(', ')}
+          </div>
+        </div>
+        
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(2, 1fr)',
+          gap: 32,
+          justifyItems: 'center',
+          marginBottom: 32,
+        }}>
+          {LAYOUTS.map(layout => {
+            const isSuggested = suggestedLayouts.includes(layout.id);
+            return (
+              <div
+                key={layout.id}
+                onClick={() => setSelectedLayout(layout.id)}
+                style={{
+                  cursor: 'pointer',
+                  padding: 8,
+                  borderRadius: 20,
+                  border: selectedLayout === layout.id 
+                    ? '2.5px solid #3b82f6' 
+                    : isSuggested 
+                      ? '2px solid rgba(59,130,246,0.3)' 
+                      : '2.5px solid transparent',
+                  background: selectedLayout === layout.id 
+                    ? 'rgba(59,130,246,0.08)' 
+                    : isSuggested 
+                      ? 'rgba(59,130,246,0.03)' 
+                      : 'rgba(0,0,0,0.03)',
+                  boxShadow: selectedLayout === layout.id 
+                    ? '0 2px 8px #3b82f633' 
+                    : isSuggested 
+                      ? '0 1px 4px rgba(59,130,246,0.1)' 
+                      : 'none',
+                  transition: 'all 0.2s',
+                  width: 180,
+                  height: 200,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  position: 'relative',
+                }}
+              >
+                {isSuggested && (
+                  <div style={{
+                    position: 'absolute',
+                    top: -8,
+                    right: -8,
+                    background: '#3b82f6',
+                    color: '#fff',
+                    fontSize: 10,
+                    fontWeight: 600,
+                    padding: '2px 6px',
+                    borderRadius: 8,
+                    zIndex: 1,
+                  }}>
+                    RECOMMENDED
+                  </div>
+                )}
+                <CollagePreview images={[]} layout={layout} size={160} rounded={true} previewOnly={true} gap={8} modalBg={isDark ? '#18191b' : '#f8f9fa'} />
+                <div style={{ 
+                  marginTop: 14, 
+                  fontWeight: 600, 
+                  fontSize: 16, 
+                  color: isDark ? '#fff' : '#222', 
+                  textAlign: 'center' 
+                }}>
+                  {layout.name}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+          <button onClick={() => setStep(1)} style={{ padding: '10px 24px', borderRadius: 8, border: '1px solid #bbb', background: isDark ? '#222' : '#eee', color: isDark ? '#fff' : '#222', fontWeight: 600, fontSize: 15, cursor: 'pointer' }}>Back</button>
+          <button onClick={() => setStep(3)} style={{ padding: '10px 24px', borderRadius: 8, border: '1px solid #bbb', background: isDark ? '#444' : '#f3f4f6', color: isDark ? '#fff' : '#222', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>Next</button>
+        </div>
       </div>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
-        <button onClick={() => setStep(1)} style={{ padding: '10px 24px', borderRadius: 8, border: '1px solid #bbb', background: isDark ? '#222' : '#eee', color: isDark ? '#fff' : '#222', fontWeight: 600, fontSize: 15, cursor: 'pointer' }}>Back</button>
-        <button onClick={() => setStep(3)} style={{ padding: '10px 24px', borderRadius: 8, border: '1px solid #bbb', background: isDark ? '#444' : '#f3f4f6', color: isDark ? '#fff' : '#222', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>Next</button>
-      </div>
-    </div>
-  );
+    );
+  };
 
   // Step 3: Preview
   const renderStep3 = () => (
