@@ -56,7 +56,7 @@ export default function EventHomepageBuilderPage() {
     eventImage: null,
     welcomeTitle: 'WELCOME TO THE EVENT',
     welcomeDescription: 'THIS IS A DESCRIPTION',
-    modules: []
+    modules: [],
   });
   const [isEditing, setIsEditing] = useState<{ title: boolean; description: boolean }>({
     title: false,
@@ -95,6 +95,9 @@ export default function EventHomepageBuilderPage() {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [companyId, setCompanyId] = useState<string | null>(null);
 
+  const gapPx = 7 * 3.78; // 1mm ≈ 3.78px
+  const bottomGapPx = 15 * 3.78; // 1mm ≈ 3.78px
+
   // Load event data
   useEffect(() => {
     (async () => {
@@ -112,7 +115,6 @@ export default function EventHomepageBuilderPage() {
       try {
         const eventData = await getEvent(eventId);
         setEvent(eventData);
-        
         // Load existing homepage data if exists
         const { data: existingData } = await supabase
           .from('event_homepage_data')
@@ -120,13 +122,13 @@ export default function EventHomepageBuilderPage() {
           .eq('event_id', eventId)
           .eq('company_id', companyId)
           .single();
-          
         if (existingData) {
+          console.log('Loaded homepageData from DB:', existingData);
           setHomepageData({
             eventImage: existingData.event_image || null,
             welcomeTitle: existingData.welcome_title || 'WELCOME TO THE EVENT',
             welcomeDescription: existingData.welcome_description || 'THIS IS A DESCRIPTION',
-            modules: existingData.modules || []
+            modules: existingData.modules || [],
           });
           setImageOffsetY(existingData.event_image_offset_y || 0);
         }
@@ -155,7 +157,6 @@ export default function EventHomepageBuilderPage() {
       return;
     }
     setIsSaving(true);
-    
     try {
       // Upload cover image
       let coverUrl: string | null = null;
@@ -164,15 +165,12 @@ export default function EventHomepageBuilderPage() {
         setHomepageData(prev => ({ ...prev, eventImage: coverUrl }));
         setCoverImagePreview(URL.createObjectURL(coverImageFile));
       }
-
       // Upload module images and update module content
       const updatedModules = [...homepageData.modules];
       let moduleFileIndex = 0;
-      
       for (let i = 0; i < updatedModules.length; i++) {
         const module = updatedModules[i];
         if (module.type === 'image' && module.content.url && module.content.url.startsWith('blob:')) {
-          // This module has a preview URL that needs to be uploaded
           if (moduleImageFiles[moduleFileIndex]) {
             const uploadedUrl = await uploadImageToStorage(moduleImageFiles[moduleFileIndex], `module-image/${Date.now()}-${i}`);
             updatedModules[i] = {
@@ -183,7 +181,6 @@ export default function EventHomepageBuilderPage() {
           }
         }
       }
-
       // Upload collage images and update collage module content
       let collageFileIndex = 0;
       for (let i = 0; i < updatedModules.length; i++) {
@@ -203,7 +200,8 @@ export default function EventHomepageBuilderPage() {
           };
         }
       }
-
+      // Debug log for event_image being saved
+      console.log('Saving homepage with event_image:', coverUrl || homepageData.eventImage);
       const { error } = await supabase
         .from('event_homepage_data')
         .upsert({
@@ -215,13 +213,11 @@ export default function EventHomepageBuilderPage() {
           modules: updatedModules,
           event_image_offset_y: imageOffsetY,
           updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'event_id,company_id'
         });
-        
       if (error) throw error;
-      
-      // Update local state with the uploaded URLs
       setHomepageData(prev => ({ ...prev, modules: updatedModules }));
-      // Show custom success toast
       setShowSuccessToast(true);
       setTimeout(() => setShowSuccessToast(false), 3000);
     } catch (error) {
@@ -1090,110 +1086,127 @@ export default function EventHomepageBuilderPage() {
   // Add PreviewModal component inside EventHomepageBuilderPage
   function PreviewModal({ open, onClose, homepageData, isDark }: { open: boolean; onClose: () => void; homepageData: HomepageData; isDark: boolean }) {
     if (!open) return null;
-    // Use coverImagePreview if present, else homepageData.eventImage
-    const coverImageSrc = coverImagePreview || homepageData.eventImage;
+    const coverImageSrc = coverImagePreview || homepageData.eventImage || '';
+    const modalHeight = 844;
+    const coverHeight = Math.round(modalHeight / 3);
+    const moduleGap = 19;
     return (
       <div style={{
         position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 3000,
         background: 'rgba(0,0,0,0.7)',
         backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }} onClick={onClose}>
+      }}>
+        {/* X button at top right of desktop modal overlay */}
+        <button onClick={onClose} style={{ position: 'fixed', top: 32, right: 48, zIndex: 4000, background: 'rgba(0,0,0,0.12)', color: '#fff', border: 'none', borderRadius: 8, width: 44, height: 44, fontSize: 28, cursor: 'pointer', fontWeight: 700, boxShadow: '0 2px 12px #0004' }}>×</button>
         <div style={{
-          width: 390, height: 844, background: isDark ? '#18191b' : '#fff', borderRadius: 32, boxShadow: '0 8px 32px #0008', overflowY: 'auto', position: 'relative',
+          width: 390, height: modalHeight, background: isDark ? '#18191b' : '#fff', borderRadius: 32, boxShadow: '0 8px 32px #0008', position: 'relative',
           display: 'flex', flexDirection: 'column', padding: 0, border: isDark ? '1.5px solid #333' : '1.5px solid #eee',
-        }} onClick={e => e.stopPropagation()}>
-          <button onClick={onClose} style={{ position: 'absolute', top: 18, right: 18, zIndex: 2, background: 'rgba(0,0,0,0.12)', color: '#fff', border: 'none', borderRadius: 8, width: 36, height: 36, fontSize: 22, cursor: 'pointer', fontWeight: 700 }}>×</button>
-          {/* Event image */}
-          {coverImageSrc && (
-            <div style={{
-              width: '100%',
-              height: 180,
-              borderRadius: 18,
-              borderWidth: 1.5,
-              borderColor: '#fff',
-              boxShadow: '0 4px 32px rgba(0,0,0,0.4)',
-              background: 'rgba(255,255,255,0.10)',
-              marginBottom: 40,
-              position: 'relative',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              overflow: 'hidden',
-            }}>
-              <img
-                src={coverImageSrc}
-                alt="Event Cover"
-                style={{
-                  position: 'absolute',
-                  left: 0,
-                  top: imageOffsetY,
-                  width: '100%',
-                  height: 'auto',
-                  minHeight: '100%',
-                  minWidth: '100%',
-                  objectFit: 'cover',
-                  userSelect: 'none',
-                  zIndex: 1,
-                  transition: 'top 0.2s',
-                }}
-                draggable={false}
-              />
+          overflow: 'hidden', // ensure nothing overflows outside the modal
+        }}>
+          {/* Scrollable content including cover photo */}
+          <div style={{ flex: 1, overflowY: 'auto' }}>
+            {/* Event image - at the very top, scrolls with content */}
+            {coverImageSrc && (
+              <div style={{
+                width: '100%',
+                height: coverHeight,
+                overflow: 'hidden',
+                borderTopLeftRadius: 0,
+                borderTopRightRadius: 0,
+                borderBottomLeftRadius: 30,
+                borderBottomRightRadius: 30,
+                borderRadius: '0 0 30px 30px',
+                clipPath: 'inset(0 0 0 0 round 0 0 30px 30px)',
+                WebkitClipPath: 'inset(0 0 0 0 round 0 0 30px 30px)',
+                background: '#f00',
+                boxShadow: 'inset 0 -60px 60px -10px rgba(0,0,0,0.55), inset 0 -12px 24px -2px rgba(0,0,0,0.45)',
+                position: 'relative',
+              }}>
+                <img
+                  src={coverImageSrc}
+                  alt="Event Cover"
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                    objectPosition: 'center',
+                    display: 'block',
+                    background: '#f00',
+                  }}
+                  draggable={false}
+                />
+              </div>
+            )}
+            <div style={{ height: bottomGapPx }} />
+            <div style={{ padding: '0 24px 0 24px', display: 'flex', flexDirection: 'column', gap: 0 }}>
+              {/* Main welcome title, styled as a title */}
+              <div style={{ fontSize: 24, fontWeight: 700, color: isDark ? '#fff' : '#222', lineHeight: 1.2 }}>{homepageData.welcomeTitle}</div>
+              <div style={{ height: moduleGap }} />
+              <div style={{ fontSize: 16, fontWeight: 400, color: isDark ? '#ccc' : '#444', lineHeight: 1.5 }}>{homepageData.welcomeDescription}</div>
+              {/* Render all module types */}
+              {homepageData.modules && homepageData.modules.map((module, idx) => {
+                const isTitle = module.type === 'title';
+                return (
+                  <React.Fragment key={module.id}>
+                    {isTitle && <div style={{ height: gapPx }} />}
+                    <div>
+                      {module.type === 'title' && (
+                        <div style={{ fontSize: 24, fontWeight: 700, color: isDark ? '#fff' : '#222', lineHeight: 1.2 }}>{module.content.text}</div>
+                      )}
+                      {module.type === 'description' && (
+                        <div style={{ fontSize: 16, fontWeight: 400, color: isDark ? '#ccc' : '#444', lineHeight: 1.5 }}>{module.content.text}</div>
+                      )}
+                      {module.type === 'image' && module.content.url && (
+                        <img src={module.content.url} alt="" style={{ width: '100%', borderRadius: 16, objectFit: 'cover', maxHeight: 220, display: 'block', margin: '16px 0' }} />
+                      )}
+                      {module.type === 'collage' && module.content.images && module.content.images.length > 0 && (
+                        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(module.content.images.length, 3)}, 1fr)`, gap: 6, margin: '16px 0' }}>
+                          {module.content.images.map((img: string, i: number) => (
+                            <img key={i} src={img} alt="" style={{ width: '100%', borderRadius: 10, objectFit: 'cover', maxHeight: 90, display: 'block' }} />
+                          ))}
+                        </div>
+                      )}
+                      {module.type === 'video' && module.content.url && (
+                        <div style={{
+                          position: 'relative',
+                          left: '50%',
+                          width: '100vw',
+                          maxWidth: 390,
+                          transform: 'translateX(-50%)',
+                          aspectRatio: '16/9',
+                          borderRadius: 14,
+                          overflow: 'hidden',
+                          background: '#000',
+                          marginBottom: 0,
+                        }}>
+                          <iframe
+                            src={module.content.url.includes('youtube.com') || module.content.url.includes('youtu.be')
+                              ? `https://www.youtube.com/embed/${module.content.url.split('v=')[1]?.split('&')[0] || module.content.url.split('/').pop()}`
+                              : module.content.url.includes('vimeo.com')
+                              ? `https://player.vimeo.com/video/${module.content.url.split('/').pop()}`
+                              : ''}
+                            width="100%" height="100%" frameBorder="0" allow="autoplay; fullscreen; picture-in-picture" allowFullScreen title="Video preview"
+                            style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
+                          />
+                        </div>
+                      )}
+                      {module.type === 'list' && module.content.items && (
+                        <ul style={{ paddingLeft: 0, margin: 0, listStyle: 'none' }}>
+                          {module.content.items.map((item: string, i: number) => (
+                            <li key={i} style={{ display: 'flex', alignItems: 'center', fontSize: 16, color: isDark ? '#fff' : '#222', paddingBottom: 4, marginBottom: 10 }}>
+                              <span style={{ display: 'inline-block', width: 10, height: 10, background: isDark ? '#fff' : '#222', borderRadius: 2, marginRight: 12, flexShrink: 0 }}></span>
+                              <span style={{ whiteSpace: 'pre-line' }}>{item}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                    {isTitle && <div style={{ height: gapPx }} />}
+                  </React.Fragment>
+                );
+              })}
             </div>
-          )}
-          <div style={{ padding: '32px 24px 0 24px', display: 'flex', flexDirection: 'column', gap: 18 }}>
-            <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: 0.5, color: isDark ? '#fff' : '#18191b', marginBottom: 6 }}>{homepageData.welcomeTitle}</div>
-            <div style={{ fontSize: 16, color: isDark ? '#ccc' : '#444', marginBottom: 18 }}>{homepageData.welcomeDescription}</div>
-            {/* Render modules */}
-            {homepageData.modules.map((module, idx) => {
-              let spacing = 24;
-              if (module.type === 'title') spacing = 32;
-              if (module.type === 'image' || module.type === 'collage' || module.type === 'video') spacing = 28;
-              if (module.type === 'list') spacing = 20;
-              return (
-                <div key={module.id} style={{ marginBottom: idx === homepageData.modules.length - 1 ? 0 : spacing }}>
-                  {module.type === 'title' && (
-                    <div style={{ fontSize: 20, fontWeight: 700, color: isDark ? '#fff' : '#222', marginBottom: 6 }}>{module.content.text}</div>
-                  )}
-                  {module.type === 'description' && (
-                    <div style={{ fontSize: 16, color: isDark ? '#ccc' : '#444' }}>{module.content.text}</div>
-                  )}
-                  {module.type === 'image' && module.content.url && (
-                    <img src={module.content.url} alt="" style={{ width: '100%', borderRadius: 16, marginBottom: 4, objectFit: 'cover', maxHeight: 220 }} />
-                  )}
-                  {module.type === 'collage' && module.content.images && module.content.images.length > 0 && (
-                    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(module.content.images.length, 3)}, 1fr)`, gap: 6 }}>
-                      {module.content.images.map((img: string, i: number) => (
-                        <img key={i} src={img} alt="" style={{ width: '100%', borderRadius: 10, objectFit: 'cover', maxHeight: 90 }} />
-                      ))}
-                    </div>
-                  )}
-                  {module.type === 'video' && module.content.url && (
-                    <div style={{ width: '100%', aspectRatio: '16/9', borderRadius: 14, overflow: 'hidden', background: '#000', marginBottom: 4 }}>
-                      <iframe
-                        src={module.content.url.includes('youtube.com') || module.content.url.includes('youtu.be')
-                          ? `https://www.youtube.com/embed/${module.content.url.split('v=')[1]?.split('&')[0] || module.content.url.split('/').pop()}`
-                          : module.content.url.includes('vimeo.com')
-                          ? `https://player.vimeo.com/video/${module.content.url.split('/').pop()}`
-                          : ''}
-                        width="100%" height="100%" frameBorder="0" allow="autoplay; fullscreen; picture-in-picture" allowFullScreen title="Video preview"
-                        style={{ width: '100%', height: '100%', border: 'none' }}
-                      />
-                    </div>
-                  )}
-                  {module.type === 'list' && module.content.items && (
-                    <ul style={{ paddingLeft: 0, margin: 0, listStyle: 'none' }}>
-                      {module.content.items.map((item: string, i: number) => (
-                        <li key={i} style={{ display: 'flex', alignItems: 'center', fontSize: 16, color: isDark ? '#fff' : '#222', marginBottom: 6 }}>
-                          <span style={{ display: 'inline-block', width: 10, height: 10, background: isDark ? '#fff' : '#222', borderRadius: 2, marginRight: 12, flexShrink: 0 }}></span>
-                          <span style={{ whiteSpace: 'pre-line' }}>{item}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              );
-            })}
           </div>
         </div>
       </div>
