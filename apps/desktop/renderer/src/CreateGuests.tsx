@@ -969,10 +969,26 @@ export default function CreateGuests() {
         return;
     }
 
+    // Debug log the current user to see what fields are available
+    console.log('Current user for guest save:', {
+      id: currentUser.id,
+      company_id: currentUser.company_id,
+      email: currentUser.email,
+      fullUser: currentUser
+    });
+
+    // Ensure company_id and created_by are not empty
+    if (!currentUser.company_id) {
+        console.warn('Warning: company_id is missing from current user');
+    }
+    if (!currentUser.id) {
+        console.warn('Warning: user id is missing from current user');
+    }
+
     // Convert guests to Supabase format and save
     const guestsForSupabase = guestsToProcess.map(guest => ({
       event_id: eventId,
-      company_id: currentUser.company_id || '',
+      company_id: currentUser.company_id || null, // Use null instead of empty string to ensure proper handling
       first_name: guest.firstName,
       middle_name: guest.middleName || '',
       last_name: guest.lastName,
@@ -996,7 +1012,7 @@ export default function CreateGuests() {
       module_values: guest.moduleValues || {},
       prefix: guest.prefix || '',
       status: 'pending',
-      created_by: currentUser.id || undefined
+      created_by: currentUser.id || null // Use null instead of undefined to ensure proper handling
     }));
 
     console.log('Saving guests to Supabase:', guestsForSupabase);
@@ -1018,7 +1034,13 @@ export default function CreateGuests() {
       })
       .catch(error => {
         console.error('Error saving guests to Supabase:', error);
-        alert('Failed to save guests. Please try again.');
+        console.error('Error details:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        });
+        alert(`Failed to save guests. Error: ${error.message || 'Unknown error'}`);
       });
   }
 
@@ -1827,122 +1849,121 @@ export default function CreateGuests() {
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          fontSize: 18,
-                          fontWeight: 700,
+                          fontSize: 14,
+                          fontWeight: 500,
                           cursor: 'pointer',
-                          boxShadow: isDark ? '0 2px 8px #0003' : '0 1px 4px #0001',
-                          transition: 'background 0.2s, color 0.2s',
-                          outline: 'none',
+                          transition: 'all 0.2s ease',
+                          zIndex: 10
                         }}
-                        title="Remove module"
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.06)';
+                        }}
                       >
                         ×
                       </button>
                       {/* Module-specific fields */}
                       {key === 'stage1TravelCompanion' && (
                         <div>
-                          <div style={{ 
-                            fontSize: 16, 
-                            fontWeight: 600, 
-                            color: isDark ? '#fff' : '#000', 
-                            marginBottom: 8,
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 8
-                          }}>
-                            Stage 1: Travel Companion
-                            <div style={{
-                              background: isDark ? '#10b981' + '20' : '#059669' + '20',
-                              color: isDark ? '#10b981' : '#059669',
-                              padding: '2px 6px',
-                              borderRadius: 4,
-                              fontSize: 10,
-                              fontWeight: 500,
-                              border: `1px solid ${isDark ? '#10b981' + '40' : '#059669' + '40'}`
-                            }}>
-                              PREMIUM
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+                            <div>
+                              <h3 style={{ 
+                                fontSize: 18, 
+                                fontWeight: 700, 
+                                margin: 0, 
+                                marginBottom: 6,
+                                color: isDark ? '#fff' : '#222'
+                              }}>
+                                Stage 1: Travel Companion
+                                <span style={{
+                                  background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+                                  color: 'white',
+                                  padding: '3px 8px',
+                                  borderRadius: 6,
+                                  fontSize: 11,
+                                  fontWeight: 600,
+                                  marginLeft: 12,
+                                  textTransform: 'uppercase',
+                                  letterSpacing: 0.5
+                                }}>
+                                  PREMIUM
+                                </span>
+                              </h3>
+                              <p style={{ 
+                                fontSize: 13, 
+                                color: isDark ? '#cbd5e1' : '#666', 
+                                margin: 0,
+                                lineHeight: 1.4,
+                                marginBottom: 16
+                              }}>
+                                Complete travel tracking from airport to hotel with GPS monitoring, driver verification, and real-time notifications.
+                              </p>
                             </div>
                           </div>
-                          <div style={{ 
-                            color: isDark ? '#aaa' : '#666', 
-                            fontSize: 12, 
-                            marginBottom: 12,
-                            lineHeight: 1.4 
-                          }}>
-                            Complete travel tracking from airport to hotel with GPS monitoring, driver verification, and real-time notifications.
+
+                          <div style={{ display: 'grid', gap: 16 }}>
+                            {/* Flight Number */}
+                            <div>
+                              <label style={labelStyle(isDark)}>Flight Number</label>
+                              <input
+                                type="text"
+                                style={inputStyle(isDark)}
+                                value={draft.moduleValues?.[key]?.[index]?.flightNumber || ''}
+                                onChange={(e) => {
+                                  const newVals = [...(draft.moduleValues?.[key] || [])];
+                                  newVals[index] = { ...newVals[index], flightNumber: e.target.value };
+                                  handleDraftChange(idx, 'moduleValues', { ...draft.moduleValues, [key]: newVals });
+                                }}
+                                placeholder="e.g. BA2490"
+                              />
+                            </div>
+
+                            {/* Destination Address (formerly Hotel Name) */}
+                            <div>
+                              <label style={labelStyle(isDark)}>Destination Address</label>
+                              <input
+                                type="text"
+                                style={inputStyle(isDark)}
+                                value={draft.moduleValues?.[key]?.[index]?.destinationAddress || ''}
+                                onChange={(e) => {
+                                  const newVals = [...(draft.moduleValues?.[key] || [])];
+                                  newVals[index] = { ...newVals[index], destinationAddress: e.target.value };
+                                  handleDraftChange(idx, 'moduleValues', { ...draft.moduleValues, [key]: newVals });
+                                }}
+                                placeholder="Enter destination address"
+                              />
+                            </div>
+
+                            {/* Driver Verification (Read-only info field) */}
+                            <div>
+                              <label style={labelStyle(isDark)}>Driver Verification</label>
+                              <div style={{
+                                ...inputStyle(isDark),
+                                backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)',
+                                color: isDark ? '#a1a1aa' : '#6b7280',
+                                fontStyle: 'italic',
+                                cursor: 'not-allowed',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 8,
+                                padding: '12px'
+                              }}>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                                  <rect x="7" y="8" width="10" height="8" rx="1" ry="1"/>
+                                  <path d="M7 8V6a3 3 0 0 1 6 0v2"/>
+                                </svg>
+                                QR codes are generated when Stage 1 is active
+                              </div>
+                            </div>
                           </div>
-                          
-                          <label style={labelStyle(isDark)}>Flight Number</label>
-                          <input
-                            type="text"
-                            value={draft.moduleValues?.[key]?.[index]?.flightNumber || ''}
-                            onChange={e => {
-                              const newVals = Array.isArray(draft.moduleValues?.[key]) ? [...draft.moduleValues[key]] : [];
-                              newVals[index] = { ...newVals[index], flightNumber: e.target.value };
-                              handleDraftChange(idx, 'moduleValues', { ...draft.moduleValues, [key]: newVals });
-                            }}
-                            style={{
-                              width: '100%',
-                              borderRadius: 6,
-                              background: isDark ? 'rgba(0,0,0,0)' : '#f9fafb',
-                              border: '1px solid #d1d5db',
-                              padding: '10px 12px',
-                              fontSize: 14,
-                              outline: 'none',
-                              marginBottom: 8
-                            }}
-                            placeholder="e.g. BA2490"
-                          />
-                          
-                          <label style={labelStyle(isDark)}>Hotel Name</label>
-                          <input
-                            type="text"
-                            value={draft.moduleValues?.[key]?.[index]?.hotelName || ''}
-                            onChange={e => {
-                              const newVals = Array.isArray(draft.moduleValues?.[key]) ? [...draft.moduleValues[key]] : [];
-                              newVals[index] = { ...newVals[index], hotelName: e.target.value };
-                              handleDraftChange(idx, 'moduleValues', { ...draft.moduleValues, [key]: newVals });
-                            }}
-                            style={{
-                              width: '100%',
-                              borderRadius: 6,
-                              background: isDark ? 'rgba(0,0,0,0)' : '#f9fafb',
-                              border: '1px solid #d1d5db',
-                              padding: '10px 12px',
-                              fontSize: 14,
-                              outline: 'none',
-                              marginBottom: 8
-                            }}
-                            placeholder="Enter hotel name"
-                          />
-                          
-                          <label style={labelStyle(isDark)}>Driver Verification Code</label>
-                          <input
-                            type="text"
-                            value={draft.moduleValues?.[key]?.[index]?.driverCode || ''}
-                            onChange={e => {
-                              const newVals = Array.isArray(draft.moduleValues?.[key]) ? [...draft.moduleValues[key]] : [];
-                              newVals[index] = { ...newVals[index], driverCode: e.target.value };
-                              handleDraftChange(idx, 'moduleValues', { ...draft.moduleValues, [key]: newVals });
-                            }}
-                            style={{
-                              width: '100%',
-                              borderRadius: 6,
-                              background: isDark ? 'rgba(0,0,0,0)' : '#f9fafb',
-                              border: '1px solid #d1d5db',
-                              padding: '10px 12px',
-                              fontSize: 14,
-                              outline: 'none',
-                              marginBottom: 4
-                            }}
-                            placeholder="Enter driver verification code"
-                          />
                         </div>
                       )}
                       {key === 'flightNumber' && (
                         <div>
-                          <div style={{ fontSize: 16, fontWeight: 600, color: '#000', marginBottom: 4 }}>Flight Tracker</div>
-                          <label style={labelStyle(isDark)}>Flight Number</label>
+                          <div style={{ fontSize: 18, fontWeight: 700, color: isDark ? '#fff' : '#000', marginBottom: 16 }}>Flight Tracker</div>
                           <input
                             type="text"
                             value={draft.moduleValues?.[key]?.[index] || ''}
@@ -1953,9 +1974,10 @@ export default function CreateGuests() {
                             }}
                             style={{
                               width: '100%',
-                              borderRadius: 6,
-                              background: isDark ? 'rgba(0,0,0,0)' : '#f9fafb',
-                              border: '1px solid #d1d5db',
+                              borderRadius: 8,
+                              background: isDark ? 'rgba(255,255,255,0.07)' : '#f9fafb',
+                              border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.13)' : '#d1d5db'}`,
+                              color: isDark ? '#fff' : '#111',
                               padding: '10px 12px',
                               fontSize: 14,
                               outline: 'none',
@@ -1967,8 +1989,7 @@ export default function CreateGuests() {
                       )}
                       {key === 'seatNumber' && (
                         <div>
-                          <div style={{ fontSize: 16, fontWeight: 600, color: isDark ? '#fff' : '#000', marginBottom: 4 }}>Seat Number</div>
-                          <label style={labelStyle(isDark)}>Seat Number</label>
+                          <div style={{ fontSize: 18, fontWeight: 700, color: isDark ? '#fff' : '#000', marginBottom: 16 }}>Seat Number</div>
                           <input
                             type="text"
                             value={draft.moduleValues?.[key]?.[index] || ''}
@@ -1994,8 +2015,7 @@ export default function CreateGuests() {
                       )}
                       {key === 'eventReference' && (
                         <div>
-                          <div style={{ fontSize: 16, fontWeight: 600, color: '#000', marginBottom: 4 }}>Event Reference</div>
-                          <label style={labelStyle(isDark)}>Reference</label>
+                          <div style={{ fontSize: 18, fontWeight: 700, color: isDark ? '#fff' : '#000', marginBottom: 16 }}>Event Reference</div>
                           <input
                             type="text"
                             value={draft.moduleValues?.[key]?.[index] || ''}
@@ -2006,9 +2026,10 @@ export default function CreateGuests() {
                             }}
                             style={{
                               width: '100%',
-                              borderRadius: 6,
-                              background: isDark ? 'rgba(0,0,0,0)' : '#f9fafb',
-                              border: '1px solid #d1d5db',
+                              borderRadius: 8,
+                              background: isDark ? 'rgba(255,255,255,0.07)' : '#f9fafb',
+                              border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.13)' : '#d1d5db'}`,
+                              color: isDark ? '#fff' : '#111',
                               padding: '10px 12px',
                               fontSize: 14,
                               outline: 'none',
@@ -2020,8 +2041,7 @@ export default function CreateGuests() {
                       )}
                       {key === 'hotelReservation' && (
                         <div>
-                          <div style={{ fontSize: 16, fontWeight: 600, color: '#000', marginBottom: 4 }}>Hotel Tracker</div>
-                          <label style={labelStyle(isDark)}>Hotel Location</label>
+                          <div style={{ fontSize: 18, fontWeight: 700, color: isDark ? '#fff' : '#000', marginBottom: 16 }}>Hotel Tracker</div>
                           <input
                             type="text"
                             value={draft.moduleValues?.[key]?.[index]?.location || ''}
@@ -2032,9 +2052,10 @@ export default function CreateGuests() {
                             }}
                             style={{
                               width: '100%',
-                              borderRadius: 6,
-                              background: isDark ? 'rgba(0,0,0,0)' : '#f9fafb',
-                              border: '1px solid #d1d5db',
+                              borderRadius: 8,
+                              background: isDark ? 'rgba(255,255,255,0.07)' : '#f9fafb',
+                              border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.13)' : '#d1d5db'}`,
+                              color: isDark ? '#fff' : '#111',
                               padding: '10px 12px',
                               fontSize: 14,
                               outline: 'none',
@@ -2042,7 +2063,6 @@ export default function CreateGuests() {
                             }}
                             placeholder="Enter hotel location"
                           />
-                          <label style={labelStyle(isDark)}>Hotel Booking Number</label>
                           <input
                             type="text"
                             value={draft.moduleValues?.[key]?.[index]?.bookingNumber || ''}
@@ -2053,9 +2073,10 @@ export default function CreateGuests() {
                             }}
                             style={{
                               width: '100%',
-                              borderRadius: 6,
-                              background: isDark ? 'rgba(0,0,0,0)' : '#f9fafb',
-                              border: '1px solid #d1d5db',
+                              borderRadius: 8,
+                              background: isDark ? 'rgba(255,255,255,0.07)' : '#f9fafb',
+                              border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.13)' : '#d1d5db'}`,
+                              color: isDark ? '#fff' : '#111',
                               padding: '10px 12px',
                               fontSize: 14,
                               outline: 'none',
@@ -2067,8 +2088,7 @@ export default function CreateGuests() {
                       )}
                       {key === 'trainBookingNumber' && (
                         <div>
-                          <div style={{ fontSize: 16, fontWeight: 600, color: '#000', marginBottom: 4 }}>Train Booking Number</div>
-                          <label style={labelStyle(isDark)}>Booking Number</label>
+                          <div style={{ fontSize: 18, fontWeight: 700, color: isDark ? '#fff' : '#000', marginBottom: 16 }}>Train Booking Number</div>
                           <input
                             type="text"
                             value={draft.moduleValues?.[key]?.[index] || ''}
@@ -2079,9 +2099,10 @@ export default function CreateGuests() {
                             }}
                             style={{
                               width: '100%',
-                              borderRadius: 6,
-                              background: isDark ? 'rgba(0,0,0,0)' : '#f9fafb',
-                              border: '1px solid #d1d5db',
+                              borderRadius: 8,
+                              background: isDark ? 'rgba(255,255,255,0.07)' : '#f9fafb',
+                              border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.13)' : '#d1d5db'}`,
+                              color: isDark ? '#fff' : '#111',
                               padding: '10px 12px',
                               fontSize: 14,
                               outline: 'none',
@@ -2093,8 +2114,7 @@ export default function CreateGuests() {
                       )}
                       {key === 'coachBookingNumber' && (
                         <div>
-                          <div style={{ fontSize: 16, fontWeight: 600, color: '#000', marginBottom: 4 }}>Coach Booking Number</div>
-                          <label style={labelStyle(isDark)}>Booking Number</label>
+                          <div style={{ fontSize: 18, fontWeight: 700, color: isDark ? '#fff' : '#000', marginBottom: 16 }}>Coach Booking Number</div>
                           <input
                             type="text"
                             value={draft.moduleValues?.[key]?.[index] || ''}
@@ -2105,9 +2125,10 @@ export default function CreateGuests() {
                             }}
                             style={{
                               width: '100%',
-                              borderRadius: 6,
-                              background: isDark ? 'rgba(0,0,0,0)' : '#f9fafb',
-                              border: '1px solid #d1d5db',
+                              borderRadius: 8,
+                              background: isDark ? 'rgba(255,255,255,0.07)' : '#f9fafb',
+                              border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.13)' : '#d1d5db'}`,
+                              color: isDark ? '#fff' : '#111',
                               padding: '10px 12px',
                               fontSize: 14,
                               outline: 'none',
@@ -2119,48 +2140,29 @@ export default function CreateGuests() {
                       )}
                       {key === 'idUpload' && (
                         <div>
-                          <div style={{ fontSize: 16, fontWeight: 600, color: '#000', marginBottom: 4 }}>ID Upload</div>
-                          <label style={labelStyle(isDark)}>Upload ID (PDF, PNG, JPG)</label>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                            <label
-                              htmlFor={`id-upload-${idx}-${index}`}
-                              style={{
-                                background: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.06)',
-                                color: isDark ? '#fff' : '#222',
-                                border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.18)' : '#bbb'}`,
-                                borderRadius: 999,
-                                padding: '8px 22px',
-                                fontSize: 15,
-                                fontWeight: 600,
-                                cursor: 'pointer',
-                                boxShadow: isDark ? '0 2px 8px #0003' : '0 1px 4px #0001',
-                                transition: 'background 0.2s, color 0.2s',
-                                outline: 'none',
-                                display: 'inline-block',
-                                backdropFilter: 'blur(10px)',
-                                WebkitBackdropFilter: 'blur(10px)'
-                              }}
-                            >
-                              {draft.moduleValues?.[key]?.[index]?.name || 'Choose file'}
-                            </label>
-                            <input
-                              id={`id-upload-${idx}-${index}`}
-                              type="file"
-                              accept=".pdf,.png,.jpg,.jpeg"
-                              onChange={e => {
-                                const file = e.target.files?.[0];
-                                const newVals = Array.isArray(draft.moduleValues?.[key]) ? [...draft.moduleValues[key]] : [];
-                                newVals[index] = file;
-                                handleDraftChange(idx, 'moduleValues', { ...draft.moduleValues, [key]: newVals });
-                              }}
-                              style={{ display: 'none' }}
-                            />
-                            {draft.moduleValues?.[key]?.[index]?.name && (
-                              <span style={{ color: isDark ? '#cbd5e1' : '#374151', fontSize: 14, marginLeft: 4 }}>
-                                {draft.moduleValues[key][index].name}
-                              </span>
-                            )}
-                          </div>
+                          <div style={{ fontSize: 18, fontWeight: 700, color: isDark ? '#fff' : '#000', marginBottom: 16 }}>ID Upload</div>
+                          <input
+                            type="file"
+                            accept=".pdf,.png,.jpg,.jpeg"
+                            onChange={e => {
+                              const file = e.target.files?.[0];
+                              const newVals = Array.isArray(draft.moduleValues?.[key]) ? [...draft.moduleValues[key]] : [];
+                              newVals[index] = file;
+                              handleDraftChange(idx, 'moduleValues', { ...draft.moduleValues, [key]: newVals });
+                            }}
+                            style={{
+                              marginBottom: 8,
+                              color: isDark ? '#fff' : '#111',
+                              background: 'transparent',
+                              border: 'none',
+                              fontSize: 14
+                            }}
+                          />
+                          {draft.moduleValues?.[key]?.[index]?.name && (
+                            <div style={{ fontSize: 14, marginTop: 4, color: isDark ? '#cbd5e1' : '#374151' }}>
+                              Uploaded: <b>{draft.moduleValues[key][index].name}</b>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -2290,7 +2292,7 @@ export default function CreateGuests() {
                     transition: 'background 0.2s, color 0.2s',
                   }}
                 >
-                  <div style={{ color: isDark ? '#fff' : '#222', fontWeight: 600, fontSize: 16, marginBottom: module.description ? 4 : 0 }}>{module.label}</div>
+                  <div style={{ color: isDark ? '#fff' : '#222', fontWeight: 700, fontSize: 16, marginBottom: module.description ? 4 : 0 }}>{module.label}</div>
                   {module.description && (
                     <div style={{ color: isDark ? '#cbd5e1' : '#666', fontSize: 12 }}>{module.description}</div>
                   )}
