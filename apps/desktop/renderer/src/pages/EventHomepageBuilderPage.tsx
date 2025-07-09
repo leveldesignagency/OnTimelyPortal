@@ -86,6 +86,7 @@ export default function EventHomepageBuilderPage() {
   const [draggingImageModuleId, setDraggingImageModuleId] = useState<string | null>(null);
   const [imageModuleStartY, setImageModuleStartY] = useState(0);
   const [imageModuleStartOffsetY, setImageModuleStartOffsetY] = useState(0);
+  const [hasSavedOnce, setHasSavedOnce] = useState(false);
 
   // Drag logic for image modules using refs
   const draggingImageModuleIdRef = useRef<string | null>(null);
@@ -131,6 +132,7 @@ export default function EventHomepageBuilderPage() {
             modules: existingData.modules || [],
           });
           setImageOffsetY(existingData.event_image_offset_y || 0);
+          setHasSavedOnce(true); // Mark as already saved if loaded from DB
         }
       } catch (error) {
         console.error('Error loading event:', error);
@@ -220,6 +222,7 @@ export default function EventHomepageBuilderPage() {
       setHomepageData(prev => ({ ...prev, modules: updatedModules }));
       setShowSuccessToast(true);
       setTimeout(() => setShowSuccessToast(false), 3000);
+      setHasSavedOnce(true); // Mark as saved after first save
     } catch (error) {
       console.error('Error saving homepage:', error);
       alert('Failed to save homepage. Please try again.');
@@ -273,11 +276,39 @@ export default function EventHomepageBuilderPage() {
     }));
   };
 
+  // Helper to save just the modules array to Supabase
+  const saveHomepageModules = async (modules: HomepageModule[]) => {
+    if (!eventId || !companyId) return;
+    try {
+      await supabase
+        .from('event_homepage_data')
+        .upsert({
+          event_id: eventId,
+          company_id: companyId,
+          event_image: homepageData.eventImage,
+          welcome_title: homepageData.welcomeTitle,
+          welcome_description: homepageData.welcomeDescription,
+          modules,
+          event_image_offset_y: imageOffsetY,
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'event_id,company_id'
+        });
+    } catch (error) {
+      console.error('Error saving modules:', error);
+    }
+  };
+
   const removeModule = (moduleId: string) => {
-    setHomepageData(prev => ({
-      ...prev,
-      modules: prev.modules.filter(module => module.id !== moduleId)
-    }));
+    setHomepageData(prev => {
+      const newModules = prev.modules.filter(module => module.id !== moduleId);
+      // Persist the change to Supabase
+      saveHomepageModules(newModules);
+      return {
+        ...prev,
+        modules: newModules
+      };
+    });
   };
 
   const moveModule = (moduleId: string, direction: 'up' | 'down') => {
@@ -988,7 +1019,7 @@ export default function EventHomepageBuilderPage() {
             {/* Collage preview or upload field */}
             {module.content.images && module.content.images.length > 0 ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
-                <CollagePreviewInline images={module.content.images} layout={LAYOUTS.find(l => l.id === module.content.layout) || LAYOUTS[0]} isDark={isDark} />
+                <CollagePreviewInline images={module.content.images} layout={LAYOUTS.find(l => l.id === module.content.layout) || LAYOUTS[0]} isDark={isDark} size={342} />
               </div>
             ) : (
               <div
@@ -1037,8 +1068,7 @@ export default function EventHomepageBuilderPage() {
   };
 
   // Helper: CollagePreview for inline module preview
-  function CollagePreviewInline({ images, layout, isDark }: { images: string[]; layout: any; isDark: boolean }) {
-    const size = 180;
+  function CollagePreviewInline({ images, layout, isDark, size = 180 }: { images: string[]; layout: any; isDark: boolean; size?: number }) {
     const gap = 8;
     const slots = layout.slots;
     return (
@@ -1105,7 +1135,7 @@ export default function EventHomepageBuilderPage() {
           overflow: 'hidden', // ensure nothing overflows outside the modal
         }}>
           {/* Scrollable content including cover photo */}
-          <div style={{ flex: 1, overflowY: 'auto' }}>
+          <div style={{ flex: 1, overflowY: 'auto', paddingBottom: bottomGapPx }}>
             {/* Event image - at the very top, scrolls with content */}
             {coverImageSrc && (
               <div style={{
@@ -1158,13 +1188,21 @@ export default function EventHomepageBuilderPage() {
                         <div style={{ fontSize: 16, fontWeight: 400, color: isDark ? '#ccc' : '#444', lineHeight: 1.5 }}>{module.content.text}</div>
                       )}
                       {module.type === 'image' && module.content.url && (
-                        <img src={module.content.url} alt="" style={{ width: '100%', borderRadius: 16, objectFit: 'cover', maxHeight: 220, display: 'block', margin: '16px 0' }} />
+                        <div style={{
+                          width: '100%',
+                          maxHeight: 220,
+                          borderRadius: 16,
+                          overflow: 'hidden',
+                          boxShadow: 'inset 0 -40px 40px -10px rgba(0,0,0,0.45), inset 0 -8px 16px -2px rgba(0,0,0,0.32)',
+                          margin: '16px 0',
+                          position: 'relative',
+                        }}>
+                          <img src={module.content.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', background: '#f00' }} />
+                        </div>
                       )}
                       {module.type === 'collage' && module.content.images && module.content.images.length > 0 && (
-                        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(module.content.images.length, 3)}, 1fr)`, gap: 6, margin: '16px 0' }}>
-                          {module.content.images.map((img: string, i: number) => (
-                            <img key={i} src={img} alt="" style={{ width: '100%', borderRadius: 10, objectFit: 'cover', maxHeight: 90, display: 'block' }} />
-                          ))}
+                        <div style={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', margin: '0 auto' }}>
+                          <CollagePreviewInline images={module.content.images} layout={LAYOUTS.find(l => l.id === module.content.layout) || LAYOUTS[0]} isDark={isDark} size={342} />
                         </div>
                       )}
                       {module.type === 'video' && module.content.url && (
@@ -1287,9 +1325,9 @@ export default function EventHomepageBuilderPage() {
             <button
               onClick={handleSave}
               disabled={isSaving}
-              style={{ ...getButtonStyles('primary', isDark), opacity: isSaving ? 0.6 : 1 }}
+              style={{ ...getButtonStyles('primary', isDark) }}
             >
-              {isSaving ? 'Saving...' : 'Save Homepage'}
+              {hasSavedOnce ? 'Update' : 'Save'}
             </button>
           </div>
         </div>

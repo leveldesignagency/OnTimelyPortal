@@ -58,6 +58,128 @@ const monthNames = [
 
 const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
+// Custom Glass Time Picker Component (from CreateItinerary)
+function CustomGlassTimePicker({ value, onChange, placeholder, isDark, colors }) {
+  const [open, setOpen] = React.useState(false);
+  const [hour, setHour] = React.useState('');
+  const [minute, setMinute] = React.useState('');
+  React.useEffect(() => {
+    if (value && /^\d{2}:\d{2}$/.test(value)) {
+      const [h, m] = value.split(':');
+      setHour(h);
+      setMinute(m);
+    }
+  }, [value]);
+  const handleSelect = (h, m) => {
+    setHour(h);
+    setMinute(m);
+    onChange(`${h}:${m}`);
+    setOpen(false);
+  };
+  const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
+  const minutes = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'));
+  return (
+    <div style={{ position: 'relative', width: '100%' }}>
+      <input
+        type="text"
+        value={value}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        onChange={e => {
+          const val = e.target.value;
+          if (/^\d{2}:\d{2}$/.test(val)) {
+            const [h, m] = val.split(':');
+            setHour(h);
+            setMinute(m);
+            onChange(val);
+          } else {
+            setHour('');
+            setMinute('');
+            onChange(val);
+          }
+        }}
+        placeholder={placeholder}
+        style={{
+          background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.9)',
+          backdropFilter: 'blur(10px)',
+          WebkitBackdropFilter: 'blur(10px)',
+          border: `1px solid ${colors.border}`,
+          borderRadius: '8px',
+          color: colors.text,
+          width: '100%',
+          fontSize: '14px',
+          height: '44px',
+          padding: '12px',
+          outline: 'none',
+          transition: 'all 0.2s',
+        }}
+        maxLength={5}
+      />
+      {open && (
+        <div style={{
+          position: 'absolute',
+          left: 0,
+          top: '100%',
+          marginTop: 4,
+          width: '100%',
+          display: 'flex',
+          gap: 8,
+          background: colors.hover,
+          border: `1px solid ${colors.border}`,
+          borderRadius: '8px',
+          boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.3)' : '0 8px 32px rgba(0,0,0,0.1)',
+          zIndex: 1000,
+          maxHeight: 220,
+          overflow: 'hidden',
+        }}>
+          <div style={{ flex: 1, overflowY: 'auto', maxHeight: 220 }}>
+            {hours.map(h => (
+              <div
+                key={h}
+                onMouseDown={() => handleSelect(h, minute || '00')}
+                style={{
+                  padding: '8px 0',
+                  textAlign: 'center',
+                  background: h === hour ? colors.text : 'transparent',
+                  color: h === hour ? (isDark ? '#000' : '#fff') : colors.text,
+                  fontWeight: h === hour ? 700 : 400,
+                  borderRadius: 4,
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  transition: 'all 0.2s',
+                }}
+              >
+                {h}
+              </div>
+            ))}
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto', maxHeight: 220 }}>
+            {minutes.map(m => (
+              <div
+                key={m}
+                onMouseDown={() => handleSelect(hour || '00', m)}
+                style={{
+                  padding: '8px 0',
+                  textAlign: 'center',
+                  background: m === minute ? colors.text : 'transparent',
+                  color: m === minute ? (isDark ? '#000' : '#fff') : colors.text,
+                  fontWeight: m === minute ? 700 : 400,
+                  borderRadius: 4,
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  transition: 'all 0.2s',
+                }}
+              >
+                {m}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function CalendarPage() {
   const { theme } = useContext(ThemeContext);
   const isDark = theme === 'dark';
@@ -647,7 +769,7 @@ Check the browser console for detailed diagnostic information.`);
           style={{
             ...glassStyle,
             padding: '12px 16px',
-            border: 'none',
+            border: '1.5px solid rgba(255, 255, 255, 0.8)',
             color: colors.text,
             fontSize: '14px',
             fontWeight: '600',
@@ -1344,20 +1466,12 @@ Check the browser console for detailed diagnostic information.`);
                 }}>
                   Start Time
                 </label>
-                <input
-                  type="time"
+                <CustomGlassTimePicker
                   value={newEventTime}
-                  onChange={(e) => setNewEventTime(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '12px',
-                    borderRadius: '8px',
-                    border: `1px solid ${colors.border}`,
-                    background: colors.hover,
-                    color: colors.text,
-                    fontSize: '14px',
-                    outline: 'none'
-                  }}
+                  onChange={setNewEventTime}
+                  placeholder="Start Time"
+                  isDark={isDark}
+                  colors={colors}
                 />
               </div>
               
@@ -1371,20 +1485,12 @@ Check the browser console for detailed diagnostic information.`);
                 }}>
                   End Time
                 </label>
-                <input
-                  type="time"
+                <CustomGlassTimePicker
                   value={newEventEndTime}
-                  onChange={(e) => setNewEventEndTime(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '12px',
-                    borderRadius: '8px',
-                    border: `1px solid ${colors.border}`,
-                    background: colors.hover,
-                    color: colors.text,
-                    fontSize: '14px',
-                    outline: 'none'
-                  }}
+                  onChange={setNewEventEndTime}
+                  placeholder="End Time"
+                  isDark={isDark}
+                  colors={colors}
                 />
               </div>
             </div>

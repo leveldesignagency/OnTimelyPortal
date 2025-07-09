@@ -201,6 +201,19 @@ export default function CreateItinerary() {
   // Add state for success message and glow effect
   const [showSuccess, setShowSuccess] = useState(false);
   const [glowItineraryId, setGlowItineraryId] = useState<string | null>(null);
+  
+  // Success message state for individual saves
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  
+  // Success message function
+  const showSuccessToast = (message: string) => {
+    setSuccessMessage(message);
+    setShowSuccessMessage(true);
+    setTimeout(() => {
+      setShowSuccessMessage(false);
+    }, 3000);
+  };
 
   const [documentFile, setDocumentFile] = useState<File | null>(null);
   const [qrcodeFile, setQrcodeFile] = useState<File | null>(null);
@@ -402,15 +415,100 @@ export default function CreateItinerary() {
     setDrafts(d => d.map((draft, i) => i === idx ? { ...draft, [key]: value } : draft));
   };
 
-  const handleSaveDraft = (idx: number) => {
+  const handleSaveDraft = async (idx: number) => {
     const draft = drafts[idx];
-    if (!draft.title.trim() || !draft.arrivalTime.trim() || !draft.startTime.trim() || !draft.endTime.trim() || !draft.location.trim()) {
-      alert('Please fill in Title, Arrival Time, Start Time, End Time, and Location');
+    if (!draft.title.trim() || !draft.startTime.trim() || !draft.endTime.trim()) {
+      alert('Please fill in Title, Start Time, and End Time');
       return;
     }
-    setItems(g => [...g, draft]);
-    setDrafts(d => d.filter((_, i) => i !== idx));
-    setExpandedDraftIndex(null);
+
+    if (!draft.date || !draft.date.trim()) {
+      alert('Please select a date for this itinerary item');
+      return;
+    }
+
+    if (!eventId || !currentUser) {
+      alert('Missing event or user information.');
+      return;
+    }
+
+    try {
+      // Extract module values for this draft
+      const documentModule = draft.modules?.document ? draft.moduleValues?.document : undefined;
+      const qrcodeModule = draft.modules?.qrcode ? draft.moduleValues?.qrcode : undefined;
+      const contactModule = draft.modules?.contact ? draft.moduleValues?.contact : undefined;
+      const notificationsModule = draft.modules?.notifications ? draft.moduleValues?.notifications : undefined;
+      
+      console.log('💾 SAVING DRAFT TO DATABASE:', {
+        title: draft.title,
+        modules: draft.modules,
+        moduleValues: draft.moduleValues,
+        extractedValues: { documentModule, qrcodeModule, contactModule, notificationsModule }
+      });
+
+      const itineraryData = {
+        event_id: eventId,
+        company_id: currentUser.company_id,
+        created_by: currentUser.id,
+        title: draft.title,
+        description: draft.details || '',
+        arrival_time: draft.arrivalTime || undefined,
+        start_time: draft.startTime,
+        end_time: draft.endTime,
+        location: draft.location || undefined,
+        is_draft: false,
+        // Document Upload Module
+        document_file_name: documentModule || undefined,
+        // QR Code Module
+        qrcode_url: qrcodeModule?.url || undefined,
+        qrcode_image: qrcodeModule?.image || undefined,
+        // Host Contact Details Module
+        contact_name: contactModule?.name || undefined,
+        contact_country_code: contactModule?.countryCode || undefined,
+        contact_phone: contactModule?.phone || undefined,
+        contact_email: contactModule?.email || undefined,
+        // Notifications Timer Module
+        notification_times: notificationsModule || [],
+        group_id: draft.group_id || undefined,
+        group_name: draft.group_name || undefined,
+        date: draft.date,
+        // Legacy content field for backward compatibility
+        content: {
+          items: [draft]
+        }
+      };
+
+      // Save to database - check if we're in edit mode
+      if (isEditMode && originalItinerary?.id) {
+        // UPDATE existing itinerary
+        const updatedItinerary = await updateItinerary(originalItinerary.id, itineraryData);
+        console.log('✅ Draft updated in database:', updatedItinerary);
+        
+        // Move from drafts to items array with existing ID
+        setItems(g => [...g, { ...draft, id: originalItinerary.id }]);
+        setDrafts(d => d.filter((_, i) => i !== idx));
+        setExpandedDraftIndex(null);
+        
+        // Show success feedback
+        showSuccessToast('Itinerary item updated successfully!');
+      } else {
+        // CREATE new itinerary
+        const createdItinerary = await addItinerary(itineraryData);
+        console.log('✅ Draft saved to database:', createdItinerary);
+        
+        // Move from drafts to items array
+        setItems(g => [...g, { ...draft, id: createdItinerary.id }]);
+        setDrafts(d => d.filter((_, i) => i !== idx));
+        setExpandedDraftIndex(null);
+        
+        // Show success feedback
+        showSuccessToast('Itinerary item saved successfully!');
+      }
+      
+    } catch (error) {
+      console.error('❌ Failed to save draft:', error);
+      alert('Failed to save itinerary item. Please try again.');
+    }
   };
 
   const handleRemoveDraft = (idx: number) => {
@@ -469,6 +567,7 @@ export default function CreateItinerary() {
   };
 
   const handleModuleValueChange = (draftIdx: number, moduleKey: string, value: any) => {
+    console.log('🔧 MODULE VALUE CHANGE:', { draftIdx, moduleKey, value });
     setDrafts(d => d.map((draft, i) => 
       i === draftIdx 
         ? { 
@@ -567,11 +666,26 @@ export default function CreateItinerary() {
         const createdItineraries: any[] = [];
         
         for (const item of allItemsToSave) {
+          // Debug: Log the item data before extraction
+          console.log('🔍 DEBUGGING ITEM BEFORE SAVE:', {
+            title: item.title,
+            modules: item.modules,
+            moduleValues: item.moduleValues
+          });
+          
           // Extract module values for each item
           const documentModule = item.modules?.document ? item.moduleValues?.document : undefined;
           const qrcodeModule = item.modules?.qrcode ? item.moduleValues?.qrcode : undefined;
           const contactModule = item.modules?.contact ? item.moduleValues?.contact : undefined;
           const notificationsModule = item.modules?.notifications ? item.moduleValues?.notifications : undefined;
+          
+          // Debug: Log the extracted values
+          console.log('🔍 EXTRACTED MODULE VALUES:', {
+            documentModule,
+            qrcodeModule,
+            contactModule,
+            notificationsModule
+          });
 
           const itineraryData = {
             event_id: eventId,
@@ -952,7 +1066,7 @@ export default function CreateItinerary() {
             color: colors.text
           }}>
             {eventDetails?.name}
-          </div>
+      </div>
           <hr style={{ 
             margin: '12px 0 8px 0', 
             border: 'none', 
@@ -967,7 +1081,7 @@ export default function CreateItinerary() {
             color: colors.textSecondary
           }}>
             {isEditMode ? 'Edit Itinerary' : 'Create Itinerary'}
-          </div>
+      </div>
         </div>
 
         {/* Action Buttons with Glass Effect */}
@@ -1036,8 +1150,8 @@ export default function CreateItinerary() {
                 marginBottom: 8
               }}
             />
-          </div>
-        )}
+        </div>
+      )}
 
         {/* Draft Items with Glass Effect */}
         {drafts.map((draft, idx) => (
@@ -1175,8 +1289,8 @@ export default function CreateItinerary() {
                           colors={colors}
                         />
                       </div>
-                    ))}
-                  </div>
+        ))}
+      </div>
 
                   {/* Location Field */}
                   <div style={{ 
@@ -1305,9 +1419,21 @@ export default function CreateItinerary() {
                             <input
                               type="file"
                               accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.xls,.xlsx,.csv,.txt"
-                              onChange={e => {
+                              onChange={async (e) => {
                                 const file = e.target.files?.[0];
-                                handleModuleValueChange(idx, moduleKey, file ? file.name : '');
+                                if (file) {
+                                  try {
+                                    console.log('📤 Uploading document:', file.name);
+                                    const url = await uploadFileToBucket(file, 'itinerary-documents', `event_${eventId}`);
+                                    console.log('✅ Document uploaded:', url);
+                                    handleModuleValueChange(idx, moduleKey, url);
+                                  } catch (error) {
+                                    console.error('❌ Document upload failed:', error);
+                                    alert('Failed to upload document. Please try again.');
+                                  }
+                                } else {
+                                  handleModuleValueChange(idx, moduleKey, '');
+                                }
                               }}
                               style={{
                                 marginBottom: 8,
@@ -1319,11 +1445,7 @@ export default function CreateItinerary() {
                             />
                             {draft.moduleValues?.[moduleKey] && (
                               <div style={{ fontSize: 14, marginTop: 4 }}>
-                                Uploaded: <b>{draft.moduleValues[moduleKey]}</b>
-                                <button
-                                  onClick={() => handleModuleValueChange(idx, moduleKey, '')}
-                                  style={{ marginLeft: 12, color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13 }}
-                                >Remove</button>
+                                Uploaded: <b>{typeof draft.moduleValues[moduleKey] === 'string' ? draft.moduleValues[moduleKey].split('/').pop() : draft.moduleValues[moduleKey]}</b>
                               </div>
                             )}
                           </div>
@@ -1348,22 +1470,34 @@ export default function CreateItinerary() {
                             <input
                               type="file"
                               accept="image/*"
-                              onChange={e => {
+                              onChange={async (e) => {
                                 const file = e.target.files?.[0];
-                                handleModuleValueChange(idx, moduleKey, { ...draft.moduleValues?.[moduleKey], image: file ? file.name : '' });
+                                if (file) {
+                                  try {
+                                    console.log('📤 Uploading QR code image:', file.name);
+                                    const url = await uploadFileToBucket(file, 'itinerary-qrcodes', `event_${eventId}`);
+                                    console.log('✅ QR code image uploaded:', url);
+                                    handleModuleValueChange(idx, moduleKey, { ...draft.moduleValues?.[moduleKey], image: url });
+                                  } catch (error) {
+                                    console.error('❌ QR code upload failed:', error);
+                                    alert('Failed to upload QR code image. Please try again.');
+                                  }
+                                } else {
+                                  handleModuleValueChange(idx, moduleKey, { ...draft.moduleValues?.[moduleKey], image: '' });
+                                }
                               }}
                               style={{ color: isDark ? '#fff' : '#111', background: 'transparent', border: 'none', fontSize: 14 }}
                             />
                             {(draft.moduleValues?.[moduleKey]?.url || draft.moduleValues?.[moduleKey]?.image) && (
-                              <div style={{ marginTop: 8 }}>
+        <div style={{ marginTop: 8 }}>
                                 {draft.moduleValues?.[moduleKey]?.url && (
                                   <div style={{ fontSize: 13, marginBottom: 4 }}>URL: <b>{draft.moduleValues[moduleKey].url}</b></div>
                                 )}
                                 {draft.moduleValues?.[moduleKey]?.image && (
-                                  <div style={{ fontSize: 13 }}>Image: <b>{draft.moduleValues[moduleKey].image}</b></div>
+                                                                      <div style={{ fontSize: 13 }}>Image: <b>{typeof draft.moduleValues[moduleKey].image === 'string' ? draft.moduleValues[moduleKey].image.split('/').pop() : draft.moduleValues[moduleKey].image}</b></div>
                                 )}
-                              </div>
-                            )}
+        </div>
+      )}
                           </div>
                         ) : moduleKey === 'contact' ? (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -1571,8 +1705,8 @@ export default function CreateItinerary() {
                     </button>
                   </div>
                 </div>
-              </div>
-            )}
+        </div>
+      )}
           </div>
         ))}
 
@@ -1880,9 +2014,9 @@ export default function CreateItinerary() {
                               style={{ ...getInputStyles(isDark), width: '100%' }}
                             />
                           </div>
-                        )}
-                      </div>
-                    );
+      )}
+    </div>
+  );
                   })}
                 </div>
               </div>
@@ -2052,8 +2186,8 @@ export default function CreateItinerary() {
       {showDeleteConfirm && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000 }}>
           {/* Delete Modal Content */}
-        </div>
-      )}
+          </div>
+        )}
 
         {/* CSV Upload Modal with Glass Effect */}
         {isCsvModalOpen && (
@@ -2087,7 +2221,7 @@ export default function CreateItinerary() {
                 }}>
                   Upload Itinerary CSV
                 </h2>
-              </div>
+    </div>
               <div style={{ padding: 32 }}>
                 <p style={{ 
                   marginBottom: 24, 
@@ -2291,73 +2425,103 @@ export default function CreateItinerary() {
           </div>
         )}
 
-        {/* Delete Confirmation Modal */}
-        {showDeleteConfirm && (
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+        }}>
           <div style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'rgba(0, 0, 0, 0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
+            ...getGlassStyles(isDark),
+            padding: 32,
+            maxWidth: 400,
+            width: '90%',
+            textAlign: 'center',
           }}>
-            <div style={{
-              ...getGlassStyles(isDark),
-              padding: 32,
-              maxWidth: 400,
-              width: '90%',
-              textAlign: 'center',
-            }}>
-              <h3 style={{ color: colors.text, marginBottom: 16 }}>Delete Item</h3>
-              <p style={{ color: colors.textSecondary, marginBottom: 24 }}>
-                Are you sure you want to delete this itinerary item? This action cannot be undone.
-              </p>
-              <p style={{ color: colors.textSecondary, marginBottom: 16, fontSize: 14 }}>
-                Type "delete" to confirm:
-              </p>
-              <input
-                type="text"
-                value={deleteConfirmText}
-                onChange={(e) => setDeleteConfirmText(e.target.value)}
+            <h3 style={{ color: colors.text, marginBottom: 16 }}>Delete Item</h3>
+            <p style={{ color: colors.textSecondary, marginBottom: 24 }}>
+              Are you sure you want to delete this itinerary item? This action cannot be undone.
+            </p>
+            <p style={{ color: colors.textSecondary, marginBottom: 16, fontSize: 14 }}>
+              Type "delete" to confirm:
+            </p>
+            <input
+              type="text"
+              value={deleteConfirmText}
+              onChange={(e) => setDeleteConfirmText(e.target.value)}
+              style={{
+                ...getInputStyles(isDark),
+                width: '100%',
+                marginBottom: 24,
+                textAlign: 'center',
+              }}
+              placeholder="Type 'delete'"
+              autoFocus
+            />
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+              <button
+                onClick={handleCancelDelete}
                 style={{
-                  ...getInputStyles(isDark),
-                  width: '100%',
-                  marginBottom: 24,
-                  textAlign: 'center',
+                  ...getButtonStyles(isDark, 'secondary'),
+                  padding: '10px 20px',
                 }}
-                placeholder="Type 'delete'"
-                autoFocus
-              />
-              <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
-                <button
-                  onClick={handleCancelDelete}
-                  style={{
-                    ...getButtonStyles(isDark, 'secondary'),
-                    padding: '10px 20px',
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleConfirmDelete}
-                  disabled={deleteConfirmText.toLowerCase() !== 'delete'}
-                  style={{
-                    ...getButtonStyles(isDark, 'danger'),
-                    padding: '10px 20px',
-                    opacity: deleteConfirmText.toLowerCase() === 'delete' ? 1 : 0.5,
-                    cursor: deleteConfirmText.toLowerCase() === 'delete' ? 'pointer' : 'not-allowed',
-                  }}
-                >
-                  Delete
-                </button>
-              </div>
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                disabled={deleteConfirmText.toLowerCase() !== 'delete'}
+                style={{
+                  ...getButtonStyles(isDark, 'danger'),
+                  padding: '10px 20px',
+                  opacity: deleteConfirmText.toLowerCase() === 'delete' ? 1 : 0.5,
+                  cursor: deleteConfirmText.toLowerCase() === 'delete' ? 'pointer' : 'not-allowed',
+                }}
+              >
+                Delete
+              </button>
             </div>
           </div>
-        )}
+        </div>
+      )}
+      
+      {/* Success Message Notification */}
+      {showSuccessMessage && (
+        <div
+          style={{
+            position: 'fixed',
+            top: '20px',
+            right: '20px',
+            background: isDark ? 'rgba(34, 197, 94, 0.9)' : 'rgba(34, 197, 94, 0.95)',
+            color: 'white',
+            padding: '16px 24px',
+            borderRadius: '12px',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            fontSize: '16px',
+            fontWeight: '500',
+            zIndex: 1000,
+          }}
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <polyline points="20,6 9,17 4,12"></polyline>
+          </svg>
+          {successMessage}
+        </div>
+      )}
     </div>
   );
 }
@@ -2369,47 +2533,47 @@ const ModuleSidebar = ({ isCollapsed, onToggle }: { isCollapsed: boolean, onTogg
   const colors = getColors(isDark);
 
   return (
-    <div style={{
-      width: isCollapsed ? 32 : 280,
-      color: colors.text,
-      transition: 'width 0.2s',
-      position: 'relative',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: isCollapsed ? 'center' : 'flex-start',
-      padding: isCollapsed ? '40px 0' : '40px 24px',
-      minHeight: '100vh',
+      <div style={{ 
+        width: isCollapsed ? 32 : 280, 
+        color: colors.text, 
+        transition: 'width 0.2s', 
+        position: 'relative', 
+        display: 'flex', 
+        flexDirection: 'column', 
+        alignItems: isCollapsed ? 'center' : 'flex-start', 
+        padding: isCollapsed ? '40px 0' : '40px 24px', 
+        minHeight: '100vh',
       background: isDark
         ? 'rgba(0, 0, 0, 0.35)'
         : 'rgba(255, 255, 255, 0.9)',
-      backdropFilter: 'blur(20px)',
-      WebkitBackdropFilter: 'blur(20px)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
       border: isDark
         ? '1.5px solid rgba(255,255,255,0.12)'
         : '1.5px solid #e5e7eb',
-      boxShadow: isDark
+        boxShadow: isDark 
         ? '0 8px 32px rgba(0,0,0,0.3)'
         : '0 8px 32px rgba(0,0,0,0.08)'
-    }}>
+      }}>
       <button onClick={onToggle} style={{ background: 'none', border: 'none', color: colors.text, fontSize: 22, cursor: 'pointer', alignSelf: isCollapsed ? 'center' : 'flex-end', marginBottom: 24 }} title={isCollapsed ? 'Show Modules' : 'Hide Modules'}>
-        {isCollapsed ? '←' : '→'}
-      </button>
-      {!isCollapsed && (
-        <>
+          {isCollapsed ? '←' : '→'}
+        </button>
+        {!isCollapsed && (
+          <>
           <div style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 24, letterSpacing: 1, textTransform: 'uppercase' }}>Itinerary Modules</div>
-          <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {ITINERARY_MODULES.map(module => (
-              <div
-                key={module.key}
-                draggable
+            <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {ITINERARY_MODULES.map(module => (
+                <div
+                  key={module.key}
+                  draggable
                 onDragStart={e => e.dataTransfer.setData('text/plain', module.key)}
-                style={{
+                  style={{
                   background: isDark ? 'rgba(40,40,40,0.45)' : 'rgba(255,255,255,0.85)',
                   border: isDark ? '1.5px solid rgba(255,255,255,0.13)' : '1px solid #bbb',
                   borderRadius: 12,
                   padding: '14px 18px',
-                  cursor: 'grab',
-                  userSelect: 'none',
+                    cursor: 'grab',
+                    userSelect: 'none',
                   boxShadow: isDark ? '0 2px 12px #0004' : '0 1px 4px #0001',
                   width: '100%',
                   color: isDark ? '#fff' : '#222',
@@ -2419,14 +2583,14 @@ const ModuleSidebar = ({ isCollapsed, onToggle }: { isCollapsed: boolean, onTogg
                 }}
               >
                 <div style={{ color: isDark ? '#fff' : '#222', fontWeight: 600, fontSize: 16 }}>{module.label}</div>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
+        </div>
+      ))}
+      </div>
+          </>
+        )}
     </div>
   );
-};
+}; 
 
 // --- DATE PICKER COMPONENTS ---
 // Assuming CustomDatePicker and CustomGlassTimePicker are defined elsewhere or here
@@ -2707,9 +2871,9 @@ function CustomGlassTimePicker({ value, onChange, placeholder, isDark, colors })
                 }}
               >
                 {h}
-              </div>
-            ))}
-          </div>
+        </div>
+      ))}
+      </div>
           <div style={{ flex: 1, overflowY: 'auto', maxHeight: 220 }}>
             {minutes.map(m => (
               <div
@@ -2735,4 +2899,4 @@ function CustomGlassTimePicker({ value, onChange, placeholder, isDark, colors })
       )}
     </div>
   );
-}
+} 

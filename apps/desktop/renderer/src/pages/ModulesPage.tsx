@@ -8,7 +8,7 @@ import { getEventModules, saveEventModules } from '../lib/supabase';
 export const ModulesPage: React.FC = () => {
   const [activeModules, setActiveModules] = useState<ModuleType[]>([]);
   const [currentUser, setCurrentUser] = useState(null);
-  
+
   // Load active modules from Supabase on mount
   useEffect(() => {
     (async () => {
@@ -22,7 +22,7 @@ export const ModulesPage: React.FC = () => {
         }
       } catch (error) {
         console.error('Failed to load modules from Supabase:', error);
-      }
+          }
     })();
   }, []);
 

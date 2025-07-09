@@ -4,7 +4,7 @@ import { ThemeContext } from './ThemeContext';
 import ThemedIcon from './components/ThemedIcon';
 
 const teamNavLinks = [
-  { to: '/teams/create', label: 'Create Team', icon: <span style={{ fontSize: '24px' }}>➕</span> },
+  { to: '/teams/create', label: 'Create Team', icon: <ThemedIcon name="plus" alt="Create Team" size={24} /> },
   { to: '/teams/chat', label: 'Chat', icon: <ThemedIcon name="chat" alt="Chat" size={60} /> },
   { to: '/teams/calendar', label: 'Calendar', icon: <ThemedIcon name="calendar" alt="Calendar" size={60} /> },
   { to: '/teams/canvas', label: 'Canvas', icon: <ThemedIcon name="canvas" alt="Canvas" size={60} /> },

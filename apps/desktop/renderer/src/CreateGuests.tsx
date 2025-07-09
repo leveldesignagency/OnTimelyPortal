@@ -4,11 +4,29 @@ import Tesseract from 'tesseract.js';
 import countryList from 'country-list';
 import { codes as countryCallingCodes } from 'country-calling-code';
 import { getCurrentUser } from './lib/auth';
-import { addMultipleGuests, getGuests, deleteGuest, deleteGuestsByGroupId } from './lib/supabase';
+import { addMultipleGuests, getGuests, deleteGuest, deleteGuestsByGroupId, supabase } from './lib/supabase';
 import { ThemeContext } from './ThemeContext';
 import { useRealtimeEvents } from './hooks/useRealtime';
 
 const AVIATIONSTACK_API_KEY = 'bb7fd8369e323c356434d5b1ac77b437'; // 🚨 PASTE YOUR NEW AVIATIONSTACK API KEY HERE 🚨
+
+// File upload function for guest files
+async function uploadGuestFile(file: File, guestId: string, fileType: 'document' | 'id' | 'qrcode'): Promise<string> {
+  const fileExt = file.name.split('.').pop();
+  const filePath = `${guestId}/${fileType}s/${Date.now()}.${fileExt}`;
+  
+  const { data, error } = await supabase.storage
+    .from('guest-files')
+    .upload(filePath, file, { upsert: true });
+  
+  if (error) throw error;
+  
+  const { data: { publicUrl } } = supabase.storage
+    .from('guest-files')
+    .getPublicUrl(filePath);
+  
+  return publicUrl;
+}
 
 // --- TYPE DEFINITIONS ---
 interface FlightData {
@@ -2141,26 +2159,81 @@ export default function CreateGuests() {
                       {key === 'idUpload' && (
                         <div>
                           <div style={{ fontSize: 18, fontWeight: 700, color: isDark ? '#fff' : '#000', marginBottom: 16 }}>ID Upload</div>
-                          <input
-                            type="file"
-                            accept=".pdf,.png,.jpg,.jpeg"
-                            onChange={e => {
-                              const file = e.target.files?.[0];
-                              const newVals = Array.isArray(draft.moduleValues?.[key]) ? [...draft.moduleValues[key]] : [];
-                              newVals[index] = file;
-                              handleDraftChange(idx, 'moduleValues', { ...draft.moduleValues, [key]: newVals });
-                            }}
-                            style={{
-                              marginBottom: 8,
-                              color: isDark ? '#fff' : '#111',
-                              background: 'transparent',
-                              border: 'none',
+                          <div style={{
+                            border: `2px dashed ${isDark ? 'rgba(255,255,255,0.13)' : '#d1d5db'}`,
+                            borderRadius: 12,
+                            padding: '24px',
+                            textAlign: 'center',
+                            background: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease'
+                          }}>
+                            <input
+                              type="file"
+                              accept=".pdf,.png,.jpg,.jpeg,.gif,.webp"
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  try {
+                                    console.log('📤 Uploading ID document:', file.name);
+                                    // Generate a temporary guest ID for file upload
+                                    const tempGuestId = draft.id || `temp_${Date.now()}`;
+                                    const url = await uploadGuestFile(file, tempGuestId, 'id');
+                                    console.log('✅ ID document uploaded:', url);
+                                    
+                                    const newVals = Array.isArray(draft.moduleValues?.[key]) ? [...draft.moduleValues[key]] : [];
+                                    newVals[index] = {
+                                      fileName: file.name,
+                                      fileSize: file.size,
+                                      fileType: file.type,
+                                      url: url,
+                                      uploadedAt: new Date().toISOString()
+                                    };
+                                    handleDraftChange(idx, 'moduleValues', { ...draft.moduleValues, [key]: newVals });
+                                  } catch (error) {
+                                    console.error('❌ ID document upload failed:', error);
+                                    alert('Failed to upload ID document. Please try again.');
+                                  }
+                                } else {
+                                  const newVals = Array.isArray(draft.moduleValues?.[key]) ? [...draft.moduleValues[key]] : [];
+                                  newVals[index] = null;
+                                  handleDraftChange(idx, 'moduleValues', { ...draft.moduleValues, [key]: newVals });
+                                }
+                              }}
+                              style={{
+                                width: '100%',
+                                height: '100%',
+                                opacity: 0,
+                                position: 'absolute',
+                                cursor: 'pointer'
+                              }}
+                            />
+                            <div style={{ position: 'relative', zIndex: 1, pointerEvents: 'none' }}>
+                              <div style={{ fontSize: 48, marginBottom: 12, color: isDark ? '#666' : '#999' }}>📄</div>
+                              <div style={{ fontSize: 16, fontWeight: 500, color: isDark ? '#fff' : '#333', marginBottom: 4 }}>
+                                {draft.moduleValues?.[key]?.[index]?.fileName ? 'File Uploaded' : 'Drop ID document here or click to browse'}
+                              </div>
+                              <div style={{ fontSize: 14, color: isDark ? '#cbd5e1' : '#666' }}>
+                                Supports PDF, PNG, JPG, GIF, WebP (max 30MB)
+                              </div>
+                            </div>
+                          </div>
+                          {draft.moduleValues?.[key]?.[index]?.fileName && (
+                            <div style={{ 
+                              marginTop: 12,
+                              padding: '12px 16px',
+                              background: isDark ? 'rgba(34, 197, 94, 0.1)' : 'rgba(34, 197, 94, 0.05)',
+                              border: `1px solid ${isDark ? 'rgba(34, 197, 94, 0.2)' : 'rgba(34, 197, 94, 0.1)'}`,
+                              borderRadius: 8,
                               fontSize: 14
-                            }}
-                          />
-                          {draft.moduleValues?.[key]?.[index]?.name && (
-                            <div style={{ fontSize: 14, marginTop: 4, color: isDark ? '#cbd5e1' : '#374151' }}>
-                              Uploaded: <b>{draft.moduleValues[key][index].name}</b>
+                            }}>
+                              <div style={{ fontWeight: 500, color: isDark ? '#22c55e' : '#16a34a', marginBottom: 4 }}>
+                                ✅ {draft.moduleValues[key][index].fileName}
+                              </div>
+                              <div style={{ color: isDark ? '#cbd5e1' : '#666', fontSize: 12 }}>
+                                {(draft.moduleValues[key][index].fileSize / 1024 / 1024).toFixed(2)} MB • 
+                                Uploaded {new Date(draft.moduleValues[key][index].uploadedAt).toLocaleString()}
+                              </div>
                             </div>
                           )}
                         </div>

@@ -23,7 +23,7 @@ export const LAYOUTS = [
       { left: 0, top: 0.5, width: 0.5, height: 0.5 },
       { left: 0.5, top: 0.5, width: 0.5, height: 0.5 },
     ],
-    min: 2,
+    min: 4,
     max: 4,
   },
   {
@@ -34,7 +34,7 @@ export const LAYOUTS = [
       { left: 0, top: 1/3, width: 1, height: 1/3 },
       { left: 0, top: 2/3, width: 1, height: 1/3 },
     ],
-    min: 2,
+    min: 3,
     max: 3,
   },
   {
@@ -57,6 +57,17 @@ export const LAYOUTS = [
       { left: 0.6, top: 0.5, width: 0.4, height: 0.5 },
     ],
     min: 2,
+    max: 3,
+  },
+  {
+    id: 'three-vertical-split',
+    name: 'Vertical Split (3)',
+    slots: [
+      { left: 0, top: 0, width: 0.5, height: 0.5 }, // top left
+      { left: 0, top: 0.5, width: 0.5, height: 0.5 }, // bottom left
+      { left: 0.5, top: 0, width: 0.5, height: 1 }, // right full
+    ],
+    min: 3,
     max: 3,
   },
 ];
@@ -258,7 +269,7 @@ export default function ImageCollageModal({ open, onClose, onSave, isDark }) {
       const count = images.length;
       if (count === 1) return ['grid', 'hero'];
       if (count === 2) return ['grid', 'side-by-side'];
-      if (count === 3) return ['grid', 'hero-side'];
+      if (count === 3) return ['three-vertical-split'];
       if (count === 4) return ['grid', 'quad'];
       if (count === 5) return ['grid', 'hero-quad'];
       if (count === 6) return ['grid', 'hex'];
@@ -297,7 +308,7 @@ export default function ImageCollageModal({ open, onClose, onSave, isDark }) {
           justifyItems: 'center',
           marginBottom: 32,
         }}>
-          {LAYOUTS.map(layout => {
+          {LAYOUTS.filter(layout => images.length >= layout.min && images.length <= layout.max).map(layout => {
             const isSuggested = suggestedLayouts.includes(layout.id);
             return (
               <div

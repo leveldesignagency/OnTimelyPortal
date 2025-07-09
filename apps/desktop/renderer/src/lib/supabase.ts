@@ -591,7 +591,7 @@ export const getEventAssignments = async (eventId: string) => {
     });
   }
   return assignments;
-};
+}; 
 
 // Validate image file before upload
 export function validateImageFile(file: File): string | null {
@@ -628,3 +628,32 @@ export async function uploadImageToStorage(file: File, pathPrefix: string): Prom
   const { publicUrl } = supabase.storage.from('event-images').getPublicUrl(filePath).data;
   return publicUrl;
 } 
+
+// Get all events for teams the user is a member of
+export const getUserTeamEvents = async (userId: string) => {
+  // 1. Find all team_ids where user is a member
+  const { data: teamMemberships, error: teamMembershipsError } = await supabase
+    .from('team_members')
+    .select('team_id')
+    .eq('user_id', userId);
+  if (teamMembershipsError) throw teamMembershipsError;
+  const teamIds = (teamMemberships || []).map(tm => tm.team_id);
+  if (teamIds.length === 0) return [];
+
+  // 2. Find all event_ids linked to those teams
+  const { data: teamEvents, error: teamEventsError } = await supabase
+    .from('team_events')
+    .select('event_id')
+    .in('team_id', teamIds);
+  if (teamEventsError) throw teamEventsError;
+  const eventIds = (teamEvents || []).map(te => te.event_id);
+  if (eventIds.length === 0) return [];
+
+  // 3. Fetch all events by those IDs
+  const { data: events, error: eventsError } = await supabase
+    .from('events')
+    .select('*')
+    .in('id', eventIds);
+  if (eventsError) throw eventsError;
+  return events || [];
+}; 

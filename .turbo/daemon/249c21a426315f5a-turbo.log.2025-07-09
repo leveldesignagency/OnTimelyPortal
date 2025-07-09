@@ -1,0 +1,248 @@
+2025-07-09T10:58:00.040117Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf(".turbo/cookies/1.cookie")}
+2025-07-09T10:58:00.040130Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2025-07-09T11:57:11.698025Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateTeamPage.tsx")}
+2025-07-09T11:57:11.698190Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T11:57:53.897678Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateTeamPage.tsx")}
+2025-07-09T11:57:53.897688Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T12:18:24.707296Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateTeamPage.tsx")}
+2025-07-09T12:18:24.707331Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T12:18:42.488953Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateTeamPage.tsx")}
+2025-07-09T12:18:42.488963Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T12:19:04.583636Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateTeamPage.tsx")}
+2025-07-09T12:19:04.583783Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T12:25:04.780423Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateTeamPage.tsx")}
+2025-07-09T12:25:04.780444Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T12:25:17.080583Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateTeamPage.tsx")}
+2025-07-09T12:25:17.080592Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T12:25:28.980361Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateTeamPage.tsx")}
+2025-07-09T12:25:28.980374Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T12:25:39.879988Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateTeamPage.tsx")}
+2025-07-09T12:25:39.880001Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T12:25:53.279848Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateTeamPage.tsx")}
+2025-07-09T12:25:53.279857Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T12:36:00.279051Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateTeamPage.tsx")}
+2025-07-09T12:36:00.279067Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T12:38:01.079094Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateTeamPage.tsx")}
+2025-07-09T12:38:01.079120Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T12:38:05.978359Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateTeamPage.tsx")}
+2025-07-09T12:38:05.978370Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T12:38:11.479125Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateTeamPage.tsx")}
+2025-07-09T12:38:11.479139Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T12:38:18.979641Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateTeamPage.tsx")}
+2025-07-09T12:38:18.979649Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T12:38:27.478836Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateTeamPage.tsx")}
+2025-07-09T12:38:27.478844Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T12:38:31.478939Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateTeamPage.tsx")}
+2025-07-09T12:38:31.478947Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T12:38:33.979198Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateTeamPage.tsx")}
+2025-07-09T12:38:33.979207Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T12:38:36.879050Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateTeamPage.tsx")}
+2025-07-09T12:38:36.879063Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T12:38:42.579012Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateTeamPage.tsx")}
+2025-07-09T12:38:42.579024Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T12:38:59.779169Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateTeamPage.tsx")}
+2025-07-09T12:38:59.779184Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T12:39:08.879284Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateTeamPage.tsx")}
+2025-07-09T12:39:08.879298Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T12:39:14.178416Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateTeamPage.tsx")}
+2025-07-09T12:39:14.178428Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T12:39:14.179547Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-07-09T12:39:46.978746Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateTeamPage.tsx")}
+2025-07-09T12:39:46.978760Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T12:39:53.778773Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateTeamPage.tsx")}
+2025-07-09T12:39:53.778786Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T12:40:04.878774Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateTeamPage.tsx")}
+2025-07-09T12:40:04.878782Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T12:40:06.279391Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateTeamPage.tsx")}
+2025-07-09T12:40:06.279400Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T12:40:12.379013Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateTeamPage.tsx")}
+2025-07-09T12:40:12.379027Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T12:40:14.578641Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateTeamPage.tsx")}
+2025-07-09T12:40:14.578657Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T12:40:17.278247Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateTeamPage.tsx")}
+2025-07-09T12:40:17.278255Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T12:40:25.978777Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateTeamPage.tsx")}
+2025-07-09T12:40:25.978788Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T12:40:31.678455Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateTeamPage.tsx")}
+2025-07-09T12:40:31.678463Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T12:40:32.779525Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateTeamPage.tsx")}
+2025-07-09T12:40:32.779534Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T12:40:35.178272Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateTeamPage.tsx")}
+2025-07-09T12:40:35.178286Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T12:41:42.179136Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateTeamPage.tsx")}
+2025-07-09T12:41:42.179162Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T12:41:47.179343Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateTeamPage.tsx")}
+2025-07-09T12:41:47.179351Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T12:42:42.177779Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateTeamPage.tsx")}
+2025-07-09T12:42:42.177788Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T12:43:19.878239Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateTeamPage.tsx")}
+2025-07-09T12:43:19.878256Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T13:09:26.045388Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateTeamPage.tsx")}
+2025-07-09T13:09:26.045407Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T13:10:24.045325Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateTeamPage.tsx")}
+2025-07-09T13:10:24.045342Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T13:11:57.544144Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("emergency_fix_team_chat.sql")}
+2025-07-09T13:11:57.544165Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2025-07-09T13:12:00.244217Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("emergency_fix_team_chat.sql")}
+2025-07-09T13:12:00.244260Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2025-07-09T13:12:01.245253Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("emergency_fix_team_chat.sql")}
+2025-07-09T13:12:01.245280Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2025-07-09T15:20:44.087977Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateTeamPage.tsx")}
+2025-07-09T15:20:44.088018Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T15:23:20.885971Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateTeamPage.tsx")}
+2025-07-09T15:23:20.886007Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T15:23:41.285963Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CalendarPage.tsx")}
+2025-07-09T15:23:41.285976Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T15:23:43.285851Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CalendarPage.tsx")}
+2025-07-09T15:23:43.285873Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T15:23:43.323008Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-07-09T15:24:45.084747Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CalendarPage.tsx")}
+2025-07-09T15:24:45.084767Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T15:25:01.884661Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CalendarPage.tsx")}
+2025-07-09T15:25:01.884672Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T15:27:21.382736Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateItinerary.tsx")}
+2025-07-09T15:27:21.382773Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T15:27:29.182435Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateItinerary.tsx")}
+2025-07-09T15:27:29.182444Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T15:28:02.082613Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateItinerary.tsx")}
+2025-07-09T15:28:02.082634Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T15:28:12.882975Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateItinerary.tsx")}
+2025-07-09T15:28:12.882990Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T15:28:21.883059Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateItinerary.tsx")}
+2025-07-09T15:28:21.883073Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T15:28:28.282264Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateItinerary.tsx")}
+2025-07-09T15:28:28.282273Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T15:28:35.882182Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateItinerary.tsx")}
+2025-07-09T15:28:35.882191Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T15:41:19.837117Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateItinerary.tsx")}
+2025-07-09T15:41:19.837137Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T15:41:34.737699Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateItinerary.tsx")}
+2025-07-09T15:41:34.737708Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T15:43:32.236625Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateItinerary.tsx")}
+2025-07-09T15:43:32.236641Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T15:43:42.037424Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateItinerary.tsx")}
+2025-07-09T15:43:42.037434Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T15:44:40.836136Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateItinerary.tsx")}
+2025-07-09T15:44:40.836154Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T15:45:28.335983Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateItinerary.tsx")}
+2025-07-09T15:45:28.336002Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T15:46:35.735083Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateItinerary.tsx")}
+2025-07-09T15:46:35.735092Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T16:06:54.867376Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateGuests.tsx")}
+2025-07-09T16:06:54.867424Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T16:06:56.768001Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateGuests.tsx")}
+2025-07-09T16:06:56.768031Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T16:06:56.966578Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateGuests.tsx")}
+2025-07-09T16:06:56.966589Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T16:06:56.966647Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-07-09T16:07:28.567306Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateGuests.tsx")}
+2025-07-09T16:07:28.567325Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T16:07:28.572361Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-07-09T16:07:31.668485Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateGuests.tsx")}
+2025-07-09T16:07:31.668503Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T16:07:34.467484Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateGuests.tsx")}
+2025-07-09T16:07:34.467506Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T16:07:34.505820Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-07-09T16:07:34.566472Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateGuests.tsx")}
+2025-07-09T16:07:34.566478Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T16:07:34.614856Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-07-09T16:10:14.467066Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateGuests.tsx")}
+2025-07-09T16:10:14.467124Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T16:10:14.538594Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-07-09T16:10:23.265746Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateGuests.tsx")}
+2025-07-09T16:10:23.265759Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T16:10:44.765372Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateGuests.tsx")}
+2025-07-09T16:10:44.765381Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T16:11:06.866859Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateGuests.tsx")}
+2025-07-09T16:11:06.866877Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T16:11:15.066095Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateGuests.tsx")}
+2025-07-09T16:11:15.066131Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T16:11:15.166143Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateGuests.tsx")}
+2025-07-09T16:11:15.166155Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T16:11:15.166219Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-07-09T16:14:21.665297Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateGuests.tsx")}
+2025-07-09T16:14:21.665369Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T16:14:21.735030Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-07-09T16:14:25.665108Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateGuests.tsx")}
+2025-07-09T16:14:25.665127Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T16:14:26.665557Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateGuests.tsx")}
+2025-07-09T16:14:26.665566Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T16:14:26.695521Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-07-09T16:15:49.465088Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateGuests.tsx")}
+2025-07-09T16:15:49.465147Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T16:16:05.464550Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf(".turbo/cookies/2.cookie")}
+2025-07-09T16:16:05.464561Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2025-07-09T16:17:19.063689Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateGuests.tsx")}
+2025-07-09T16:17:19.063713Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T16:21:36.162405Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("sql/update_guests_table_for_modules.sql")}
+2025-07-09T16:21:36.162440Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2025-07-09T16:21:38.363166Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("sql/update_guests_table_for_modules.sql")}
+2025-07-09T16:21:38.363189Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2025-07-09T16:21:38.561727Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("sql/update_guests_table_for_modules.sql")}
+2025-07-09T16:21:38.561746Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2025-07-09T16:26:48.160529Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("sql/update_storage_bucket_limits.sql")}
+2025-07-09T16:26:48.160577Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2025-07-09T16:26:50.661360Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("sql/update_storage_bucket_limits.sql")}
+2025-07-09T16:26:50.661395Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2025-07-09T16:26:51.660534Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("sql/update_storage_bucket_limits.sql")}
+2025-07-09T16:26:51.660561Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2025-07-09T16:28:19.860121Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateGuests.tsx")}
+2025-07-09T16:28:19.860148Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T16:28:31.159417Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateGuests.tsx")}
+2025-07-09T16:28:31.159444Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T16:29:00.683692Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateGuests.tsx")}
+2025-07-09T16:29:00.683713Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T16:34:53.412591Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateGuests.tsx"), AnchoredSystemPathBuf("sql/add_missing_tables.sql")}
+2025-07-09T16:34:53.412737Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }, WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T16:34:53.465992Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-07-09T16:34:53.912823Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/App.tsx"), AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateItinerary.tsx"), AnchoredSystemPathBuf("apps/desktop/renderer/src/lib/auth.ts")}
+2025-07-09T16:34:53.912835Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T16:34:53.912883Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-07-09T16:34:54.412154Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/lib/chat.ts")}
+2025-07-09T16:34:54.412164Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T16:34:54.565972Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-07-09T16:34:54.566065Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/TeamsLayout.tsx"), AnchoredSystemPathBuf("apps/desktop/renderer/src/CalendarPage.tsx"), AnchoredSystemPathBuf("apps/desktop/renderer/src/components/CustomSuccessModal.tsx"), AnchoredSystemPathBuf("apps/desktop/renderer/src/lib/supabase.ts")}
+2025-07-09T16:34:54.566069Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T16:34:54.566101Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-07-09T16:34:54.712399Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("emergency_fix_team_chat.sql"), AnchoredSystemPathBuf("sql/update_storage_bucket_limits.sql"), AnchoredSystemPathBuf("undo_team_delete_rls.sql")}
+2025-07-09T16:34:54.712409Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2025-07-09T16:35:52.313812Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("sql/add_missing_tables.sql")}
+2025-07-09T16:35:52.313928Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2025-07-09T16:35:52.413934Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateGuests.tsx")}
+2025-07-09T16:35:52.413946Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T16:35:52.445614Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-07-09T16:35:52.613639Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/App.tsx"), AnchoredSystemPathBuf("apps/desktop/renderer/src/lib/auth.ts")}
+2025-07-09T16:35:52.613653Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T16:35:52.669375Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-07-09T16:35:52.712729Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/App.tsx"), AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateItinerary.tsx")}
+2025-07-09T16:35:52.712747Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T16:35:52.712793Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-07-09T16:35:53.713120Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/lib/chat.ts"), AnchoredSystemPathBuf("emergency_fix_team_chat.sql"), AnchoredSystemPathBuf("apps/desktop/renderer/src/CalendarPage.tsx"), AnchoredSystemPathBuf("undo_team_delete_rls.sql"), AnchoredSystemPathBuf("apps/desktop/renderer/src/TeamsLayout.tsx"), AnchoredSystemPathBuf("sql/add_missing_tables.sql"), AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateGuests.tsx"), AnchoredSystemPathBuf("apps/desktop/renderer/src/components/CustomSuccessModal.tsx"), AnchoredSystemPathBuf("apps/desktop/renderer/src/lib/supabase.ts")}
+2025-07-09T16:35:53.713130Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }, WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2025-07-09T16:35:53.769728Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-07-09T16:35:53.813188Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("sql/add_missing_tables.sql"), AnchoredSystemPathBuf("undo_team_delete_rls.sql"), AnchoredSystemPathBuf("emergency_fix_team_chat.sql"), AnchoredSystemPathBuf("apps/desktop/renderer/src/CalendarPage.tsx"), AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateGuests.tsx"), AnchoredSystemPathBuf("apps/desktop/renderer/src/TeamsLayout.tsx"), AnchoredSystemPathBuf("apps/desktop/renderer/src/components/CustomSuccessModal.tsx")}
+2025-07-09T16:35:53.813201Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }, WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T16:35:53.813249Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-07-09T16:35:53.914014Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("sql/update_storage_bucket_limits.sql"), AnchoredSystemPathBuf("apps/desktop/renderer/src/App.tsx"), AnchoredSystemPathBuf("apps/desktop/renderer/src/lib/auth.ts"), AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateItinerary.tsx")}
+2025-07-09T16:35:53.914026Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }, WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2025-07-09T16:35:53.920076Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-07-09T16:35:54.813141Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CalendarPage.tsx"), AnchoredSystemPathBuf("apps/desktop/renderer/src/lib/supabase.ts"), AnchoredSystemPathBuf("emergency_fix_team_chat.sql"), AnchoredSystemPathBuf("apps/desktop/renderer/src/TeamsLayout.tsx"), AnchoredSystemPathBuf("sql/update_storage_bucket_limits.sql"), AnchoredSystemPathBuf("undo_team_delete_rls.sql"), AnchoredSystemPathBuf("apps/desktop/renderer/src/components/CustomSuccessModal.tsx"), AnchoredSystemPathBuf("apps/desktop/renderer/src/lib/chat.ts")}
+2025-07-09T16:35:54.813165Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }, WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T16:35:54.850426Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-07-09T16:36:03.113717Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateGuests.tsx"), AnchoredSystemPathBuf("sql/add_missing_tables.sql")}
+2025-07-09T16:36:03.113746Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }, WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2025-07-09T16:36:03.141865Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-07-09T16:36:03.515576Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/App.tsx"), AnchoredSystemPathBuf("apps/desktop/renderer/src/lib/auth.ts"), AnchoredSystemPathBuf("apps/desktop/renderer/src/CreateItinerary.tsx")}
+2025-07-09T16:36:03.515600Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T16:36:03.566260Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-07-09T16:36:04.313911Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/CalendarPage.tsx"), AnchoredSystemPathBuf("apps/desktop/renderer/src/components/CustomSuccessModal.tsx"), AnchoredSystemPathBuf("apps/desktop/renderer/src/lib/chat.ts"), AnchoredSystemPathBuf("undo_team_delete_rls.sql"), AnchoredSystemPathBuf("apps/desktop/renderer/src/lib/supabase.ts"), AnchoredSystemPathBuf("emergency_fix_team_chat.sql"), AnchoredSystemPathBuf("apps/desktop/renderer/src/TeamsLayout.tsx")}
+2025-07-09T16:36:04.313921Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }, WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2025-07-09T16:36:04.313974Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-07-09T16:36:04.413955Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("sql/update_storage_bucket_limits.sql")}
+2025-07-09T16:36:04.413964Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2025-07-09T16:36:05.213963Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/desktop/renderer/src/lib/chat.ts")}
+2025-07-09T16:36:05.213974Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T16:36:05.214166Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-07-09T16:36:05.313170Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("emergency_fix_team_chat.sql"), AnchoredSystemPathBuf("undo_team_delete_rls.sql"), AnchoredSystemPathBuf("apps/desktop/renderer/src/CalendarPage.tsx"), AnchoredSystemPathBuf("apps/desktop/renderer/src/lib/supabase.ts"), AnchoredSystemPathBuf("apps/desktop/renderer/src/TeamsLayout.tsx"), AnchoredSystemPathBuf("apps/desktop/renderer/src/components/CustomSuccessModal.tsx")}
+2025-07-09T16:36:05.313180Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }, WorkspacePackage { name: Other("desktop"), path: AnchoredSystemPathBuf("apps/desktop") }}))
+2025-07-09T16:36:05.313227Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun

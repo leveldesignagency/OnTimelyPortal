@@ -1561,7 +1561,7 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
             if (success) {
               console.log('✅ Group deleted successfully from backend');
               onAddNotification(`Group "${chat.name}" has been deleted`, 'success');
-            } else {
+    } else {
               console.warn('⚠️ Backend deletion failed, but updating UI anyway (group may have been removed from backend)');
               onAddNotification(`Group "${chat.name}" removed from your chat list`, 'info');
             }
@@ -2975,31 +2975,31 @@ export default function TeamChatPage() {
     const subscriptions: any[] = [];
 
     const setupSubscriptions = async () => {
-      // Subscribe to messages for ALL user chats
-      chats.forEach(chat => {
-        console.log(`🔔 Subscribing to messages for chat: ${chat.name} (${chat.id})`);
-        try {
-          const subscription = subscribeToMessages(chat.id, handleNewMessage);
-          if (subscription) {
-            subscriptions.push(subscription);
-          }
-        } catch (error) {
-          console.error(`Failed to subscribe to chat ${chat.id}:`, error);
+    // Subscribe to messages for ALL user chats
+    chats.forEach(chat => {
+      console.log(`🔔 Subscribing to messages for chat: ${chat.name} (${chat.id})`);
+      try {
+        const subscription = subscribeToMessages(chat.id, handleNewMessage);
+        if (subscription) {
+          subscriptions.push(subscription);
         }
-      });
-
-      // Subscribe to user status changes
-      const currentAuthUser = await getCurrentUser();
-      if (currentAuthUser) {
-        try {
-          const statusSubscription = subscribeToUserStatus(currentAuthUser.company_id, handleUserStatusChange);
-          if (statusSubscription) {
-            subscriptions.push(statusSubscription);
-          }
-        } catch (error) {
-          console.error('Failed to subscribe to user status:', error);
-        }
+      } catch (error) {
+        console.error(`Failed to subscribe to chat ${chat.id}:`, error);
       }
+    });
+
+    // Subscribe to user status changes
+      const currentAuthUser = await getCurrentUser();
+    if (currentAuthUser) {
+      try {
+        const statusSubscription = subscribeToUserStatus(currentAuthUser.company_id, handleUserStatusChange);
+        if (statusSubscription) {
+          subscriptions.push(statusSubscription);
+        }
+      } catch (error) {
+        console.error('Failed to subscribe to user status:', error);
+      }
+    }
     };
 
     setupSubscriptions();

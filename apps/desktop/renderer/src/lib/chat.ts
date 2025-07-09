@@ -151,7 +151,7 @@ export const createTeam = async (
   try {
     // Validate company access
     console.log('🔍 Validating company access for:', companyId)
-    if (!validateCompanyAccess(companyId)) {
+    if (!(await validateCompanyAccess(companyId))) {
       console.error('❌ Company access validation failed')
       throw new Error('Access denied: Cannot create team in this company')
     }
@@ -159,7 +159,7 @@ export const createTeam = async (
 
     // Validate creator belongs to company
     console.log('🔍 Getting current user...')
-    const currentUser = getCurrentUser()
+    const currentUser = await getCurrentUser()
     console.log('👤 Current user:', currentUser)
     
     if (!currentUser) {
@@ -323,7 +323,7 @@ export const createTeamChat = async (
     console.log('🚀 Creating team chat:', { creatorId, companyId, teamId, chatName });
 
     // Validate company access
-    if (!validateCompanyAccess(companyId)) {
+    if (!(await validateCompanyAccess(companyId))) {
       console.error('❌ Company access denied for company:', companyId);
       throw new Error('Access denied: Cannot create team chat in this company');
     }
@@ -487,7 +487,7 @@ export const createTeamChat = async (
     }
   } catch (error) {
     console.error('💥 Failed to create team chat:', error)
-    return null
+    return null  // Return null instead of throwing to avoid breaking team creation
   }
 }
 

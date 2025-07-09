@@ -81,12 +81,14 @@ export const logout = async (): Promise<void> => {
 export const getCurrentUser = async (): Promise<User | null> => {
   try {
     const { data: { user: authUser } } = await supabase.auth.getUser();
-    if (!authUser) return null;
+    if (!authUser || !authUser.email) return null;
+    
     const { data: userProfile, error } = await supabase
       .from('users')
       .select('*')
-      .eq('id', authUser.id)
+      .eq('email', authUser.email)  // Match by email instead of ID
       .single();
+      
     if (error || !userProfile) {
       console.error('Failed to fetch user profile:', error);
       return null;

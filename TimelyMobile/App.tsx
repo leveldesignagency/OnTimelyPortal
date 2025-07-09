@@ -47,7 +47,7 @@ export default function App() {
   return (
     <ThemeProvider>
       <NavigationContainer>
-        <StatusBar style="auto" />
+      <StatusBar style="auto" />
         {user ? (
           <Tab.Navigator
             initialRouteName="Dashboard"

@@ -18,7 +18,7 @@ import LoginPage from './pages/LoginPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import { ThemeProvider, ThemeContext } from './ThemeContext';
 import { getCurrentUser, getCompanyEvents } from './lib/auth';
-import { getEvents, createEvent, Event } from './lib/supabase';
+import { getEvents, createEvent, Event, getUserTeamEvents } from './lib/supabase';
 import LinkItinerariesPage from './pages/LinkItinerariesPage';
 import AssignOverviewPage from './pages/AssignOverviewPage';
 import EventPortalManagementPage from './pages/EventPortalManagementPage';
@@ -155,31 +155,54 @@ const AppContent = () => {
   }, [isDark]);
 
   useEffect(() => {
-    // Don't load events on login page
-    if (isLoginPage) {
-      setLoading(false);
-      return;
-    }
-
-    (async () => {
+    const fetchEvents = async () => {
+      if (isLoginPage) {
+        setLoading(false);
+        return;
+      }
+      
       setLoading(true);
       setError(null);
+      
       try {
+        console.log('🔄 Starting event fetch...');
         const user = await getCurrentUser();
+        console.log('👤 Current user for events:', user);
+        
         if (!user) {
-          // Don't show error on login page, let ProtectedRoute handle it
-          setLoading(false);
+          console.log('⚠️ No user found, skipping event fetch');
+          setEvents([]);
           return;
         }
-        const events = await getCompanyEvents(user.company_id);
-        setEvents(events);
+        
+        // Try to fetch events for teams the user is a member of
+        console.log('🔍 Fetching team events for user:', user.id);
+        const teamEvents = await getUserTeamEvents(user.id);
+        console.log('✅ Team events result:', teamEvents);
+        
+        if (teamEvents && teamEvents.length > 0) {
+          console.log('✅ Using team events:', teamEvents.length, 'events');
+          setEvents(teamEvents);
+        } else {
+          // Fallback: show all company events if user is not in any team
+          console.log('⚠️ No team events found, falling back to company events');
+          const companyEvents = await getEvents(user.company_id);
+          console.log('✅ Company events result:', companyEvents);
+          setEvents(companyEvents || []);
+        }
+        
+        console.log('✅ Event fetch completed successfully');
       } catch (err) {
-        console.error('Failed to load events:', err);
-        setError('Failed to load events');
+        console.error('💥 Failed to fetch events:', err);
+        const errorMessage = err instanceof Error ? err.message : 'Failed to load events';
+        setError(errorMessage);
+        setEvents([]);
       } finally {
         setLoading(false);
       }
-    })();
+    };
+    
+    fetchEvents();
   }, [isLoginPage]);
 
   // Event creation handler

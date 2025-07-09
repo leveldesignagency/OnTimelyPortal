@@ -350,10 +350,10 @@ export default function CreateEventPage({ onCreate }: CreateEventPageProps) {
       }
       console.log('Creating event with user:', currentUser);
       const eventData: Omit<Event, 'id' | 'created_at' | 'updated_at'> = {
-        name,
-        from,
-        to,
-        status: 'Upcoming',
+      name,
+      from,
+      to,
+      status: 'Upcoming',
         description: description || undefined,
         location: location || undefined,
         company_id: currentUser.company_id,
@@ -384,10 +384,10 @@ export default function CreateEventPage({ onCreate }: CreateEventPageProps) {
           {/* Event Name field */}
           <div style={{ marginBottom: 20, width: '100%' }}>
             <label style={{ color: colors.text, fontWeight: 600, fontSize: 16, marginBottom: 8, display: 'block' }}>Event Name *</label>
-            <input
+        <input
               type="text"
-              value={name}
-              onChange={e => setName(e.target.value)}
+          value={name}
+          onChange={e => setName(e.target.value)}
               style={{
                 width: '100%',
                 padding: '16px 20px',
@@ -403,17 +403,17 @@ export default function CreateEventPage({ onCreate }: CreateEventPageProps) {
                 transition: 'all 0.2s',
                 backdropFilter: 'blur(10px)'
               }}
-              placeholder="What is your event called?"
-              required
-            />
+          placeholder="What is your event called?"
+          required
+        />
           </div>
           {/* Location field */}
           <div style={{ marginBottom: 20, width: '100%' }}>
             <label style={{ color: colors.text, fontWeight: 600, fontSize: 16, marginBottom: 8, display: 'block' }}>Location</label>
-            <input
+        <input
               type="text"
-              value={location}
-              onChange={e => setLocation(e.target.value)}
+          value={location}
+          onChange={e => setLocation(e.target.value)}
               style={{
                 width: '100%',
                 padding: '16px 20px',
@@ -438,48 +438,48 @@ export default function CreateEventPage({ onCreate }: CreateEventPageProps) {
             <label style={{ color: colors.text, fontWeight: 600, fontSize: 16, marginBottom: 8, display: 'block' }}>Time Zone</label>
             <GlassTimeZoneDropdown value={timeZone} onChange={setTimeZone} colors={colors} />
           </div>
-          <label style={{ color: colors.textSecondary, fontWeight: 600, fontSize: 15, marginBottom: 8, display: 'block', marginTop: 12, alignSelf: 'flex-start' }} htmlFor="event-from">DATES/DURATION *</label>
-          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 40, gap: 20, width: '100%' }}>
-            <CustomDatePicker
-              value={from}
-              onChange={setFrom}
-              placeholder="Start date"
-              isDark={isDark}
-              colors={colors}
-              required
-            />
-            <span style={{ fontSize: 32, color: colors.textSecondary, margin: '0 12px', userSelect: 'none' }}>&#9654;</span>
-            <CustomDatePicker
-              value={to}
-              onChange={setTo}
-              placeholder="End date"
-              isDark={isDark}
-              colors={colors}
-              required
-            />
-          </div>
-          <button 
-            type="submit" 
-            disabled={loading}
-            style={{ 
-              width: '100%', 
-              marginTop: 12, 
-              height: 60, 
-              fontSize: 22,
-              fontWeight: 700,
-              borderRadius: '12px',
-              border: 'none',
-              background: colors.text,
-              color: isDark ? '#000' : '#fff',
-              opacity: loading ? 0.7 : 1,
-              cursor: loading ? 'not-allowed' : 'pointer',
-              boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.2)' : '0 2px 8px rgba(0,0,0,0.08)',
-              transition: 'all 0.2s',
-              letterSpacing: 1
-            }}
-          >
-            {loading ? 'CREATING...' : 'CREATE'}
-          </button>
+        <label style={{ color: colors.textSecondary, fontWeight: 600, fontSize: 15, marginBottom: 8, display: 'block', marginTop: 12, alignSelf: 'flex-start' }} htmlFor="event-from">DATES/DURATION *</label>
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 40, gap: 20, width: '100%' }}>
+          <CustomDatePicker
+            value={from}
+            onChange={setFrom}
+            placeholder="Start date"
+            isDark={isDark}
+            colors={colors}
+            required
+          />
+          <span style={{ fontSize: 32, color: colors.textSecondary, margin: '0 12px', userSelect: 'none' }}>&#9654;</span>
+          <CustomDatePicker
+            value={to}
+            onChange={setTo}
+            placeholder="End date"
+            isDark={isDark}
+            colors={colors}
+            required
+          />
+        </div>
+        <button 
+          type="submit" 
+          disabled={loading}
+          style={{ 
+            width: '100%', 
+            marginTop: 12, 
+            height: 60, 
+            fontSize: 22,
+            fontWeight: 700,
+            borderRadius: '12px',
+            border: 'none',
+            background: colors.text,
+            color: isDark ? '#000' : '#fff',
+            opacity: loading ? 0.7 : 1,
+            cursor: loading ? 'not-allowed' : 'pointer',
+            boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.2)' : '0 2px 8px rgba(0,0,0,0.08)',
+            transition: 'all 0.2s',
+            letterSpacing: 1
+          }}
+        >
+          {loading ? 'CREATING...' : 'CREATE'}
+        </button>
         </form>
       </div>
     </div>
