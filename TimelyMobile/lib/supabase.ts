@@ -1,8 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
 
-const supabaseUrl = 'https://ijsktwmevnqgzwwuggkf.supabase.co';
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlqc2t0d21ldm5xZ3p3d3VnZ2tmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTA3MDU4MTYsImV4cCI6MjA2NjI4MTgxNn0.w4eBL4hOZoAOo33ZXX-lSqQmIuSoP3fBEO1lBlpIRNw';
+const supabaseUrl = Constants.expoConfig.extra.SUPABASE_URL;
+const supabaseAnonKey = Constants.expoConfig.extra.SUPABASE_ANON_KEY;
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
@@ -30,7 +31,6 @@ export type Event = {
 
 export type Guest = {
   id: string;
-  event_id: string;
   company_id: string;
   first_name: string;
   middle_name?: string;

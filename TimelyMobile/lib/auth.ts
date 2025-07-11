@@ -173,16 +173,31 @@ export async function getCurrentUser(): Promise<AuthResponse> {
 }
 
 export async function guestLogin(email: string, password: string) {
-  // Validate guest login
+  // Log credentials being sent
+  console.log('[guestLogin] Attempting login with:', email, password);
+
+  // 1. Authenticate with Supabase Auth
+  const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password });
+  console.log('[guestLogin] signInWithPassword result:', authData, authError);
+  if (authError) {
+    return { error: authError, loginResult: null, guest: null };
+  }
+
+  // TEMPORARY BYPASS: Skip RPC for now
+  return { error: null, loginResult: null, guest: null };
+
+  // 2. (Optional) Validate guest login in your own table
   const { data: loginResult, error: loginError } = await supabase.rpc('validate_guest_login', {
     p_email: email,
     p_password: password,
   });
+  console.log('[guestLogin] validate_guest_login result:', loginResult, loginError);
   if (loginError || !loginResult || !loginResult[0]?.is_valid) {
     return { error: loginError || new Error('Invalid login'), loginResult: null, guest: null };
   }
+
+  // 3. Fetch guest profile if needed
   const guest_id = loginResult[0].guest_id;
-  // Fetch guest profile by guest_id
   const { data: guest, error: guestError } = await supabase
     .from('guests')
     .select('*')

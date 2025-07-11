@@ -36,20 +36,40 @@ export default function TimelineScreen({ guest }: { guest: any }) {
   // Fetch itineraries for selected date
   useEffect(() => {
     async function fetchItineraries() {
-      if (!guest?.event_id || !guest?.id) return;
+      if (!guest?.event_id || !guest?.id) {
+        console.log('[TimelineScreen] Missing guest data:', { event_id: guest?.event_id, guest_id: guest?.id });
+        return;
+      }
       setLoading(true);
-      
       const selectedDateStr = selectedDate.toISOString().split('T')[0];
+      console.log('[TimelineScreen] Fetching itineraries for:', { 
+        guest_id: guest.id, 
+        event_id: guest.event_id, 
+        date: selectedDateStr 
+      });
       
-      const { data, error } = await supabase
-        .from('itineraries')
-        .select('*')
-        .eq('event_id', guest.event_id)
-        .eq('date', selectedDateStr)
-        .order('start_time', { ascending: true });
+      try {
+        // Use the secure RPC that verifies company_id, event_id, and guest_id
+        const { data, error } = await supabase.rpc('get_guest_itinerary_items', {
+          p_guest_id: guest.id,
+          p_event_id: guest.event_id,
+          p_date: selectedDateStr
+        });
         
-      setItineraries(data || []);
-      setLoading(false);
+        console.log('[TimelineScreen] RPC result:', { data, error });
+        
+        if (error) {
+          console.error('[TimelineScreen] Error fetching itineraries:', error);
+          setItineraries([]);
+        } else {
+          setItineraries(data || []);
+        }
+      } catch (err) {
+        console.error('[TimelineScreen] Exception in fetchItineraries:', err);
+        setItineraries([]);
+      } finally {
+        setLoading(false);
+      }
     }
     fetchItineraries();
   }, [guest, selectedDate]);
@@ -62,20 +82,9 @@ export default function TimelineScreen({ guest }: { guest: any }) {
     const minutes = currentTime.getMinutes();
     const seconds = currentTime.getSeconds();
     
-    // Debug logging
-    console.log('=== SCROLL DEBUG ===');
-    console.log('Current device time:', currentTime.toLocaleTimeString());
-    console.log('Hours:', hours, 'Minutes:', minutes, 'Seconds:', seconds);
-    
     const currentY = getYForTime(hours, minutes, seconds);
     const centerOffset = SCREEN_HEIGHT / 2;
     const scrollTarget = currentY - centerOffset;
-    
-    console.log('Current Y position:', currentY);
-    console.log('Screen height:', SCREEN_HEIGHT);
-    console.log('Center offset:', centerOffset);
-    console.log('Scroll target:', scrollTarget);
-    console.log('==================');
     
     // Scroll both ScrollViews to the same position
     scrollViewRef.current.scrollTo({

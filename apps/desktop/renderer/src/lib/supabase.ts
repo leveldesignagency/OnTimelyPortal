@@ -323,18 +323,19 @@ export type Itinerary = {
   updated_at?: string
 }
 
-export const getItineraries = async (eventId: string, companyId?: string) => {
+export const getItineraries = async (eventId: string, companyId?: string, sortOrder: 'asc' | 'desc' = 'asc') => {
   let query = supabase
     .from('itineraries')
     .select('*')
     .eq('event_id', eventId)
+    .order('date', { ascending: sortOrder === 'asc' });
 
   // Add company filtering for extra security
   if (companyId) {
     query = query.eq('company_id', companyId)
   }
 
-  const { data, error } = await query.order('created_at', { ascending: false })
+  const { data, error } = await query;
 
   if (error) throw error
   return data

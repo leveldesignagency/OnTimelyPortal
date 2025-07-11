@@ -18,6 +18,7 @@ import { useFonts, Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, P
 import { BlurView } from 'expo-blur'
 import GuestDashboard from './GuestDashboard'
 import { supabase } from '../lib/supabase'
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface LoginScreenProps {
   onLogin: (user: any) => void
@@ -86,31 +87,41 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
 
   const handleGuestLogin = async () => {
     if (!guestEmail || !guestPassword) {
-      Alert.alert('Error', 'Please enter both email and password')
-      return
+      Alert.alert('Error', 'Please enter both email and password');
+      return;
     }
-    setLoading(true)
+    setLoading(true);
     try {
-      const { error, loginResult } = await guestLogin(guestEmail, guestPassword)
-      if (error) {
-        Alert.alert('Guest Login Failed', error.message)
-      } else if (loginResult) {
-        const { guest_id } = loginResult
-        const { data: guest, error: guestError } = await supabase
-          .from('guests')
-          .select('*')
-          .eq('id', guest_id)
-          .single()
-        if (guestError || !guest) {
-          Alert.alert('Error', 'Failed to fetch guest profile')
-        } else {
-          onLogin(guest)
-        }
+      // Debug: log credentials being sent
+      console.log('Attempting guest login with:', guestEmail, guestPassword);
+      // Call the login_guest RPC to validate credentials
+      const { data, error } = await supabase.rpc('login_guest', {
+        p_email: guestEmail,
+        p_password: guestPassword
+      });
+      console.log('login_guest result:', data, error);
+      if (error || !data || !Array.isArray(data) || data.length === 0) {
+        let errorMsg = error?.message || 'Invalid login credentials';
+        Alert.alert('Guest Login Failed', errorMsg);
+        setLoading(false);
+        return;
       }
+      const guest = data[0];
+      // Store guest session (id, event_id, role) in AsyncStorage
+      const session = {
+        id: guest.id, // use 'id' for consistency
+        event_id: guest.event_id,
+        role: 'guest',
+        email: guest.email
+      };
+      await AsyncStorage.setItem('guestSession', JSON.stringify(session));
+      // Optionally: fetch guest profile or event data here
+      onLogin(session);
     } catch (error) {
-      Alert.alert('Error', 'An unexpected error occurred')
+      console.log('Unexpected error:', error);
+      Alert.alert('Error', 'An unexpected error occurred');
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
   }
 

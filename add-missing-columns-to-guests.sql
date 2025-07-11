@@ -1,3 +1,9 @@
+-- GUESTS TABLE MIGRATION: Remove guest_id column and use id as the canonical guest identifier
+-- All foreign keys in related tables should reference guests.id
+
+ALTER TABLE guests DROP COLUMN IF EXISTS guest_id;
+-- All code, functions, and foreign keys should now use guests.id as the guest identifier
+
 -- Add ALL missing columns to existing guests table
 -- This will add all columns that the code expects based on the Guest type
 

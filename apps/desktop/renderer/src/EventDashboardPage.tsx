@@ -318,6 +318,16 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [showOptionsMenu, setShowOptionsMenu] = useState(false);
 
+  // Add state for itinerary date sort order
+  const [filtersItineraryDateSort, setFiltersItineraryDateSort] = useState<'asc' | 'desc'>('asc');
+
+  // Add state for custom sort dropdown
+  const [showSortDropdown, setShowSortDropdown] = useState(false);
+
+  // Add state for undo functionality
+  const [lastBulkAction, setLastBulkAction] = useState<{ action: string, affected: any[] } | null>(null);
+  const [undoMessage, setUndoMessage] = useState<string | null>(null);
+
   // Success message function
   const showSuccess = (message: string) => {
     setSuccessMessage(message);
@@ -847,9 +857,11 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
       await addItinerary(newItinerary);
       await refetchItineraries();
       showSuccess('Itinerary duplicated successfully!');
+      return newItinerary;
     } catch (error) {
       console.error('Error duplicating itinerary:', error);
       showSuccess('Error duplicating itinerary. Please try again.');
+      return null;
     }
   };
 
@@ -1570,6 +1582,58 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
     border: isDark ? '1px solid #333' : '1px solid #e5e7eb',
     marginBottom: 32,
     marginTop: 15,
+  };
+
+  // Add a useEffect to refetch itineraries when sort order changes
+  useEffect(() => {
+    if (!event?.id) return;
+    const fetchItineraries = async () => {
+      try {
+        // getCurrentUser may be async, so handle accordingly
+        const user = typeof getCurrentUser === 'function' ? await getCurrentUser() : getCurrentUser;
+        const companyId = user?.company_id;
+        const data = await getItineraries(event.id, companyId, filtersItineraryDateSort);
+        setSavedItineraries(data.filter((it: any) => it.is_draft === false));
+        setDraftItineraries(data.filter((it: any) => it.is_draft === true));
+      } catch (error) {
+        console.error('Error fetching itineraries with sort:', error);
+      }
+    };
+    fetchItineraries();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtersItineraryDateSort, event?.id]);
+
+  // Remove Options button and dropdown, add Select All button and modal
+  // Add state for Select All modal
+  const [showBulkActionsModal, setShowBulkActionsModal] = useState(false);
+
+  // Undo Last button handler
+  const handleUndoLast = async () => {
+    if (!lastBulkAction) return;
+    if (lastBulkAction.action === 'duplicate') {
+      // Remove duplicated itineraries
+      for (const it of lastBulkAction.affected) {
+        await deleteItinerary(it.id);
+      }
+      await refetchItineraries();
+      setUndoMessage('Duplicated itineraries have been removed.');
+    } else if (lastBulkAction.action === 'draft') {
+      // Un-draft: set is_draft to false
+      for (const it of lastBulkAction.affected) {
+        await updateItinerary(it.id, { ...it, is_draft: false });
+      }
+      await refetchItineraries();
+      setUndoMessage('Drafts have been restored to active.');
+    } else if (lastBulkAction.action === 'delete') {
+      // Re-create deleted itineraries
+      for (const it of lastBulkAction.affected) {
+        const { id, ...rest } = it;
+        await addItinerary(rest);
+      }
+      await refetchItineraries();
+      setUndoMessage('Deleted itineraries have been restored.');
+    }
+    setLastBulkAction(null);
   };
 
   return (
@@ -2299,137 +2363,164 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
                 <h2 style={mainTitleStyle}>Itineraries</h2>
                 
-                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                  {/* Options Menu Button */}
-                  <div style={{ position: 'relative' }} ref={optionsMenuRef}>
-                    <button 
-                      onClick={() => setShowOptionsMenu(!showOptionsMenu)}
-                      style={{
-                        ...getButtonStyles(isDark, 'secondary'),
-                        fontSize: 16,
-                        minWidth: 120,
-                        minHeight: 48,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 8
-                      }}
-                    >
-                      Options
-                      <span style={{ fontSize: 12 }}>▼</span>
-                    </button>
-                    
-                    {/* Options Dropdown */}
-                    {showOptionsMenu && (
-                      <div style={{
-                        position: 'absolute',
-                        top: '100%',
-                        right: 0,
-                        zIndex: 1000,
-                        width: 180,
-                        ...getGlassStyles(isDark),
-                        padding: 16,
-                        marginTop: 8,
-                        boxSizing: 'border-box',
-                      }}>
-                        <button
-                          onClick={handleSelectAllItineraries}
-                          style={{
-                            width: '100%',
-                            padding: '12px 16px',
-                            background: 'transparent',
-                            border: 'none',
-                            color: isDark ? '#ffffff' : '#000000',
-                            textAlign: 'left',
-                            cursor: 'pointer',
-                            borderRadius: 8,
-                            fontSize: 14,
-                            fontWeight: 500,
-                            marginBottom: 8,
-                            transition: 'background 0.2s ease'
-                          }}
-                          onMouseEnter={e => {
-                            e.currentTarget.style.background = isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)';
-                          }}
-                          onMouseLeave={e => {
-                            e.currentTarget.style.background = 'transparent';
-                          }}
-                        >
-                          {selectedItineraryIds.length === savedItineraries.length ? 'Deselect All' : 'Select All'}
-                        </button>
-                        <button
-                          onClick={() => {
-                            setShowBulkDeleteConfirm(true);
-                            setShowOptionsMenu(false);
-                          }}
-                          style={{
-                            width: '100%',
-                            padding: '12px 16px',
-                            background: 'rgba(239, 68, 68, 0.1)',
-                            border: '1px solid rgba(239, 68, 68, 0.3)',
-                            color: '#ef4444',
-                            textAlign: 'left',
-                            cursor: 'pointer',
-                            borderRadius: 8,
-                            fontSize: 14,
-                            fontWeight: 500,
-                            marginBottom: 8,
-                            transition: 'all 0.2s ease'
-                          }}
-                          onMouseEnter={e => {
-                            e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
-                          }}
-                          onMouseLeave={e => {
-                            e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
-                          }}
-                        >
-                          Delete All
-                        </button>
-                        
-                        <button
-                          onClick={() => {
-                            handleExportCsv();
-                            setShowOptionsMenu(false);
-                          }}
-                          style={{
-                            width: '100%',
-                            padding: '12px 16px',
-                            background: 'transparent',
-                            border: 'none',
-                            color: isDark ? '#ffffff' : '#000000',
-                            textAlign: 'left',
-                            cursor: 'pointer',
-                            borderRadius: 8,
-                            fontSize: 14,
-                            fontWeight: 500,
-                            marginBottom: 8,
-                            transition: 'background 0.2s ease'
-                          }}
-                          onMouseEnter={e => {
-                            e.currentTarget.style.background = isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)';
-                          }}
-                          onMouseLeave={e => {
-                            e.currentTarget.style.background = 'transparent';
-                          }}
-                        >
-                          Export CSV
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                  
+                <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+                  {/* Select All Button (replaces Options) */}
+                  <button
+                    onClick={() => setShowBulkActionsModal(true)}
+                    style={{
+                      ...getButtonStyles(isDark, 'secondary'),
+                      fontSize: 16,
+                      minWidth: 160,
+                      minHeight: 48,
+                      height: 48,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    Select All
+                  </button>
+                  {/* Export CSV Button */}
+                  <button
+                    onClick={handleExportCsv}
+                    style={{
+                      ...getButtonStyles(isDark, 'secondary'),
+                      fontSize: 16,
+                      minWidth: 160,
+                      minHeight: 48,
+                      height: 48,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    Export CSV
+                  </button>
                   {/* Create Itinerary Button */}
-                  <button 
-                    onClick={() => navigate(`/event/${id}/itinerary/create`)} 
+                  <button
+                    onClick={() => navigate(`/event/${id}/itinerary/create`)}
                     style={{
                       ...getButtonStyles(isDark, 'primary'),
                       fontSize: 18,
-                      minWidth: 140,
+                      minWidth: 160,
                       minHeight: 48,
-                      width: 'auto'
+                      height: 48,
+                      width: 'auto',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
                     }}
                   >
                     Create Itinerary
                   </button>
+                </div>
+              </div>
+              
+              {/* Sort by Date Dropdown */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: 16, gap: 12 }}>
+                <label htmlFor="sort-date" style={{ fontWeight: 500, fontSize: 15, color: isDark ? '#fff' : '#222', marginRight: 8 }}>Sort by Date:</label>
+                <div style={{ position: 'relative', minWidth: 180, maxWidth: 220 }}>
+                  <button
+                    id="sort-date"
+                    aria-haspopup="listbox"
+                    aria-expanded={showSortDropdown}
+                    onClick={() => setShowSortDropdown(v => !v)}
+                    style={{
+                      width: '100%',
+                      height: 48,
+                      background: isDark ? 'rgba(30, 30, 30, 0.7)' : 'rgba(255, 255, 255, 0.7)',
+                      border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.12)'}`,
+                      borderRadius: 14,
+                      boxShadow: isDark ? '0 4px 16px rgba(0,0,0,0.18)' : '0 4px 16px rgba(0,0,0,0.08)',
+                      color: isDark ? '#fff' : '#222',
+                      fontSize: 17,
+                      fontWeight: 600,
+                      padding: '0 36px 0 16px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      cursor: 'pointer',
+                      outline: showSortDropdown ? `2px solid ${isDark ? '#fff' : '#222'}` : 'none',
+                      transition: 'background 0.2s',
+                      position: 'relative',
+                      zIndex: 2,
+                    }}
+                    onBlur={e => {
+                      // Only close if focus leaves the dropdown area
+                      if (!e.currentTarget.contains(e.relatedTarget)) setShowSortDropdown(false);
+                    }}
+                  >
+                    {filtersItineraryDateSort === 'asc' ? 'Date Ascending' : 'Date Descending'}
+                    <span style={{ position: 'absolute', right: 16, fontSize: 20, color: isDark ? '#fff' : '#222', opacity: 0.7, pointerEvents: 'none' }}>▼</span>
+                  </button>
+                  {showSortDropdown && (
+                    <div
+                      role="listbox"
+                      tabIndex={-1}
+                      style={{
+                        position: 'absolute',
+                        top: '110%',
+                        left: 0,
+                        width: '100%',
+                        background: isDark ? 'rgba(30, 30, 30, 0.95)' : 'rgba(255,255,255,0.97)',
+                        border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.12)'}`,
+                        borderRadius: 14,
+                        boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.28)' : '0 8px 32px rgba(0,0,0,0.12)',
+                        zIndex: 1000,
+                        marginTop: 4,
+                        padding: 4,
+                        backdropFilter: 'blur(14px)',
+                        WebkitBackdropFilter: 'blur(14px)',
+                      }}
+                    >
+                      {['asc', 'desc'].map(option => (
+                        <button
+                          key={option}
+                          role="option"
+                          aria-selected={filtersItineraryDateSort === option}
+                          onClick={() => {
+                            setFiltersItineraryDateSort(option as 'asc' | 'desc');
+                            setShowSortDropdown(false);
+                          }}
+                          style={{
+                            width: '100%',
+                            background: 'none',
+                            border: 'none',
+                            color: isDark ? '#fff' : '#222',
+                            fontSize: 17,
+                            fontWeight: 600,
+                            padding: '12px 16px',
+                            borderRadius: 10,
+                            textAlign: 'left',
+                            cursor: 'pointer',
+                            transition: 'background 0.15s',
+                            backgroundColor: filtersItineraryDateSort === option ? (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)') : 'transparent',
+                            outline: 'none',
+                            marginBottom: 2,
+                          }}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              setFiltersItineraryDateSort(option as 'asc' | 'desc');
+                              setShowSortDropdown(false);
+                            }
+                          }}
+                        >
+                          {option === 'asc' ? 'Date Ascending' : 'Date Descending'}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
               
@@ -3933,6 +4024,141 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
         }}>
           <span style={{ fontSize: 18 }}>✓</span>
           {successMessage}
+        </div>
+      )}
+
+      {/* Bulk Actions Modal */}
+      {showBulkActionsModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.6)',
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 2000
+        }}>
+          <div style={{
+            ...getGlassStyles(isDark),
+            padding: 40,
+            minWidth: 420,
+            maxWidth: 520,
+            borderRadius: 20,
+            boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.28)' : '0 8px 32px rgba(0,0,0,0.12)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 24
+          }}>
+            <div style={{ fontSize: 24, fontWeight: 700, marginBottom: 8, color: isDark ? '#fff' : '#222' }}>Bulk Actions</div>
+            <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <button
+                onClick={async () => {
+                  // Duplicate all selected itineraries
+                  const duplicated: any[] = [];
+                  for (const it of savedItineraries) {
+                    const newIt = await handleDuplicate(it);
+                    if (newIt) duplicated.push(newIt);
+                  }
+                  setLastBulkAction({ action: 'duplicate', affected: duplicated });
+                  setShowBulkActionsModal(false);
+                }}
+                style={{ ...getButtonStyles(isDark, 'primary'), width: '100%', fontSize: 17 }}
+              >
+                Duplicate All
+              </button>
+              <button
+                onClick={() => {
+                  // Share all selected itineraries (open share modal for all)
+                  // You may want to implement a custom share modal for all, or call your existing share logic
+                  // For now, just close the modal
+                  setShowBulkActionsModal(false);
+                  setShowShareModal(true);
+                  setItineraryToShare(null); // null means share all
+                }}
+                style={{ ...getButtonStyles(isDark, 'secondary'), width: '100%', fontSize: 17 }}
+              >
+                Share All
+              </button>
+              <button
+                onClick={async () => {
+                  // Save all as draft
+                  const drafted: any[] = [];
+                  for (const it of savedItineraries) {
+                    await handleMakeDraft(it.id);
+                    drafted.push(it);
+                  }
+                  setLastBulkAction({ action: 'draft', affected: drafted });
+                  setShowBulkActionsModal(false);
+                }}
+                style={{ ...getButtonStyles(isDark, 'secondary'), width: '100%', fontSize: 17 }}
+              >
+                Save All as Draft
+              </button>
+              <button
+                onClick={async () => {
+                  // Delete all
+                  const deleted: any[] = [];
+                  for (const it of savedItineraries) {
+                    await deleteItinerary(it.id);
+                    deleted.push(it);
+                  }
+                  await refetchItineraries();
+                  setLastBulkAction({ action: 'delete', affected: deleted });
+                  setShowBulkActionsModal(false);
+                }}
+                style={{
+                  ...getButtonStyles(isDark, 'secondary'),
+                  width: '100%',
+                  fontSize: 17,
+                  background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                  color: '#fff',
+                  border: 'none',
+                }}
+              >
+                Delete All
+              </button>
+            </div>
+            <button
+              onClick={handleUndoLast}
+              disabled={!lastBulkAction}
+              style={{
+                ...getButtonStyles(isDark, 'secondary'),
+                width: '100%',
+                fontSize: 17,
+                opacity: lastBulkAction ? 1 : 0.5,
+                cursor: lastBulkAction ? 'pointer' : 'not-allowed',
+                marginBottom: 8
+              }}
+            >
+              Undo Last
+            </button>
+            {undoMessage && (
+              <div style={{
+                marginTop: 12,
+                color: isDark ? '#22c55e' : '#16a34a',
+                fontWeight: 600,
+                textAlign: 'center',
+                fontSize: 16
+              }}>{undoMessage}</div>
+            )}
+            <button
+              onClick={() => setShowBulkActionsModal(false)}
+              style={{
+                marginTop: 16,
+                ...getButtonStyles(isDark, 'secondary'),
+                width: '100%',
+                fontSize: 17
+              }}
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       )}
     </div>
