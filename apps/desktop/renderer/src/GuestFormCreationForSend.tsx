@@ -5,6 +5,7 @@ import countryList from 'country-list';
 import { codes as countryCallingCodes } from 'country-calling-code';
 import { getCurrentUser } from './lib/auth';
 import { addMultipleGuests, deleteGuest, deleteGuestsByGroupId } from './lib/supabase';
+import { v4 as uuidv4 } from 'uuid';
 
 const AVIATIONSTACK_API_KEY = 'bb7fd8369e323c356434d5b1ac77b437'; // 🚨 PASTE YOUR NEW AVIATIONSTACK API KEY HERE 🚨
 
@@ -691,34 +692,38 @@ export default function GuestFormCreationForSend() {
     }
 
     // Convert guests to Supabase format and save
-    const guestsForSupabase = guestsToProcess.map(guest => ({
-      event_id: eventId,
-      company_id: currentUser.company_id || '',
-      first_name: guest.firstName,
-      middle_name: guest.middleName || '',
-      last_name: guest.lastName,
-      email: guest.email,
-      contact_number: guest.contactNumber,
-      country_code: guest.countryCode,
-      id_type: guest.idType,
-      id_number: guest.idNumber,
-      id_country: guest.idCountry || '',
-      dob: guest.dob || undefined,
-      gender: guest.gender || '',
-      group_id: isGroup ? `group-${Date.now()}` : undefined,
-      group_name: isGroup ? groupName : undefined,
-      next_of_kin_name: guest.nextOfKinName || '',
-      next_of_kin_email: guest.nextOfKinEmail || '',
-      next_of_kin_phone_country: guest.nextOfKinPhoneCountry || '',
-      next_of_kin_phone: guest.nextOfKinPhone || '',
-      dietary: guest.dietary || [],
-      medical: guest.medical || [],
-      modules: guest.modules || {},
-      module_values: guest.moduleValues || {},
-      prefix: guest.prefix || '',
-      status: 'pending',
-      created_by: currentUser.id || undefined
-    }));
+    const guestsForSupabase = guestsToProcess.map(guest => {
+      const guestId = uuidv4();
+      return {
+        id: guestId,
+        event_id: eventId,
+        company_id: currentUser.company_id || '',
+        first_name: guest.firstName,
+        middle_name: guest.middleName || '',
+        last_name: guest.lastName,
+        email: guest.email,
+        contact_number: guest.contactNumber,
+        country_code: guest.countryCode,
+        id_type: guest.idType,
+        id_number: guest.idNumber,
+        id_country: guest.idCountry || '',
+        dob: guest.dob || undefined,
+        gender: guest.gender || '',
+        group_id: isGroup ? `group-${Date.now()}` : undefined,
+        group_name: isGroup ? groupName : undefined,
+        next_of_kin_name: guest.nextOfKinName || '',
+        next_of_kin_email: guest.nextOfKinEmail || '',
+        next_of_kin_phone_country: guest.nextOfKinPhoneCountry || '',
+        next_of_kin_phone: guest.nextOfKinPhone || '',
+        dietary: guest.dietary || [],
+        medical: guest.medical || [],
+        modules: guest.modules || {},
+        module_values: guest.moduleValues || {},
+        prefix: guest.prefix || '',
+        status: 'pending',
+        created_by: currentUser.id || undefined
+      };
+    });
 
     console.log('Saving guests to Supabase:', guestsForSupabase);
 

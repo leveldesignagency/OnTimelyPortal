@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef, useMemo, useContext } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import Tesseract from 'tesseract.js';
-import countryList from 'country-list';
 import { codes as countryCallingCodes } from 'country-calling-code';
-import { getCurrentUser } from './lib/auth';
+import { getCurrentUser, User } from './lib/auth';
 import { addMultipleGuests, getGuests, deleteGuest, deleteGuestsByGroupId, supabase } from './lib/supabase';
 import { ThemeContext } from './ThemeContext';
 import { useRealtimeEvents } from './hooks/useRealtime';
+import Papa from 'papaparse';
+import { v4 as uuidv4 } from 'uuid';
 
 const AVIATIONSTACK_API_KEY = 'bb7fd8369e323c356434d5b1ac77b437'; // 🚨 PASTE YOUR NEW AVIATIONSTACK API KEY HERE 🚨
 
@@ -182,7 +183,6 @@ const GUEST_FIELDS = [
 
 const PREFIXES = ['Mr', 'Mrs', 'Ms', 'Mx', 'Dr', 'Prof'];
 const GENDERS = ['Male', 'Female', 'Transgender', 'Non Binary', 'Other', 'Prefer Not to Say'];
-const COUNTRIES = countryList.getNames();
 
 function getFlagEmoji(isoCode2: string) {
   if (!isoCode2) return '';
@@ -295,6 +295,22 @@ const getColors = (isDark: boolean) => ({
   cardBg: isDark ? 'rgba(30, 30, 30, 0.8)' : 'rgba(255, 255, 255, 0.8)'
 });
 
+// 1. Add a helper to convert dd/mm/yyyy <-> yyyy-mm-dd
+function convertDOBtoISO(dob: string) {
+  if (!dob) return null;
+  const match = dob.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!match) return null;
+  const [, day, month, year] = match;
+  return `${year}-${month}-${day}`;
+}
+function convertDOBtoDisplay(iso: string) {
+  if (!iso) return '';
+  const match = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return iso;
+  const [, year, month, day] = match;
+  return `${day}/${month}/${year}`;
+}
+
 export default function CreateGuests() {
   const { eventId: eventIdFromParams, guestIndex } = useParams();
   const location = useLocation();
@@ -364,10 +380,16 @@ export default function CreateGuests() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  const currentUser = getCurrentUser();
-  const { events: realtimeEvents } = useRealtimeEvents(currentUser?.company_id || null);
-  const [eventDetails, setEventDetails] = useState<any>(null);
-  const [dateRange, setDateRange] = useState('');
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const companyId = currentUser?.company_id || null;
+  const { events: realtimeEvents } = useRealtimeEvents(companyId);
+
+  useEffect(() => {
+    (async () => {
+      const user = await getCurrentUser();
+      setCurrentUser(user);
+    })();
+  }, []);
 
   useEffect(() => {
     if (!eventId || !realtimeEvents) return;
@@ -381,6 +403,9 @@ export default function CreateGuests() {
       }
     }
   }, [eventId, realtimeEvents]);
+
+  const [eventDetails, setEventDetails] = useState<any>(null);
+  const [dateRange, setDateRange] = useState('');
 
   useEffect(() => {
     if (!eventId) return;
@@ -440,6 +465,12 @@ export default function CreateGuests() {
           console.log('[CreateGuests] guestToEdit found:', guestToEdit);
 
           if (guestToEdit) {
+            if (guestToEdit.dob) {
+              guestToEdit.dob = convertDOBtoDisplay(guestToEdit.dob);
+            }
+          }
+
+          if (guestToEdit) {
             setGuests([]); // Clear guests state to avoid rendering the summary card
             setEditGuestIdx(!isNaN(idx) ? idx : null);
 
@@ -469,6 +500,12 @@ export default function CreateGuests() {
             guestToEdit = allGuests.find((g: any) => g.id === guestIndex);
           }
           console.log('[CreateGuests] Fallback guestToEdit found:', guestToEdit);
+
+          if (guestToEdit) {
+            if (guestToEdit.dob) {
+              guestToEdit.dob = convertDOBtoDisplay(guestToEdit.dob);
+            }
+          }
 
           if (guestToEdit) {
             setGuests([]);
@@ -915,16 +952,21 @@ export default function CreateGuests() {
   async function handleRemoveGuest(idx: number) {
     const guestToRemove = guests[idx];
 
+    // Debug log before attempting to delete
+    console.log('Attempting to delete guest:', {
+      idx,
+      id: guestToRemove?.id,
+      guest: guestToRemove
+    });
+
     // If the guest has an ID, it means it's saved in Supabase and needs to be deleted
     if (guestToRemove.id && eventId) {
         try {
           // Delete from Supabase using the guest's ID
           await deleteGuest(guestToRemove.id);
           console.log('Guest deleted from Supabase successfully');
-          
           // Remove from local state
           setGuests(g => g.filter((_, i) => i !== idx));
-          
           // If we're in edit mode, navigate back to guests tab
           if (editGuestIdx !== null) {
             navigate(`/event/${eventId}?tab=guests`);
@@ -965,7 +1007,7 @@ export default function CreateGuests() {
     setGuests(g => g.filter((_, i) => i !== idx));
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!eventId) {
         console.error('Save failed: no eventId');
         return;
@@ -980,7 +1022,6 @@ export default function CreateGuests() {
     }
 
     // Check if user is logged in
-    const currentUser = getCurrentUser();
     if (!currentUser) {
         console.error('No user logged in');
         alert('You must be logged in to save guests. Please log in and try again.');
@@ -1006,7 +1047,7 @@ export default function CreateGuests() {
     // Convert guests to Supabase format and save
     const guestsForSupabase = guestsToProcess.map(guest => ({
       event_id: eventId,
-      company_id: currentUser.company_id || null, // Use null instead of empty string to ensure proper handling
+      company_id: currentUser && currentUser.company_id ? currentUser.company_id : '',
       first_name: guest.firstName,
       middle_name: guest.middleName || '',
       last_name: guest.lastName,
@@ -1016,7 +1057,7 @@ export default function CreateGuests() {
       id_type: guest.idType,
       id_number: guest.idNumber,
       id_country: guest.idCountry || '',
-      dob: guest.dob || undefined,
+      dob: convertDOBtoISO(guest.dob) || undefined,
       gender: guest.gender || '',
       group_id: isGroup ? `group-${Date.now()}` : undefined,
       group_name: isGroup ? groupName : undefined,
@@ -1030,7 +1071,7 @@ export default function CreateGuests() {
       module_values: guest.moduleValues || {},
       prefix: guest.prefix || '',
       status: 'pending',
-      created_by: currentUser.id || null // Use null instead of undefined to ensure proper handling
+      created_by: currentUser && currentUser.id ? currentUser.id : ''
     }));
 
     console.log('Saving guests to Supabase:', guestsForSupabase);
@@ -1115,9 +1156,9 @@ export default function CreateGuests() {
     const moduleHeaders = GUEST_MODULES.map(m => m.label);
     const headers = [
       'Prefix', 'Gender', 'First Name', 'Middle Name', 'Last Name',
-      'Country Code', 'Contact Number', 'Email',
+      'Country Code', 'Contact Number', 'Email', 'D.O.B. (dd/mm/yyyy)',
       'ID Type', 'ID Number', 'Country of Origin',
-      'Next of Kin Name', 'Next of Kin Email', 'Next of Kin Country Code', 'Next of Kin Number',
+      'Next of Kin Name', 'Next of Kin Email', 'N.O.K Country Code', 'N.O.K Contact Number',
       'Dietary', 'Medical/Accessibility',
       ...moduleHeaders
     ];
@@ -1172,7 +1213,7 @@ export default function CreateGuests() {
 
     let countryName = '';
     if (/^[A-Z]{3}$/.test(nationality)) {
-      countryName = countryList.getName(nationality) || nationality;
+      countryName = nationality;
     }
     if (!/^[A-Z0-9]+$/.test(passportNumber)) passportNumber = '';
 
@@ -1348,6 +1389,19 @@ export default function CreateGuests() {
         return { ...g, moduleFlightData: newModuleFlightData };
     }));
   }
+
+  // Add state for countries
+  const [countryNames, setCountryNames] = useState<string[]>([]);
+
+  useEffect(() => {
+    fetch('/data.csv')
+      .then(res => res.text())
+      .then(csvText => {
+        const parsed = Papa.parse(csvText, { header: true });
+        const names = parsed.data.map((row: any) => row.Name).filter(Boolean);
+        setCountryNames(names);
+      });
+  }, []);
 
   return (
     <div style={{ 
@@ -1602,6 +1656,10 @@ export default function CreateGuests() {
                       <label style={labelStyle(isDark)}>Email</label>
                       <input value={draft.email} onChange={e => handleDraftChange(idx, 'email', e.target.value)} style={{...inputStyle(isDark), height: 40, fontSize: 15, padding: '8px 12px'}} placeholder="Email" />
                     </div>
+                    <div style={{ flex: 2 }}>
+                      <label style={labelStyle(isDark)}>D.O.B. (dd/mm/yyyy)</label>
+                      <input value={draft.dob} onChange={e => handleDraftChange(idx, 'dob', e.target.value)} style={{...inputStyle(isDark), height: 40, fontSize: 15, padding: '8px 12px'}} placeholder="dd/mm/yyyy" />
+                    </div>
                   </div>
                   {/* Row 3: ID Type (custom dropdown), ID Number, Country of Origin (dropdown) */}
                   <div style={{ display: 'flex', gap: 10 }}>
@@ -1654,14 +1712,16 @@ export default function CreateGuests() {
                             width: '100%',
                             maxHeight: 220,
                             overflowY: 'auto',
-                            background: isDark ? 'rgba(0,0,0,0)' : '#fff',
+                            background: isDark ? 'rgba(30,30,30,0.7)' : 'rgba(255,255,255,0.7)',
                             border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.13)' : '#d1d5db'}`,
                             borderRadius: 12,
                             zIndex: 100,
                             boxShadow: isDark ? '0 4px 24px #000a' : '0 2px 8px #0002',
                             padding: 4,
+                            backdropFilter: 'blur(12px)',
+                            WebkitBackdropFilter: 'blur(12px)',
                           }}>
-                            {COUNTRIES.map((c: string) => (
+                            {countryNames.map((c: string) => (
                               <div
                                 key={c}
                                 tabIndex={0}
@@ -1707,11 +1767,11 @@ export default function CreateGuests() {
                     </div>
                     <div style={{ flex: 3, display: 'flex', gap: 6 }}>
                       <div style={{ flex: 1 }}>
-                        <label style={labelStyle(isDark)}>Country Code</label>
+                        <label style={labelStyle(isDark)}>N.O.K Country Code</label>
                         <input value={draft.nextOfKinPhoneCountry} onChange={e => handleDraftChange(idx, 'nextOfKinPhoneCountry', e.target.value)} style={{...inputStyle(isDark), height: 40, fontSize: 15, padding: '8px 12px'}} placeholder="+44" />
                       </div>
                       <div style={{ flex: 2 }}>
-                        <label style={labelStyle(isDark)}>Contact Number</label>
+                        <label style={labelStyle(isDark)}>N.O.K Contact Number</label>
                         <input value={draft.nextOfKinPhone} onChange={e => handleDraftChange(idx, 'nextOfKinPhone', e.target.value)} style={{...inputStyle(isDark), height: 40, fontSize: 15, padding: '8px 12px'}} placeholder="Contact Number" />
                       </div>
                     </div>

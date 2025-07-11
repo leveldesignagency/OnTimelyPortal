@@ -169,7 +169,7 @@ export class Stage1TravelService {
     const { data, error } = await supabase
       .from('guest_travel_profiles')
       .select('*')
-      .eq('guest_id', guestId)
+      .eq('id', guestId)
       .eq('event_id', eventId)
       .single();
 

@@ -417,8 +417,10 @@ export default function CreateItinerary() {
 
   const handleSaveDraft = async (idx: number) => {
     const draft = drafts[idx];
-    if (!draft.title.trim() || !draft.startTime.trim() || !draft.endTime.trim()) {
-      alert('Please fill in Title, Start Time, and End Time');
+    console.log('Attempting to save draft:', draft);
+    if (!draft.title || !draft.startTime || !draft.endTime || !draft.date) {
+      alert('Please fill in Title, Start Time, End Time, and Date for this itinerary item.');
+      console.error('Draft missing required fields:', draft);
       return;
     }
 
@@ -896,8 +898,8 @@ export default function CreateItinerary() {
               }
             });
             
-            if (!entry.title) {
-              throw new Error(`Row ${rowIndex + 2} is missing Title.`);
+            if (!entry.title || !entry.startTime || !entry.endTime || !entry.date) {
+              throw new Error(`Row ${rowIndex + 2} is missing required fields: Title, Start Time, End Time, or Date.`);
             }
             return entry;
           });
@@ -929,7 +931,13 @@ export default function CreateItinerary() {
         group_name: item.group_name || undefined,
       }));
 
-      setDrafts(d => [...d, ...newDrafts]);
+      // Defensive check: filter out drafts missing required fields
+      const validDrafts = newDrafts.filter(d => d.title && d.startTime && d.endTime && d.date);
+      if (validDrafts.length < newDrafts.length) {
+        alert('Some rows in your CSV were missing required fields and were not added.');
+        console.warn('Invalid drafts:', newDrafts.filter(d => !(d.title && d.startTime && d.endTime && d.date)));
+      }
+      setDrafts(d => [...d, ...validDrafts]);
       setIsCsvModalOpen(false);
     } catch (error) {
       console.error('CSV upload error:', error);
@@ -1632,7 +1640,7 @@ export default function CreateItinerary() {
                         opacity: draft.title && draft.arrivalTime && draft.startTime && draft.endTime ? 1 : 0.6
                       }}
                     >
-                      Save
+                      Edit
                     </button>
                   </div>
                 </div>
@@ -1677,7 +1685,7 @@ export default function CreateItinerary() {
                         marginRight: 8
                       }}
                     >
-                      Save
+                      Edit
                     </button>
                     <button
                       onClick={(e) => {
@@ -2498,27 +2506,21 @@ export default function CreateItinerary() {
         <div
           style={{
             position: 'fixed',
-            top: '20px',
-            right: '20px',
-            background: isDark ? 'rgba(34, 197, 94, 0.9)' : 'rgba(34, 197, 94, 0.95)',
-            color: 'white',
-            padding: '16px 24px',
-            borderRadius: '12px',
-            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
-            backdropFilter: 'blur(16px)',
-            WebkitBackdropFilter: 'blur(16px)',
-            border: '1px solid rgba(255, 255, 255, 0.2)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-            fontSize: '16px',
-            fontWeight: '500',
-            zIndex: 1000,
+            top: 32,
+            right: 32,
+            zIndex: 9999,
+            background: '#10b981',
+            color: '#fff',
+            padding: '16px 32px',
+            borderRadius: 8,
+            fontSize: 18,
+            fontWeight: 600,
+            boxShadow: '0 4px 16px rgba(16, 185, 129, 0.2)',
+            transition: 'opacity 0.3s',
+            opacity: showSuccessMessage ? 1 : 0,
+            pointerEvents: 'none',
           }}
         >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <polyline points="20,6 9,17 4,12"></polyline>
-          </svg>
           {successMessage}
         </div>
       )}

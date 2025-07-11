@@ -67,7 +67,7 @@ export default function EventLauncher() {
         if (data && Array.isArray(data)) {
           console.log('Processing', data.length, 'assignment records');
           data.forEach((row: any) => {
-            const guestId = row.guest_id;
+            const guestId = row.id;
             const itineraryId = row.itinerary_id.toString(); // Convert bigint to string for UI
             
             console.log('Processing assignment:', { guestId, itineraryId, row });
@@ -373,8 +373,27 @@ export default function EventLauncher() {
                       cursor: 'pointer',
                       transition: 'background 0.2s, border 0.2s',
                       boxShadow: selectedGuests.includes(guest.id) ? '0 0 0 1px #fff' : '0 2px 8px rgba(0,0,0,0.08)',
+                      position: 'relative',
                     }}
                   >
+                    {/* Stage 1 Active badge */}
+                    {guest.modules?.stage1TravelCompanion && (
+                      <div style={{
+                        position: 'absolute',
+                        top: 10,
+                        right: 10,
+                        background: '#22c55e',
+                        color: 'white',
+                        padding: '4px 10px',
+                        borderRadius: 6,
+                        fontWeight: 700,
+                        fontSize: 12,
+                        boxShadow: '0 2px 8px rgba(34,197,94,0.15)',
+                        zIndex: 2
+                      }}>
+                        Stage 1 Active
+                      </div>
+                    )}
                     <div style={{ fontWeight: 600, fontSize: 16 }}>{guest.first_name} {guest.last_name}</div>
                     <div style={{ color: '#aaa', fontSize: 13 }}>{guest.email}</div>
                     {/* Assigned itinerary tags */}

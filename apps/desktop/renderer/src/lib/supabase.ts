@@ -252,7 +252,7 @@ export const addGuest = async (guest: Omit<Guest, 'id' | 'created_at' | 'updated
 export const addMultipleGuests = async (guests: Omit<Guest, 'id' | 'created_at' | 'updated_at'>[]) => {
   const { data, error } = await supabase
     .from('guests')
-    .insert(guests)
+    .upsert(guests, { onConflict: 'event_id,email' })
     .select()
   
   if (error) throw error

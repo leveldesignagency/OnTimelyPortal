@@ -1102,15 +1102,17 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
           <div style={{ 
             position: 'absolute', 
             top: 16, 
-            left: 16,
+            right: 16,
             background: '#22c55e',
             color: 'white',
-            padding: '4px 8px',
-            borderRadius: 4,
+            padding: '4px 10px',
+            borderRadius: 6,
+            fontWeight: 700,
             fontSize: 12,
-            fontWeight: 600
+            boxShadow: '0 2px 8px rgba(34,197,94,0.15)',
+            zIndex: 2
           }}>
-            Stage 1: Active
+            Stage 1 Active
           </div>
         )}
         

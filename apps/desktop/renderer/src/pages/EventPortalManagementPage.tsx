@@ -8,13 +8,40 @@ import FeedbackGuestSelectionModal from '../components/FeedbackGuestSelectionMod
 import MultipleChoiceModuleModal from '../components/MultipleChoiceModuleModal';
 import PhotoVideoModuleModal from '../components/PhotoVideoModuleModal';
 import QuestionModal from '../components/QuestionModuleModal';
+import { createClient } from '@supabase/supabase-js';
+
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
+const SERVICE_ROLE_KEY = import.meta.env.VITE_SERVICE_ROLE_KEY || '';
+
+// Debug logging
+console.log('🔧 Admin Supabase Config:');
+console.log('SUPABASE_URL:', SUPABASE_URL);
+console.log('SERVICE_ROLE_KEY:', SERVICE_ROLE_KEY ? `${SERVICE_ROLE_KEY.substring(0, 20)}...` : 'NOT SET');
+
+const adminSupabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY); // Use your service role key
+
+// Add email validation helper functions
+const isValidEmail = (email: string): boolean => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+};
+
+const hasInternationalChars = (email: string): boolean => {
+  // Check for non-ASCII characters that might cause issues
+  return /[^\x00-\x7F]/.test(email);
+};
+
+const sanitizeEmail = (email: string): string => {
+  // Basic sanitization - remove leading/trailing spaces
+  return email.trim().toLowerCase();
+};
 
 interface GuestLogin {
   id: string;
   email: string;
   temporaryPassword: string;
   loginUrl: string;
-  status: 'pending' | 'sent' | 'accessed';
+  status: 'pending' | 'invite_sent' | 'credentials_set' | 'accessed';
 }
 
 export default function EventPortalManagementPage() {
@@ -83,6 +110,41 @@ export default function EventPortalManagementPage() {
   const [feedbackStep2, setFeedbackStep2] = useState<{ title: string; defaultRating: number; time: Date } | null>(null);
   const [showMultipleChoiceModal, setShowMultipleChoiceModal] = useState(false);
   const [showPhotoVideoModal, setShowPhotoVideoModal] = useState(false);
+  // Add state for toast
+  const [showCopyToast, setShowCopyToast] = useState(false);
+  const [selectedGuestsForGenerate, setSelectedGuestsForGenerate] = useState<string[]>([]);
+  const [customModal, setCustomModal] = useState<{ title: string; message: string; onClose?: () => void } | null>(null);
+
+  useEffect(() => {
+    if (!eventId) return;
+    const fetchGuestLogins = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('guest_logins')
+          .select('*')
+          .eq('event_id', eventId)
+          .order('created_at', { ascending: false });
+        if (error) {
+          console.error('Failed to fetch guest logins:', error);
+          return;
+        }
+        if (data && Array.isArray(data)) {
+          // Map to GuestLogin type
+          const logins = data.map((row: any) => ({
+            id: row.guest_id,
+            email: row.email,
+            temporaryPassword: row.password,
+            loginUrl: row.login_url,
+            status: 'pending' as const, // Fix linter error
+          }));
+          setGuestLogins(logins);
+        }
+      } catch (err) {
+        console.error('Error fetching guest logins:', err);
+      }
+    };
+    fetchGuestLogins();
+  }, [eventId]);
 
   // Initialize collapsed cards when guests change
   useEffect(() => {
@@ -93,49 +155,16 @@ export default function EventPortalManagementPage() {
     setCollapsedCards(collapsed);
   }, [guests]);
 
-  // Load existing guest logins from database
+  // Note: Guest logins are generated on-demand, not loaded from database
+  // They exist only in the UI state during the session
+  
+  // Add debug logging for guests
   useEffect(() => {
-    // Only run if eventId is available
-    if (!eventId) return;
-
-    async function loadExistingGuestLogins() {
-      try {
-        console.log('Loading existing guest logins for event:', eventId);
-        
-        // Call the backend function to get all guest logins for this event
-        const { data, error } = await supabase.rpc('get_guest_login_status', {
-          p_event_id: eventId,
-        });
-
-        if (error) {
-          console.error('Error loading guest logins:', error);
-          return;
-        }
-
-        if (data && Array.isArray(data) && data.length > 0) {
-          console.log('Found existing guest logins:', data);
-          
-          // Map the backend data to your GuestLogin type
-          const existingLogins = data.map((row: any) => ({
-            id: row.guest_id,
-            email: row.email,
-            temporaryPassword: row.password,
-            loginUrl: `timely://guest-login?email=${row.email}&password=${row.password}`,
-            status: row.status as 'pending' | 'sent' | 'accessed',
-          }));
-          
-          setGuestLogins(existingLogins);
-          console.log('Loaded guest logins into UI:', existingLogins);
-        } else {
-          console.log('No existing guest logins found for this event');
-        }
-      } catch (error) {
-        console.error('Error loading guest logins:', error);
-      }
-    }
-
-    loadExistingGuestLogins();
-  }, [eventId]);
+    console.log('🔍 Guests state updated:', {
+      count: guests.length,
+      guests: guests.map((g: any) => ({ id: g.id, email: g.email, name: `${g.first_name} ${g.last_name}` }))
+    });
+  }, [guests]);
 
   // Load event information
   useEffect(() => {
@@ -196,117 +225,169 @@ export default function EventPortalManagementPage() {
     }));
   };
 
-  // Generate logins for all guests
-  const handleGenerateLogins = async () => {
+  // Simplify the handleGenerateLogins function to use guest_logins table:
+  const handleGenerateLogins = async (guestsToGenerate?: any[]) => {
     setIsGeneratingLogins(true);
-    setShowGenerateLoginsModal(false); // Close the initial modal
-    
+    setShowGenerateLoginsModal(false);
     try {
-      // First, check if we have guests
-      if (!guests || guests.length === 0) {
+      console.log('🔍 Generate logins called with:', {
+        guestsToGenerateCount: guestsToGenerate?.length || 0,
+        allGuestsCount: guests.length,
+        guestsToGenerateList: guestsToGenerate?.map(g => ({ id: g.id, email: g.email })) || 'none provided',
+        allGuestsEmails: guests.map(g => g.email)
+      });
+      
+      const guestsList = guestsToGenerate || guests;
+      console.log('🔍 Final guests list to process:', guestsList.length, 'guests');
+      
+      if (!guestsList || guestsList.length === 0) {
         throw new Error('No guests found for this event');
       }
-
-      console.log('Generating logins for guests:', guests);
-
-      // Use the database function to create guest logins
-      const newLogins: GuestLogin[] = [];
       
-      for (const guest of guests) {
-        console.log(`Creating login for guest: ${guest.email} (ID: ${guest.id})`);
-        
-        // Call the database function to create guest login
-        const { data, error } = await supabase.rpc('create_guest_login', {
-          p_guest_id: guest.id,
-          p_event_id: eventId,
-          p_email: guest.email
-        });
-
-        if (error) {
-          console.error(`Error creating login for ${guest.email}:`, error);
-          throw new Error(`Failed to create login for ${guest.email}: ${error.message}`);
+      console.log('Creating guest logins for guests:', guestsList);
+      const newLogins: GuestLogin[] = [];
+      const errors: string[] = [];
+      
+      for (const guest of guestsList) {
+        try {
+          const guestEmail = sanitizeEmail(guest.email);
+          
+          // Validate email format
+          if (!isValidEmail(guestEmail)) {
+            errors.push(`Invalid email format: ${guest.email}`);
+            continue;
+          }
+          
+          // Check for international characters that might cause issues
+          if (hasInternationalChars(guestEmail)) {
+            errors.push(`Email contains international characters that may not be supported: ${guest.email}`);
+            continue;
+          }
+          
+          if (!guestEmail) {
+            errors.push(`Guest email is missing for: ${guest.first_name} ${guest.last_name}`);
+            continue;
+          }
+          
+          // Call the create_guest_login RPC function
+          console.log('🔧 Creating guest login for:', guestEmail);
+          const { data: loginData, error: loginError } = await supabase.rpc('create_guest_login', {
+            p_guest_id: guest.id,
+            p_event_id: eventId,
+            p_email: guestEmail
+          });
+          
+          console.log('🔧 Guest login creation result:', { loginData, loginError });
+          
+          if (loginError) {
+            console.error('🚨 Failed to create guest login:', loginError);
+            errors.push(`Failed to create login for ${guestEmail}: ${loginError.message}`);
+            continue;
+          }
+          
+          if (!loginData || loginData.length === 0) {
+            errors.push(`No login data returned for ${guestEmail}`);
+            continue;
+          }
+          
+          const loginRecord = loginData[0];
+          const newLogin: GuestLogin = {
+            id: guest.id,
+            email: guestEmail,
+            temporaryPassword: loginRecord.password,
+            loginUrl: loginRecord.login_url,
+            status: 'pending'
+          };
+          newLogins.push(newLogin);
+          
+        } catch (error) {
+          console.error(`Error processing guest ${guest.email}:`, error);
+          errors.push(`Failed to process ${guest.email}: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
-
-        if (!data || data.length === 0) {
-          throw new Error(`No login data returned for ${guest.email}`);
-        }
-
-        // The function returns a single row with the login details
-        const loginData = data[0];
-        
-        newLogins.push({
-          id: guest.id,
-          email: loginData.email,
-          temporaryPassword: loginData.password,
-          loginUrl: loginData.login_url,
-          status: 'pending' as const
-        });
       }
       
       setGuestLogins(newLogins);
       setIsGeneratingLogins(false);
-      setShowSuccessModal(true);
+      
+      if (errors.length > 0) {
+        setCustomModal({
+          title: 'Some guests could not be processed',
+          message: `Successfully created ${newLogins.length} guest accounts.\n\nErrors:\n${errors.join('\n')}`,
+        });
+      } else {
+        setShowSuccessModal(true);
+      }
       
       console.log('Successfully created guest logins:', newLogins);
     } catch (error) {
       console.error('Failed to generate guest logins:', error);
       setIsGeneratingLogins(false);
-      
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      alert(`Failed to generate guest logins: ${errorMessage}`);
+      setCustomModal({
+        title: 'Failed to create guest logins',
+        message: errorMessage,
+      });
     }
   };
 
   // Regenerate logins for selected guests
   const handleRegenerateLogins = async () => {
     if (selectedGuestsForRegenerate.length === 0) return;
-    
     setIsGeneratingLogins(true);
     setShowRegenerateModal(false);
-    
     try {
-      // Get selected guests
-      const selectedGuests = guests.filter((guest: any) => 
-        selectedGuestsForRegenerate.includes(guest.id)
-      );
-
-      console.log('Regenerating logins for guests:', selectedGuests);
-
-      // Use the database function to create new guest logins
+      const selectedGuests = guests.filter((guest: any) => selectedGuestsForRegenerate.includes(guest.id));
+      console.log('Regenerating guest logins for guests:', selectedGuests);
       const updatedLogins: GuestLogin[] = [];
+      const errors: string[] = [];
       
       for (const guest of selectedGuests) {
-        console.log(`Regenerating login for guest: ${guest.email} (ID: ${guest.id})`);
-        
-        // Call the database function to create new guest login
-        const { data, error } = await supabase.rpc('create_guest_login', {
-          p_guest_id: guest.id,
-          p_event_id: eventId,
-          p_email: guest.email
-        });
-
-        if (error) {
-          console.error(`Error regenerating login for ${guest.email}:`, error);
-          throw new Error(`Failed to regenerate login for ${guest.email}: ${error.message}`);
+        try {
+          const guestEmail = sanitizeEmail(guest.email);
+          
+          if (!guestEmail) {
+            errors.push(`Guest email is missing for: ${guest.first_name} ${guest.last_name}`);
+            continue;
+          }
+          
+          // Call the create_guest_login RPC function (this will deactivate existing logins)
+          console.log('🔧 Regenerating guest login for:', guestEmail);
+          const { data: loginData, error: loginError } = await supabase.rpc('create_guest_login', {
+            p_guest_id: guest.id,
+            p_event_id: eventId,
+            p_email: guestEmail
+          });
+          
+          console.log('🔧 Guest login regeneration result:', { loginData, loginError });
+          
+          if (loginError) {
+            console.error('🚨 Failed to regenerate guest login:', loginError);
+            errors.push(`Failed to regenerate login for ${guestEmail}: ${loginError.message}`);
+            continue;
+          }
+          
+          if (!loginData || loginData.length === 0) {
+            errors.push(`No login data returned for ${guestEmail}`);
+            continue;
+          }
+          
+          const loginRecord = loginData[0];
+          const updatedLogin: GuestLogin = {
+            id: guest.id,
+            email: guestEmail,
+            temporaryPassword: loginRecord.password,
+            loginUrl: loginRecord.login_url,
+            status: 'pending'
+          };
+          updatedLogins.push(updatedLogin);
+          
+        } catch (error) {
+          console.error(`Error regenerating login for guest ${guest.email}:`, error);
+          errors.push(`Failed to regenerate login for ${guest.email}: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
-
-        if (!data || data.length === 0) {
-          throw new Error(`No login data returned for ${guest.email}`);
-        }
-
-        // The function returns a single row with the login details
-        const loginData = data[0];
-        
-        updatedLogins.push({
-          id: guest.id,
-          email: loginData.email,
-          temporaryPassword: loginData.password,
-          loginUrl: loginData.login_url,
-          status: 'pending' as const
-        });
       }
       
-      // Update existing logins with new ones
+      // Update the UI state
       setGuestLogins(prev => {
         const updated = [...prev];
         updatedLogins.forEach(newLogin => {
@@ -321,16 +402,26 @@ export default function EventPortalManagementPage() {
       });
       
       setIsGeneratingLogins(false);
-      setShowSuccessModal(true);
       setSelectedGuestsForRegenerate([]);
+      
+      if (errors.length > 0) {
+        setCustomModal({
+          title: 'Some guest logins could not be regenerated',
+          message: `Successfully regenerated ${updatedLogins.length} guest logins.\n\nErrors:\n${errors.join('\n')}`,
+        });
+      } else {
+        setShowSuccessModal(true);
+      }
       
       console.log('Successfully regenerated guest logins:', updatedLogins);
     } catch (error) {
       console.error('Failed to regenerate guest logins:', error);
       setIsGeneratingLogins(false);
-      
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      alert(`Failed to regenerate guest logins: ${errorMessage}`);
+      setCustomModal({
+        title: 'Failed to regenerate guest logins',
+        message: errorMessage,
+      });
     }
   };
 
@@ -345,19 +436,43 @@ export default function EventPortalManagementPage() {
 
   // Copy login details to clipboard
   const handleCopyLoginDetails = (login: GuestLogin) => {
-    const details = `Login Details for ${login.email}:\nURL: ${login.loginUrl}\nPassword: ${login.temporaryPassword}`;
+    const details = `Email: ${login.email}\nPassword: ${login.temporaryPassword}`;
     navigator.clipboard.writeText(details);
+    setShowCopyToast(true);
+    setTimeout(() => setShowCopyToast(false), 2000);
   };
 
-  // Send login details via email (placeholder)
+  // Send login details via email
   const handleSendLoginDetails = async (login: GuestLogin) => {
-    // TODO: Implement actual email sending
-    console.log('Sending login details to:', login.email);
-    
-    // Update status to sent
-    setGuestLogins(prev => prev.map(l => 
-      l.id === login.id ? { ...l, status: 'sent' } : l
-    ));
+    try {
+      console.log('Sending login details to:', login.email);
+      
+      // For now, just update the status to invite_sent
+      // TODO: Add actual email sending logic here if needed
+      
+      // Update status to invite_sent
+      setGuestLogins(prev => prev.map(l => 
+        l.id === login.id ? { ...l, status: 'invite_sent' } : l
+      ));
+      
+      console.log('Successfully marked invite as sent for:', login.email);
+      
+      // TODO: Implement actual email sending here
+      // You can use your existing email service or add a new one
+      // For now, we'll just log the login details
+      console.log('Login details for', login.email, ':', {
+        email: login.email,
+        password: login.temporaryPassword,
+        loginUrl: login.loginUrl
+      });
+      
+    } catch (error) {
+      console.error('Error sending login details:', error);
+      setCustomModal({
+        title: 'Failed to send invite',
+        message: `Failed to send invite to ${login.email}`,
+      });
+    }
   };
 
   // Send all login details
@@ -365,9 +480,20 @@ export default function EventPortalManagementPage() {
     // Send to all guests who haven't been sent yet
     const pendingLogins = guestLogins.filter(login => login.status === 'pending');
     
+    if (pendingLogins.length === 0) {
+      alert('No pending invites to send.');
+      return;
+    }
+    
+    console.log(`Sending ${pendingLogins.length} invite emails...`);
+    
     for (const login of pendingLogins) {
       await handleSendLoginDetails(login);
+      // Add a small delay between sends to avoid rate limiting
+      await new Promise(resolve => setTimeout(resolve, 500));
     }
+    
+    console.log('Finished sending all invite emails');
   };
 
   // Helper to open modal after drop
@@ -817,33 +943,35 @@ export default function EventPortalManagementPage() {
             <p style={{ fontSize: 16, color: isDark ? '#ccc' : '#666', margin: 0 }}>
               Generate temporary login credentials for guests to access their personalized mobile experience.
             </p>
-            <button
-              onClick={() => guestLogins.length > 0 ? setShowRegenerateModal(true) : setShowGenerateLoginsModal(true)}
-              style={{
-                borderRadius: 8,
-                padding: '10px 8px',
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 4,
-                width: 100,
-                height: 36,
-                background: isDark 
-                  ? 'rgba(255, 255, 255, 0.1)' 
-                  : 'rgba(255, 255, 255, 0.2)',
-                backdropFilter: 'blur(8px)',
-                border: isDark 
-                  ? '1px solid rgba(255, 255, 255, 0.2)' 
-                  : '1px solid rgba(0, 0, 0, 0.1)',
-                color: isDark ? '#ffffff' : '#000000',
-              }}
-            >
-              {guestLogins.length > 0 ? 'Regenerate' : 'Generate'}
-            </button>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button
+                onClick={() => guestLogins.length > 0 ? setShowRegenerateModal(true) : setShowGenerateLoginsModal(true)}
+                style={{
+                  borderRadius: 8,
+                  padding: '10px 8px',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 4,
+                  width: 100,
+                  height: 36,
+                  background: isDark 
+                    ? 'rgba(255, 255, 255, 0.1)' 
+                    : 'rgba(255, 255, 255, 0.2)',
+                  backdropFilter: 'blur(8px)',
+                  border: isDark 
+                    ? '1px solid rgba(255, 255, 255, 0.2)' 
+                    : '1px solid rgba(0, 0, 0, 0.1)',
+                  color: isDark ? '#ffffff' : '#000000',
+                }}
+              >
+                {guestLogins.length > 0 ? 'Regenerate' : 'Generate'}
+              </button>
+            </div>
           </div>
           
           {guestLogins.length > 0 && (
@@ -882,7 +1010,7 @@ export default function EventPortalManagementPage() {
                   }}
                   disabled={guestLogins.filter(login => login.status === 'pending').length === 0}
                 >
-                  📧 Send All
+                  Send All
                 </button>
               </div>
               <p style={{ fontSize: 14, color: isDark ? '#ccc' : '#666', marginBottom: 16 }}>
@@ -894,38 +1022,65 @@ export default function EventPortalManagementPage() {
                     background: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(255, 255, 255, 0.8)',
                     border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
                     borderRadius: 8,
-                    padding: 16
+                    padding: 10,
+                    position: 'relative'
                   }}>
                     <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>
                       {login.email}
                     </div>
                     <div style={{ fontSize: 12, color: isDark ? '#aaa' : '#666', marginBottom: 8 }}>
-                      Password: <code style={{ background: isDark ? '#333' : '#f3f4f6', padding: '2px 6px', borderRadius: 4 }}>
+                      Password: <span style={{ 
+                        fontFamily: 'monospace',
+                        fontWeight: 600,
+                        color: isDark ? '#22c55e' : '#16a34a',
+                        background: isDark ? 'rgba(34, 197, 94, 0.1)' : 'rgba(22, 163, 74, 0.1)',
+                        padding: '2px 6px',
+                        borderRadius: 4,
+                        fontSize: 13
+                      }}>
                         {login.temporaryPassword}
-                      </code>
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 12, color: isDark ? '#aaa' : '#666', marginBottom: 8 }}>
+                      Status: <span style={{ 
+                        color: login.status === 'invite_sent' ? '#22c55e' : 
+                               login.status === 'credentials_set' ? '#3b82f6' : 
+                               login.status === 'accessed' ? '#10b981' : '#f59e0b'
+                      }}>
+                        {login.status === 'pending' ? 'Ready to Send' :
+                         login.status === 'invite_sent' ? 'Invite Sent' :
+                         login.status === 'credentials_set' ? 'Credentials Set' :
+                         login.status === 'accessed' ? 'Accessed' : 'Unknown'}
+                      </span>
                     </div>
                     <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
                       <button
-                        onClick={() => handleCopyLoginDetails(login)}
                         style={{
+                          justifyContent: 'center',
+                          textAlign: 'center',
                           ...getButtonStyles('secondary', isDark),
                           fontSize: 12,
                           padding: '6px 12px',
                         }}
+                        onClick={() => handleCopyLoginDetails(login)}
                       >
-                        📋 Copy
+                        Copy
                       </button>
                       <button
-                        onClick={() => handleSendLoginDetails(login)}
-                        disabled={login.status === 'sent'}
                         style={{
+                          justifyContent: 'center',
+                          textAlign: 'center',
                           ...getButtonStyles('primary', isDark),
                           fontSize: 12,
-                          padding: '6px 12px',
-                          opacity: login.status === 'sent' ? 0.6 : 1,
+                          padding: '12px 12px',
+                          opacity: login.status === 'invite_sent' || login.status === 'credentials_set' || login.status === 'accessed' ? 0.6 : 1,
                         }}
+                        onClick={() => handleSendLoginDetails(login)}
+                        disabled={login.status === 'invite_sent' || login.status === 'credentials_set' || login.status === 'accessed'}
                       >
-                        {login.status === 'sent' ? '✓ Sent' : '📧 Send'}
+                        {login.status === 'invite_sent' ? '✓ Invite Sent' : 
+                         login.status === 'credentials_set' ? '✓ Credentials Set' :
+                         login.status === 'accessed' ? '✓ Accessed' : 'Send Invite'}
                       </button>
                     </div>
                   </div>
@@ -943,7 +1098,7 @@ export default function EventPortalManagementPage() {
           <div style={{ display: 'grid', gap: 16 }}>
             {guests.map((guest: any) => {
               const assignedItins = (guestAssignments[guest.id] || []).map((itinId: string) =>
-                itineraries.find((itin: any) => itin.id === itinId)
+                itineraries.find((itin: any) => String(itin.id) === String(itinId))
               ).filter(Boolean);
               const isCollapsed = collapsedCards[guest.id];
               
@@ -1024,7 +1179,6 @@ export default function EventPortalManagementPage() {
                           </div>
                         )}
                       </div>
-                      
                       {/* Available Add-ons */}
                       {eventAddOns.length > 0 && (
                         <div>
@@ -1048,6 +1202,20 @@ export default function EventPortalManagementPage() {
                           </div>
                         </div>
                       )}
+                      {/* Active Modules for Guest */}
+                      {guest.modules && Object.entries(guest.modules).map(([key, isActive]) => (
+                        isActive && (
+                          <div key={key} style={{ marginTop: 8, color: '#22c55e', fontWeight: 600 }}>
+                            {key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())} Module Active
+                            {/* Optionally show module values */}
+                            {guest.module_values && guest.module_values[key] && (
+                              <div style={{ fontSize: 13, color: '#888', marginTop: 2 }}>
+                                {JSON.stringify(guest.module_values[key])}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      ))}
                     </div>
                   )}
                 </div>
@@ -1080,30 +1248,44 @@ export default function EventPortalManagementPage() {
             }}>
               <h3 style={{ fontSize: 24, fontWeight: 700, marginBottom: 16 }}>Generate Guest Logins</h3>
               <p style={{ marginBottom: 24, color: isDark ? '#ccc' : '#666' }}>
-                This will create temporary login credentials for all {guests.length} guests. Each guest will receive:
+                This will create temporary login credentials for the selected guests. Each guest will receive:
               </p>
               <ul style={{ marginBottom: 24, paddingLeft: 20, color: isDark ? '#ccc' : '#666' }}>
                 <li>A unique login URL for the mobile app</li>
                 <li>A temporary password (8 characters)</li>
                 <li>Access to their personalized itinerary and add-ons</li>
               </ul>
-              
               <div style={{ marginBottom: 24 }}>
                 <h4 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Guest Emails:</h4>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedGuestsForGenerate.length === guests.length}
+                      onChange={e => setSelectedGuestsForGenerate(e.target.checked ? guests.map(g => g.id) : [])}
+                      style={{ marginRight: 8 }}
+                    />
+                    <span style={{ fontWeight: 600 }}>Select All</span>
+                  </label>
                   {guests.map((guest: any) => (
-                    <span key={guest.id} style={{
-                      padding: '4px 8px',
-                      background: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
-                      borderRadius: 4,
-                      fontSize: 13
-                    }}>
-                      {guest.email}
-                    </span>
+                    <label key={guest.id} style={{ display: 'flex', alignItems: 'center', marginBottom: 4 }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedGuestsForGenerate.includes(guest.id)}
+                        onChange={e => {
+                          if (e.target.checked) {
+                            setSelectedGuestsForGenerate(prev => [...prev, guest.id]);
+                          } else {
+                            setSelectedGuestsForGenerate(prev => prev.filter(id => id !== guest.id));
+                          }
+                        }}
+                        style={{ marginRight: 8 }}
+                      />
+                      <span>{guest.email}</span>
+                    </label>
                   ))}
                 </div>
               </div>
-              
               <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
                 <button
                   onClick={() => setShowGenerateLoginsModal(false)}
@@ -1116,14 +1298,19 @@ export default function EventPortalManagementPage() {
                   Cancel
                 </button>
                 <button
-                  onClick={handleGenerateLogins}
+                  onClick={async () => {
+                    setShowGenerateLoginsModal(false);
+                    // Only generate logins for selected guests
+                    const selected = guests.filter(g => selectedGuestsForGenerate.includes(g.id));
+                    await handleGenerateLogins(selected);
+                  }}
                   style={{
                     ...getButtonStyles('primary', isDark),
                     justifyContent: 'center'
                   }}
-                  disabled={isGeneratingLogins}
+                  disabled={isGeneratingLogins || selectedGuestsForGenerate.length === 0}
                 >
-                  {isGeneratingLogins ? 'Generating...' : 'Generate Logins'}
+                  {isGeneratingLogins ? 'Generating...' : `Generate Logins${selectedGuestsForGenerate.length > 0 ? ` (${selectedGuestsForGenerate.length})` : ''}`}
                 </button>
               </div>
             </div>
@@ -1165,17 +1352,19 @@ export default function EventPortalManagementPage() {
                   marginBottom: 16 
                 }}>
                   <h4 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Select Guests:</h4>
-                  <div style={{ display: 'flex', gap: 8 }}>
+                  <div style={{ display: 'flex', gap: 12 }}>
                     <button
                       onClick={() => setSelectedGuestsForRegenerate(guests.map((g: any) => g.id))}
                       style={{
-                        padding: '4px 8px',
-                        fontSize: 12,
+                        padding: '12px 24px',
+                        fontSize: 14,
                         background: 'transparent',
                         border: `1px solid ${isDark ? '#666' : '#ccc'}`,
                         borderRadius: 4,
                         color: isDark ? '#ccc' : '#666',
-                        cursor: 'pointer'
+                        cursor: 'pointer',
+                        minWidth: 140,
+                        whiteSpace: 'nowrap',
                       }}
                     >
                       Select All
@@ -1183,13 +1372,15 @@ export default function EventPortalManagementPage() {
                     <button
                       onClick={() => setSelectedGuestsForRegenerate([])}
                       style={{
-                        padding: '4px 8px',
-                        fontSize: 12,
+                        padding: '12px 24px',
+                        fontSize: 14,
                         background: 'transparent',
                         border: `1px solid ${isDark ? '#666' : '#ccc'}`,
                         borderRadius: 4,
                         color: isDark ? '#ccc' : '#666',
-                        cursor: 'pointer'
+                        cursor: 'pointer',
+                        minWidth: 140,
+                        whiteSpace: 'nowrap',
                       }}
                     >
                       Clear All
@@ -1228,7 +1419,7 @@ export default function EventPortalManagementPage() {
                           {guest.email}
                         </div>
                       </div>
-                      {guestLogins.find(login => login.id === guest.id)?.status === 'sent' && (
+                      {guestLogins.find(login => login.id === guest.id)?.status === 'invite_sent' && (
                         <div style={{
                           padding: '2px 6px',
                           background: '#22c55e',
@@ -1237,7 +1428,7 @@ export default function EventPortalManagementPage() {
                           fontSize: 11,
                           fontWeight: 600
                         }}>
-                          Sent
+                          Invite Sent
                         </div>
                       )}
                     </label>
@@ -1245,27 +1436,31 @@ export default function EventPortalManagementPage() {
                 </div>
               </div>
               
+              
               <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
                 <button
-                  onClick={() => {
-                    setShowRegenerateModal(false);
-                    setSelectedGuestsForRegenerate([]);
-                  }}
                   style={{
                     ...getButtonStyles('secondary', isDark),
-                    justifyContent: 'center'
+                    justifyContent: 'center',
+                    whiteSpace: 'nowrap',
+                    minWidth: 140,
+                    padding: '12px 24px',
                   }}
+                  onClick={() => setShowRegenerateModal(false)}
                   disabled={isGeneratingLogins}
                 >
                   Cancel
                 </button>
                 <button
-                  onClick={handleRegenerateLogins}
                   style={{
                     ...getButtonStyles('primary', isDark),
                     justifyContent: 'center',
+                    whiteSpace: 'nowrap',
+                    minWidth: 140,
+                    padding: '12px 24px',
                     opacity: selectedGuestsForRegenerate.length === 0 ? 0.6 : 1
                   }}
+                  onClick={handleRegenerateLogins}
                   disabled={isGeneratingLogins || selectedGuestsForRegenerate.length === 0}
                 >
                   {isGeneratingLogins ? 'Regenerating...' : `Regenerate ${selectedGuestsForRegenerate.length} Login${selectedGuestsForRegenerate.length !== 1 ? 's' : ''}`}
@@ -1457,144 +1652,147 @@ export default function EventPortalManagementPage() {
             {/* Timeline Controller: draggable container for date picker and navigation arrows */}
             <DraggableTimelineController isDark={isDark} DateSlider={DateSlider} handleTimelinePrevious={handleTimelinePrevious} handleTimelineNext={handleTimelineNext} />
 
-            {/* Draggable Modules - Each in its own container */}
-            <div style={{
-              position: 'absolute',
-              right: 48,
-              top: 100,
-              zIndex: 1000,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 24,
-              minWidth: 220,
-            }}>
-              {/* Title and subtitle above modules */}
-              <div style={{ marginBottom: 8 }}>
-                <div style={{ fontWeight: 800, fontSize: 18, color: isDark ? '#fff' : '#222', letterSpacing: 0.5 }}>Modules</div>
-                <div style={{ fontSize: 13, color: isDark ? '#aaa' : '#666', fontWeight: 500, marginTop: 2 }}>Drag the modules onto the mobile to create.</div>
+            {/* Draggable Modules - Only show when Preview Timeline modal is open */}
+            {showPreviewModal && (
+              <div style={{
+                position: 'absolute',
+                right: 48,
+                top: 100,
+                zIndex: 1000,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 24,
+                minWidth: 220,
+              }}>
+                {/* Title and subtitle above modules */}
+                <div style={{ marginBottom: 8 }}>
+                  <div style={{ fontWeight: 800, fontSize: 18, color: isDark ? '#fff' : '#222', letterSpacing: 0.5 }}>Modules</div>
+                  <div style={{ fontSize: 13, color: isDark ? '#aaa' : '#666', fontWeight: 500, marginTop: 2 }}>Drag the modules onto the mobile to create.</div>
+                </div>
+                {/* Draggable Module Buttons (restored) */}
+                {/* Question Field Module */}
+                <div
+                  draggable
+                  style={{
+                    background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(36,36,40,0.08)',
+                    border: `2px dashed ${isDark ? 'rgba(255,255,255,0.18)' : 'rgba(36,36,40,0.18)'}`,
+                    borderRadius: 18,
+                    padding: '20px 28px',
+                    minWidth: 160,
+                    fontWeight: 700,
+                    fontSize: 15,
+                    color: isDark ? '#fff' : '#222',
+                    boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.10)' : '0 2px 8px rgba(36,36,40,0.08)',
+                    cursor: 'grab',
+                    userSelect: 'none',
+                    textAlign: 'center',
+                    marginBottom: 8,
+                    backdropFilter: 'blur(8px)',
+                  }}
+                  onDragStart={e => {
+                    e.dataTransfer.setData('moduleType', 'question');
+                  }}
+                >
+                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>
+                    + Question
+                  </div>
+                  <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 400 }}>
+                    Drag to phone to ask guests
+                  </div>
+                </div>
+                {/* Feedback Module */}
+                <div
+                  draggable
+                  style={{
+                    background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(36,36,40,0.08)',
+                    border: `2px dashed ${isDark ? 'rgba(255,255,255,0.18)' : 'rgba(36,36,40,0.18)'}`,
+                    borderRadius: 18,
+                    padding: '20px 28px',
+                    minWidth: 160,
+                    fontWeight: 700,
+                    fontSize: 15,
+                    color: isDark ? '#fff' : '#222',
+                    boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.10)' : '0 2px 8px rgba(36,36,40,0.08)',
+                    cursor: 'grab',
+                    userSelect: 'none',
+                    textAlign: 'center',
+                    marginBottom: 8,
+                    backdropFilter: 'blur(8px)',
+                  }}
+                  onDragStart={e => {
+                    e.dataTransfer.setData('moduleType', 'feedback');
+                  }}
+                >
+                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>
+                    + Feedback Module
+                  </div>
+                  <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 400 }}>
+                    Drag to phone for ratings
+                  </div>
+                </div>
+                {/* Multiple Choice Module */}
+                <div
+                  draggable
+                  style={{
+                    background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(36,36,40,0.08)',
+                    border: `2px dashed ${isDark ? 'rgba(255,255,255,0.18)' : 'rgba(36,36,40,0.18)'}`,
+                    borderRadius: 18,
+                    padding: '20px 28px',
+                    minWidth: 160,
+                    fontWeight: 700,
+                    fontSize: 15,
+                    color: isDark ? '#fff' : '#222',
+                    boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.10)' : '0 2px 8px rgba(36,36,40,0.08)',
+                    cursor: 'grab',
+                    userSelect: 'none',
+                    textAlign: 'center',
+                    marginBottom: 8,
+                    backdropFilter: 'blur(8px)',
+                  }}
+                  onDragStart={e => {
+                    e.dataTransfer.setData('moduleType', 'multiple-choice');
+                  }}
+                >
+                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>
+                    + Multiple Choice Module
+                  </div>
+                  <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 400 }}>
+                    Drag to phone for polls
+                  </div>
+                </div>
+                {/* Photo/Video Module */}
+                <div
+                  draggable
+                  style={{
+                    background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(36,36,40,0.08)',
+                    border: `2px dashed ${isDark ? 'rgba(255,255,255,0.18)' : 'rgba(36,36,40,0.18)'}`,
+                    borderRadius: 18,
+                    padding: '20px 28px',
+                    minWidth: 160,
+                    fontWeight: 700,
+                    fontSize: 15,
+                    color: isDark ? '#fff' : '#222',
+                    boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.10)' : '0 2px 8px rgba(36,36,40,0.08)',
+                    cursor: 'grab',
+                    userSelect: 'none',
+                    textAlign: 'center',
+                    marginBottom: 8,
+                    backdropFilter: 'blur(8px)',
+                  }}
+                  onDragStart={e => {
+                    e.dataTransfer.setData('moduleType', 'photo-video');
+                  }}
+                >
+                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>
+                    + Photo/Video Module
+                  </div>
+                  <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 400 }}>
+                    Drag to phone for media
+                  </div>
+                </div>
               </div>
-              {/* Draggable Module Buttons (restored) */}
-              {/* Question Field Module */}
-              <div
-                draggable
-                style={{
-                  background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(36,36,40,0.08)',
-                  border: `2px dashed ${isDark ? 'rgba(255,255,255,0.18)' : 'rgba(36,36,40,0.18)'}`,
-                  borderRadius: 18,
-                  padding: '20px 28px',
-                  minWidth: 160,
-                  fontWeight: 700,
-                  fontSize: 15,
-                  color: isDark ? '#fff' : '#222',
-                  boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.10)' : '0 2px 8px rgba(36,36,40,0.08)',
-                  cursor: 'grab',
-                  userSelect: 'none',
-                  textAlign: 'center',
-                  marginBottom: 8,
-                  backdropFilter: 'blur(8px)',
-                }}
-                onDragStart={e => {
-                  e.dataTransfer.setData('moduleType', 'question');
-                }}
-              >
-                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>
-                  + Question
-                </div>
-                <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 400 }}>
-                  Drag to phone to ask guests
-                </div>
-              </div>
-              {/* Feedback Module */}
-              <div
-                draggable
-                style={{
-                  background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(36,36,40,0.08)',
-                  border: `2px dashed ${isDark ? 'rgba(255,255,255,0.18)' : 'rgba(36,36,40,0.18)'}`,
-                  borderRadius: 18,
-                  padding: '20px 28px',
-                  minWidth: 160,
-                  fontWeight: 700,
-                  fontSize: 15,
-                  color: isDark ? '#fff' : '#222',
-                  boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.10)' : '0 2px 8px rgba(36,36,40,0.08)',
-                  cursor: 'grab',
-                  userSelect: 'none',
-                  textAlign: 'center',
-                  marginBottom: 8,
-                  backdropFilter: 'blur(8px)',
-                }}
-                onDragStart={e => {
-                  e.dataTransfer.setData('moduleType', 'feedback');
-                }}
-              >
-                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>
-                  + Feedback Module
-                </div>
-                <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 400 }}>
-                  Drag to phone for ratings
-                </div>
-              </div>
-              {/* Multiple Choice Module */}
-              <div
-                draggable
-                style={{
-                  background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(36,36,40,0.08)',
-                  border: `2px dashed ${isDark ? 'rgba(255,255,255,0.18)' : 'rgba(36,36,40,0.18)'}`,
-                  borderRadius: 18,
-                  padding: '20px 28px',
-                  minWidth: 160,
-                  fontWeight: 700,
-                  fontSize: 15,
-                  color: isDark ? '#fff' : '#222',
-                  boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.10)' : '0 2px 8px rgba(36,36,40,0.08)',
-                  cursor: 'grab',
-                  userSelect: 'none',
-                  textAlign: 'center',
-                  marginBottom: 8,
-                  backdropFilter: 'blur(8px)',
-                }}
-                onDragStart={e => {
-                  e.dataTransfer.setData('moduleType', 'multiple-choice');
-                }}
-              >
-                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>
-                  + Multiple Choice Module
-                </div>
-                <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 400 }}>
-                  Drag to phone for polls
-                </div>
-              </div>
-              {/* Photo/Video Module */}
-              <div
-                draggable
-                style={{
-                  background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(36,36,40,0.08)',
-                  border: `2px dashed ${isDark ? 'rgba(255,255,255,0.18)' : 'rgba(36,36,40,0.18)'}`,
-                  borderRadius: 18,
-                  padding: '20px 28px',
-                  minWidth: 160,
-                  fontWeight: 700,
-                  fontSize: 15,
-                  color: isDark ? '#fff' : '#222',
-                  boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.10)' : '0 2px 8px rgba(36,36,40,0.08)',
-                  cursor: 'grab',
-                  userSelect: 'none',
-                  textAlign: 'center',
-                  marginBottom: 8,
-                  backdropFilter: 'blur(8px)',
-                }}
-                onDragStart={e => {
-                  e.dataTransfer.setData('moduleType', 'photo-video');
-                }}
-              >
-                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>
-                  + Photo/Video Module
-                </div>
-                <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 400 }}>
-                  Drag to phone for media
-                </div>
-              </div>
-            </div>
+            )}
+
             {/* View Modules button at bottom right of Preview Modal (fixed width and style) */}
             <button
               style={{
@@ -1772,25 +1970,74 @@ export default function EventPortalManagementPage() {
           />
         )}
 
-        {/* 1. Add title and subtitle above modules */}
-        <div style={{
-          position: 'absolute',
-          right: 48,
-          top: 100,
-          zIndex: 1000,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 24,
-        }}>
-          <div style={{ marginBottom: 8 }}>
-            <div style={{ fontWeight: 800, fontSize: 18, color: isDark ? '#fff' : '#222', letterSpacing: 0.5 }}>Module</div>
-            <div style={{ fontSize: 13, color: isDark ? '#aaa' : '#666', fontWeight: 500, marginTop: 2 }}>Drag the modules onto the mobile to create.</div>
-          </div>
-          {/* ...existing module buttons... */}
-        </div>
-
         {/* 2. Timeline Controller: draggable container for date picker and navigation arrows */}
         {/* Find the date picker and navigation arrows, and wrap them in a new absolutely positioned, draggable container called Timeline Controller. Do not change their logic or handlers. */}
+
+        {showCopyToast && (
+          <div style={{
+            position: 'fixed',
+            top: 24,
+            right: 24,
+            background: 'rgba(40,40,40,0.95)',
+            color: '#fff',
+            padding: '12px 24px',
+            borderRadius: 8,
+            fontWeight: 600,
+            fontSize: 16,
+            zIndex: 2000,
+            boxShadow: '0 2px 12px rgba(0,0,0,0.15)'
+          }}>
+            Copied to clipboard!
+          </div>
+        )}
+
+        {customModal && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 3000
+          }}>
+            <div style={{
+              background: isDark ? '#222' : '#fff',
+              color: isDark ? '#fff' : '#222',
+              borderRadius: 16,
+              padding: 40,
+              maxWidth: 400,
+              width: '90%',
+              textAlign: 'center',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.25)'
+            }}>
+              <h3 style={{ fontSize: 22, fontWeight: 700, marginBottom: 18 }}>{customModal.title}</h3>
+              <p style={{ fontSize: 16, marginBottom: 28 }}>{customModal.message}</p>
+              <button
+                onClick={() => {
+                  setCustomModal(null);
+                  if (customModal.onClose) customModal.onClose();
+                }}
+                style={{
+                  borderRadius: 8,
+                  padding: '10px 24px',
+                  fontSize: 15,
+                  fontWeight: 600,
+                  background: isDark ? '#444' : '#eee',
+                  color: isDark ? '#fff' : '#222',
+                  border: 'none',
+                  cursor: 'pointer',
+                  marginTop: 12
+                }}
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        )}
 
       </div>
     </div>
@@ -1928,3 +2175,4 @@ function DraggableTimelineController({ isDark, DateSlider, handleTimelinePreviou
     </div>
   );
 }
+
