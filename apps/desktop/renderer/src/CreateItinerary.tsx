@@ -6,7 +6,11 @@ import {
   getItineraries, 
   addItinerary, 
   updateItinerary, 
-  type Itinerary 
+  addDraftItinerary, 
+  updateDraftItinerary,
+  publishDraftItinerary,
+  type Itinerary,
+  insertActivityLog
 } from './lib/supabase';
 import { ThemeContext } from './ThemeContext';
 import ThemedIcon from './components/ThemedIcon';
@@ -222,6 +226,10 @@ export default function CreateItinerary() {
   const [uploading, setUploading] = useState<boolean>(false);
   const [csvFile, setCsvFile] = useState<File | null>(null);
 
+  // Add state for saved feedback
+  const [savedDraftIdx, setSavedDraftIdx] = useState<number | null>(null);
+  const [savedItemIdx, setSavedItemIdx] = useState<number | null>(null);
+
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -261,7 +269,7 @@ export default function CreateItinerary() {
             setOriginalItinerary(itineraryToEdit);
             // Convert database fields back to draft format
             const draftItem = {
-              id: `edit_${Date.now()}_${Math.random()}`,
+              id: itineraryToEdit.id,
               title: itineraryToEdit.title,
               arrivalTime: itineraryToEdit.arrival_time || '',
               startTime: itineraryToEdit.start_time || '',
@@ -298,10 +306,19 @@ export default function CreateItinerary() {
             if (itineraryToEdit.notification_times && itineraryToEdit.notification_times.length > 0) {
               draftItem.modules.notifications = true;
               draftItem.moduleValues.notifications = itineraryToEdit.notification_times;
+              // Debug: log what is loaded from DB
+              console.log('[DEBUG] Loaded notification_times from DB:', itineraryToEdit.notification_times);
+            }
+            // --- FIX: Also set for published items ---
+            const publishedItem = { ...draftItem };
+            publishedItem.moduleValues = { ...draftItem.moduleValues };
+            if (itineraryToEdit.notification_times && itineraryToEdit.notification_times.length > 0) {
+              publishedItem.moduleValues.notifications = itineraryToEdit.notification_times;
             }
             console.log('Mapped draftItem:', draftItem);
-            setDrafts([draftItem]);
-            setExpandedDraftIndex(0);
+            // For existing published itineraries, add to items array, not drafts
+            setItems([publishedItem]);
+            setExpandedItemIndex(0);
           } else {
             console.warn('No itinerary found for editing with id:', itineraryId);
           }
@@ -415,104 +432,6 @@ export default function CreateItinerary() {
     setDrafts(d => d.map((draft, i) => i === idx ? { ...draft, [key]: value } : draft));
   };
 
-  const handleSaveDraft = async (idx: number) => {
-    const draft = drafts[idx];
-    console.log('Attempting to save draft:', draft);
-    if (!draft.title || !draft.startTime || !draft.endTime || !draft.date) {
-      alert('Please fill in Title, Start Time, End Time, and Date for this itinerary item.');
-      console.error('Draft missing required fields:', draft);
-      return;
-    }
-
-    if (!draft.date || !draft.date.trim()) {
-      alert('Please select a date for this itinerary item');
-      return;
-    }
-
-    if (!eventId || !currentUser) {
-      alert('Missing event or user information.');
-      return;
-    }
-
-    try {
-      // Extract module values for this draft
-      const documentModule = draft.modules?.document ? draft.moduleValues?.document : undefined;
-      const qrcodeModule = draft.modules?.qrcode ? draft.moduleValues?.qrcode : undefined;
-      const contactModule = draft.modules?.contact ? draft.moduleValues?.contact : undefined;
-      const notificationsModule = draft.modules?.notifications ? draft.moduleValues?.notifications : undefined;
-      
-      console.log('💾 SAVING DRAFT TO DATABASE:', {
-        title: draft.title,
-        modules: draft.modules,
-        moduleValues: draft.moduleValues,
-        extractedValues: { documentModule, qrcodeModule, contactModule, notificationsModule }
-      });
-
-      const itineraryData = {
-        event_id: eventId,
-        company_id: currentUser.company_id,
-        created_by: currentUser.id,
-        title: draft.title,
-        description: draft.details || '',
-        arrival_time: draft.arrivalTime || undefined,
-        start_time: draft.startTime,
-        end_time: draft.endTime,
-        location: draft.location || undefined,
-        is_draft: false,
-        // Document Upload Module
-        document_file_name: documentModule || undefined,
-        // QR Code Module
-        qrcode_url: qrcodeModule?.url || undefined,
-        qrcode_image: qrcodeModule?.image || undefined,
-        // Host Contact Details Module
-        contact_name: contactModule?.name || undefined,
-        contact_country_code: contactModule?.countryCode || undefined,
-        contact_phone: contactModule?.phone || undefined,
-        contact_email: contactModule?.email || undefined,
-        // Notifications Timer Module
-        notification_times: notificationsModule || [],
-        group_id: draft.group_id || undefined,
-        group_name: draft.group_name || undefined,
-        date: draft.date,
-        // Legacy content field for backward compatibility
-        content: {
-          items: [draft]
-        }
-      };
-
-      // Save to database - check if we're in edit mode
-      if (isEditMode && originalItinerary?.id) {
-        // UPDATE existing itinerary
-        const updatedItinerary = await updateItinerary(originalItinerary.id, itineraryData);
-        console.log('✅ Draft updated in database:', updatedItinerary);
-        
-        // Move from drafts to items array with existing ID
-        setItems(g => [...g, { ...draft, id: originalItinerary.id }]);
-        setDrafts(d => d.filter((_, i) => i !== idx));
-        setExpandedDraftIndex(null);
-        
-        // Show success feedback
-        showSuccessToast('Itinerary item updated successfully!');
-      } else {
-        // CREATE new itinerary
-        const createdItinerary = await addItinerary(itineraryData);
-        console.log('✅ Draft saved to database:', createdItinerary);
-        
-        // Move from drafts to items array
-        setItems(g => [...g, { ...draft, id: createdItinerary.id }]);
-        setDrafts(d => d.filter((_, i) => i !== idx));
-        setExpandedDraftIndex(null);
-        
-        // Show success feedback
-        showSuccessToast('Itinerary item saved successfully!');
-      }
-      
-    } catch (error) {
-      console.error('❌ Failed to save draft:', error);
-      alert('Failed to save itinerary item. Please try again.');
-    }
-  };
-
   const handleRemoveDraft = (idx: number) => {
     setDrafts(d => d.filter((_, i) => i !== idx));
     setExpandedDraftIndex(null);
@@ -581,162 +500,72 @@ export default function CreateItinerary() {
   };
 
   const handleSaveItinerary = async () => {
-    // Check if we have any drafts or items to save
-    const allItemsToSave = [...drafts, ...items];
+    if (!eventDetails || !currentUser) {
+      console.error('❌ Missing eventDetails or currentUser');
+      return;
+    }
     
-    if (allItemsToSave.length === 0) {
-      alert('Please add at least one itinerary item before saving.');
-      return;
-    }
-
-    if (!eventId || !currentUser) {
-      alert('Missing event or user information.');
-      return;
-    }
-
+    console.log('👤 Current user:', currentUser);
+    console.log('📅 Event details:', eventDetails);
     try {
-      // Validate that all items have required fields
-      const invalidItems = allItemsToSave.filter(item => 
-        !item.title.trim() || !item.startTime.trim() || !item.endTime.trim()
-      );
-      
-      if (invalidItems.length > 0) {
-        alert('Please fill in Title, Start Time, and End Time for all items before saving.');
-        return;
-      }
-
-      // Validate that all items have a date
-      const itemsWithoutDate = allItemsToSave.filter(item => 
-        !item.date || !item.date.trim()
-      );
-      
-      if (itemsWithoutDate.length > 0) {
-        alert('⚠️ Date Required\n\nPlease select a date for all itinerary items before saving. Each activity must have a specific date to help your guests plan their schedule.\n\nTip: Use the date picker for each item to set when the activity will take place.');
-        return;
-      }
-
-      // If we're in edit mode, update the existing itinerary
-      if (isEditMode && originalItinerary?.id) {
-        const firstItem = allItemsToSave[0];
-        
-        // Extract module values
-        const documentModule = firstItem.modules?.document ? firstItem.moduleValues?.document : undefined;
-        const qrcodeModule = firstItem.modules?.qrcode ? firstItem.moduleValues?.qrcode : undefined;
-        const contactModule = firstItem.modules?.contact ? firstItem.moduleValues?.contact : undefined;
-        const notificationsModule = firstItem.modules?.notifications ? firstItem.moduleValues?.notifications : undefined;
-
+      // --- PUBLISHED ITINERARY SAVE LOGIC ---
+      // If editing from EventDashboard > itineraries tab > edit, always treat as published
+      // Only process the items array (published itineraries)
+      console.log('🔄 Starting save process for published itineraries...');
+      console.log('📝 Items to save:', items);
+      for (const item of items) {
         const itineraryData = {
-          title: firstItem.title,
-          description: firstItem.details || '',
-          arrival_time: firstItem.arrivalTime || undefined,
-          start_time: firstItem.startTime,
-          end_time: firstItem.endTime,
-          location: firstItem.location || undefined,
-          is_draft: false,
-          // Document Upload Module
-          document_file_name: documentModule || undefined,
-          // QR Code Module
-          qrcode_url: qrcodeModule?.url || undefined,
-          qrcode_image: qrcodeModule?.image || undefined,
-          // Host Contact Details Module
-          contact_name: contactModule?.name || undefined,
-          contact_country_code: contactModule?.countryCode || undefined,
-          contact_phone: contactModule?.phone || undefined,
-          contact_email: contactModule?.email || undefined,
-          // Notifications Timer Module
-          notification_times: notificationsModule || [],
-          group_id: firstItem.group_id || undefined,
-          group_name: firstItem.group_name || undefined,
-          date: firstItem.date && firstItem.date.trim() ? firstItem.date : undefined, // FIX: Convert empty string to undefined
-          // Legacy content field for backward compatibility
-          content: {
-            items: allItemsToSave
-          }
+          event_id: eventDetails.id,
+          company_id: currentUser.company_id || '',
+          created_by: currentUser.id || '',
+          title: item.title || 'Untitled Itinerary',
+          description: item.details || '',
+          date: item.date || '',
+          arrival_time: item.arrivalTime || '',
+          start_time: item.startTime || '',
+          end_time: item.endTime || '',
+          location: item.location || '',
+          document_file_name: item.moduleValues?.document || '',
+          qrcode_url: item.moduleValues?.qrcode?.url || '',
+          qrcode_image: item.moduleValues?.qrcode?.image || '',
+          contact_name: item.moduleValues?.contact?.name || '',
+          contact_country_code: item.moduleValues?.contact?.countryCode || '',
+          contact_phone: item.moduleValues?.contact?.phone || '',
+          contact_email: item.moduleValues?.contact?.email || '',
+          notification_times: item.moduleValues?.notifications || [],
+          group_id: groupId || undefined,
+          group_name: groupName,
+          content: { originalItem: item },
+          modules: item.modules || {},
+          module_values: item.moduleValues || {},
+          is_draft: false
         };
-
-        const updatedItinerary = await updateItinerary(originalItinerary.id, itineraryData);
-        console.log('Itinerary updated successfully:', updatedItinerary);
-        setShowSuccess(true);
-        setGlowItineraryId(updatedItinerary.id);
-        setTimeout(() => {
-          setShowSuccess(false);
-          setGlowItineraryId(null);
-          navigate(`/event/${eventId}?tab=itineraries`, { state: { glowId: updatedItinerary.id } });
-        }, 2000);
-      } else {
-        // Create new itineraries (one for each item)
-        const createdItineraries: any[] = [];
-        
-        for (const item of allItemsToSave) {
-          // Debug: Log the item data before extraction
-          console.log('🔍 DEBUGGING ITEM BEFORE SAVE:', {
-            title: item.title,
-            modules: item.modules,
-            moduleValues: item.moduleValues
-          });
-          
-          // Extract module values for each item
-          const documentModule = item.modules?.document ? item.moduleValues?.document : undefined;
-          const qrcodeModule = item.modules?.qrcode ? item.moduleValues?.qrcode : undefined;
-          const contactModule = item.modules?.contact ? item.moduleValues?.contact : undefined;
-          const notificationsModule = item.modules?.notifications ? item.moduleValues?.notifications : undefined;
-          
-          // Debug: Log the extracted values
-          console.log('🔍 EXTRACTED MODULE VALUES:', {
-            documentModule,
-            qrcodeModule,
-            contactModule,
-            notificationsModule
-          });
-
-          const itineraryData = {
-            event_id: eventId,
-            company_id: currentUser.company_id,
-            created_by: currentUser.id,
-            title: item.title,
-            description: item.details || '',
-            arrival_time: item.arrivalTime || undefined,
-            start_time: item.startTime,
-            end_time: item.endTime,
-            location: item.location || undefined,
-            is_draft: false,
-            // Document Upload Module
-            document_file_name: documentModule || undefined,
-            // QR Code Module
-            qrcode_url: qrcodeModule?.url || undefined,
-            qrcode_image: qrcodeModule?.image || undefined,
-            // Host Contact Details Module
-            contact_name: contactModule?.name || undefined,
-            contact_country_code: contactModule?.countryCode || undefined,
-            contact_phone: contactModule?.phone || undefined,
-            contact_email: contactModule?.email || undefined,
-            // Notifications Timer Module
-            notification_times: notificationsModule || [],
-            group_id: item.group_id || undefined,
-            group_name: item.group_name || undefined,
-            date: item.date && item.date.trim() ? item.date : undefined, // FIX: Convert empty string to undefined
-            // Legacy content field for backward compatibility
-            content: {
-              originalItem: item
-            }
-          };
-
-          const newItinerary = await addItinerary(itineraryData);
-          createdItineraries.push(newItinerary);
+        // Always treat as published: update if id exists, add if not
+        if (item.id) {
+          try {
+            const result = await updateItinerary(String(item.id), itineraryData);
+            console.log('✅ Update successful:', result);
+          } catch (updateError) {
+            console.error('❌ Update failed:', updateError);
+            throw updateError;
+          }
+        } else {
+          try {
+            const result = await addItinerary(itineraryData);
+            console.log('✅ Add successful:', result);
+          } catch (addError) {
+            console.error('❌ Add failed:', addError);
+            throw addError;
+          }
         }
-        
-        console.log(`${createdItineraries.length} itinerary items created successfully:`, createdItineraries);
-        setShowSuccess(true);
-        setGlowItineraryId(createdItineraries[0].id);
-        setTimeout(() => {
-          setShowSuccess(false);
-          setGlowItineraryId(null);
-          navigate(`/event/${eventId}?tab=itineraries`, { state: { glowId: createdItineraries[0].id } });
-        }, 2000);
       }
+      showSuccessToast('Itinerary saved successfully!');
+      setItems([]);
+      navigate(`/event/${eventId}?tab=itineraries`);
     } catch (error) {
-      console.error('Error saving itinerary to Supabase:', error);
-      alert('Failed to save itinerary. Please try again.');
+      console.error('❌ Error saving itinerary:', error);
+      if (error instanceof Error) alert('Error saving itinerary: ' + error.message);
+      else alert('Error saving itinerary: ' + JSON.stringify(error));
     }
   };
 
@@ -945,40 +774,231 @@ export default function CreateItinerary() {
     }
   };
 
-  const handleEditItem = (idx: number) => {
-    setExpandedItemIndex(idx);
-  };
+
 
   const handleItemChange = (idx: number, key: keyof ItineraryItem, value: any) => {
     setItems(items => items.map((item, i) => i === idx ? { ...item, [key]: value } : item));
   };
 
-  const handleItemModuleDrop = (idx: number, e: React.DragEvent) => {
+  const handleItemModuleDrop = async (idx: number, e: React.DragEvent) => {
     e.preventDefault();
     const moduleKey = e.dataTransfer.getData('text/plain');
     const module = ITINERARY_MODULES.find(m => m.key === moduleKey);
     if (module) {
+      // Update local state first
       setItems(items => items.map((item, i) => i === idx ? {
         ...item,
         modules: { ...item.modules, [moduleKey]: true },
         moduleValues: { ...item.moduleValues, [moduleKey]: getDefaultModuleValue(moduleKey) }
       } : item));
+
+      // Get the updated item
+      const updatedItems = items.map((item, i) => i === idx ? {
+        ...item,
+        modules: { ...item.modules, [moduleKey]: true },
+        moduleValues: { ...item.moduleValues, [moduleKey]: getDefaultModuleValue(moduleKey) }
+      } : item);
+      
+      const updatedItem = updatedItems[idx];
+      
+      // Save to database if this is a saved item (has an ID)
+      if (updatedItem.id && eventId && currentUser) {
+        try {
+          // Extract module values for the updated item
+          const documentModule = updatedItem.modules?.document ? updatedItem.moduleValues?.document : undefined;
+          const qrcodeModule = updatedItem.modules?.qrcode ? updatedItem.moduleValues?.qrcode : undefined;
+          const contactModule = updatedItem.modules?.contact ? updatedItem.moduleValues?.contact : undefined;
+          const notificationsModule = updatedItem.modules?.notifications ? updatedItem.moduleValues?.notifications : undefined;
+
+          const itineraryData = {
+            title: updatedItem.title,
+            description: updatedItem.details || '',
+            arrival_time: updatedItem.arrivalTime || undefined,
+            start_time: updatedItem.startTime,
+            end_time: updatedItem.endTime,
+            location: updatedItem.location || undefined,
+            is_draft: false,
+            // Document Upload Module
+            document_file_name: documentModule || undefined,
+            // QR Code Module
+            qrcode_url: qrcodeModule?.url || undefined,
+            qrcode_image: qrcodeModule?.image || undefined,
+            // Host Contact Details Module
+            contact_name: contactModule?.name || undefined,
+            contact_country_code: contactModule?.countryCode || undefined,
+            contact_phone: contactModule?.phone || undefined,
+            contact_email: contactModule?.email || undefined,
+            // Notifications Timer Module
+            notification_times: notificationsModule || [],
+            group_id: updatedItem.group_id || undefined,
+            group_name: updatedItem.group_name || undefined,
+            date: updatedItem.date && updatedItem.date.trim() ? updatedItem.date : undefined,
+            // Legacy content field for backward compatibility
+            content: {
+              originalItem: updatedItem
+            }
+          };
+
+          await updateItinerary(updatedItem.id, itineraryData);
+          console.log('✅ Module added and saved to database:', moduleKey);
+        } catch (error) {
+          console.error('❌ Failed to save module addition to database:', error);
+          // Revert the local state change if database update fails
+          setItems(items => items.map((item, i) => i === idx ? {
+            ...item,
+            modules: { ...item.modules, [moduleKey]: false },
+            moduleValues: { ...item.moduleValues, [moduleKey]: undefined }
+          } : item));
+          alert('Failed to add module. Please try again.');
+        }
+      }
     }
   };
 
-  const handleRemoveItemModule = (itemIdx: number, moduleKey: string) => {
+  const handleRemoveItemModule = async (itemIdx: number, moduleKey: string) => {
+    // Update local state first
     setItems(items => items.map((item, i) => i === itemIdx ? {
       ...item,
       modules: { ...item.modules, [moduleKey]: false },
       moduleValues: { ...item.moduleValues, [moduleKey]: undefined }
     } : item));
+
+    // Get the updated item
+    const updatedItems = items.map((item, i) => i === itemIdx ? {
+      ...item,
+      modules: { ...item.modules, [moduleKey]: false },
+      moduleValues: { ...item.moduleValues, [moduleKey]: undefined }
+    } : item);
+    
+    const updatedItem = updatedItems[itemIdx];
+    
+    // Save to database if this is a saved item (has an ID)
+    if (updatedItem.id && eventId && currentUser) {
+      try {
+        // Extract module values for the updated item
+        const documentModule = updatedItem.modules?.document ? updatedItem.moduleValues?.document : undefined;
+        const qrcodeModule = updatedItem.modules?.qrcode ? updatedItem.moduleValues?.qrcode : undefined;
+        const contactModule = updatedItem.modules?.contact ? updatedItem.moduleValues?.contact : undefined;
+        const notificationsModule = updatedItem.modules?.notifications ? updatedItem.moduleValues?.notifications : undefined;
+
+        const itineraryData = {
+          title: updatedItem.title,
+          description: updatedItem.details || '',
+          arrival_time: updatedItem.arrivalTime || undefined,
+          start_time: updatedItem.startTime,
+          end_time: updatedItem.endTime,
+          location: updatedItem.location || undefined,
+          is_draft: false,
+          // Document Upload Module
+          document_file_name: documentModule || undefined,
+          // QR Code Module
+          qrcode_url: qrcodeModule?.url || undefined,
+          qrcode_image: qrcodeModule?.image || undefined,
+          // Host Contact Details Module
+          contact_name: contactModule?.name || undefined,
+          contact_country_code: contactModule?.countryCode || undefined,
+          contact_phone: contactModule?.phone || undefined,
+          contact_email: contactModule?.email || undefined,
+          // Notifications Timer Module
+          notification_times: notificationsModule || [],
+          group_id: updatedItem.group_id || undefined,
+          group_name: updatedItem.group_name || undefined,
+          date: updatedItem.date && updatedItem.date.trim() ? updatedItem.date : undefined,
+          // Legacy content field for backward compatibility
+          content: {
+            originalItem: updatedItem
+          }
+        };
+
+        await updateItinerary(updatedItem.id, itineraryData);
+        console.log('✅ Module removed and saved to database:', moduleKey);
+      } catch (error) {
+        console.error('❌ Failed to save module removal to database:', error);
+        // Revert the local state change if database update fails
+        setItems(items => items.map((item, i) => i === itemIdx ? {
+          ...item,
+          modules: { ...item.modules, [moduleKey]: true },
+          moduleValues: { ...item.moduleValues, [moduleKey]: items[itemIdx].moduleValues[moduleKey] }
+        } : item));
+        alert('Failed to remove module. Please try again.');
+      }
+    }
   };
 
-  const handleItemModuleValueChange = (itemIdx: number, moduleKey: string, value: any) => {
+  const handleItemModuleValueChange = async (itemIdx: number, moduleKey: string, value: any) => {
+    // Debug: log what is being saved
+    if (moduleKey === 'notifications') {
+      console.log('[DEBUG] Saving notification_times:', value, 'for itemIdx:', itemIdx);
+    }
+    // Update local state first
     setItems(items => items.map((item, i) => i === itemIdx ? {
       ...item,
       moduleValues: { ...item.moduleValues, [moduleKey]: value }
     } : item));
+
+    // Get the updated item
+    const updatedItems = items.map((item, i) => i === itemIdx ? {
+      ...item,
+      moduleValues: { ...item.moduleValues, [moduleKey]: value }
+    } : item);
+    
+    const updatedItem = updatedItems[itemIdx];
+    
+    // Save to database if this is a saved item (has an ID)
+    if (updatedItem.id && eventId && currentUser) {
+      try {
+        // Extract module values for the updated item
+        const documentModule = updatedItem.modules?.document ? updatedItem.moduleValues?.document : undefined;
+        const qrcodeModule = updatedItem.modules?.qrcode ? updatedItem.moduleValues?.qrcode : undefined;
+        const contactModule = updatedItem.modules?.contact ? updatedItem.moduleValues?.contact : undefined;
+        const notificationsModule = updatedItem.modules?.notifications ? updatedItem.moduleValues?.notifications : undefined;
+
+        // Debug: log what is being sent to the DB
+        if (moduleKey === 'notifications') {
+          console.log('[DEBUG] updateItinerary notification_times:', notificationsModule);
+        }
+
+        const itineraryData = {
+          title: updatedItem.title,
+          description: updatedItem.details || '',
+          arrival_time: updatedItem.arrivalTime || undefined,
+          start_time: updatedItem.startTime,
+          end_time: updatedItem.endTime,
+          location: updatedItem.location || undefined,
+          is_draft: false,
+          // Document Upload Module
+          document_file_name: documentModule || undefined,
+          // QR Code Module
+          qrcode_url: qrcodeModule?.url || undefined,
+          qrcode_image: qrcodeModule?.image || undefined,
+          // Host Contact Details Module
+          contact_name: contactModule?.name || undefined,
+          contact_country_code: contactModule?.countryCode || undefined,
+          contact_phone: contactModule?.phone || undefined,
+          contact_email: contactModule?.email || undefined,
+          // Notifications Timer Module
+          notification_times: notificationsModule || [],
+          group_id: updatedItem.group_id || undefined,
+          group_name: updatedItem.group_name || undefined,
+          date: updatedItem.date && updatedItem.date.trim() ? updatedItem.date : undefined,
+          // Legacy content field for backward compatibility
+          content: {
+            originalItem: updatedItem
+          }
+        };
+
+        await updateItinerary(updatedItem.id, itineraryData);
+        console.log('✅ Module value updated and saved to database:', moduleKey);
+      } catch (error) {
+        console.error('❌ Failed to save module value change to database:', error);
+        // Revert the local state change if database update fails
+        setItems(items => items.map((item, i) => i === itemIdx ? {
+          ...item,
+          moduleValues: { ...item.moduleValues, [moduleKey]: items[itemIdx].moduleValues[moduleKey] }
+        } : item));
+        alert('Failed to update module value. Please try again.');
+      }
+    }
   };
 
   const getDefaultModuleValue = (moduleKey: string) => {
@@ -1008,7 +1028,7 @@ export default function CreateItinerary() {
       const url = await uploadFileToBucket(file, 'itinerary-documents', 'uploads');
       setDocumentUrl(url);
     } catch (err: any) {
-      alert('Document upload failed: ' + (err.message || err.toString()));
+      alert('Document upload failed: ' + (err instanceof Error ? err.message : String(err)));
     }
     setUploading(false);
   };
@@ -1022,7 +1042,7 @@ export default function CreateItinerary() {
       const url = await uploadFileToBucket(file, 'itinerary-qrcodes', 'uploads');
       setQrcodeUrl(url);
     } catch (err: any) {
-      alert('QR code upload failed: ' + (err.message || err.toString()));
+      alert('QR code upload failed: ' + (err instanceof Error ? err.message : String(err)));
     }
     setUploading(false);
   };
@@ -1189,8 +1209,8 @@ export default function CreateItinerary() {
                     background: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)',
                     border: 'none',
                     borderRadius: '50%',
-                    width: 44,
-                    height: 44,
+                    width: 32,
+                    height: 32,
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
@@ -1221,8 +1241,8 @@ export default function CreateItinerary() {
                     right: 24,
                     ...getButtonStyles(isDark, 'danger'),
                     borderRadius: '50%',
-                    width: 44,
-                    height: 44,
+                    width: 32,
+                    height: 32,
                     padding: 0,
                     display: 'flex',
                     alignItems: 'center',
@@ -1253,7 +1273,7 @@ export default function CreateItinerary() {
                   <input
                     placeholder="Event Title"
                     value={draft.title}
-                    onChange={(e) => handleDraftChange(idx, 'title', e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleDraftChange(idx, 'title', e.target.value)}
                     style={{
                       ...getInputStyles(isDark),
                       width: '100%',
@@ -1270,10 +1290,10 @@ export default function CreateItinerary() {
                   </div>
                   <div style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
                     {/* Date Field */}
-                    <div style={{ flex: 1, position: 'relative' }}>
+                    <div style={{ flex: 1, position: 'relative', display: 'flex', flexDirection: 'column' }}>
                       <CustomDatePicker
                         value={draft.date}
-                        onChange={(value) => handleDraftChange(idx, 'date', value)}
+                        onChange={(value: string) => handleDraftChange(idx, 'date', value)}
                         placeholder="Date (DD/MM/YYYY)"
                         isDark={isDark}
                         colors={colors}
@@ -1281,24 +1301,26 @@ export default function CreateItinerary() {
                         openDropdown={openDropdown}
                         setOpenDropdown={setOpenDropdown}
                       />
+                      <div style={{ fontWeight: 600, fontSize: 12, marginTop: 4, letterSpacing: 0.5, color: colors.textSecondary, textTransform: 'uppercase', textAlign: 'center' }}>Date</div>
                     </div>
-                    {/* Time Fields */}
+                    {/* Time Fields with Labels Underneath */}
                     {([
                       ['arrivalTime', 'Arrival Time'],
                       ['startTime', 'Start Time'],
                       ['endTime', 'End Time']
                     ] as [keyof ItineraryItem, string][]).map(([key, label]) => (
-                      <div style={{ flex: 1, position: 'relative' }} key={key}>
+                      <div style={{ flex: 1, position: 'relative', display: 'flex', flexDirection: 'column' }} key={key}>
                         <CustomGlassTimePicker
                           value={draft[key] as string}
-                          onChange={value => handleDraftChange(idx, key, value)}
+                          onChange={(value: string) => handleDraftChange(idx, key, value)}
                           placeholder={label}
                           isDark={isDark}
                           colors={colors}
                         />
+                        <div style={{ fontWeight: 600, fontSize: 12, marginTop: 4, letterSpacing: 0.5, color: colors.textSecondary, textTransform: 'uppercase', textAlign: 'center' }}>{label}</div>
                       </div>
-        ))}
-      </div>
+                    ))}
+                  </div>
 
                   {/* Location Field */}
                   <div style={{ 
@@ -1313,7 +1335,7 @@ export default function CreateItinerary() {
                   <input
                     placeholder="Event Location"
                     value={draft.location}
-                    onChange={(e) => handleDraftChange(idx, 'location', e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleDraftChange(idx, 'location', e.target.value)}
                     style={{
                       ...getInputStyles(isDark),
                       width: '100%',
@@ -1337,7 +1359,7 @@ export default function CreateItinerary() {
                   <textarea
                     placeholder="Event Description"
                     value={draft.details}
-                    onChange={(e) => handleDraftChange(idx, 'details', e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => handleDraftChange(idx, 'details', e.target.value)}
                     style={{
                       ...getInputStyles(isDark),
                       width: '100%',
@@ -1361,7 +1383,8 @@ export default function CreateItinerary() {
                       cursor: 'copy', 
                       marginTop: 24,
                       border: `2px dashed ${colors.border}`,
-                      background: isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'
+                      background: isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)',
+                      marginBottom: 24
                     }}
                     onDrop={e => handleModuleDrop(idx, e)}
                     onDragOver={e => e.preventDefault()}
@@ -1595,53 +1618,7 @@ export default function CreateItinerary() {
 
                   {/* Action Buttons */}
                   <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 24 }}>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleRemoveDraft(idx);
-                      }}
-                      style={{
-                        background: '#18181b',
-                        color: '#fff',
-                        border: '1.5px solid #444',
-                        borderRadius: 8,
-                        fontWeight: 500,
-                        fontSize: 16,
-                        padding: '10px 24px',
-                        cursor: 'pointer',
-                        minWidth: '100px',
-                        height: 48,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        marginRight: 8
-                      }}
-                    >
-                      Delete
-                    </button>
-                    <button
-                      onClick={() => handleSaveDraft(idx)}
-                      disabled={!draft.title || !draft.arrivalTime || !draft.startTime || !draft.endTime}
-                      style={{
-                        background: '#18181b',
-                        color: '#fff',
-                        border: '1.5px solid #444',
-                        borderRadius: 8,
-                        fontWeight: 500,
-                        fontSize: 16,
-                        padding: '10px 24px',
-                        cursor: draft.title && draft.arrivalTime && draft.startTime && draft.endTime ? 'pointer' : 'not-allowed',
-                        minWidth: '100px',
-                        height: 48,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        marginRight: 8,
-                        opacity: draft.title && draft.arrivalTime && draft.startTime && draft.endTime ? 1 : 0.6
-                      }}
-                    >
-                      Edit
-                    </button>
+
                   </div>
                 </div>
               </div>
@@ -1661,57 +1638,7 @@ export default function CreateItinerary() {
                       {draft.location && ` • ${draft.location}`}
                     </div>
                   </div>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleSaveDraft(idx);
-                      }}
-                      disabled={!draft.title || !draft.arrivalTime || !draft.startTime || !draft.endTime}
-                      style={{
-                        background: '#18181b',
-                        color: '#fff',
-                        border: '1.5px solid #444',
-                        borderRadius: 8,
-                        fontWeight: 500,
-                        fontSize: 16,
-                        padding: '10px 24px',
-                        cursor: 'pointer',
-                        minWidth: '100px',
-                        height: 48,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        marginRight: 8
-                      }}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleRemoveDraft(idx);
-                      }}
-                      style={{
-                        background: '#18181b',
-                        color: '#fff',
-                        border: '1.5px solid #444',
-                        borderRadius: 8,
-                        fontWeight: 500,
-                        fontSize: 16,
-                        padding: '10px 24px',
-                        cursor: 'pointer',
-                        minWidth: '100px',
-                        height: 48,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        marginRight: 8
-                      }}
-                    >
-                      Delete
-                    </button>
-                  </div>
+
                 </div>
         </div>
       )}
@@ -1750,8 +1677,8 @@ export default function CreateItinerary() {
                     background: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)',
                     border: 'none',
                     borderRadius: '50%',
-                    width: 44,
-                    height: 44,
+                    width: 32,
+                    height: 32,
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
@@ -1780,8 +1707,8 @@ export default function CreateItinerary() {
                     right: 24,
                     ...getButtonStyles(isDark, 'danger'),
                     borderRadius: '50%',
-                    width: 44,
-                    height: 44,
+                    width: 32,
+                    height: 32,
                     padding: 0,
                     display: 'flex',
                     alignItems: 'center',
@@ -1812,7 +1739,7 @@ export default function CreateItinerary() {
                   <input
                     placeholder="Event Title"
                     value={item.title}
-                    onChange={(e) => handleItemChange(idx, 'title', e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleItemChange(idx, 'title', e.target.value)}
                     style={{
                       ...getInputStyles(isDark),
                       width: '100%',
@@ -1829,10 +1756,11 @@ export default function CreateItinerary() {
                   </div>
                   <div style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
                     {/* Date Field */}
-                    <div style={{ flex: 1, position: 'relative' }}>
+                    <div style={{ flex: 1, position: 'relative', display: 'flex', flexDirection: 'column', marginRight: 8 }}>
+                      <label style={{ fontWeight: 600, fontSize: 14, marginBottom: 6, marginTop: 8, color: colors.textSecondary, textAlign: 'left', letterSpacing: 0.5 }}>Date</label>
                       <CustomDatePicker
                         value={item.date}
-                        onChange={(value) => handleItemChange(idx, 'date', value)}
+                        onChange={(value: string) => handleItemChange(idx, 'date', value)}
                         placeholder="Date (DD/MM/YYYY)"
                         isDark={isDark}
                         colors={colors}
@@ -1841,16 +1769,17 @@ export default function CreateItinerary() {
                         setOpenDropdown={setOpenDropdown}
                       />
                     </div>
-                    {/* Time Fields */}
+                    {/* Time Fields with Labels Above */}
                     {([
                       ['arrivalTime', 'Arrival Time'],
                       ['startTime', 'Start Time'],
                       ['endTime', 'End Time']
                     ] as [keyof ItineraryItem, string][]).map(([key, label]) => (
-                      <div style={{ flex: 1, position: 'relative' }} key={key}>
+                      <div style={{ flex: 1, position: 'relative', display: 'flex', flexDirection: 'column', marginRight: 8 }} key={key}>
+                        <label style={{ fontWeight: 600, fontSize: 14, marginBottom: 6, marginTop: 8, color: colors.textSecondary, textAlign: 'left', letterSpacing: 0.5 }}>{label}</label>
                         <CustomGlassTimePicker
                           value={item[key] as string}
-                          onChange={value => handleItemChange(idx, key, value)}
+                          onChange={(value: string) => handleItemChange(idx, key, value)}
                           placeholder={label}
                           isDark={isDark}
                           colors={colors}
@@ -1872,7 +1801,7 @@ export default function CreateItinerary() {
                   <input
                     placeholder="Event Location"
                     value={item.location}
-                    onChange={(e) => handleItemChange(idx, 'location', e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleItemChange(idx, 'location', e.target.value)}
                     style={{
                       ...getInputStyles(isDark),
                       width: '100%',
@@ -1896,7 +1825,7 @@ export default function CreateItinerary() {
                   <textarea
                     placeholder="Event Description"
                     value={item.details}
-                    onChange={(e) => handleItemChange(idx, 'details', e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => handleItemChange(idx, 'details', e.target.value)}
                     style={{
                       ...getInputStyles(isDark),
                       width: '100%',
@@ -1920,7 +1849,8 @@ export default function CreateItinerary() {
                       cursor: 'copy', 
                       marginTop: 24,
                       border: `2px dashed ${colors.border}`,
-                      background: isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'
+                      background: isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)',
+                      marginBottom: 24
                     }}
                     onDrop={e => handleItemModuleDrop(idx, e)}
                     onDragOver={e => e.preventDefault()}
@@ -1935,97 +1865,221 @@ export default function CreateItinerary() {
                   </div>
 
                   {/* Display Added Modules with Glass Effect */}
-                  {Object.entries(item.modules || {}).filter(([_, isActive]) => isActive).map(([moduleKey, _]) => {
-                    const module = ITINERARY_MODULES.find(m => m.key === moduleKey);
-                    if (!module) return null;
-                    return (
-                      <div key={moduleKey} style={{
-                        background: isDark ? 'rgba(30,30,30,0.75)' : '#fff',
-                        border: `2px solid ${isDark ? 'rgba(255,255,255,0.10)' : '#e5e7eb'}`,
-                        borderRadius: 16,
-                        padding: 20,
-                        marginTop: 16,
-                        position: 'relative',
-                        boxShadow: isDark ? '0 2px 12px #0006' : '0 1px 4px #0001',
-                        color: isDark ? '#fff' : '#111',
-                        backdropFilter: 'blur(16px)',
-                        WebkitBackdropFilter: 'blur(16px)'
-                      }}>
-                        <button
-                          onClick={() => handleRemoveItemModule(idx, moduleKey)}
+                  <div className="moduleList">
+                    {Object.entries(item.modules || {}).filter(([_, isActive]) => isActive).map(([moduleKey, _]) => {
+                      const module = ITINERARY_MODULES.find(m => m.key === moduleKey);
+                      if (!module) return null;
+                      return (
+                        <div
+                          key={moduleKey}
+                          className="moduleItem"
                           style={{
-                            position: 'absolute',
-                            top: 12,
-                            right: 12,
-                            background: '#ef4444',
-                            border: 'none',
-                            borderRadius: '50%',
-                            width: 28,
-                            height: 28,
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontSize: 14,
-                            color: 'white'
+                            background: isDark ? 'rgba(30,30,30,0.85)' : 'rgba(255,255,255,0.95)',
+                            border: `2px solid ${isDark ? 'rgba(255,255,255,0.10)' : '#e5e7eb'}`,
+                            borderRadius: 18,
+                            boxShadow: isDark ? '0 4px 24px #0008' : '0 2px 12px #0002',
+                            padding: '28px 28px 20px 28px',
+                            marginBottom: 28,
+                            position: 'relative',
+                            color: colors.text,
+                            backdropFilter: 'blur(18px)',
+                            WebkitBackdropFilter: 'blur(18px)'
                           }}
                         >
-                          ×
-                        </button>
-                        <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 12 }}>
-                          {module.label}
+                          <button
+                            className="moduleDeleteButton"
+                            onClick={() => handleRemoveItemModule(idx, moduleKey)}
+                            style={{
+                              position: 'absolute',
+                              top: 18,
+                              right: 18,
+                              background: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.06)',
+                              color: isDark ? '#fff' : '#222',
+                              border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.18)' : '#bbb'}`,
+                              borderRadius: '50%',
+                              width: 18,
+                              height: 18,
+                              minWidth: 18,
+                              minHeight: 18,
+                              boxShadow: isDark ? '0 2px 8px #0004' : '0 1px 4px #0001',
+                              fontSize: 12,
+                              fontWeight: 500,
+                              cursor: 'pointer',
+                              transition: 'all 0.2s',
+                              zIndex: 10,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              padding: 0, // ensure no extra padding
+                              lineHeight: 1, // ensure no vertical stretching
+                            }}
+                            title="Remove module"
+                          >×</button>
+                          <div className="moduleItemContent">
+                            <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 12, color: colors.text }}>{module.label}</div>
+                            {/* Document Upload */}
+                            {moduleKey === 'document' && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 0, width: '100%' }}>
+                                <label style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'flex-start',
+                                  background: isDark ? 'rgba(255,255,255,0.08)' : '#f3f4f6',
+                                  color: isDark ? '#fff' : '#222',
+                                  border: `2px dotted ${isDark ? 'rgba(255,255,255,0.25)' : '#bbb'}`,
+                                  borderRadius: 10,
+                                  fontWeight: 500,
+                                  fontSize: 16,
+                                  padding: '0 18px',
+                                  height: 48,
+                                  minWidth: 200,
+                                  cursor: 'pointer',
+                                  width: '100%',
+                                  transition: 'background 0.2s, color 0.2s',
+                                  textAlign: 'center',
+                                  letterSpacing: 0.2,
+                                  position: 'relative',
+                                }}>
+                                  {item.moduleValues.document ? item.moduleValues.document.split('/').pop() : 'Choose file'}
+                                  <input
+                                    type="file"
+                                    accept="application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/plain,image/png,image/jpeg"
+                                    style={{ display: 'none' }}
+                                    onChange={async (e) => {
+                                      const file = e.target.files?.[0];
+                                      if (file) {
+                                        setUploading(true);
+                                        try {
+                                          const url = await uploadFileToBucket(file, 'itinerary-documents', 'uploads');
+                                          handleItemModuleValueChange(idx, 'document', url);
+                                        } catch (err) {
+                                          alert('Document upload failed: ' + (err instanceof Error ? err.message : String(err)));
+                                        }
+                                        setUploading(false);
+                                      }
+                                    }}
+                                  />
+                                </label>
+                              </div>
+                            )}
+                            {/* QR Code */}
+                            {moduleKey === 'qrcode' && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%' }}>
+                                <label style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'flex-start',
+                                  background: isDark ? 'rgba(255,255,255,0.08)' : '#f3f4f6',
+                                  color: isDark ? '#fff' : '#222',
+                                  border: `2px dotted ${isDark ? 'rgba(255,255,255,0.25)' : '#bbb'}`,
+                                  borderRadius: 10,
+                                  fontWeight: 500,
+                                  fontSize: 16,
+                                  padding: '0 18px',
+                                  height: 48,
+                                  minWidth: 160,
+                                  cursor: 'pointer',
+                                  width: 200,
+                                  transition: 'background 0.2s, color 0.2s',
+                                  textAlign: 'center',
+                                  letterSpacing: 0.2,
+                                  position: 'relative',
+                                }}>
+                                  {item.moduleValues.qrcode?.image ? item.moduleValues.qrcode.image.split('/').pop() : 'Choose file'}
+                                  <input
+                                    type="file"
+                                    accept="image/png,image/jpeg,image/svg+xml"
+                                    style={{ display: 'none' }}
+                                    onChange={async (e) => {
+                                      const file = e.target.files?.[0];
+                                      if (file) {
+                                        setUploading(true);
+                                        try {
+                                          const url = await uploadFileToBucket(file, 'itinerary-qrcodes', 'uploads');
+                                          handleItemModuleValueChange(idx, 'qrcode', { ...item.moduleValues?.qrcode, image: url });
+                                        } catch (err) {
+                                          alert('QR code upload failed: ' + (err instanceof Error ? err.message : String(err)));
+                                        }
+                                        setUploading(false);
+                                      }
+                                    }}
+                                  />
+                                </label>
+                                <input
+                                  type="text"
+                                  placeholder="QR Code URL"
+                                  value={item.moduleValues?.qrcode?.url || ''}
+                                  onChange={e => handleItemModuleValueChange(idx, 'qrcode', { ...item.moduleValues?.qrcode, url: e.target.value })}
+                                  style={{ ...getInputStyles(isDark), height: 48, borderRadius: 10, fontSize: 16, padding: '0 16px', flex: 1, minWidth: 0, margin: 0 }}
+                                />
+                              </div>
+                            )}
+                            {/* Host Contact Details */}
+                            {moduleKey === 'contact' && (
+                              <div style={{ display: 'flex', gap: 16, width: '100%' }}>
+                                <input
+                                  placeholder="Host Name"
+                                  value={item.moduleValues?.contact?.name || ''}
+                                  onChange={(e) => handleItemModuleValueChange(idx, 'contact', { ...item.moduleValues?.contact, name: e.target.value })}
+                                  style={{ ...getInputStyles(isDark), height: 48, borderRadius: 10, fontSize: 16, padding: '0 16px', width: 180 }}
+                                />
+                                <input
+                                  placeholder="Phone"
+                                  value={item.moduleValues?.contact?.phone || ''}
+                                  onChange={(e) => handleItemModuleValueChange(idx, 'contact', { ...item.moduleValues?.contact, phone: e.target.value })}
+                                  style={{ ...getInputStyles(isDark), height: 48, borderRadius: 10, fontSize: 16, padding: '0 16px', width: 180 }}
+                                />
+                                <input
+                                  placeholder="Email"
+                                  value={item.moduleValues?.contact?.email || ''}
+                                  onChange={(e) => handleItemModuleValueChange(idx, 'contact', { ...item.moduleValues?.contact, email: e.target.value })}
+                                  style={{ ...getInputStyles(isDark), height: 48, borderRadius: 10, fontSize: 16, padding: '0 16px', flex: 1, minWidth: 0 }}
+                                />
+                              </div>
+                            )}
+                            {/* Notifications Timer */}
+                            {moduleKey === 'notifications' && (
+                              <div style={{ width: '100%' }}>
+                                {/* Removed label text as requested */}
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 18, rowGap: 12, width: '100%' }}>
+                                  {[
+                                    { label: '24 hours', value: 24 * 60 },
+                                    { label: '8 hours', value: 8 * 60 },
+                                    { label: '4 hours', value: 4 * 60 },
+                                    { label: '3 hours', value: 3 * 60 },
+                                    { label: '2 hours', value: 2 * 60 },
+                                    { label: '1 hour', value: 60 },
+                                    { label: '45 minutes', value: 45 },
+                                    { label: '30 minutes', value: 30 },
+                                    { label: '15 minutes', value: 15 },
+                                  ].map((opt, i) => (
+                                    <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 15, color: colors.text, whiteSpace: 'nowrap' }}>
+                                      <input
+                                        type="checkbox"
+                                        checked={Array.isArray(item.moduleValues?.notifications) && item.moduleValues.notifications.map(String).includes(String(opt.value))}
+                                        onChange={async e => {
+                                          let newTimes = Array.isArray(item.moduleValues?.notifications) ? item.moduleValues.notifications.map(String) : [];
+                                          const valueStr = String(opt.value);
+                                          if (e.target.checked) {
+                                            if (!newTimes.includes(valueStr)) newTimes.push(valueStr);
+                                          } else {
+                                            newTimes = newTimes.filter(v => v !== valueStr);
+                                          }
+                                          await handleItemModuleValueChange(idx, 'notifications', newTimes);
+                                        }}
+                                        style={{ accentColor: isDark ? '#fff' : '#000', width: 22, height: 22, marginRight: 8 }}
+                                      />
+                                      {opt.label}
+                                    </label>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        
-                        {moduleKey === 'contact' && (
-                          <div>
-                            <input
-                              placeholder="Contact Name"
-                              value={item.moduleValues?.contact?.name || ''}
-                              onChange={(e) => handleItemModuleValueChange(idx, 'contact', { ...item.moduleValues?.contact, name: e.target.value })}
-                              style={{ ...getInputStyles(isDark), width: '100%', marginBottom: 8 }}
-                            />
-                            <div style={{ display: 'flex', gap: 8 }}>
-                              <input
-                                placeholder="Country Code"
-                                value={item.moduleValues?.contact?.countryCode || ''}
-                                onChange={(e) => handleItemModuleValueChange(idx, 'contact', { ...item.moduleValues?.contact, countryCode: e.target.value })}
-                                style={{ ...getInputStyles(isDark), width: '30%' }}
-                              />
-                              <input
-                                placeholder="Phone Number"
-                                value={item.moduleValues?.contact?.phone || ''}
-                                onChange={(e) => handleItemModuleValueChange(idx, 'contact', { ...item.moduleValues?.contact, phone: e.target.value })}
-                                style={{ ...getInputStyles(isDark), width: '70%' }}
-                              />
-                            </div>
-                            <input
-                              placeholder="Email Address"
-                              value={item.moduleValues?.contact?.email || ''}
-                              onChange={(e) => handleItemModuleValueChange(idx, 'contact', { ...item.moduleValues?.contact, email: e.target.value })}
-                              style={{ ...getInputStyles(isDark), width: '100%', marginTop: 8 }}
-                            />
-                          </div>
-                        )}
-                        
-                        {moduleKey === 'notifications' && (
-                          <div>
-                            <div style={{ fontSize: 14, color: colors.textSecondary, marginBottom: 8 }}>
-                              Notification times (minutes before event):
-                            </div>
-                            <input
-                              placeholder="e.g., 15,30,60"
-                              value={Array.isArray(item.moduleValues?.notifications) ? item.moduleValues.notifications.join(',') : ''}
-                              onChange={(e) => {
-                                const times = e.target.value.split(',').map(t => parseInt(t.trim())).filter(t => !isNaN(t));
-                                handleItemModuleValueChange(idx, 'notifications', times);
-                              }}
-                              style={{ ...getInputStyles(isDark), width: '100%' }}
-                            />
-                          </div>
-      )}
-    </div>
-  );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             ) : (
@@ -2062,53 +2116,7 @@ export default function CreateItinerary() {
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <button
-                      style={{
-                        background: '#18181b',
-                        color: '#fff',
-                        border: '1.5px solid #444',
-                        borderRadius: 8,
-                        padding: '10px 24px',
-                        fontSize: 16,
-                        fontWeight: 500,
-                        cursor: 'pointer',
-                        marginRight: 8,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        minWidth: 80,
-                        height: 40
-                      }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleEditItem(idx);
-                      }}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      style={{
-                        background: '#18181b',
-                        color: '#fff',
-                        border: '1.5px solid #444',
-                        borderRadius: 8,
-                        padding: '10px 24px',
-                        fontSize: 16,
-                        fontWeight: 500,
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        minWidth: 80,
-                        height: 40
-                      }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleRemoveItem(idx);
-                      }}
-                    >
-                      Delete
-                    </button>
+
                   </div>
                 </div>
               </div>
@@ -2152,7 +2160,7 @@ export default function CreateItinerary() {
               padding: '10px 36px', 
               minWidth: '125px'
             }} 
-            onClick={() => navigate(`/event/${eventId}?tab=dashboard`)}
+            onClick={() => navigate(`/event/${eventId}?tab=itineraries`)}
           >
             Cancel
           </button>
@@ -2251,7 +2259,7 @@ export default function CreateItinerary() {
                       marginBottom: 16
                     }}
                   >
-                    📥 Download CSV Template
+                    Download CSV Template
                   </button>
                 </div>
 
@@ -2609,7 +2617,17 @@ async function uploadFileToBucket(file: File, bucket: 'itinerary-documents' | 'i
 }
 
 // --- Clean Date Picker Component
-function CustomDatePicker({ value, onChange, placeholder, isDark, colors, id, openDropdown, setOpenDropdown }) {
+interface CustomDatePickerProps {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  isDark: boolean;
+  colors: ReturnType<typeof getColors>;
+  id: string;
+  openDropdown: string | null;
+  setOpenDropdown: (id: string | null) => void;
+}
+function CustomDatePicker({ value, onChange, placeholder, isDark, colors, id, openDropdown, setOpenDropdown }: CustomDatePickerProps) {
   const [month, setMonth] = React.useState(() => new Date().getMonth());
   const [year, setYear] = React.useState(() => new Date().getFullYear());
   const today = new Date();
@@ -2620,7 +2638,7 @@ function CustomDatePicker({ value, onChange, placeholder, isDark, colors, id, op
     'July', 'August', 'September', 'October', 'November', 'December'
   ];
   const isOpen = openDropdown === id;
-  function selectDate(day) {
+  function selectDate(day: number) {
     const mm = String(month + 1).padStart(2, '0');
     const dd = String(day).padStart(2, '0');
     onChange(`${year}-${mm}-${dd}`);
@@ -2632,7 +2650,7 @@ function CustomDatePicker({ value, onChange, placeholder, isDark, colors, id, op
     const [yyyy, mm, dd] = value.split('-');
     displayValue = `${dd}/${mm}/${yyyy}`;
   }
-  const handleInputChange = (e) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     // Accept both dd/MM/yyyy and yyyy-MM-dd
     let val = e.target.value;
     if (/^\d{2}\/\d{2}\/\d{4}$/.test(val)) {
@@ -2683,57 +2701,6 @@ function CustomDatePicker({ value, onChange, placeholder, isDark, colors, id, op
           border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.18)' : '#e5e7eb'}`,
           background: isDark ? 'rgba(30, 30, 30, 0.95)' : 'rgba(255,255,255,0.95)',
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-            <button 
-              type="button" 
-              onClick={() => {
-                if (month === 0) {
-                  setMonth(11);
-                  setYear(year - 1);
-                } else {
-                  setMonth(month - 1);
-                }
-              }} 
-              style={{ 
-                background: 'none', 
-                border: 'none', 
-                color: colors.text, 
-                fontSize: 18, 
-                cursor: 'pointer', 
-                padding: '4px 8px',
-                borderRadius: '4px',
-                boxShadow: 'none',
-              }}
-            >
-              ←
-            </button>
-            <span style={{ fontWeight: 600, fontSize: 16, color: colors.text }}>
-              {monthNames[month]} {year}
-            </span>
-            <button 
-              type="button" 
-              onClick={() => {
-                if (month === 11) {
-                  setMonth(0);
-                  setYear(year + 1);
-                } else {
-                  setMonth(month + 1);
-                }
-              }} 
-              style={{ 
-                background: 'none', 
-                border: 'none', 
-                color: colors.text, 
-                fontSize: 18, 
-                cursor: 'pointer', 
-                padding: '4px 8px',
-                borderRadius: '4px',
-                boxShadow: 'none',
-              }}
-            >
-              →
-            </button>
-          </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, marginBottom: 8 }}>
             {['S','M','T','W','T','F','S'].map((day, i) => (
               <div key={i} style={{ 
@@ -2747,7 +2714,7 @@ function CustomDatePicker({ value, onChange, placeholder, isDark, colors, id, op
               </div>
             ))}
             {Array(firstDay).fill(null).map((_, i) => <div key={'empty'+i} />)}
-            {Array(daysInMonth).fill(null).map((_, i) => {
+            {Array(daysInMonth).fill(null).map((_, i: number) => {
               const day = i + 1;
               const isToday = year === today.getFullYear() && month === today.getMonth() && day === today.getDate();
               const isSelected = value && new Date(value).getDate() === day && new Date(value).getMonth() === month && new Date(value).getFullYear() === year;
@@ -2781,7 +2748,14 @@ function CustomDatePicker({ value, onChange, placeholder, isDark, colors, id, op
 }
 
 // --- Custom Glassmorphic Time Picker ---
-function CustomGlassTimePicker({ value, onChange, placeholder, isDark, colors }) {
+interface CustomGlassTimePickerProps {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  isDark: boolean;
+  colors: ReturnType<typeof getColors>;
+}
+function CustomGlassTimePicker({ value, onChange, placeholder, isDark, colors }: CustomGlassTimePickerProps) {
   const [open, setOpen] = React.useState(false);
   const [hour, setHour] = React.useState('');
   const [minute, setMinute] = React.useState('');
@@ -2792,113 +2766,97 @@ function CustomGlassTimePicker({ value, onChange, placeholder, isDark, colors })
       setMinute(m);
     }
   }, [value]);
-  const handleSelect = (h, m) => {
+  const handleSelect = (h: string, m: string) => {
     setHour(h);
     setMinute(m);
     onChange(`${h}:${m}`);
-    setOpen(false);
   };
-  const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
-  const minutes = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'));
   return (
     <div style={{ position: 'relative', width: '100%' }}>
       <input
         type="text"
-        value={value}
-        onFocus={() => setOpen(true)}
-        onBlur={() => setTimeout(() => setOpen(false), 150)}
-        onChange={e => {
-          const val = e.target.value;
-          if (/^\d{2}:\d{2}$/.test(val)) {
-            const [h, m] = val.split(':');
-            setHour(h);
-            setMinute(m);
-            onChange(val);
-          } else {
-            setHour('');
-            setMinute('');
-            onChange(val);
-          }
-        }}
+        value={`${hour}:${minute}`}
+        onChange={(e) => handleSelect(e.target.value.split(':')[0], e.target.value.split(':')[1])}
         placeholder={placeholder}
         style={{
-          background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.9)',
-          backdropFilter: 'blur(10px)',
-          WebkitBackdropFilter: 'blur(10px)',
-          border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.13)' : '#d1d5db'}`,
-          borderRadius: '12px',
-          color: isDark ? '#fff' : '#000',
           width: '100%',
-          fontSize: 16,
-          height: 48,
           padding: '12px 16px',
-          boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.3)' : '0 8px 32px rgba(0,0,0,0.1)',
+          borderRadius: '12px',
+          border: `2px solid ${colors.border}`,
+          background: colors.inputBg,
+          color: colors.text,
+          fontSize: '16px',
+          transition: 'all 0.2s ease',
+          height: '48px',
+          boxSizing: 'border-box',
           outline: 'none',
-          transition: 'all 0.2s',
+          boxShadow: 'none',
         }}
-        maxLength={5}
       />
       {open && (
         <div style={{
           position: 'absolute',
-          left: 0,
+          left: '50%',
           top: '100%',
-          marginTop: 8,
-          width: '100%',
-          display: 'flex',
-          gap: 8,
+          transform: 'translate(-50%, 8px)',
+          zIndex: 1000,
+          width: 300,
           ...getGlassStyles(isDark),
+          padding: 20,
+          boxSizing: 'border-box',
           borderRadius: 16,
           boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.3)' : '0 8px 32px rgba(0,0,0,0.1)',
           border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.18)' : '#e5e7eb'}`,
-          zIndex: 1000,
-          maxHeight: 220,
-          overflow: 'hidden',
+          background: isDark ? 'rgba(30, 30, 30, 0.95)' : 'rgba(255,255,255,0.95)',
         }}>
-          <div style={{ flex: 1, overflowY: 'auto', maxHeight: 220 }}>
-            {hours.map(h => (
-              <div
-                key={h}
-                onMouseDown={() => handleSelect(h, minute || '00')}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 4, marginBottom: 8 }}>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <label style={{ color: colors.textSecondary, marginBottom: 4 }}>Hour</label>
+              <input
+                type="number"
+                value={hour}
+                onChange={(e) => handleSelect(e.target.value, minute)}
                 style={{
-                  padding: '8px 0',
-                  textAlign: 'center',
-                  background: h === hour ? colors.accent : 'transparent',
-                  color: h === hour ? '#000' : colors.text,
-                  fontWeight: h === hour ? 700 : 400,
-                  borderRadius: 8,
-                  cursor: 'pointer',
-                  fontSize: 16,
-                  transition: 'all 0.2s',
+                  width: '100%',
+                  padding: '12px 16px',
+                  borderRadius: '12px',
+                  border: `2px solid ${colors.border}`,
+                  background: colors.inputBg,
+                  color: colors.text,
+                  fontSize: '16px',
+                  transition: 'all 0.2s ease',
+                  height: '48px',
+                  boxSizing: 'border-box',
+                  outline: 'none',
+                  boxShadow: 'none',
                 }}
-              >
-                {h}
-        </div>
-      ))}
-      </div>
-          <div style={{ flex: 1, overflowY: 'auto', maxHeight: 220 }}>
-            {minutes.map(m => (
-              <div
-                key={m}
-                onMouseDown={() => handleSelect(hour || '00', m)}
+              />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <label style={{ color: colors.textSecondary, marginBottom: 4 }}>Minute</label>
+              <input
+                type="number"
+                value={minute}
+                onChange={(e) => handleSelect(hour, e.target.value)}
                 style={{
-                  padding: '8px 0',
-                  textAlign: 'center',
-                  background: m === minute ? colors.accent : 'transparent',
-                  color: m === minute ? '#000' : colors.text,
-                  fontWeight: m === minute ? 700 : 400,
-                  borderRadius: 8,
-                  cursor: 'pointer',
-                  fontSize: 16,
-                  transition: 'all 0.2s',
+                  width: '100%',
+                  padding: '12px 16px',
+                  borderRadius: '12px',
+                  border: `2px solid ${colors.border}`,
+                  background: colors.inputBg,
+                  color: colors.text,
+                  fontSize: '16px',
+                  transition: 'all 0.2s ease',
+                  height: '48px',
+                  boxSizing: 'border-box',
+                  outline: 'none',
+                  boxShadow: 'none',
                 }}
-              >
-                {m}
-              </div>
-            ))}
+              />
+            </div>
           </div>
         </div>
       )}
     </div>
   );
-} 
+}

@@ -328,7 +328,9 @@ export const getItineraries = async (eventId: string, companyId?: string, sortOr
     .from('itineraries')
     .select('*')
     .eq('event_id', eventId)
-    .order('date', { ascending: sortOrder === 'asc' });
+    .eq('is_draft', false) // Only get published itineraries
+    .order('date', { ascending: sortOrder === 'asc' })
+    .order('start_time', { ascending: sortOrder === 'asc' });
 
   // Add company filtering for extra security
   if (companyId) {
@@ -657,4 +659,119 @@ export const getUserTeamEvents = async (userId: string) => {
     .in('id', eventIds);
   if (eventsError) throw eventsError;
   return events || [];
+}; 
+
+// Add functions for draft itineraries
+export const getDraftItineraries = async (eventId: string, companyId?: string) => {
+  let query = supabase
+    .from('draft_itineraries')
+    .select('*')
+    .eq('event_id', eventId)
+    .order('date', { ascending: true })
+    .order('start_time', { ascending: true });
+
+  if (companyId) {
+    query = query.eq('company_id', companyId)
+  }
+
+  const { data, error } = await query;
+
+  if (error) throw error
+  return data
+}
+
+export const addDraftItinerary = async (itinerary: any) => {
+  const { data, error } = await supabase
+    .from('draft_itineraries')
+    .insert(itinerary)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+export const updateDraftItinerary = async (id: string, updates: any) => {
+  const { data, error } = await supabase
+    .from('draft_itineraries')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+export const deleteDraftItinerary = async (id: string) => {
+  const { error } = await supabase
+    .from('draft_itineraries')
+    .delete()
+    .eq('id', id)
+
+  if (error) throw error
+}
+
+export const publishDraftItinerary = async (draftId: string) => {
+  const { data, error } = await supabase
+    .rpc('publish_draft_itinerary', { draft_id: draftId })
+
+  if (error) throw error
+  return data
+} 
+
+/**
+ * Insert an activity log entry for notifications/audit trail
+ * @param {Object} params
+ * @param {string} params.company_id - The company ID
+ * @param {string} params.user_id - The user ID
+ * @param {string} params.action_type - The type of action (e.g. 'event_created', 'guests_added')
+ * @param {Object} [params.details] - Optional details (will be stored as JSON)
+ * @param {string} [params.event_id] - Optional event ID
+ */
+export const insertActivityLog = async ({ company_id, user_id, action_type, details = {}, event_id }: {
+  company_id: string;
+  user_id: string;
+  action_type: string;
+  details?: Record<string, any>;
+  event_id?: string;
+}) => {
+  const { error } = await supabase.from('activity_log').insert([
+    {
+      company_id,
+      user_id,
+      action_type,
+      details,
+      event_id,
+    },
+  ]);
+  if (error) throw error;
+}; 
+
+/**
+ * Subscribe to real-time changes in the activity_log table for a company
+ * @param {string} companyId - The company ID to filter activity logs
+ * @param {(payload: any) => void} callback - Callback for new/updated/deleted activity log entries
+ * @returns {any} The Supabase channel subscription
+ */
+export const subscribeToActivityLog = (_companyId: string, callback: (payload: any) => void) => {
+  return supabase
+    .channel('activity_log')
+    .on('postgres_changes', {
+      event: '*',
+      schema: 'public',
+      table: 'activity_log'
+    }, callback)
+    .subscribe();
+}; 
+
+export const getEventsCreatedByUser = async (userId: string, companyId: string) => {
+  const { data, error } = await supabase
+    .from('events')
+    .select('*')
+    .eq('company_id', companyId)
+    .eq('created_by', userId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data;
 }; 

@@ -1,7 +1,7 @@
 import React, { useState, useContext, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ThemeContext } from '../ThemeContext';
-import { supabase, getEvent, type Event, uploadImageToStorage, validateImageFile } from '../lib/supabase';
+import { supabase, getEvent, type Event, uploadImageToStorage, validateImageFile, insertActivityLog } from '../lib/supabase';
 import ImageCollageModal, { LAYOUTS } from '../components/ImageCollageModal';
 import TOSModal from '../components/TOSModal';
 import { getCurrentUser, getCurrentUserCompanyId } from '../lib/auth';
@@ -223,6 +223,18 @@ export default function EventHomepageBuilderPage() {
       setShowSuccessToast(true);
       setTimeout(() => setShowSuccessToast(false), 3000);
       setHasSavedOnce(true); // Mark as saved after first save
+
+      // Insert activity log entry
+      const user = await getCurrentUser();
+      await insertActivityLog({
+        company_id: companyId,
+        user_id: user?.id || '',
+        action_type: 'homepage_updated',
+        event_id: eventId,
+        details: {
+          event_title: event?.name || '',
+        },
+      });
     } catch (error) {
       console.error('Error saving homepage:', error);
       alert('Failed to save homepage. Please try again.');
@@ -778,7 +790,6 @@ export default function EventHomepageBuilderPage() {
               placeholder="Paste YouTube or Vimeo URL here..."
               style={{
                 width: '100%',
-                marginBottom: 18,
                 ...getFieldStyles(isDark),
                 fontSize: 18,
                 padding: 16,

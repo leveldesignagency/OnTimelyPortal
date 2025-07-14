@@ -4,7 +4,7 @@ import Tesseract from 'tesseract.js';
 import countryList from 'country-list';
 import { codes as countryCallingCodes } from 'country-calling-code';
 import { getCurrentUser } from './lib/auth';
-import { addMultipleGuests, deleteGuest, deleteGuestsByGroupId } from './lib/supabase';
+import { addMultipleGuests, deleteGuest, deleteGuestsByGroupId, insertActivityLog } from './lib/supabase';
 import { v4 as uuidv4 } from 'uuid';
 
 const AVIATIONSTACK_API_KEY = 'bb7fd8369e323c356434d5b1ac77b437'; // 🚨 PASTE YOUR NEW AVIATIONSTACK API KEY HERE 🚨
@@ -729,7 +729,7 @@ export default function GuestFormCreationForSend() {
 
     // Save to Supabase
     addMultipleGuests(guestsForSupabase)
-      .then(() => {
+      .then(async () => {
         console.log('Guests saved to Supabase successfully');
         // Reset state and navigate
         setGuests([]);
@@ -738,6 +738,18 @@ export default function GuestFormCreationForSend() {
         setGroupName('');
         setGroupNameConfirmed(false);
         navigate(`/event/${eventId}?tab=guests`, { replace: true });
+
+        const user = await getCurrentUser();
+        await insertActivityLog({
+          company_id: (eventId && 'company_id' in JSON.parse(localStorage.getItem('timely_events') || '[]').find((e: any) => e.id === eventId) && 'company_id' in JSON.parse(localStorage.getItem('timely_events') || '[]').find((e: any) => e.id === eventId) ? JSON.parse(localStorage.getItem('timely_events') || '[]').find((e: any) => e.id === eventId).company_id : ''),
+          user_id: user?.id || '',
+          action_type: 'guests_added',
+          event_id: eventId,
+          details: {
+            count: guestsForSupabase.length,
+            event_title: (eventId && 'name' in JSON.parse(localStorage.getItem('timely_events') || '[]').find((e: any) => e.id === eventId) ? JSON.parse(localStorage.getItem('timely_events') || '[]').find((e: any) => e.id === eventId).name : ''),
+          },
+        });
       })
       .catch(error => {
         console.error('Error saving guests to Supabase:', error);

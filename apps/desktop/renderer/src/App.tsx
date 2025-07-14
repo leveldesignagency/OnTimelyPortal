@@ -23,6 +23,8 @@ import LinkItinerariesPage from './pages/LinkItinerariesPage';
 import AssignOverviewPage from './pages/AssignOverviewPage';
 import EventPortalManagementPage from './pages/EventPortalManagementPage';
 import EventHomepageBuilderPage from './pages/EventHomepageBuilderPage';
+import NotificationsPage from './pages/NotificationsPage';
+import { getEventsCreatedByUser } from './lib/supabase';
 
 // Update EventType to match Supabase Event type
 export type EventType = Event;
@@ -38,6 +40,40 @@ const AppContent = () => {
   const [isSidebarOpen, setSidebarOpen] = useState(true);
   const isTeamsPage = location.pathname.startsWith('/teams');
   const isLoginPage = location.pathname === '/login';
+
+  // Add event deletion handler
+  const handleDeleteEvent = async (eventId: string) => {
+    setEvents(prev => prev.filter(e => e.id !== eventId));
+    // Re-fetch events from Supabase to ensure UI is in sync
+    try {
+      const user = await getCurrentUser();
+      if (!user) {
+        setEvents([]);
+        return;
+      }
+      // 1. Fetch team events
+      const teamEvents = await getUserTeamEvents(user.id);
+      // 2. Fetch events created by the user
+      const userCreatedEvents = await getEventsCreatedByUser(user.id, user.company_id);
+      // 3. Merge and deduplicate
+      const allEvents = [...(teamEvents || []), ...(userCreatedEvents || [])];
+      const dedupedEvents = Object.values(
+        allEvents.reduce((acc, event) => {
+          acc[event.id] = event;
+          return acc;
+        }, {} as Record<string, Event>)
+      );
+      if (dedupedEvents.length > 0) {
+        setEvents(dedupedEvents as EventType[]);
+      } else {
+        // Fallback: show all company events if user is not in any team and has not created any events
+        const companyEvents = await getEvents(user.company_id);
+        setEvents(companyEvents || []);
+      }
+    } catch (err) {
+      setEvents([]);
+    }
+  };
 
   // Global styles useEffect must be before any early returns
   React.useEffect(() => {
@@ -160,48 +196,40 @@ const AppContent = () => {
         setLoading(false);
         return;
       }
-      
       setLoading(true);
       setError(null);
-      
       try {
-        console.log('🔄 Starting event fetch...');
         const user = await getCurrentUser();
-        console.log('👤 Current user for events:', user);
-        
         if (!user) {
-          console.log('⚠️ No user found, skipping event fetch');
           setEvents([]);
           return;
         }
-        
-        // Try to fetch events for teams the user is a member of
-        console.log('🔍 Fetching team events for user:', user.id);
+        // 1. Fetch team events
         const teamEvents = await getUserTeamEvents(user.id);
-        console.log('✅ Team events result:', teamEvents);
-        
-        if (teamEvents && teamEvents.length > 0) {
-          console.log('✅ Using team events:', teamEvents.length, 'events');
-          setEvents(teamEvents);
+        // 2. Fetch events created by the user
+        const userCreatedEvents = await getEventsCreatedByUser(user.id, user.company_id);
+        // 3. Merge and deduplicate
+        const allEvents = [...(teamEvents || []), ...(userCreatedEvents || [])];
+        const dedupedEvents = Object.values(
+          allEvents.reduce((acc, event) => {
+            acc[event.id] = event;
+            return acc;
+          }, {} as Record<string, Event>)
+        );
+        if (dedupedEvents.length > 0) {
+          setEvents(dedupedEvents as EventType[]);
         } else {
-          // Fallback: show all company events if user is not in any team
-          console.log('⚠️ No team events found, falling back to company events');
+          // Fallback: show all company events if user is not in any team and has not created any events
           const companyEvents = await getEvents(user.company_id);
-          console.log('✅ Company events result:', companyEvents);
           setEvents(companyEvents || []);
         }
-        
-        console.log('✅ Event fetch completed successfully');
       } catch (err) {
-        console.error('💥 Failed to fetch events:', err);
-        const errorMessage = err instanceof Error ? err.message : 'Failed to load events';
-        setError(errorMessage);
+        setError(err instanceof Error ? err.message : 'Failed to load events');
         setEvents([]);
       } finally {
         setLoading(false);
       }
     };
-    
     fetchEvents();
   }, [isLoginPage]);
 
@@ -247,7 +275,7 @@ const AppContent = () => {
     <div style={{ display: 'flex', position: 'relative', height: '100vh', overflow: 'hidden' }}>
       {!isLoginPage && (
         <Sidebar 
-          events={events} 
+          events={events}
           isOverlay={isTeamsPage} 
           isOpen={isSidebarOpen} 
           setOpen={setSidebarOpen} 
@@ -259,9 +287,10 @@ const AppContent = () => {
           <Route path="/login" element={<LoginPage />} />
           
           {/* Protected routes */}
-          <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+          <Route path="/" element={<ProtectedRoute><Dashboard events={events} /></ProtectedRoute>} />
           <Route path="/create-event" element={<ProtectedRoute><CreateEventPage onCreate={handleCreateEvent} /></ProtectedRoute>} />
-          <Route path="/event/:id" element={<ProtectedRoute><EventDashboardPage events={events} /></ProtectedRoute>} />
+          <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
+          <Route path="/event/:id" element={<ProtectedRoute><EventDashboardPage events={events} onDeleteEvent={handleDeleteEvent} /></ProtectedRoute>} />
           <Route path="/event/:id/add-guests" element={<ProtectedRoute><CreateGuests /></ProtectedRoute>} />
           <Route path="/event/:eventId/guests/edit/:guestIndex" element={<ProtectedRoute><CreateGuests /></ProtectedRoute>} />
           <Route path="/event/:eventId/itinerary/create" element={<ProtectedRoute><CreateItinerary /></ProtectedRoute>} />

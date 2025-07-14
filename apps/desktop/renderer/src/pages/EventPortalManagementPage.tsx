@@ -853,12 +853,12 @@ export default function EventPortalManagementPage() {
           </div>
         </div>
 
-        {/* Event Information & Placeholder - Two Columns */}
+        {/* Event Homepage Builder & Placeholder - Two Columns */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 32, marginBottom: 48, alignItems: 'stretch' }}>
-          {/* Event Information Section */}
+          {/* Event Homepage Builder Section */}
           <div style={{ ...getSectionStyles(isDark), marginBottom: 0, display: 'flex', flexDirection: 'column', height: '100%' }}>
             <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 24, borderBottom: `2px solid ${isDark ? '#333' : '#e5e7eb'}`, paddingBottom: 12 }}>
-              Event Information
+              Event Homepage Builder
             </h2>
             <p style={{ fontSize: 16, color: isDark ? '#ccc' : '#666', marginBottom: 0, marginRight: 0 }}>
               Create a custom homepage for your guests with all the need to knows about the event.

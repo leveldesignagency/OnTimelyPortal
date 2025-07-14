@@ -9,7 +9,6 @@ const PAGE_LINKS = [
   { label: 'Dashboard', to: '/' },
   { label: 'Create Event', to: '/create-event' },
   { label: 'Teams', to: '/teams' },
-  { label: 'Realtime Test', to: '/realtime-test' },
 ];
 
 // Add EventType definition for Sidebar props

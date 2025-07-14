@@ -382,3 +382,22 @@ export const getCompanyEvents = async (companyId: string): Promise<Event[]> => {
     return []
   }
 } 
+
+/**
+ * Fetch a user's full name by user_id from the users table
+ * @param {string} userId
+ * @returns {Promise<string | null>} Full name or null
+ */
+export const getUserNameById = async (userId: string): Promise<string | null> => {
+  try {
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('name, email')
+      .eq('id', userId)
+      .single();
+    if (error || !user) return null;
+    return user.name || user.email || null;
+  } catch (error) {
+    return null;
+  }
+}; 

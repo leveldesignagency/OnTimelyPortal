@@ -3,7 +3,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import Tesseract from 'tesseract.js';
 import { codes as countryCallingCodes } from 'country-calling-code';
 import { getCurrentUser, User } from './lib/auth';
-import { addMultipleGuests, getGuests, deleteGuest, deleteGuestsByGroupId, supabase } from './lib/supabase';
+import { addMultipleGuests, getGuests, deleteGuest, deleteGuestsByGroupId, supabase, insertActivityLog } from './lib/supabase';
 import { ThemeContext } from './ThemeContext';
 import { useRealtimeEvents } from './hooks/useRealtime';
 import Papa from 'papaparse';
@@ -1101,6 +1101,19 @@ export default function CreateGuests() {
         });
         alert(`Failed to save guests. Error: ${error.message || 'Unknown error'}`);
       });
+
+    // After guests are added:
+    const user = await getCurrentUser();
+    await insertActivityLog({
+      company_id: (eventDetails && 'company_id' in eventDetails && eventDetails.company_id) ? eventDetails.company_id : '',
+      user_id: user?.id || '',
+      action_type: 'guests_added',
+      event_id: (eventDetails && 'id' in eventDetails && eventDetails.id) ? eventDetails.id : '',
+      details: {
+        count: guestsToProcess.length,
+        event_title: (eventDetails && 'name' in eventDetails && eventDetails.name) ? eventDetails.name : '',
+      },
+    });
   }
 
   async function handleDeleteGroup() {

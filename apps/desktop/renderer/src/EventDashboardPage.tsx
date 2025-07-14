@@ -18,12 +18,62 @@ import {
   deleteMultipleItineraries,
   getEventModules,
   saveEventModules,
+  getDraftItineraries,
+  deleteDraftItinerary,
+  updateEvent,
   type Guest,
   type Itinerary,
   deleteEvent as supabaseDeleteEvent
 } from './lib/supabase';
 import { Itinerary as SupabaseItinerary } from './lib/supabase';
 import AddOnCard from './components/AddOnCard';
+import { User } from './lib/auth';
+import EventForm from './components/EventForm';
+import { getEventTeams } from './lib/supabase';
+
+function EventMetaInfo({ event, colors, isDark }: { event: any, colors: any, isDark: boolean }) {
+  const [teamNames, setTeamNames] = useState<string[]>([]);
+  useEffect(() => {
+    (async () => {
+      if (!event?.id) return;
+      try {
+        const links = await getEventTeams(event.id);
+        setTeamNames((links || []).map((t: any) => t.teams?.name || '').filter(Boolean));
+      } catch {
+        setTeamNames([]);
+      }
+    })();
+  }, [event?.id]);
+  const metaParts = [];
+  if (event.location) metaParts.push(`Location: ${event.location}`);
+  if (event.time_zone) metaParts.push(`Time Zone: ${event.time_zone}`);
+  if (teamNames.length > 0) metaParts.push(`Team Assigned: ${teamNames.join(', ')}`);
+  if (event.from) metaParts.push(`From: ${new Date(event.from).toLocaleDateString('en-GB', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}`);
+  if (event.to) metaParts.push(`To: ${new Date(event.to).toLocaleDateString('en-GB', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}`);
+  if (metaParts.length === 0) return null;
+  return (
+    <div style={{ marginTop: 4, marginBottom: 16, fontSize: 15, color: colors.textSecondary, display: 'flex', alignItems: 'center', gap: 12 }}>
+      {metaParts.map((part, idx) => (
+        <span key={idx}>
+          {part}
+          {idx < metaParts.length - 1 && <span style={{ margin: '0 12px', fontSize: 18, fontWeight: 700, color: colors.textSecondary, verticalAlign: 'middle' }}>•</span>}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+// Add getColors function definition
+const getColors = (isDark: boolean) => ({
+  bg: isDark ? '#0f0f0f' : '#f8fafc',
+  text: isDark ? '#ffffff' : '#000000',
+  textSecondary: isDark ? '#a1a1aa' : '#666666',
+  border: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
+  accent: isDark ? '#ffffff' : '#000000',
+  hoverBg: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)',
+  inputBg: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(255, 255, 255, 0.9)',
+  cardBg: isDark ? 'rgba(30, 30, 30, 0.8)' : 'rgba(255, 255, 255, 0.8)'
+});
 
 console.log("THIS IS EVENT DASHBOARD PAGE");
 
@@ -162,14 +212,23 @@ const getButtonStyles = (isDark: boolean, variant: 'primary' | 'secondary' = 'pr
   }
 };
 
-export default function EventDashboardPage({ events }: { events: EventType[] }) {
+export default function EventDashboardPage({ events, onDeleteEvent }: { events: EventType[]; onDeleteEvent?: (eventId: string) => void }) {
   const { theme } = useContext(ThemeContext);
   const isDark = theme === 'dark';
+  const colors = getColors(isDark);
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   
   // Get current user for company context
-  const currentUser = getCurrentUser();
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      const user = await getCurrentUser();
+      setCurrentUser(user);
+    })();
+  }, []);
   
   // Use real-time guests hook
   const { guests: realtimeGuests, loading: guestsLoading, error: guestsError, refetch: refetchGuests } = useRealtimeGuests(id || null);
@@ -182,6 +241,7 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
   const [guests, setGuests] = useState<GuestType[]>([]);
   const [savedItineraries, setSavedItineraries] = useState<ItineraryType[]>([]);
   const [draftItineraries, setDraftItineraries] = useState<ItineraryType[]>([]);
+  const [externalDraftItineraries, setExternalDraftItineraries] = useState<ItineraryType[]>([]);
   
   // CSV Upload states
   const [isCsvUploading, setIsCsvUploading] = useState(false);
@@ -193,6 +253,7 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
   const [ittinerariesExpandedCard, setIttinerariesExpandedCard] = useState<string | null>(null);
   const [currentCard, setCurrentCard] = useState<string | null>(null);
   const [isSelectModeActive, setIsSelectModeActive] = useState(false);
+  const [isItinerarySelectModeActive, setIsItinerarySelectModeActive] = useState(false);
   const [selectedItineraryIds, setSelectedItineraryIds] = useState<string[]>([]);
   const [selectedGuestIds, setSelectedGuestIds] = useState<string[]>([]);
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
@@ -327,6 +388,24 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
   // Add state for undo functionality
   const [lastBulkAction, setLastBulkAction] = useState<{ action: string, affected: any[] } | null>(null);
   const [undoMessage, setUndoMessage] = useState<string | null>(null);
+
+  // Add state for draft deletion confirmation
+  const [showDeleteDraftModal, setShowDeleteDraftModal] = useState(false);
+  const [draftToDelete, setDraftToDelete] = useState<string | null>(null);
+  const [deleteDraftText, setDeleteDraftText] = useState('');
+
+  // Add state for edit event modal
+  const [showEditEventModal, setShowEditEventModal] = useState(false);
+  const [editEventData, setEditEventData] = useState({
+    name: '',
+    from: '',
+    to: '',
+    description: '',
+    location: '',
+    timeZone: 'UTC',
+    teamIds: [] as string[]
+  });
+  const [editEventLoading, setEditEventLoading] = useState(false);
 
   // Success message function
   const showSuccess = (message: string) => {
@@ -596,6 +675,22 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
     }
   }, [realtimeItineraries]);
 
+  // Fetch drafts from draft_itineraries table
+  useEffect(() => {
+    const fetchDrafts = async () => {
+      if (!event?.id || !currentUser?.company_id) return;
+      
+      try {
+        const drafts = await getDraftItineraries(event.id, currentUser.company_id);
+        setExternalDraftItineraries(drafts);
+      } catch (error) {
+        console.error('Error fetching draft itineraries:', error);
+      }
+    };
+
+    fetchDrafts();
+  }, [event?.id, currentUser?.company_id]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Shift') {
@@ -616,16 +711,14 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
   }, []);
 
   useEffect(() => {
+    // On mount, check for ?tab=itineraries and set the correct tab
     const params = new URLSearchParams(location.search);
-    if (activeTab !== 'itineraries') {
-      params.set('tab', activeTab);
-      navigate(`${location.pathname}?${params.toString()}`, { replace: true });
-    } else {
-      params.delete('tab');
-      const search = params.toString();
-      navigate(`${location.pathname}${search ? `?${search}` : ''}`, { replace: true });
+    const tab = params.get('tab');
+    if (tab && tab !== activeTab) {
+      setActiveTab(tab);
     }
-  }, [activeTab, location.pathname, navigate]);
+    // eslint-disable-next-line
+  }, []);
 
   useEffect(() => {
     if (!event) return;
@@ -916,7 +1009,6 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
       
       // Close modal immediately
       setShowDeleteConfirm(false);
-      setDeleteText('');
       setItineraryToDelete(null);
       
       // Refetch data
@@ -929,7 +1021,6 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
       
       // Close modal on error too
       setShowDeleteConfirm(false);
-      setDeleteText('');
       setItineraryToDelete(null);
       
       alert(`Error deleting itinerary: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -1009,12 +1100,51 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
   const handlePublishDraft = async (draftIndex: number) => {
     if (!event) return;
     
-    const draft = draftItineraries[draftIndex];
+    const draft = externalDraftItineraries[draftIndex];
     if (!draft) return;
     
     try {
-      await updateItinerary(draft.id, { ...draft, is_draft: false });
+      // Create the itinerary data for the published table
+      const itineraryData = {
+        event_id: event.id,
+        company_id: currentUser?.company_id || '',
+        created_by: currentUser?.id || '',
+        title: draft.title || 'Untitled Itinerary',
+        description: draft.description || '',
+        date: draft.date || '',
+        arrival_time: draft.arrival_time || '',
+        start_time: draft.start_time || '',
+        end_time: draft.end_time || '',
+        location: draft.location || '',
+        document_file_name: draft.document_file_name || '',
+        qrcode_url: draft.qrcode_url || '',
+        qrcode_image: draft.qrcode_image || '',
+        contact_name: draft.contact_name || '',
+        contact_country_code: draft.contact_country_code || '',
+        contact_phone: draft.contact_phone || '',
+        contact_email: draft.contact_email || '',
+        notification_times: draft.notification_times || [],
+        group_id: draft.group_id || undefined,
+        group_name: draft.group_name || undefined,
+        content: draft.content || {},
+        modules: (draft as any).modules || {},
+        module_values: (draft as any).module_values || {},
+        is_draft: false
+      };
+
+      // Add to published itineraries table
+      await addItinerary(itineraryData);
+      
+      // Delete from draft itineraries table
+      await deleteDraftItinerary(draft.id);
+      
+      // Refresh both lists
       await refetchItineraries();
+      
+      // Refetch drafts
+      const drafts = await getDraftItineraries(event.id, currentUser?.company_id || '');
+      setExternalDraftItineraries(drafts);
+      
       showSuccess('Draft published successfully!');
     } catch (error) {
       console.error('Error publishing draft:', error);
@@ -1158,6 +1288,7 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
     try {
       await supabaseDeleteEvent(event.id);
       setShowDeleteEventModal(false);
+      if (onDeleteEvent) onDeleteEvent(event.id);
       navigate('/');
     } catch (error) {
       console.error('Error deleting event:', error);
@@ -1282,29 +1413,66 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
   }
 
   function downloadCsv() {
-    if (!event || !guests) return;
+    if (!event || !savedItineraries) return;
 
-    const headers = ['First Name', 'Last Name', 'Email', 'Contact Number', 'Country Code', 'ID Type', 'ID Number'];
-    const rows = guests.map(guest => [
-      guest.firstName || '',
-      guest.lastName || '',
-      guest.email || '',
-      guest.contactNumber || '',
-      guest.countryCode || '',
-      guest.idType || '',
-      guest.idNumber || ''
+    // Define headers for itinerary CSV
+    const headers = [
+      'Title',
+      'Description', 
+      'Date',
+      'Arrival Time',
+      'Start Time',
+      'End Time',
+      'Location',
+      'Group ID',
+      'Group Name',
+      'Document File Name',
+      'QR Code URL',
+      'QR Code Image',
+      'Contact Name',
+      'Contact Country Code',
+      'Contact Phone',
+      'Contact Email',
+      'Notification Times',
+      'Modules',
+      'Module Values'
+    ];
+
+    // Create rows from published itineraries
+    const rows = savedItineraries.map(itinerary => [
+      itinerary.title || '',
+      itinerary.description || '',
+      itinerary.date || '',
+      itinerary.arrival_time || '',
+      itinerary.start_time || '',
+      itinerary.end_time || '',
+      itinerary.location || '',
+      itinerary.group_id || '',
+      itinerary.group_name || '',
+      itinerary.document_file_name || '',
+      itinerary.qrcode_url || '',
+      itinerary.qrcode_image || '',
+      itinerary.contact_name || '',
+      itinerary.contact_country_code || '',
+      itinerary.contact_phone || '',
+      itinerary.contact_email || '',
+      Array.isArray(itinerary.notification_times) ? itinerary.notification_times.join(';') : '',
+      JSON.stringify((itinerary as any).modules || {}),
+      JSON.stringify((itinerary as any).module_values || {})
     ]);
 
+    // Create CSV content
     const csvContent = [
       headers.join(','),
       ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
     ].join('\n');
 
+    // Create and download the file
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
-    link.setAttribute('download', `${event.name}_guests.csv`);
+    link.setAttribute('download', `${event.name}_itineraries.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -1426,10 +1594,340 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
               />
             );
           })
-        )}
-      </div>
-    );
-  })();
+              )}
+
+      {/* Test Modal */}
+      {showEditEventModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 2000
+        }}>
+          <div style={{
+            background: 'white',
+            padding: 20,
+            borderRadius: 8,
+            color: 'black'
+          }}>
+            <h2>Test Modal - Edit Event Modal is working!</h2>
+            <button onClick={() => setShowEditEventModal(false)}>Close</button>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Event Modal */}
+      {(() => {
+        const handleEditEvent = async (e: React.FormEvent) => {
+          e.preventDefault();
+          if (!currentEvent || !editEventData.name || !editEventData.from || !editEventData.to) {
+            alert('Please fill in all required fields');
+            return;
+          }
+          
+          setEditEventLoading(true);
+          try {
+            const updatedEvent = {
+              ...currentEvent,
+              name: editEventData.name,
+              from: editEventData.from,
+              to: editEventData.to,
+              description: editEventData.description,
+              location: editEventData.location,
+              time_zone: editEventData.timeZone
+            };
+            
+            // Update the event in the database
+            await updateEvent(currentEvent.id, updatedEvent);
+            
+            // Update local state
+            const updatedEvents = events.map(e => e.id === currentEvent.id ? updatedEvent : e);
+            // You might need to update the events prop or use a callback
+            
+            setShowEditEventModal(false);
+            showSuccess('Event updated successfully!');
+            
+            // Refresh the page to show updated data
+            window.location.reload();
+          } catch (error) {
+            console.error('Error updating event:', error);
+            alert('Error updating event. Please try again.');
+          } finally {
+            setEditEventLoading(false);
+          }
+        };
+
+        console.log('showEditEventModal:', showEditEventModal);
+        return showEditEventModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 2000
+        }}>
+          <div style={{
+            ...getGlassStyles(isDark),
+            padding: 32,
+            minWidth: 400,
+            maxWidth: 500,
+            width: '90%',
+            maxHeight: '90vh',
+            overflowY: 'auto'
+          }}>
+            <form onSubmit={handleEditEvent}>
+              <div style={{ 
+                fontSize: 24, 
+                fontWeight: 600, 
+                marginBottom: 8, 
+                color: colors.text,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}>
+                Edit Event
+                <button
+                  type="button"
+                  onClick={() => setShowEditEventModal(false)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    fontSize: 24,
+                    cursor: 'pointer',
+                    color: colors.textSecondary,
+                    padding: 4,
+                    borderRadius: 4,
+                    transition: 'color 0.2s'
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.color = colors.text; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.color = colors.textSecondary; }}
+                >
+                  ×
+                </button>
+              </div>
+              
+              {/* Event Name field */}
+              <div style={{ marginBottom: 20, width: '100%', position: 'relative' }}>
+                <label style={{ color: colors.text, fontWeight: 600, fontSize: 16, marginBottom: 8, display: 'block' }}>Event Name *</label>
+                <input
+                  type="text"
+                  value={editEventData.name}
+                  onChange={e => {
+                    if (e.target.value.length <= 20) setEditEventData(prev => ({ ...prev, name: e.target.value }));
+                  }}
+                  maxLength={20}
+                  style={{
+                    width: '100%',
+                    padding: '16px 20px',
+                    borderRadius: '12px',
+                    border: `2px solid ${colors.border}`,
+                    background: colors.inputBg,
+                    color: colors.text,
+                    fontSize: '20px',
+                    marginBottom: 0,
+                    minHeight: '56px',
+                    boxSizing: 'border-box',
+                    marginTop: 4,
+                    transition: 'all 0.2s',
+                    backdropFilter: 'blur(10px)'
+                  }}
+                  placeholder="What is your event called?"
+                  required
+                />
+                {/* Character count, far right */}
+                <div style={{ position: 'absolute', right: 12, top: 18, fontSize: 13, color: colors.textSecondary }}>
+                  {editEventData.name.length}/20
+                </div>
+              </div>
+
+              {/* Location field */}
+              <div style={{ marginBottom: 20, width: '100%' }}>
+                <label style={{ color: colors.text, fontWeight: 600, fontSize: 16, marginBottom: 8, display: 'block' }}>Location</label>
+                <input
+                  type="text"
+                  value={editEventData.location}
+                  onChange={e => setEditEventData(prev => ({ ...prev, location: e.target.value }))}
+                  style={{
+                    width: '100%',
+                    padding: '16px 20px',
+                    borderRadius: '12px',
+                    border: `2px solid ${colors.border}`,
+                    background: colors.inputBg,
+                    color: colors.text,
+                    fontSize: '20px',
+                    marginBottom: 0,
+                    minHeight: '56px',
+                    boxSizing: 'border-box',
+                    marginTop: 4,
+                    transition: 'all 0.2s',
+                    backdropFilter: 'blur(10px)'
+                  }}
+                  placeholder="Event location"
+                />
+              </div>
+
+              {/* Time Zone field */}
+              <div style={{ marginBottom: 20, width: '100%' }}>
+                <label style={{ color: colors.text, fontWeight: 600, fontSize: 16, marginBottom: 8, display: 'block' }}>Time Zone</label>
+                <select
+                  value={editEventData.timeZone}
+                  onChange={e => setEditEventData(prev => ({ ...prev, timeZone: e.target.value }))}
+                  style={{
+                    width: '100%',
+                    padding: '16px 20px',
+                    borderRadius: '12px',
+                    border: `2px solid ${colors.border}`,
+                    background: colors.inputBg,
+                    color: colors.text,
+                    fontSize: '20px',
+                    marginBottom: 0,
+                    minHeight: '56px',
+                    boxSizing: 'border-box',
+                    marginTop: 4,
+                    transition: 'all 0.2s',
+                    backdropFilter: 'blur(10px)',
+                    outline: 'none'
+                  }}
+                >
+                  <option value="UTC">UTC</option>
+                  <option value="America/New_York">Eastern Time</option>
+                  <option value="America/Chicago">Central Time</option>
+                  <option value="America/Denver">Mountain Time</option>
+                  <option value="America/Los_Angeles">Pacific Time</option>
+                  <option value="Europe/London">London</option>
+                  <option value="Europe/Paris">Paris</option>
+                  <option value="Asia/Tokyo">Tokyo</option>
+                  <option value="Australia/Sydney">Sydney</option>
+                </select>
+              </div>
+
+              {/* Description field */}
+              <div style={{ marginBottom: 20, width: '100%' }}>
+                <label style={{ color: colors.text, fontWeight: 600, fontSize: 16, marginBottom: 8, display: 'block' }}>Description</label>
+                <textarea
+                  value={editEventData.description}
+                  onChange={e => setEditEventData(prev => ({ ...prev, description: e.target.value }))}
+                  style={{
+                    width: '100%',
+                    padding: '16px 20px',
+                    borderRadius: '12px',
+                    border: `2px solid ${colors.border}`,
+                    background: colors.inputBg,
+                    color: colors.text,
+                    fontSize: '16px',
+                    marginBottom: 0,
+                    minHeight: '100px',
+                    boxSizing: 'border-box',
+                    marginTop: 4,
+                    transition: 'all 0.2s',
+                    backdropFilter: 'blur(10px)',
+                    resize: 'vertical',
+                    outline: 'none'
+                  }}
+                  placeholder="Event description"
+                />
+              </div>
+
+              {/* Date fields */}
+              <div style={{ display: 'flex', alignItems: 'center', marginBottom: 40, gap: 20, width: '100%' }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ color: colors.text, fontWeight: 600, fontSize: 16, marginBottom: 8, display: 'block' }}>Start Date *</label>
+                  <input
+                    type="date"
+                    value={editEventData.from}
+                    onChange={e => setEditEventData(prev => ({ ...prev, from: e.target.value }))}
+                    style={{
+                      width: '100%',
+                      padding: '16px 20px',
+                      borderRadius: '12px',
+                      border: `2px solid ${colors.border}`,
+                      background: colors.inputBg,
+                      color: colors.text,
+                      fontSize: '16px',
+                      marginBottom: 0,
+                      minHeight: '56px',
+                      boxSizing: 'border-box',
+                      marginTop: 4,
+                      transition: 'all 0.2s',
+                      backdropFilter: 'blur(10px)',
+                      outline: 'none'
+                    }}
+                    required
+                  />
+                </div>
+                <span style={{ fontSize: 32, color: colors.textSecondary, margin: '0 12px', userSelect: 'none', alignSelf: 'flex-end', marginBottom: 8 }}>&#9654;</span>
+                <div style={{ flex: 1 }}>
+                  <label style={{ color: colors.text, fontWeight: 600, fontSize: 16, marginBottom: 8, display: 'block' }}>End Date *</label>
+                  <input
+                    type="date"
+                    value={editEventData.to}
+                    onChange={e => setEditEventData(prev => ({ ...prev, to: e.target.value }))}
+                    style={{
+                      width: '100%',
+                      padding: '16px 20px',
+                      borderRadius: '12px',
+                      border: `2px solid ${colors.border}`,
+                      background: colors.inputBg,
+                      color: colors.text,
+                      fontSize: '16px',
+                      marginBottom: 0,
+                      minHeight: '56px',
+                      boxSizing: 'border-box',
+                      marginTop: 4,
+                      transition: 'all 0.2s',
+                      backdropFilter: 'blur(10px)',
+                      outline: 'none'
+                    }}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowEditEventModal(false)}
+                  style={{
+                    ...getButtonStyles(isDark, 'secondary'),
+                    padding: '12px 24px',
+                    fontSize: 16
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={editEventLoading}
+                  style={{
+                    ...getButtonStyles(isDark, 'primary'),
+                    padding: '12px 24px',
+                    fontSize: 16,
+                    opacity: editEventLoading ? 0.7 : 1,
+                    cursor: editEventLoading ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  {editEventLoading ? 'UPDATING...' : 'UPDATE'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      );
+      })()}
+    </div>
+  );
+})();
 
   if (!event) {
     return (
@@ -1592,9 +2090,17 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
         // getCurrentUser may be async, so handle accordingly
         const user = typeof getCurrentUser === 'function' ? await getCurrentUser() : getCurrentUser;
         const companyId = user?.company_id;
-        const data = await getItineraries(event.id, companyId, filtersItineraryDateSort);
-        setSavedItineraries(data.filter((it: any) => it.is_draft === false));
-        setDraftItineraries(data.filter((it: any) => it.is_draft === true));
+        let data = await getItineraries(event.id, companyId, filtersItineraryDateSort);
+        // Always sort in-memory by date
+        const sortFn = (a: any, b: any) => {
+          if (!a.date) return 1;
+          if (!b.date) return -1;
+          const aDate = new Date(a.date).getTime();
+          const bDate = new Date(b.date).getTime();
+          return filtersItineraryDateSort === 'asc' ? aDate - bDate : bDate - aDate;
+        };
+        setSavedItineraries(data.filter((it) => it.is_draft === false).sort(sortFn));
+        setDraftItineraries(data.filter((it) => it.is_draft === true).sort(sortFn));
       } catch (error) {
         console.error('Error fetching itineraries with sort:', error);
       }
@@ -1635,6 +2141,69 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
     }
     setLastBulkAction(null);
   };
+
+  // Add function to handle draft deletion
+  const handleDeleteDraft = async () => {
+    if (!draftToDelete) return;
+    
+    try {
+      console.log('Deleting draft:', draftToDelete);
+      await deleteDraftItinerary(draftToDelete);
+      console.log('Draft deleted successfully');
+      
+      // Update UI immediately by filtering out the deleted draft
+      setExternalDraftItineraries(prev => {
+        const updated = prev.filter(draft => draft.id !== draftToDelete);
+        console.log('Updated drafts list:', updated.length, 'drafts remaining');
+        return updated;
+      });
+      
+      // Also refetch drafts to ensure consistency
+      if (event?.id && currentUser?.company_id) {
+        const drafts = await getDraftItineraries(event.id, currentUser.company_id);
+        setExternalDraftItineraries(drafts);
+        console.log('Refetched drafts:', drafts.length, 'drafts');
+      }
+      
+      setShowDeleteDraftModal(false);
+      setDraftToDelete(null);
+      showSuccess('Draft deleted successfully!');
+    } catch (error) {
+      console.error('Error deleting draft:', error);
+      alert('Error deleting draft. Please try again.');
+    }
+  };
+
+  // Add function to handle edit event modal
+  const handleOpenEditEventModal = async () => {
+    console.log('handleOpenEditEventModal called');
+    console.log('currentEvent:', currentEvent);
+    if (currentEvent) {
+      // Fetch assigned team IDs for this event
+      let teamIds: string[] = [];
+      try {
+        const teamLinks = await getEventTeams(currentEvent.id);
+        teamIds = (teamLinks || []).map((t: any) => t.team_id);
+      } catch (e) {
+        teamIds = [];
+      }
+      setEditEventData({
+        name: currentEvent.name || '',
+        from: currentEvent.from || '',
+        to: currentEvent.to || '',
+        description: (currentEvent as any).description || '',
+        location: (currentEvent as any).location || '',
+        timeZone: (currentEvent as any).time_zone || 'UTC',
+        teamIds
+      });
+      setShowEditEventModal(true);
+    } else {
+      console.log('No currentEvent found');
+    }
+  };
+
+
+
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: isDark ? '#121212' : '#f8f9fa' }}>
@@ -1759,54 +2328,10 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
           color: isDark ? '#ffffff' : '#222',
           width: '100%'
         }}>
-          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-              <h1 style={mainTitleStyle}>{currentEvent?.name || 'Event Dashboard'}</h1>
-              <span style={{
-                background: currentEvent ? getStatusColor(currentEvent) : '#6b7280',
-                color: '#fff',
-                padding: '6px 12px',
-                borderRadius: 20,
-                fontSize: 12,
-                fontWeight: 600,
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px'
-              }}>
-                {currentEvent ? getEventDisplayStatus(currentEvent) : 'UNKNOWN'}
-              </span>
-            </div>
-            {currentEvent && (currentEvent.from || currentEvent.to) && (
-              <div style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'flex-end',
-                gap: 4,
-                color: isDark ? '#aaa' : '#666',
-                fontSize: 14
-              }}>
-                {currentEvent.from && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontWeight: 600 }}>From:</span>
-                    <span>{new Date(currentEvent.from).toLocaleDateString('en-GB', { 
-                      weekday: 'short', 
-                      year: 'numeric', 
-                      month: 'short', 
-                      day: 'numeric' 
-                    })}</span>
-                  </div>
-                )}
-                {currentEvent.to && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontWeight: 600 }}>To:</span>
-                    <span>{new Date(currentEvent.to).toLocaleDateString('en-GB', { 
-                      weekday: 'short', 
-                      year: 'numeric', 
-                      month: 'short', 
-                      day: 'numeric' 
-                    })}</span>
-                  </div>
-                )}
-              </div>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0 }}>
+            <h1 style={mainTitleStyle}>{currentEvent?.name || 'Event Dashboard'}</h1>
+            {currentEvent && (
+              <EventMetaInfo event={currentEvent} colors={colors} isDark={isDark} />
             )}
           </div>
           <div style={{ height: 32 }} />
@@ -1822,50 +2347,102 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
             <div style={{ marginBottom: 64, paddingBottom: 48 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                 <h2 style={mainTitleStyle}>Event Dashboard</h2>
-                <button
-                  onClick={() => navigate(`/link-itineraries/${currentEvent?.id}`)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 10,
-                    background: isDark 
-                      ? 'rgba(255, 255, 255, 0.1)' 
-                      : 'rgba(255, 255, 255, 0.2)',
-                    backdropFilter: 'blur(10px)',
-                    border: isDark 
-                      ? '1px solid rgba(255, 255, 255, 0.2)' 
-                      : '1px solid rgba(0, 0, 0, 0.1)',
-                    color: isDark ? '#ffffff' : '#000000',
-                    borderRadius: 12,
-                    padding: '16px 32px',
-                    fontSize: 16,
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    boxShadow: isDark 
-                      ? '0 8px 32px rgba(0, 0, 0, 0.3)' 
-                      : '0 8px 32px rgba(0, 0, 0, 0.1)',
-                    transition: 'all 0.2s ease',
-                    outline: 'none',
-                    minWidth: '140px',
-                    maxWidth: '180px',
-                    whiteSpace: 'nowrap' as const,
-                    marginBottom: 24, // Add this line for spacing
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = isDark 
-                      ? 'rgba(255, 255, 255, 0.15)' 
-                      : 'rgba(255, 255, 255, 0.3)';
-                    e.currentTarget.style.transform = 'translateY(-2px)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = isDark 
-                      ? 'rgba(255, 255, 255, 0.1)' 
-                      : 'rgba(255, 255, 255, 0.2)';
-                    e.currentTarget.style.transform = 'translateY(0px)';
-                  }}
-                >
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <button
+                    onClick={() => navigate(`/link-itineraries/${currentEvent?.id}`)}
+                    style={{
+                      background: isDark 
+                        ? 'rgba(255, 255, 255, 0.1)' 
+                        : 'rgba(255, 255, 255, 0.2)',
+                      backdropFilter: 'blur(10px)',
+                      border: isDark 
+                        ? '1px solid rgba(255, 255, 255, 0.2)' 
+                        : '1px solid rgba(0, 0, 0, 0.1)',
+                      color: isDark ? '#ffffff' : '#000000',
+                      borderRadius: 12,
+                      padding: '16px 32px',
+                      fontSize: 16,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      boxShadow: isDark 
+                        ? '0 8px 32px rgba(0, 0, 0, 0.3)' 
+                        : '0 8px 32px rgba(0, 0, 0, 0.1)',
+                      transition: 'all 0.2s ease',
+                      outline: 'none',
+                      minWidth: '140px',
+                      maxWidth: '180px',
+                      whiteSpace: 'nowrap',
+                      marginBottom: 24,
+                      textAlign: 'center',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 0 // Remove any gap
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = isDark 
+                        ? 'rgba(255, 255, 255, 0.15)' 
+                        : 'rgba(255, 255, 255, 0.3)';
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = isDark 
+                        ? 'rgba(255, 255, 255, 0.1)' 
+                        : 'rgba(255, 255, 255, 0.2)';
+                      e.currentTarget.style.transform = 'translateY(0px)';
+                    }}
+                  >
                   Launch Event
-                </button>
+                  </button>
+                  <button
+                    onClick={() => {
+                      console.log('Edit Event button clicked!');
+                      handleOpenEditEventModal();
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: isDark 
+                        ? 'rgba(255, 255, 255, 0.1)' 
+                        : 'rgba(255, 255, 255, 0.2)',
+                      backdropFilter: 'blur(10px)',
+                      border: isDark 
+                        ? '1px solid rgba(255, 255, 255, 0.2)' 
+                        : '1px solid rgba(0, 0, 0, 0.1)',
+                      color: isDark ? '#ffffff' : '#000000',
+                      borderRadius: 12,
+                      padding: '16px 32px',
+                      fontSize: 16,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      boxShadow: isDark 
+                        ? '0 8px 32px rgba(0, 0, 0, 0.3)' 
+                        : '0 8px 32px rgba(0, 0, 0, 0.1)',
+                      transition: 'all 0.2s ease',
+                      outline: 'none',
+                      minWidth: '140px',
+                      maxWidth: '180px',
+                      whiteSpace: 'nowrap',
+                      marginBottom: 24,
+                      textAlign: 'center',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = isDark 
+                        ? 'rgba(255, 255, 255, 0.15)' 
+                        : 'rgba(255, 255, 255, 0.3)';
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = isDark 
+                        ? 'rgba(255, 255, 255, 0.1)' 
+                        : 'rgba(255, 255, 255, 0.2)';
+                      e.currentTarget.style.transform = 'translateY(0px)';
+                    }}
+                  >
+                    Edit Event
+                  </button>
+                </div>
               </div>
               
               {/* Overview Stats Row */}
@@ -2364,26 +2941,28 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                 <h2 style={mainTitleStyle}>Itineraries</h2>
                 
                 <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-                  {/* Select All Button (replaces Options) */}
-                  <button
-                    onClick={() => setShowBulkActionsModal(true)}
-                    style={{
-                      ...getButtonStyles(isDark, 'secondary'),
-                      fontSize: 16,
-                      minWidth: 160,
-                      minHeight: 48,
-                      height: 48,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 8,
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                    }}
-                  >
-                    Select All
-                  </button>
+                  {/* Select All Button - only show when select mode is active */}
+                  {isItinerarySelectModeActive && (
+                    <button
+                      onClick={() => setShowBulkActionsModal(true)}
+                      style={{
+                        ...getButtonStyles(isDark, 'secondary'),
+                        fontSize: 16,
+                        minWidth: 160,
+                        minHeight: 48,
+                        height: 48,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 8,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                    >
+                      Select All
+                    </button>
+                  )}
                   {/* Export CSV Button */}
                   <button
                     onClick={handleExportCsv}
@@ -2403,6 +2982,32 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                     }}
                   >
                     Export CSV
+                  </button>
+                  {/* Select Button */}
+                  <button
+                    onClick={() => {
+                      const newMode = !isItinerarySelectModeActive;
+                      setIsItinerarySelectModeActive(newMode);
+                      if (!newMode) {
+                        setSelectedItineraryIds([]);
+                      }
+                    }}
+                    style={{
+                      ...getButtonStyles(isDark, 'secondary'),
+                      fontSize: 16,
+                      minWidth: 160,
+                      minHeight: 48,
+                      height: 48,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    {isItinerarySelectModeActive ? 'Unselect' : 'Select'}
                   </button>
                   {/* Create Itinerary Button */}
                   <button
@@ -2429,100 +3034,63 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
               
               {/* Sort by Date Dropdown */}
               <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: 16, gap: 12 }}>
-                <label htmlFor="sort-date" style={{ fontWeight: 500, fontSize: 15, color: isDark ? '#fff' : '#222', marginRight: 8 }}>Sort by Date:</label>
-                <div style={{ position: 'relative', minWidth: 180, maxWidth: 220 }}>
-                  <button
-                    id="sort-date"
-                    aria-haspopup="listbox"
-                    aria-expanded={showSortDropdown}
-                    onClick={() => setShowSortDropdown(v => !v)}
-                    style={{
-                      width: '100%',
-                      height: 48,
-                      background: isDark ? 'rgba(30, 30, 30, 0.7)' : 'rgba(255, 255, 255, 0.7)',
-                      border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.12)'}`,
-                      borderRadius: 14,
-                      boxShadow: isDark ? '0 4px 16px rgba(0,0,0,0.18)' : '0 4px 16px rgba(0,0,0,0.08)',
-                      color: isDark ? '#fff' : '#222',
-                      fontSize: 17,
-                      fontWeight: 600,
-                      padding: '0 36px 0 16px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      cursor: 'pointer',
-                      outline: showSortDropdown ? `2px solid ${isDark ? '#fff' : '#222'}` : 'none',
-                      transition: 'background 0.2s',
-                      position: 'relative',
-                      zIndex: 2,
-                    }}
-                    onBlur={e => {
-                      // Only close if focus leaves the dropdown area
-                      if (!e.currentTarget.contains(e.relatedTarget)) setShowSortDropdown(false);
-                    }}
-                  >
-                    {filtersItineraryDateSort === 'asc' ? 'Date Ascending' : 'Date Descending'}
-                    <span style={{ position: 'absolute', right: 16, fontSize: 20, color: isDark ? '#fff' : '#222', opacity: 0.7, pointerEvents: 'none' }}>▼</span>
-                  </button>
-                  {showSortDropdown && (
-                    <div
-                      role="listbox"
-                      tabIndex={-1}
-                      style={{
-                        position: 'absolute',
-                        top: '110%',
-                        left: 0,
-                        width: '100%',
-                        background: isDark ? 'rgba(30, 30, 30, 0.95)' : 'rgba(255,255,255,0.97)',
-                        border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.12)'}`,
-                        borderRadius: 14,
-                        boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.28)' : '0 8px 32px rgba(0,0,0,0.12)',
-                        zIndex: 1000,
-                        marginTop: 4,
-                        padding: 4,
-                        backdropFilter: 'blur(14px)',
-                        WebkitBackdropFilter: 'blur(14px)',
-                      }}
-                    >
-                      {['asc', 'desc'].map(option => (
-                        <button
-                          key={option}
-                          role="option"
-                          aria-selected={filtersItineraryDateSort === option}
-                          onClick={() => {
-                            setFiltersItineraryDateSort(option as 'asc' | 'desc');
-                            setShowSortDropdown(false);
-                          }}
-                          style={{
-                            width: '100%',
-                            background: 'none',
-                            border: 'none',
-                            color: isDark ? '#fff' : '#222',
-                            fontSize: 17,
-                            fontWeight: 600,
-                            padding: '12px 16px',
-                            borderRadius: 10,
-                            textAlign: 'left',
-                            cursor: 'pointer',
-                            transition: 'background 0.15s',
-                            backgroundColor: filtersItineraryDateSort === option ? (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)') : 'transparent',
-                            outline: 'none',
-                            marginBottom: 2,
-                          }}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              setFiltersItineraryDateSort(option as 'asc' | 'desc');
-                              setShowSortDropdown(false);
-                            }
-                          }}
-                        >
-                          {option === 'asc' ? 'Date Ascending' : 'Date Descending'}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                <label style={{ fontWeight: 500, fontSize: 15, color: isDark ? '#fff' : '#222', marginRight: 8 }}>Sort by Date:</label>
+                <button
+                  onClick={() => setFiltersItineraryDateSort(prev => prev === 'asc' ? 'desc' : 'asc')}
+                  style={{
+                    minWidth: 160,
+                    height: 44,
+                    background: isDark ? 'rgba(30, 30, 30, 0.7)' : 'rgba(255, 255, 255, 0.7)',
+                    border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.12)'}`,
+                    borderRadius: 14,
+                    boxShadow: isDark ? '0 4px 16px rgba(0,0,0,0.18)' : '0 4px 16px rgba(0,0,0,0.08)',
+                    color: isDark ? '#fff' : '#222',
+                    fontSize: 17,
+                    fontWeight: 600,
+                    padding: '0 24px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    outline: 'none',
+                    transition: 'background 0.2s',
+                    position: 'relative',
+                    zIndex: 2,
+                  }}
+                >
+                  {filtersItineraryDateSort === 'asc' ? 'Date Ascending' : 'Date Descending'}
+                </button>
               </div>
+              
+              {/* Selection indicator bar for itineraries */}
+              {isItinerarySelectModeActive && selectedItineraryIds.length > 0 && (
+                <div style={{ 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  alignItems: 'center', 
+                  background: '#fee2e2', 
+                  padding: '12px 24px', 
+                  borderRadius: 8, 
+                  marginBottom: 24, 
+                  border: '2px solid #fecaca'
+                }}>
+                  <span style={{fontSize: 16, fontWeight: 500, color: '#b91c1c'}}>{selectedItineraryIds.length} itinerary(s) selected</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <button
+                        onClick={() => setSelectedItineraryIds([])}
+                        style={{ background: '#fff', color: '#000', border: '2px solid #000', borderRadius: '8px', padding: '10px 20px', fontSize: 15, fontWeight: 600, cursor: 'pointer' }}
+                    >
+                        Unselect
+                    </button>
+                    <button
+                        onClick={() => setShowBulkDeleteConfirm(true)}
+                        style={{ background: '#ef4444', color: 'white', border: 'none', borderRadius: '8px', padding: '10px 20px', fontSize: 15, fontWeight: 600, cursor: 'pointer' }}
+                    >
+                        Delete
+                    </button>
+                  </div>
+                </div>
+              )}
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
                 {savedItineraries.length === 0 && (
@@ -2590,7 +3158,7 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                           }}
                         >
                           {/* Selection checkbox */}
-                          {isSelectModeActive && (
+                          {isItinerarySelectModeActive && (
                             <div style={{ 
                               position: 'absolute', 
                               top: 16, 
@@ -2779,12 +3347,12 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                               </div>
                             </div>
                           </div>
-                          <div style={{ marginTop: 20, display: 'flex', alignSelf: 'flex-end', gap: 16, alignItems: 'center' }}>
-                            <button title="Edit" onClick={() => navigate(`/event/${id}/itinerary/edit/${it.id}`)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="edit" /></button>
-                            <button title="Duplicate" onClick={() => handleDuplicate(it)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="duplicate" /></button>
-                            <button title="Share" onClick={() => { setItineraryToShare(it.id); setShowShareModal(true); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="share" /></button>
-                            <button title="Save as Draft" onClick={() => handleMakeDraft(it.id)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="saveAsDraft" /></button>
-                            <button title="Delete" onClick={() => { setItineraryToDelete(it.id); setShowDeleteConfirm(true); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="delete" /></button>
+                          <div style={{ position: 'absolute', top: 16, right: 16, display: 'flex', gap: 4, alignItems: 'center' }}>
+                            <button title="Edit" onClick={() => navigate(`/event/${id}/itinerary/edit/${it.id}`)} style={{ background: 'none', border: 'none', color: isDark ? '#fff' : '#000', padding: 4, cursor: 'pointer' }}><Icon name="edit" style={{ fontSize: 16, color: isDark ? '#fff' : '#000' }} /></button>
+                            <button title="Duplicate" onClick={() => handleDuplicate(it)} style={{ background: 'none', border: 'none', color: isDark ? '#fff' : '#000', padding: 4, cursor: 'pointer' }}><Icon name="duplicate" style={{ fontSize: 16, color: isDark ? '#fff' : '#000' }} /></button>
+                            <button title="Share" onClick={() => { setItineraryToShare(it.id); setShowShareModal(true); }} style={{ background: 'none', border: 'none', color: isDark ? '#fff' : '#000', padding: 4, cursor: 'pointer' }}><Icon name="share" style={{ fontSize: 16, color: isDark ? '#fff' : '#000' }} /></button>
+                            <button title="Save as Draft" onClick={() => handleMakeDraft(it.id)} style={{ background: 'none', border: 'none', color: isDark ? '#fff' : '#000', padding: 4, cursor: 'pointer' }}><Icon name="saveAsDraft" style={{ fontSize: 16, color: isDark ? '#fff' : '#000' }} /></button>
+                            <button title="Delete" onClick={() => { setItineraryToDelete(it.id); setShowDeleteConfirm(true); }} style={{ background: 'none', border: 'none', color: isDark ? '#fff' : '#000', padding: 4, cursor: 'pointer' }}><Icon name="delete" style={{ fontSize: 16, color: isDark ? '#fff' : '#000' }} /></button>
                           </div>
                         </div>
                       ))}
@@ -2809,7 +3377,7 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                     }}
                   >
                     {/* Selection checkbox */}
-                    {isSelectModeActive && (
+                    {isItinerarySelectModeActive && (
                       <div style={{ 
                         position: 'absolute', 
                         top: 16, 
@@ -2997,24 +3565,24 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                           </div>
                         </div>
                       </div>
-                      <div style={{ marginTop: 20, display: 'flex', alignSelf: 'flex-end', gap: 16, alignItems: 'center' }}>
-                        <button title="Edit" onClick={() => navigate(`/event/${id}/itinerary/edit/${it.id}`)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="edit" /></button>
-                        <button title="Duplicate" onClick={() => handleDuplicate(it)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="duplicate" /></button>
-                        <button title="Share" onClick={() => { setItineraryToShare(it.id); setShowShareModal(true); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="share" /></button>
-                        <button title="Save as Draft" onClick={() => handleMakeDraft(it.id)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="saveAsDraft" /></button>
-                        <button title="Delete" onClick={() => { setItineraryToDelete(it.id); setShowDeleteConfirm(true); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}><Icon name="delete" /></button>
+                      <div style={{ position: 'absolute', top: 16, right: 16, display: 'flex', gap: 4, alignItems: 'center' }}>
+                        <button title="Edit" onClick={() => navigate(`/event/${id}/itinerary/edit/${it.id}`)} style={{ background: 'none', border: 'none', color: isDark ? '#fff' : '#000', padding: 4, cursor: 'pointer' }}><Icon name="edit" style={{ fontSize: 16, color: isDark ? '#fff' : '#000' }} /></button>
+                        <button title="Duplicate" onClick={() => handleDuplicate(it)} style={{ background: 'none', border: 'none', color: isDark ? '#fff' : '#000', padding: 4, cursor: 'pointer' }}><Icon name="duplicate" style={{ fontSize: 16, color: isDark ? '#fff' : '#000' }} /></button>
+                        <button title="Share" onClick={() => { setItineraryToShare(it.id); setShowShareModal(true); }} style={{ background: 'none', border: 'none', color: isDark ? '#fff' : '#000', padding: 4, cursor: 'pointer' }}><Icon name="share" style={{ fontSize: 16, color: isDark ? '#fff' : '#000' }} /></button>
+                        <button title="Save as Draft" onClick={() => handleMakeDraft(it.id)} style={{ background: 'none', border: 'none', color: isDark ? '#fff' : '#000', padding: 4, cursor: 'pointer' }}><Icon name="saveAsDraft" style={{ fontSize: 16, color: isDark ? '#fff' : '#000' }} /></button>
+                        <button title="Delete" onClick={() => { setItineraryToDelete(it.id); setShowDeleteConfirm(true); }} style={{ background: 'none', border: 'none', color: isDark ? '#fff' : '#000', padding: 4, cursor: 'pointer' }}><Icon name="delete" style={{ fontSize: 16, color: isDark ? '#fff' : '#000' }} /></button>
                       </div>
                     </div>
                   </div>
                 ))}
 
                 {/* Drafts Section */}
-                {draftItineraries.length > 0 && (
+                {externalDraftItineraries.length > 0 && (
                   <div style={{ marginTop: 48, paddingTop: 32, borderTop: `2px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}` }}>
                     <h3 style={mainTitleStyle}>Draft Itineraries</h3>
                     
                     <div style={{ display: 'grid', gap: 24 }}>
-                      {draftItineraries.map((draft, draftIdx) => (
+                      {externalDraftItineraries.map((draft, draftIdx) => (
                         <div
                           key={draft.id}
                           style={{
@@ -3023,63 +3591,187 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
                             borderRadius: 16,
                             padding: 28,
                             background: isDark ? 'rgba(40,40,40,0.5)' : 'rgba(245,245,245,0.7)',
+                            position: 'relative'
                           }}
                         >
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+                          {/* Delete button - positioned top right only */}
+                          <button
+                            onClick={() => {
+                              setDraftToDelete(draft.id);
+                              setShowDeleteDraftModal(true);
+                              setDeleteDraftText('');
+                            }}
+                            style={{
+                              position: 'absolute',
+                              top: 18,
+                              right: 18,
+                              background: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.06)',
+                              color: isDark ? '#fff' : '#222',
+                              border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.18)' : '#bbb'}`,
+                              borderRadius: '50%',
+                              width: 18,
+                              height: 18,
+                              minWidth: 18,
+                              minHeight: 18,
+                              boxShadow: isDark ? '0 2px 8px #0004' : '0 1px 4px #0001',
+                              fontSize: 12,
+                              fontWeight: 500,
+                              cursor: 'pointer',
+                              transition: 'all 0.2s',
+                              zIndex: 10,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              padding: 0,
+                              lineHeight: 1,
+                            }}
+                            title="Delete draft"
+                          >
+                            ×
+                          </button>
+
+                          <div style={{ flex: 1, marginLeft: 0 }}>
+                            <div style={{ fontWeight: 600, fontSize: 20, marginBottom: 12, color: isDark ? '#ffffff' : '#000000' }}>
+                              {draft.title || 'Untitled Draft'}
+                            </div>
                             <div>
-                              <h4 style={{ 
-                                fontSize: 20, 
-                                fontWeight: 600, 
-                                margin: 0, 
-                                marginBottom: 8,
-                                color: isDark ? '#ffffff' : '#000000'
-                              }}>
-                                {draft.title}
-                              </h4>
-                              <div style={{ 
-                                fontSize: 14, 
-                                color: isDark ? '#a1a1aa' : '#71717a',
-                                marginBottom: 8
-                              }}>
-                                Draft • {formatUK(draft.date || '')} • {draft.location}
-                              </div>
-                              {draft.description && (
-                                <p style={{ 
-                                  fontSize: 15, 
-                                  color: isDark ? '#d1d5db' : '#374151',
-                                  margin: 0,
-                                  lineHeight: 1.5
+                              {/* Display individual itinerary details */}
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                                <div style={{
+                                  background: isDark 
+                                    ? 'rgba(255, 255, 255, 0.05)' 
+                                    : 'rgba(0, 0, 0, 0.03)',
+                                  backdropFilter: 'blur(10px)',
+                                  WebkitBackdropFilter: 'blur(10px)',
+                                  border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
+                                  borderRadius: 12,
+                                  padding: '16px',
+                                  transition: 'all 0.2s ease'
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.background = isDark 
+                                    ? 'rgba(255, 255, 255, 0.08)' 
+                                    : 'rgba(0, 0, 0, 0.05)';
+                                  e.currentTarget.style.transform = 'scale(1.01)';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.background = isDark 
+                                    ? 'rgba(255, 255, 255, 0.05)' 
+                                    : 'rgba(0, 0, 0, 0.03)';
+                                  e.currentTarget.style.transform = 'scale(1)';
                                 }}>
-                                  {draft.description}
-                                </p>
-                              )}
+                                  <div style={{ display: 'flex', marginBottom: 8 }}>
+                                    <div style={{ fontWeight: 500, fontSize: 16, color: isDark ? '#ffffff' : '#000000' }}>
+                                      {draft.title || 'Untitled Draft'}
+                                    </div>
+                                  </div>
+                                  
+                                  <div style={{ display: 'flex', gap: 24, marginBottom: 12 }}>
+                                    {draft.arrival_time && (
+                                      <div style={{ 
+                                        color: isDark ? '#d1d5db' : '#374151', 
+                                        fontSize: 14 
+                                      }}>
+                                        <span style={{ 
+                                          fontWeight: 500, 
+                                          color: isDark ? '#a1a1aa' : '#71717a' 
+                                        }}>Arrival:</span> {draft.arrival_time}
+                                      </div>
+                                    )}
+                                    {draft.start_time && draft.end_time && (
+                                      <div style={{ 
+                                        color: isDark ? '#d1d5db' : '#374151', 
+                                        fontSize: 14 
+                                      }}>
+                                        <span style={{ 
+                                          fontWeight: 500, 
+                                          color: isDark ? '#a1a1aa' : '#71717a' 
+                                        }}>Time:</span> {draft.start_time} - {draft.end_time}
+                                      </div>
+                                    )}
+                                    {draft.date && (
+                                      <div style={{ 
+                                        color: isDark ? '#d1d5db' : '#374151', 
+                                        fontSize: 14 
+                                      }}>
+                                        <span style={{ fontWeight: 500, color: isDark ? '#a1a1aa' : '#71717a', marginRight: 4 }}>Date:</span> {new Date(draft.date).toLocaleDateString('en-GB', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
+                                      </div>
+                                    )}
+                                    {draft.location && (
+                                      <div style={{ 
+                                        color: isDark ? '#d1d5db' : '#374151', 
+                                        fontSize: 14 
+                                      }}>
+                                        <span style={{ 
+                                          fontWeight: 500, 
+                                          color: isDark ? '#a1a1aa' : '#71717a' 
+                                        }}>Location:</span> {draft.location}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {draft.description && (
+                                    <div style={{ 
+                                      color: isDark ? '#a1a1aa' : '#71717a', 
+                                      fontSize: 14, 
+                                      marginBottom: 12 
+                                    }}>
+                                      {draft.description}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
                             </div>
+                          </div>
+                          
+                          <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 20 }}>
+                            <button
+                              onClick={() => navigate(`/event/${event?.id}/itinerary/edit/${draft.id}`)}
+                              style={{
+                                ...getButtonStyles(isDark, 'primary'),
+                                fontSize: 14,
+                                padding: '8px 16px',
+                                minHeight: 36
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.transform = 'scale(1.05)';
+                                e.currentTarget.style.boxShadow = isDark 
+                                  ? '0 6px 20px rgba(0, 0, 0, 0.4)' 
+                                  : '0 6px 20px rgba(0, 0, 0, 0.15)';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.transform = 'scale(1)';
+                                e.currentTarget.style.boxShadow = isDark 
+                                  ? '0 4px 16px rgba(0, 0, 0, 0.2)' 
+                                  : '0 4px 16px rgba(0, 0, 0, 0.1)';
+                              }}
+                            >
+                              Edit
+                            </button>
                             
-                            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                              <button
-                                onClick={() => handlePublishDraft(draftIdx)}
-                                style={{
-                                  ...getButtonStyles(isDark, 'primary'),
-                                  fontSize: 14,
-                                  padding: '8px 16px',
-                                  minHeight: 36
-                                }}
-                              >
-                                Publish
-                              </button>
-                              
-                              <button
-                                onClick={() => navigate(`/event/${event?.id}/itinerary/edit/${draft.id}`)}
-                                style={{
-                                  ...getButtonStyles(isDark, 'secondary'),
-                                  fontSize: 14,
-                                  padding: '8px 16px',
-                                  minHeight: 36
-                                }}
-                              >
-                                Edit
-                              </button>
-                            </div>
+                            <button
+                              onClick={() => handlePublishDraft(draftIdx)}
+                              style={{
+                                ...getButtonStyles(isDark, 'secondary'),
+                                fontSize: 14,
+                                padding: '8px 16px',
+                                minHeight: 36
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.transform = 'scale(1.05)';
+                                e.currentTarget.style.boxShadow = isDark 
+                                  ? '0 6px 20px rgba(0, 0, 0, 0.4)' 
+                                  : '0 6px 20px rgba(0, 0, 0, 0.15)';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.transform = 'scale(1)';
+                                e.currentTarget.style.boxShadow = isDark 
+                                  ? '0 4px 16px rgba(0, 0, 0, 0.2)' 
+                                  : '0 4px 16px rgba(0, 0, 0, 0.1)';
+                              }}
+                            >
+                              Publish
+                            </button>
                           </div>
                         </div>
                       ))}
@@ -3500,34 +4192,12 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
               marginBottom: 24,
               lineHeight: 1.5
             }}>
-              This action cannot be undone. Type <strong>"delete"</strong> to confirm.
+              Are you sure you want to permanently delete this itinerary? This action cannot be undone.
             </div>
-            <input
-              type="text"
-              value={deleteText}
-              onChange={(e) => setDeleteText(e.target.value)}
-              placeholder="Type 'delete' to confirm"
-              style={{
-                width: '100%',
-                padding: '12px 16px',
-                fontSize: 16,
-                borderRadius: 12,
-                border: `2px solid ${isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.2)'}`,
-                background: isDark 
-                  ? 'rgba(255, 255, 255, 0.05)' 
-                  : 'rgba(0, 0, 0, 0.02)',
-                color: isDark ? '#ffffff' : '#000000',
-                marginBottom: 24,
-                backdropFilter: 'blur(10px)',
-                WebkitBackdropFilter: 'blur(10px)',
-                boxSizing: 'border-box'
-              }}
-            />
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 16 }}>
               <button
                 onClick={() => {
                   setShowDeleteConfirm(false);
-                  setDeleteText('');
                   setItineraryToDelete(null);
                 }}
                 style={{
@@ -3540,23 +4210,19 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
               </button>
               <button
                 onClick={handleDeleteSingle}
-                disabled={deleteText !== 'delete'}
                 style={{
-                  background: deleteText === 'delete' 
-                    ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)'
-                    : isDark 
-                      ? 'rgba(239, 68, 68, 0.3)' 
-                      : 'rgba(239, 68, 68, 0.2)',
-                  color: deleteText === 'delete' ? '#ffffff' : '#a1a1aa',
+                  background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                  color: '#ffffff',
                   border: 'none',
                   padding: '12px 24px',
                   borderRadius: 12,
                   fontSize: 16,
                   fontWeight: 600,
-                  cursor: deleteText === 'delete' ? 'pointer' : 'not-allowed',
+                  cursor: 'pointer',
                   backdropFilter: 'blur(10px)',
                   WebkitBackdropFilter: 'blur(10px)',
-                  transition: 'all 0.2s ease'
+                  transition: 'all 0.2s ease',
+                  boxShadow: '0 4px 16px rgba(239, 68, 68, 0.3)'
                 }}
               >
                 Delete
@@ -4158,6 +4824,147 @@ export default function EventDashboardPage({ events }: { events: EventType[] }) 
             >
               Cancel
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Draft Confirmation Modal */}
+      {showDeleteDraftModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            ...getGlassStyles(isDark),
+            padding: 32,
+            borderRadius: 16,
+            maxWidth: 400,
+            width: '90%',
+            textAlign: 'center'
+          }}>
+            <h3 style={{
+              fontSize: 24,
+              fontWeight: 600,
+              margin: '0 0 16px 0',
+              color: colors.text
+            }}>
+              Delete Draft
+            </h3>
+            <p style={{
+              fontSize: 16,
+              color: colors.textSecondary,
+              margin: '0 0 24px 0',
+              lineHeight: 1.5
+            }}>
+              Are you sure you want to delete this draft? This action cannot be undone.
+            </p>
+            <div style={{
+              display: 'flex',
+              gap: 12,
+              justifyContent: 'center'
+            }}>
+              <button
+                onClick={() => {
+                  setShowDeleteDraftModal(false);
+                  setDraftToDelete(null);
+                }}
+                style={{
+                  ...getButtonStyles(isDark, 'secondary'),
+                  fontSize: 16,
+                  padding: '12px 24px',
+                  minWidth: 100
+                }}
+              >
+                Close
+              </button>
+              <button
+                onClick={handleDeleteDraft}
+                style={{
+                  ...getButtonStyles(isDark, 'primary'),
+                  fontSize: 16,
+                  padding: '12px 24px',
+                  minWidth: 100,
+                  background: isDark ? '#ef4444' : '#dc2626',
+                  color: '#ffffff',
+                  border: 'none'
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Event Modal - now at the end of the return for proper stacking and matching CreateEventPage UI */}
+      {showEditEventModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.5)',
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999
+        }}>
+          <div style={{
+            width: '100%',
+            maxWidth: '800px',
+            ...getGlassStyles(isDark),
+            padding: '40px',
+            position: 'relative',
+            boxShadow: isDark 
+              ? 'inset 0 2px 8px rgba(255,255,255,0.05), 0 8px 32px rgba(0,0,0,0.3)' 
+              : 'inset 0 2px 8px rgba(0,0,0,0.05), 0 8px 32px rgba(0,0,0,0.1)',
+          }}>
+            <EventForm
+              mode="edit"
+              initialValues={editEventData}
+              isDark={isDark}
+              colors={colors}
+              onCancel={() => setShowEditEventModal(false)}
+              onSubmit={async (values) => {
+                setEditEventLoading(true);
+                try {
+                  if (!currentEvent) {
+                    alert('No event selected.');
+                    setEditEventLoading(false);
+                    return;
+                  }
+                  const updatedEvent = {
+                    ...currentEvent,
+                    name: values.name,
+                    from: values.from,
+                    to: values.to,
+                    description: values.description,
+                    location: values.location,
+                    time_zone: values.timeZone
+                  };
+                  await updateEvent(currentEvent.id, updatedEvent);
+                  setShowEditEventModal(false);
+                  showSuccess('Event updated successfully!');
+                  window.location.reload();
+                } catch (error) {
+                  console.error('Error updating event:', error);
+                  alert('Error updating event. Please try again.');
+                } finally {
+                  setEditEventLoading(false);
+                }
+              }}
+            />
           </div>
         </div>
       )}

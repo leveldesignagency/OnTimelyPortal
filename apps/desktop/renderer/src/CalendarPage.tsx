@@ -663,22 +663,44 @@ Check the browser console for detailed diagnostic information.`);
   const generateCalendarDays = () => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
-    const daysInMonth = getDaysInMonth(year, month);
-    const firstDay = getFirstDayOfMonth(year, month);
     
-    const days = [];
-    
-    // Add empty cells for days before the first day of the month
-    for (let i = 0; i < firstDay; i++) {
-      days.push(null);
+    if (viewMode === 'Week') {
+      // Generate current week view
+      const today = new Date();
+      const currentDay = today.getDay(); // 0 = Sunday, 1 = Monday, etc.
+      const days = [];
+      
+      // Calculate the start of the week (Sunday)
+      const startOfWeek = new Date(today);
+      startOfWeek.setDate(today.getDate() - currentDay);
+      
+      // Generate 7 days starting from Sunday
+      for (let i = 0; i < 7; i++) {
+        const day = new Date(startOfWeek);
+        day.setDate(startOfWeek.getDate() + i);
+        days.push(day);
+      }
+      
+      return days;
+    } else {
+      // Generate full month view (existing logic)
+      const daysInMonth = getDaysInMonth(year, month);
+      const firstDay = getFirstDayOfMonth(year, month);
+      
+      const days = [];
+      
+      // Add empty cells for days before the first day of the month
+      for (let i = 0; i < firstDay; i++) {
+        days.push(null);
+      }
+      
+      // Add days of the month
+      for (let day = 1; day <= daysInMonth; day++) {
+        days.push(new Date(year, month, day));
+      }
+      
+      return days;
     }
-    
-    // Add days of the month
-    for (let day = 1; day <= daysInMonth; day++) {
-      days.push(new Date(year, month, day));
-    }
-    
-    return days;
   };
 
   const getEventsForDate = (date: Date) => {
@@ -1070,7 +1092,17 @@ Check the browser console for detailed diagnostic information.`);
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
               <button
-                onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))}
+                onClick={() => {
+                  if (viewMode === 'Week') {
+                    // Navigate to previous week
+                    const newDate = new Date(currentDate);
+                    newDate.setDate(currentDate.getDate() - 7);
+                    setCurrentDate(newDate);
+                  } else {
+                    // Navigate to previous month
+                    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
+                  }
+                }}
                 style={{
                   padding: '8px 12px',
                   borderRadius: '8px',
@@ -1091,11 +1123,45 @@ Check the browser console for detailed diagnostic information.`);
                 color: colors.text,
                 whiteSpace: 'nowrap'
               }}>
-                {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
+                {viewMode === 'Week' ? (
+                  (() => {
+                    const today = new Date();
+                    const currentDay = today.getDay();
+                    const startOfWeek = new Date(today);
+                    startOfWeek.setDate(today.getDate() - currentDay);
+                    const endOfWeek = new Date(startOfWeek);
+                    endOfWeek.setDate(startOfWeek.getDate() + 6);
+                    
+                    const startMonth = startOfWeek.getMonth();
+                    const endMonth = endOfWeek.getMonth();
+                    const startYear = startOfWeek.getFullYear();
+                    const endYear = endOfWeek.getFullYear();
+                    
+                    if (startMonth === endMonth && startYear === endYear) {
+                      return `${monthNames[startMonth]} ${startOfWeek.getDate()} - ${endOfWeek.getDate()}, ${startYear}`;
+                    } else if (startYear === endYear) {
+                      return `${monthNames[startMonth]} ${startOfWeek.getDate()} - ${monthNames[endMonth]} ${endOfWeek.getDate()}, ${startYear}`;
+                    } else {
+                      return `${monthNames[startMonth]} ${startOfWeek.getDate()}, ${startYear} - ${monthNames[endMonth]} ${endOfWeek.getDate()}, ${endYear}`;
+                    }
+                  })()
+                ) : (
+                  `${monthNames[currentDate.getMonth()]} ${currentDate.getFullYear()}`
+                )}
               </h2>
               
               <button
-                onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))}
+                onClick={() => {
+                  if (viewMode === 'Week') {
+                    // Navigate to next week
+                    const newDate = new Date(currentDate);
+                    newDate.setDate(currentDate.getDate() + 7);
+                    setCurrentDate(newDate);
+                  } else {
+                    // Navigate to next month
+                    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
+                  }
+                }}
                 style={{
                   padding: '8px 12px',
                   borderRadius: '8px',
