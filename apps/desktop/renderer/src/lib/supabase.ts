@@ -328,7 +328,6 @@ export const getItineraries = async (eventId: string, companyId?: string, sortOr
     .from('itineraries')
     .select('*')
     .eq('event_id', eventId)
-    .eq('is_draft', false) // Only get published itineraries
     .order('date', { ascending: sortOrder === 'asc' })
     .order('start_time', { ascending: sortOrder === 'asc' });
 
@@ -344,26 +343,35 @@ export const getItineraries = async (eventId: string, companyId?: string, sortOr
 }
 
 export const addItinerary = async (itinerary: Omit<Itinerary, 'id' | 'created_at' | 'updated_at'>) => {
+  console.log('[addItinerary] Attempting to insert:', itinerary);
   const { data, error } = await supabase
     .from('itineraries')
     .insert(itinerary)
     .select()
-    .single()
-
-  if (error) throw error
-  return data
+    .single();
+  if (error) {
+    console.error('[addItinerary] Supabase insert error:', error);
+    throw error;
+  }
+  console.log('[addItinerary] Supabase insert result:', data);
+  return data;
 }
 
-export const updateItinerary = async (id: string, updates: Partial<Itinerary>) => {
+export const updateItinerary = async (id: number, updates: Partial<Itinerary>) => {
+  console.log('[updateItinerary] Called with id:', id, 'updates:', updates);
   const { data, error } = await supabase
     .from('itineraries')
     .update(updates)
     .eq('id', id)
     .select()
-    .single()
+    .single();
 
-  if (error) throw error
-  return data
+  if (error) {
+    console.error('[updateItinerary] Supabase update error:', error);
+    throw error;
+  }
+  console.log('[updateItinerary] Supabase update result:', data);
+  return data;
 }
 
 export const deleteItinerary = async (id: string) => {
@@ -774,4 +782,65 @@ export const getEventsCreatedByUser = async (userId: string, companyId: string) 
     .order('created_at', { ascending: false });
   if (error) throw error;
   return data;
+}; 
+
+// Add a timeline module to the timeline_modules table
+export const addTimelineModule = async (module: {
+  event_id: string,
+  module_type: string,
+  title?: string,
+  question?: string,
+  time: string,
+  date: string, // YYYY-MM-DD format
+  label?: string,
+  link?: string,
+  file?: string,
+  survey_data?: any,
+  feedback_data?: any,
+  created_by?: string
+}) => {
+  const { data, error } = await supabase
+    .from('timeline_modules')
+    .insert([module])
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}; 
+
+// Event Add-Ons types and functions
+export type EventAddon = {
+  id: string;
+  event_id: string;
+  addon_key: string;
+  enabled: boolean;
+  created_at?: string;
+  is_active?: boolean;
+  addon_label?: string;
+  addon_type?: string;
+  addon_description?: string;
+  addon_icon?: string;
+  updated_at?: string;
+};
+
+// Fetch all add-ons for an event
+export const getEventAddOns = async (eventId: string): Promise<EventAddon[]> => {
+  const { data, error } = await supabase
+    .from('event_addons')
+    .select('*')
+    .eq('event_id', eventId)
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return data as EventAddon[];
+};
+
+// Upsert (enable/disable) an add-on for an event
+export const upsertEventAddon = async (addon: Omit<EventAddon, 'id' | 'created_at' | 'updated_at'>) => {
+  const { data, error } = await supabase
+    .from('event_addons')
+    .upsert([addon], { onConflict: 'event_id,addon_key' })
+    .select()
+    .single();
+  if (error) throw error;
+  return data as EventAddon;
 }; 

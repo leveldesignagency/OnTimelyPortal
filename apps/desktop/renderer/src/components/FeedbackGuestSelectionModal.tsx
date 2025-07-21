@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ThemeContext } from '../ThemeContext';
+import { addTimelineModule, supabase } from '../lib/supabase';
 
 const getGlassStyles = (isDark: boolean) => ({
   background: isDark 
@@ -13,14 +14,36 @@ const getGlassStyles = (isDark: boolean) => ({
     : '0 8px 32px rgba(0,0,0,0.1)',
 });
 
-export default function FeedbackGuestSelectionModal({ open, onClose, guests, onSave, moduleData }) {
+// Add prop types
+interface Guest {
+  id: string;
+  first_name?: string;
+  last_name?: string;
+  email: string;
+}
+interface ModuleData {
+  eventId: string;
+  title: string;
+  time: string;
+  defaultRating?: number;
+  currentUser: { id: string };
+}
+interface FeedbackGuestSelectionModalProps {
+  open: boolean;
+  onClose: () => void;
+  guests: Guest[];
+  onSave: (selected: string[]) => void;
+  moduleData: ModuleData;
+}
+
+export default function FeedbackGuestSelectionModal({ open, onClose, guests, onSave, moduleData }: FeedbackGuestSelectionModalProps) {
   const { theme } = React.useContext(ThemeContext);
   const isDark = theme === 'dark';
-  const [selected, setSelected] = useState(() => guests.map(g => g.id));
+  const [selected, setSelected] = useState<string[]>(() => guests.map((g: Guest) => g.id));
 
   if (!open) return null;
 
-  const toggle = id => setSelected(sel => sel.includes(id) ? sel.filter(i => i !== id) : [...sel, id]);
+  const toggle = (id: string) => setSelected((sel: string[]) => sel.includes(id) ? sel.filter((i: string) => i !== id) : [...sel, id]);
   const allSelected = selected.length === guests.length;
 
   return (
@@ -40,7 +63,7 @@ export default function FeedbackGuestSelectionModal({ open, onClose, guests, onS
           <button onClick={() => setSelected([])} style={{ flex: 1, padding: '10px 0', borderRadius: 8, border: '1px solid rgba(255,255,255,0.18)', background: isDark ? '#222' : '#eee', color: isDark ? '#fff' : '#222', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>Clear All</button>
         </div>
         <div style={{ width: '100%', maxHeight: 260, overflowY: 'auto', marginBottom: 24 }}>
-          {guests.map(g => (
+          {guests.map((g: Guest) => (
             <label key={g.id} style={{ display: 'flex', alignItems: 'center', padding: 10, borderRadius: 8, background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', marginBottom: 6, cursor: 'pointer' }}>
               <input type="checkbox" checked={selected.includes(g.id)} onChange={() => toggle(g.id)} style={{ marginRight: 12, width: 16, height: 16 }} />
               <div style={{ flex: 1 }}>
@@ -52,7 +75,34 @@ export default function FeedbackGuestSelectionModal({ open, onClose, guests, onS
         </div>
         <div style={{ display: 'flex', gap: 16, width: '100%', justifyContent: 'flex-end' }}>
           <button onClick={onClose} style={{ padding: '12px 28px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.18)', background: isDark ? '#222' : '#eee', color: isDark ? '#fff' : '#222', fontWeight: 600, fontSize: 16, cursor: 'pointer', marginRight: 8 }}>Cancel</button>
-          <button onClick={() => { onSave(selected); setTimeout(() => { window.dispatchEvent(new Event('refreshTimelineModules')); }, 300); }} disabled={selected.length === 0} style={{ padding: '12px 28px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.18)', background: isDark ? '#444' : '#f3f4f6', color: isDark ? '#fff' : '#222', fontWeight: 700, fontSize: 16, cursor: selected.length ? 'pointer' : 'not-allowed', opacity: selected.length ? 1 : 0.7 }}>Save & Post</button>
+          <button onClick={async () => {
+            try {
+              const module = await addTimelineModule({
+                event_id: moduleData.eventId,
+                module_type: 'feedback',
+                title: moduleData.title,
+                time: moduleData.time,
+                feedback_data: { defaultRating: moduleData.defaultRating },
+                created_by: moduleData.currentUser.id,
+              });
+              console.log('Created feedback module:', module);
+              if (module && module.id && selected.length > 0) {
+                await Promise.all(
+                  selected.map(guestId =>
+                    supabase.from('timeline_module_guests').insert({
+                      module_id: module.id,
+                      guest_id: guestId,
+                    })
+                  )
+                );
+              }
+              setTimeout(() => { window.dispatchEvent(new Event('refreshTimelineModules')); }, 300);
+              onSave(selected);
+            } catch (error) {
+              console.error('Failed to create feedback module:', error);
+              alert('Failed to save feedback module. Please try again.');
+            }
+          }} disabled={selected.length === 0} style={{ padding: '12px 28px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.18)', background: isDark ? '#444' : '#f3f4f6', color: isDark ? '#fff' : '#222', fontWeight: 700, fontSize: 16, cursor: selected.length ? 'pointer' : 'not-allowed', opacity: selected.length ? 1 : 0.7 }}>Save & Post</button>
         </div>
         {/* --- SUPABASE: On save, insert feedback module with guest assignments --- */}
         {/* Table: timeline_modules, Fields: event_id, module_type: 'feedback', time, title, default_rating, assigned_guests */}

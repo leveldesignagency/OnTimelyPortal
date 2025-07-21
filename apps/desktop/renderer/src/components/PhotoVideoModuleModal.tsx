@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ThemeContext } from '../ThemeContext';
+import { addTimelineModule, supabase } from '../lib/supabase';
 
 const getGlassStyles = (isDark: boolean) => ({
   background: isDark 
@@ -259,7 +260,24 @@ function GlassTimePicker({ value, onChange, isDark }) {
   );
 }
 
-export default function PhotoVideoModuleModal({ open, onClose, onNext, guests }) {
+// Add prop types
+interface Guest {
+  id: string;
+  first_name?: string;
+  last_name?: string;
+  email: string;
+}
+
+interface PhotoVideoModuleModalProps {
+  open: boolean;
+  onClose: () => void;
+  onNext: (data: any) => void;
+  guests: Guest[];
+  eventId: string;
+  currentUser: { id: string };
+}
+
+export default function PhotoVideoModuleModal({ open, onClose, onNext, guests, eventId, currentUser }: PhotoVideoModuleModalProps) {
   const { theme } = React.useContext(ThemeContext);
   const isDark = theme === 'dark';
   const [prompt, setPrompt] = useState('');
@@ -269,7 +287,8 @@ export default function PhotoVideoModuleModal({ open, onClose, onNext, guests })
     return now.toTimeString().slice(0,5);
   });
   const [step, setStep] = useState(1);
-  const [selectedGuests, setSelectedGuests] = useState([]);
+  const [selectedGuests, setSelectedGuests] = useState<string[]>([]);
+  const [showSuccessToast, setShowSuccessToast] = useState(false);
 
   if (!open) return null;
 
@@ -332,10 +351,55 @@ export default function PhotoVideoModuleModal({ open, onClose, onNext, guests })
           </div>
           <div style={{ display: 'flex', gap: 16, width: '100%', justifyContent: 'flex-end' }}>
             <button onClick={onClose} style={{ padding: '12px 28px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.18)', background: isDark ? '#222' : '#eee', color: isDark ? '#fff' : '#222', fontWeight: 600, fontSize: 16, cursor: 'pointer', marginRight: 8 }}>Cancel</button>
-            <button onClick={() => onNext({ prompt, date, time, guests: selectedGuests })} disabled={selectedGuests.length === 0} style={{ padding: '12px 28px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.18)', background: isDark ? '#444' : '#f3f4f6', color: isDark ? '#fff' : '#222', fontWeight: 700, fontSize: 16, cursor: selectedGuests.length ? 'pointer' : 'not-allowed', opacity: selectedGuests.length ? 1 : 0.7 }}>Save & Post</button>
+            <button onClick={async () => {
+              const module = await addTimelineModule({
+                event_id: eventId,
+                module_type: 'photo_video',
+                title: prompt,
+                time: time,
+                date: date,
+                label: prompt,
+                link: '',
+                file: null,
+                created_by: currentUser.id,
+              });
+              if (module && module.id && selectedGuests.length > 0) {
+                await Promise.all(
+                  selectedGuests.map(guestId =>
+                    supabase.from('timeline_module_guests').insert({
+                      module_id: module.id,
+                      guest_id: guestId,
+                    })
+                  )
+                );
+              }
+              setTimeout(() => { window.dispatchEvent(new Event('refreshTimelineModules')); }, 300);
+              setShowSuccessToast(true);
+              setTimeout(() => setShowSuccessToast(false), 3000);
+              onNext({ module, selectedGuests });
+            }} style={{ padding: '12px 28px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.18)', background: isDark ? '#444' : '#f3f4f6', color: isDark ? '#fff' : '#222', fontWeight: 700, fontSize: 16, cursor: !prompt ? 'not-allowed' : 'pointer', opacity: !prompt ? 0.7 : 1 }}>Save & Post</button>
           </div>
         </div>}
       </div>
+      
+      {/* Success Toast */}
+      {showSuccessToast && (
+        <div style={{
+          position: 'fixed',
+          top: 24,
+          right: 24,
+          background: 'rgba(40,200,120,0.95)',
+          color: '#fff',
+          padding: '12px 24px',
+          borderRadius: 8,
+          fontWeight: 600,
+          fontSize: 16,
+          zIndex: 3000,
+          boxShadow: '0 2px 12px rgba(0,0,0,0.15)'
+        }}>
+          Photo/Video module created successfully!
+        </div>
+      )}
     </div>
   );
 } 

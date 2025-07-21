@@ -246,7 +246,13 @@ function CustomDatePicker({ value, onChange, placeholder, isDark, colors, requir
           marginBottom: 0
         }}
       >
-        <span>{value ? new Date(value).toLocaleDateString() : placeholder}</span>
+        <span>{value ? (() => {
+          const date = new Date(value);
+          const day = String(date.getDate()).padStart(2, '0');
+          const month = String(date.getMonth() + 1).padStart(2, '0');
+          const year = date.getFullYear();
+          return `${day}/${month}/${year}`;
+        })() : placeholder}</span>
         <ThemedIcon name="calendar" size={24} style={{ marginLeft: 8, background: 'transparent', color: '#fff' }} />
       </div>
       {show && (

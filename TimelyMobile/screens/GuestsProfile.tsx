@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Dimensions, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Dimensions, ActivityIndicator, Button } from 'react-native';
 import { useTheme } from '../ThemeContext';
 import QRCode from 'react-native-qrcode-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../lib/supabase';
+import { useNavigation } from '@react-navigation/native';
 
 const { width, height } = Dimensions.get('window');
 
@@ -43,6 +44,33 @@ interface Guest {
   event_end_date?: string;
   auth_guest_user_id?: string;
   password?: string;
+  // Travel module fields
+  flight_number?: string;
+  arrival_airport?: string;
+  departure_date?: string;
+  arrival_date?: string;
+  departure_time?: string;
+  arrival_time?: string;
+  hotel_location?: string;
+  check_in_date?: string;
+  hotel_departure_date?: string;
+  check_in_time?: string;
+  train_booking_number?: string;
+  train_station?: string;
+  train_departure_date?: string;
+  train_arrival_date?: string;
+  train_departure_time?: string;
+  train_arrival_time?: string;
+  coach_booking_number?: string;
+  coach_station?: string;
+  coach_departure_date?: string;
+  coach_arrival_date?: string;
+  coach_departure_time?: string;
+  coach_arrival_time?: string;
+  event_reference?: string;
+  id_upload_url?: string;
+  id_upload_filename?: string;
+  id_upload_uploaded_at?: string;
 }
 
 interface GuestsProfileProps {
@@ -158,6 +186,7 @@ function GeometricOverlay() {
 
 export default function GuestsProfile({ guest: propGuest }: GuestsProfileProps) {
   const { theme } = useTheme();
+  const navigation = useNavigation();
   const [guest, setGuest] = useState<Guest | null>(null);
   const [eventData, setEventData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -189,8 +218,39 @@ export default function GuestsProfile({ guest: propGuest }: GuestsProfileProps) 
 
           if (data) {
             console.log('[GuestsProfile] Guest data loaded:', data);
-            console.log('[GuestsProfile] module_values:', data.module_values);
-            console.log('[GuestsProfile] modules:', data.modules);
+            console.log('[GuestsProfile] OLD module_values (IGNORED):', data.module_values);
+            console.log('[GuestsProfile] OLD modules (IGNORED):', data.modules);
+            console.log('[GuestsProfile] NEW Flight data from DB columns:', {
+              flight_number: data.flight_number,
+              arrival_airport: data.arrival_airport,
+              departure_date: data.departure_date,
+              arrival_date: data.arrival_date,
+              departure_time: data.departure_time,
+              arrival_time: data.arrival_time
+            });
+            console.log('[GuestsProfile] NEW Hotel data from DB columns:', {
+              hotel_location: data.hotel_location,
+              check_in_date: data.check_in_date,
+              hotel_departure_date: data.hotel_departure_date,
+              check_in_time: data.check_in_time
+            });
+            console.log('[GuestsProfile] NEW Train data from DB columns:', {
+              train_booking_number: data.train_booking_number,
+              train_station: data.train_station,
+              train_departure_date: data.train_departure_date,
+              train_arrival_date: data.train_arrival_date,
+              train_departure_time: data.train_departure_time,
+              train_arrival_time: data.train_arrival_time
+            });
+            console.log('[GuestsProfile] NEW Coach data from DB columns:', {
+              coach_booking_number: data.coach_booking_number,
+              coach_station: data.coach_station,
+              coach_departure_date: data.coach_departure_date,
+              coach_arrival_date: data.coach_arrival_date,
+              coach_departure_time: data.coach_departure_time,
+              coach_arrival_time: data.coach_arrival_time
+            });
+            console.log('[GuestsProfile] NEW Event reference from DB column:', data.event_reference);
             setGuest(data);
             
             // Fetch event data if we have an event_id
@@ -218,8 +278,15 @@ export default function GuestsProfile({ guest: propGuest }: GuestsProfileProps) 
 
             if (data) {
               console.log('[GuestsProfile] Guest data loaded by email:', data);
-              console.log('[GuestsProfile] module_values:', data.module_values);
-              console.log('[GuestsProfile] modules:', data.modules);
+              console.log('[GuestsProfile] OLD module_values (IGNORED):', data.module_values);
+              console.log('[GuestsProfile] OLD modules (IGNORED):', data.modules);
+              console.log('[GuestsProfile] NEW Travel module fields from DB columns:', {
+                flight_number: data.flight_number,
+                hotel_location: data.hotel_location,
+                train_booking_number: data.train_booking_number,
+                coach_booking_number: data.coach_booking_number,
+                event_reference: data.event_reference
+              });
               setGuest(data);
               
               // Fetch event data if we have an event_id
@@ -286,81 +353,155 @@ export default function GuestsProfile({ guest: propGuest }: GuestsProfileProps) 
     setExpanded(prev => ({ ...prev, [title]: !prev[title] }));
   };
 
-  // Process module values and create dynamic sections
-  const processModuleValues = (moduleValues: Record<string, any> | null) => {
-    if (!moduleValues) return {};
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    (navigation as any).reset({ index: 0, routes: [{ name: 'LoginScreen' }] });
+  };
 
-    const MODULE_KEY_MAP: Record<string, { section: string; label: string }> = {
-      flightNumber: { section: 'Flight Information', label: 'Flight Number' },
-      seatNumber: { section: 'Flight Information', label: 'Seat Number' },
-      eventReference: { section: 'Event Information', label: 'Event Reference' },
-      hotelReservation: { section: 'Hotel Information', label: 'Hotel Reservation' },
-      hotelTracker: { section: 'Hotel Information', label: 'Hotel Tracker' },
-      trainBookingNumber: { section: 'Train Booking Number', label: 'Train Booking Number' },
-      coachBookingNumber: { section: 'Coach Booking Number', label: 'Coach Booking Number' },
-      idUpload: { section: 'Travel Credentials', label: 'ID Upload' },
-      stage1TravelCompanion: { section: 'Travel Credentials', label: 'Stage 1: Travel Companion' },
-    };
+  // Helper function to format time from HH:MM:SS to HH:MM
+  const formatTime = (timeString: string): string => {
+    if (!timeString) return timeString;
+    // If the time includes seconds (HH:MM:SS), strip them to get HH:MM
+    if (timeString.match(/^\d{2}:\d{2}:\d{2}$/)) {
+      return timeString.substring(0, 5); // Get first 5 characters (HH:MM)
+    }
+    return timeString; // Already in HH:MM format or invalid format
+  };
 
+  // Helper function to format date for display
+  const formatDate = (dateString: string): string => {
+    if (!dateString) return dateString;
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: '2-digit', 
+        year: 'numeric'
+      });
+    } catch {
+      return dateString;
+    }
+  };
+
+  // Process module values and create dynamic sections - Updated to handle travel modules properly
+  const processModuleValues = (guest: Guest) => {
     const processedModules: { [key: string]: any[] } = {};
 
-    Object.entries(moduleValues).forEach(([moduleKey, moduleDataArray]) => {
-      const mapping = MODULE_KEY_MAP[moduleKey];
-      if (!mapping) return;
-      const { section, label } = mapping;
-      const fields: any[] = [];
+    // Flight Information
+    const flightFields: any[] = [];
+    if (guest.flight_number) {
+      flightFields.push({ label: 'Flight Number', value: guest.flight_number });
+    }
+    if (guest.arrival_airport) {
+      flightFields.push({ label: 'Arrival Airport', value: guest.arrival_airport });
+    }
+    if (guest.departure_date) {
+      flightFields.push({ label: 'Departure Date', value: formatDate(guest.departure_date) });
+    }
+    if (guest.arrival_date) {
+      flightFields.push({ label: 'Arrival Date', value: formatDate(guest.arrival_date) });
+    }
+    if (guest.departure_time) {
+      flightFields.push({ label: 'Departure Time', value: formatTime(guest.departure_time) });
+    }
+    if (guest.arrival_time) {
+      flightFields.push({ label: 'Arrival Time', value: formatTime(guest.arrival_time) });
+    }
 
-      if (Array.isArray(moduleDataArray)) {
-        moduleDataArray.forEach((moduleData, idx) => {
-          if (moduleData && typeof moduleData === 'object') {
-            // For Flight Information, ensure Flight Number comes before Seat Number
-            if (section === 'Flight Information') {
-              if (moduleKey === 'flightNumber' && moduleData) {
-                fields.push({ label: `${label}${moduleDataArray.length > 1 ? ' ' + (idx + 1) : ''}`, value: String(moduleData.flightNumber || moduleData) });
-              }
-            }
-            // Add all other keys
-            Object.entries(moduleData).forEach(([k, v]) => {
-              if (v !== undefined && v !== null && v !== '') {
-                // Skip flightNumber if already added
-                if (section === 'Flight Information' && moduleKey === 'flightNumber' && k === 'flightNumber') return;
-                fields.push({ label: `${label}${moduleDataArray.length > 1 ? ' ' + (idx + 1) : ''} - ${k.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}`, value: String(v) });
-              }
-            });
-          } else if (moduleData !== undefined && moduleData !== null && moduleData !== '') {
-            fields.push({ label: `${label}${moduleDataArray.length > 1 ? ' ' + (idx + 1) : ''}`, value: String(moduleData) });
-          }
-        });
-      } else if (moduleDataArray && typeof moduleDataArray === 'object') {
-        if (section === 'Flight Information' && moduleKey === 'flightNumber' && moduleDataArray) {
-          fields.push({ label, value: String(moduleDataArray.flightNumber || moduleDataArray) });
-        }
-        Object.entries(moduleDataArray).forEach(([k, v]) => {
-          if (v !== undefined && v !== null && v !== '') {
-            if (section === 'Flight Information' && moduleKey === 'flightNumber' && k === 'flightNumber') return;
-            fields.push({ label: `${label} - ${k.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}`, value: String(v) });
-          }
-        });
-      } else if (moduleDataArray !== undefined && moduleDataArray !== null && moduleDataArray !== '') {
-        fields.push({ label, value: String(moduleDataArray) });
-      }
+    if (flightFields.length > 0) {
+      processedModules['Flight Information'] = flightFields;
+    }
 
-      if (fields.length > 0) {
-        if (!processedModules[section]) processedModules[section] = [];
-        // For Flight Information, always merge flightNumber fields first, then others
-        if (section === 'Flight Information') {
-          if (moduleKey === 'flightNumber') {
-            processedModules[section] = [...fields, ...(processedModules[section] || [])];
-          } else if (moduleKey === 'seatNumber') {
-            processedModules[section] = [...(processedModules[section] || []), ...fields];
-          } else {
-            processedModules[section].push(...fields);
-          }
-        } else {
-          processedModules[section].push(...fields);
-        }
+    // Hotel Information  
+    const hotelFields: any[] = [];
+    if (guest.hotel_location) {
+      hotelFields.push({ label: 'Hotel Location', value: guest.hotel_location });
+    }
+    if (guest.check_in_date) {
+      hotelFields.push({ label: 'Check-in Date', value: formatDate(guest.check_in_date) });
+    }
+    if (guest.hotel_departure_date) {
+      hotelFields.push({ label: 'Departure Date', value: formatDate(guest.hotel_departure_date) });
+    }
+    if (guest.check_in_time) {
+      hotelFields.push({ label: 'Check-in Time', value: formatTime(guest.check_in_time) });
+    }
+    if (hotelFields.length > 0) {
+      processedModules['Hotel Information'] = hotelFields;
+    }
+
+    // Train Information
+    const trainFields: any[] = [];
+    if (guest.train_booking_number) {
+      trainFields.push({ label: 'Booking Number', value: guest.train_booking_number });
+    }
+    if (guest.train_station) {
+      trainFields.push({ label: 'Station', value: guest.train_station });
+    }
+    if (guest.train_departure_date) {
+      trainFields.push({ label: 'Departure Date', value: formatDate(guest.train_departure_date) });
+    }
+    if (guest.train_arrival_date) {
+      trainFields.push({ label: 'Arrival Date', value: formatDate(guest.train_arrival_date) });
+    }
+    if (guest.train_departure_time) {
+      trainFields.push({ label: 'Departure Time', value: formatTime(guest.train_departure_time) });
+    }
+    if (guest.train_arrival_time) {
+      trainFields.push({ label: 'Arrival Time', value: formatTime(guest.train_arrival_time) });
+    }
+    if (trainFields.length > 0) {
+      processedModules['Train Booking Number'] = trainFields;
+    }
+
+    // Coach Information
+    const coachFields: any[] = [];
+    if (guest.coach_booking_number) {
+      coachFields.push({ label: 'Booking Number', value: guest.coach_booking_number });
+    }
+    if (guest.coach_station) {
+      coachFields.push({ label: 'Station', value: guest.coach_station });
+    }
+    if (guest.coach_departure_date) {
+      coachFields.push({ label: 'Departure Date', value: formatDate(guest.coach_departure_date) });
+    }
+    if (guest.coach_arrival_date) {
+      coachFields.push({ label: 'Arrival Date', value: formatDate(guest.coach_arrival_date) });
+    }
+    if (guest.coach_departure_time) {
+      coachFields.push({ label: 'Departure Time', value: formatTime(guest.coach_departure_time) });
+    }
+    if (guest.coach_arrival_time) {
+      coachFields.push({ label: 'Arrival Time', value: formatTime(guest.coach_arrival_time) });
+    }
+    if (coachFields.length > 0) {
+      processedModules['Coach Booking Number'] = coachFields;
+    }
+
+    // Event Reference
+    if (guest.event_reference) {
+      processedModules['Event Information'] = [
+        ...(processedModules['Event Information'] || []),
+        { label: 'Event Reference', value: guest.event_reference }
+      ];
+    }
+
+    // ID Upload information
+    if (guest.id_upload_url || guest.id_upload_filename) {
+      const idFields: any[] = [];
+      if (guest.id_upload_filename) {
+        idFields.push({ label: 'ID Document', value: guest.id_upload_filename });
       }
-    });
+      if (guest.id_upload_uploaded_at) {
+        idFields.push({ label: 'Uploaded At', value: formatDate(guest.id_upload_uploaded_at) });
+      }
+      if (idFields.length > 0) {
+        processedModules['Travel Credentials'] = [
+          ...(processedModules['Travel Credentials'] || []),
+          ...idFields
+        ];
+      }
+    }
 
     return processedModules;
   };
@@ -403,7 +544,9 @@ export default function GuestsProfile({ guest: propGuest }: GuestsProfileProps) 
   const qrValue = guest.id;
   
   // Process module values
-  const processedModules = processModuleValues(guest.module_values || null);
+  const processedModules = processModuleValues(guest);
+  console.log('[GuestsProfile] Processed modules:', processedModules);
+  console.log('[GuestsProfile] Number of processed module sections:', Object.keys(processedModules).length);
   
   // Merge event data with guest data
   const guestWithEventData = {
@@ -440,9 +583,14 @@ export default function GuestsProfile({ guest: propGuest }: GuestsProfileProps) 
             // Add module fields to the appropriate sections
             if (processedModules[section.title]) {
               sectionFields = [...sectionFields, ...processedModules[section.title]];
+              console.log(`[GuestsProfile] Added ${processedModules[section.title].length} module fields to section: ${section.title}`);
             }
             
-            if (sectionFields.length === 0) return null;
+            console.log(`[GuestsProfile] Section "${section.title}" has ${sectionFields.length} total fields`);
+            if (sectionFields.length === 0) {
+              console.log(`[GuestsProfile] Skipping empty section: ${section.title}`);
+              return null;
+            }
             return (
               <View key={section.title} style={{ marginBottom: 18 }}>
                 <View
@@ -489,6 +637,7 @@ export default function GuestsProfile({ guest: propGuest }: GuestsProfileProps) 
             );
           })}
         </View>
+        <Button title="Log Out" onPress={handleLogout} color="#ef4444" />
       </ScrollView>
     </View>
   );

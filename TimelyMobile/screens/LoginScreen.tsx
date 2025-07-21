@@ -10,6 +10,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   Dimensions,
+  TouchableWithoutFeedback,
+  Keyboard,
 } from 'react-native'
 import { signIn, signInAsGuest, guestLogin } from '../lib/auth'
 import { getGlassCardStyle } from '../lib/glassmorphic'
@@ -136,136 +138,143 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' }}>
-      <View style={{ width: 340 }}>
-        {/* TIMELY title */}
-        <Text style={{
-          color: '#fff',
-          fontSize: 32,
-          fontWeight: 'bold',
-          fontFamily: 'Poppins_700Bold',
-          textAlign: 'center',
-          letterSpacing: 8,
-          marginTop: 0,
-          marginBottom: 70,
-        }}>TIMELY</Text>
-        {/* Admin/Guest Tabs */}
-        <View style={{ flexDirection: 'row', width: '100%', marginBottom: 32 }}>
-          <TouchableOpacity
-            style={{
-              flex: 1,
-              backgroundColor: activeTab === 'admin' ? '#fff' : '#111',
-              borderTopLeftRadius: 8,
-              borderBottomLeftRadius: 8,
-              borderTopRightRadius: 0,
-              borderBottomRightRadius: 0,
-              alignItems: 'center',
-              justifyContent: 'center',
-              height: 44,
-              borderWidth: 1,
-              borderColor: '#222',
-            }}
-            onPress={() => setActiveTab('admin')}
-          >
+    <KeyboardAvoidingView 
+      style={{ flex: 1 }} 
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <View style={{ flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' }}>
+          <View style={{ width: 340 }}>
+            {/* TIMELY title */}
             <Text style={{
-              color: activeTab === 'admin' ? '#000' : '#fff',
-              fontWeight: '700',
+              color: '#fff',
+              fontSize: 32,
+              fontWeight: 'bold',
               fontFamily: 'Poppins_700Bold',
-              fontSize: 16,
-              letterSpacing: 1,
-            }}>Admin Login</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={{
-              flex: 1,
-              backgroundColor: activeTab === 'guest' ? '#fff' : '#111',
-              borderTopRightRadius: 8,
-              borderBottomRightRadius: 8,
-              borderTopLeftRadius: 0,
-              borderBottomLeftRadius: 0,
-              alignItems: 'center',
-              justifyContent: 'center',
-              height: 44,
-              borderWidth: 1,
-              borderColor: '#222',
-            }}
-            onPress={() => setActiveTab('guest')}
-          >
-            <Text style={{
-              color: activeTab === 'guest' ? '#000' : '#fff',
-              fontWeight: '700',
-              fontFamily: 'Poppins_700Bold',
-              fontSize: 16,
-              letterSpacing: 1,
-            }}>Guest Login</Text>
-          </TouchableOpacity>
+              textAlign: 'center',
+              letterSpacing: 8,
+              marginTop: 0,
+              marginBottom: 70,
+            }}>TIMELY</Text>
+            {/* Admin/Guest Tabs */}
+            <View style={{ flexDirection: 'row', width: '100%', marginBottom: 32 }}>
+              <TouchableOpacity
+                style={{
+                  flex: 1,
+                  backgroundColor: activeTab === 'admin' ? '#fff' : '#111',
+                  borderTopLeftRadius: 8,
+                  borderBottomLeftRadius: 8,
+                  borderTopRightRadius: 0,
+                  borderBottomRightRadius: 0,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: 44,
+                  borderWidth: 1,
+                  borderColor: '#222',
+                }}
+                onPress={() => setActiveTab('admin')}
+              >
+                <Text style={{
+                  color: activeTab === 'admin' ? '#000' : '#fff',
+                  fontWeight: '700',
+                  fontFamily: 'Poppins_700Bold',
+                  fontSize: 16,
+                  letterSpacing: 1,
+                }}>Admin Login</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{
+                  flex: 1,
+                  backgroundColor: activeTab === 'guest' ? '#fff' : '#111',
+                  borderTopRightRadius: 8,
+                  borderBottomRightRadius: 8,
+                  borderTopLeftRadius: 0,
+                  borderBottomLeftRadius: 0,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: 44,
+                  borderWidth: 1,
+                  borderColor: '#222',
+                }}
+                onPress={() => setActiveTab('guest')}
+              >
+                <Text style={{
+                  color: activeTab === 'guest' ? '#000' : '#fff',
+                  fontWeight: '700',
+                  fontFamily: 'Poppins_700Bold',
+                  fontSize: 16,
+                  letterSpacing: 1,
+                }}>Guest Login</Text>
+              </TouchableOpacity>
+            </View>
+            {/* Email field */}
+            <Text style={{ color: '#fff', fontSize: 16, marginBottom: 8 }}>Email</Text>
+            <TextInput
+              style={{
+                width: '100%',
+                height: 48,
+                backgroundColor: '#111',
+                color: '#fff',
+                borderRadius: 8,
+                paddingHorizontal: 12,
+                marginBottom: 20,
+                fontSize: 16,
+                borderWidth: 1,
+                borderColor: '#222',
+              }}
+              placeholder="example@xyz.com"
+              placeholderTextColor="#888"
+              value={activeTab === 'admin' ? adminEmail : guestEmail}
+              onChangeText={activeTab === 'admin' ? setAdminEmail : setGuestEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            {/* Password field */}
+            <Text style={{ color: '#fff', fontSize: 16, marginBottom: 8 }}>Password</Text>
+            <TextInput
+              style={{
+                width: '100%',
+                height: 48,
+                backgroundColor: '#111',
+                color: '#fff',
+                borderRadius: 8,
+                paddingHorizontal: 12,
+                marginBottom: 28,
+                fontSize: 16,
+                borderWidth: 1,
+                borderColor: '#222',
+              }}
+              placeholder="······"
+              placeholderTextColor="#888"
+              value={activeTab === 'admin' ? adminPassword : guestPassword}
+              onChangeText={activeTab === 'admin' ? setAdminPassword : setGuestPassword}
+              secureTextEntry
+            />
+            {/* Login button */}
+            <TouchableOpacity
+              style={{
+                width: '100%',
+                height: 48,
+                backgroundColor: '#fff',
+                borderRadius: 8,
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: 18,
+              }}
+              onPress={activeTab === 'admin' ? handleAdminLogin : handleGuestLogin}
+              disabled={loading}
+            >
+              <Text style={{ color: '#000', fontSize: 18, fontWeight: '700' }}>{loading ? 'Logging in...' : 'Login'}</Text>
+            </TouchableOpacity>
+            {/* Forgot password */}
+            <Text style={{ color: '#fff', fontSize: 15, textAlign: 'center', marginTop: 18 }}>
+              Forgot Password? <Text style={{ fontWeight: '700' }}>Contact your event host.</Text>
+            </Text>
+          </View>
         </View>
-        {/* Email field */}
-        <Text style={{ color: '#fff', fontSize: 16, marginBottom: 8 }}>Email</Text>
-        <TextInput
-          style={{
-            width: '100%',
-            height: 48,
-            backgroundColor: '#111',
-            color: '#fff',
-            borderRadius: 8,
-            paddingHorizontal: 12,
-            marginBottom: 20,
-            fontSize: 16,
-            borderWidth: 1,
-            borderColor: '#222',
-          }}
-          placeholder="example@xyz.com"
-          placeholderTextColor="#888"
-          value={activeTab === 'admin' ? adminEmail : guestEmail}
-          onChangeText={activeTab === 'admin' ? setAdminEmail : setGuestEmail}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-        {/* Password field */}
-        <Text style={{ color: '#fff', fontSize: 16, marginBottom: 8 }}>Password</Text>
-        <TextInput
-          style={{
-            width: '100%',
-            height: 48,
-            backgroundColor: '#111',
-            color: '#fff',
-            borderRadius: 8,
-            paddingHorizontal: 12,
-            marginBottom: 28,
-            fontSize: 16,
-            borderWidth: 1,
-            borderColor: '#222',
-          }}
-          placeholder="······"
-          placeholderTextColor="#888"
-          value={activeTab === 'admin' ? adminPassword : guestPassword}
-          onChangeText={activeTab === 'admin' ? setAdminPassword : setGuestPassword}
-          secureTextEntry
-        />
-        {/* Login button */}
-        <TouchableOpacity
-          style={{
-            width: '100%',
-            height: 48,
-            backgroundColor: '#fff',
-            borderRadius: 8,
-            alignItems: 'center',
-            justifyContent: 'center',
-            marginBottom: 18,
-          }}
-          onPress={activeTab === 'admin' ? handleAdminLogin : handleGuestLogin}
-          disabled={loading}
-        >
-          <Text style={{ color: '#000', fontSize: 18, fontWeight: '700' }}>{loading ? 'Logging in...' : 'Login'}</Text>
-        </TouchableOpacity>
-        {/* Forgot password */}
-        <Text style={{ color: '#fff', fontSize: 15, textAlign: 'center', marginTop: 18 }}>
-          Forgot Password? <Text style={{ fontWeight: '700' }}>Contact your event host.</Text>
-        </Text>
-      </View>
-    </View>
+      </TouchableWithoutFeedback>
+    </KeyboardAvoidingView>
   )
 }
 

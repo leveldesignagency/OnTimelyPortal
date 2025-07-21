@@ -158,13 +158,31 @@ const TimelinePreview = forwardRef(function TimelinePreview({
   eventId, 
   selectedDate = new Date() 
 }: TimelinePreviewProps, ref) {
-  console.log('TimelinePreview props:', { 
-    itineraries: itineraries?.length, 
-    isDark, 
-    eventId, 
-    selectedDate,
-    itinerariesData: itineraries
-  });
+  // Only log when itineraries actually change length (throttle logs)
+  const prevItinerariesLength = useRef<number>(itineraries?.length || 0);
+  useEffect(() => {
+    if (itineraries?.length !== prevItinerariesLength.current) {
+      console.log('TimelinePreview received itineraries:', itineraries);
+      prevItinerariesLength.current = itineraries?.length || 0;
+    }
+  }, [itineraries]);
+
+  // Only log props if eventId or selectedDate changes
+  const prevEventId = useRef<string | undefined>();
+  const prevSelectedDate = useRef<string | undefined>();
+  useEffect(() => {
+    if (eventId !== prevEventId.current || selectedDate?.toString() !== prevSelectedDate.current) {
+      console.log('TimelinePreview props:', { 
+        itineraries: itineraries?.length, 
+        isDark, 
+        eventId, 
+        selectedDate,
+        itinerariesData: itineraries
+      });
+      prevEventId.current = eventId;
+      prevSelectedDate.current = selectedDate?.toString();
+    }
+  }, [eventId, selectedDate, itineraries]);
 
   const [currentTime, setCurrentTime] = useState(new Date());
   const [selectedEventIndex, setSelectedEventIndex] = useState<number | null>(null);
@@ -175,11 +193,6 @@ const TimelinePreview = forwardRef(function TimelinePreview({
 
   // State for animated viewport center position (timelinePosition, 0-100)
   const [animatedViewportCenter, setAnimatedViewportCenter] = useState<number | null>(null);
-
-  // Debug logging
-  useEffect(() => {
-    console.log('TimelinePreview received itineraries:', itineraries);
-  }, [itineraries]);
 
   // Update current time every minute to simulate real-time
   useEffect(() => {
@@ -226,13 +239,16 @@ const TimelinePreview = forwardRef(function TimelinePreview({
       }
       
       const matches = itemDateString === targetDateString;
-      console.log('Date comparison:', { 
-        itemId: item.id, 
-        itemDate: item.date, 
-        itemDateString, 
-        targetDateString, 
-        matches 
-      });
+      // Only log date comparison if it doesn't match (for debugging)
+      if (!matches) {
+        console.log('Date comparison mismatch:', { 
+          itemId: item.id, 
+          itemDate: item.date, 
+          itemDateString, 
+          targetDateString, 
+          matches 
+        });
+      }
       return matches;
     });
 
@@ -283,8 +299,12 @@ const TimelinePreview = forwardRef(function TimelinePreview({
   const [surveyModules, setSurveyModules] = useState<any[]>([]);
   // --- Question Module State ---
   const [questionModules, setQuestionModules] = useState<QuestionModule[]>([]);
+  // --- Multiple Choice Module State ---
+  const [multipleChoiceModules, setMultipleChoiceModules] = useState<any[]>([]);
   // --- Feedback Module State ---
   const [feedbackModules, setFeedbackModules] = useState<any[]>([]);
+  // --- Photo/Video Module State ---
+  const [photoVideoModules, setPhotoVideoModules] = useState<any[]>([]);
 
   // Add refresh trigger state
   const [moduleRefreshTrigger, setModuleRefreshTrigger] = useState(0);
@@ -296,7 +316,9 @@ const TimelinePreview = forwardRef(function TimelinePreview({
       setQrModules([]);
       setSurveyModules([]);
       setQuestionModules([]);
+      setMultipleChoiceModules([]);
       setFeedbackModules([]);
+      setPhotoVideoModules([]);
       return;
     }
 
@@ -318,6 +340,7 @@ const TimelinePreview = forwardRef(function TimelinePreview({
       const qrData = data?.filter((m: any) => m.module_type === 'qrcode').map((m: any) => ({
         id: m.id,
         time: m.time,
+        date: m.date,
         label: m.label || m.title,
         link: m.link,
         file: m.file,
@@ -327,6 +350,7 @@ const TimelinePreview = forwardRef(function TimelinePreview({
       const surveyData = data?.filter((m: any) => m.module_type === 'survey').map((m: any) => ({
         id: m.id,
         time: m.time,
+        date: m.date,
         title: m.title,
         survey_data: m.survey_data,
         type: 'survey'
@@ -335,37 +359,64 @@ const TimelinePreview = forwardRef(function TimelinePreview({
       const questionData = data?.filter((m: any) => m.module_type === 'question').map((m: any) => ({
         id: m.id,
         time: m.time,
+        date: m.date,
         question: m.question || m.title,
         type: 'question',
+        createdAt: m.created_at
+      })) || [];
+
+      const multipleChoiceData = data?.filter((m: any) => m.module_type === 'multiple_choice').map((m: any) => ({
+        id: m.id,
+        time: m.time,
+        date: m.date,
+        question: m.question || m.title,
+        survey_data: m.survey_data,
+        type: 'multiple_choice',
         createdAt: m.created_at
       })) || [];
 
       const feedbackData = data?.filter((m: any) => m.module_type === 'feedback').map((m: any) => ({
         id: m.id,
         time: m.time,
+        date: m.date,
         question: m.question || m.title,
         feedback_data: m.feedback_data,
         type: 'feedback'
+      })) || [];
+
+      const photoVideoData = data?.filter((m: any) => m.module_type === 'photo_video').map((m: any) => ({
+        id: m.id,
+        time: m.time,
+        date: m.date,
+        title: m.title,
+        type: 'photo_video',
+        createdAt: m.created_at
       })) || [];
 
       console.log('Module type counts:', {
         qr: qrData.length,
         survey: surveyData.length,
         question: questionData.length,
+        multipleChoice: multipleChoiceData.length,
         feedback: feedbackData.length,
+        photoVideo: photoVideoData.length,
         questionData,
       });
 
       setQrModules(qrData);
       setSurveyModules(surveyData);
       setQuestionModules(questionData);
+      setMultipleChoiceModules(multipleChoiceData);
       setFeedbackModules(feedbackData);
+      setPhotoVideoModules(photoVideoData);
 
       console.log('Modules loaded successfully:', {
         qr: qrData.length,
         survey: surveyData.length,
         question: questionData.length,
-        feedback: feedbackData.length
+        multipleChoice: multipleChoiceData.length,
+        feedback: feedbackData.length,
+        photoVideo: photoVideoData.length
       });
 
     } catch (error) {
@@ -393,22 +444,32 @@ const TimelinePreview = forwardRef(function TimelinePreview({
     const targetDate = selectedDate || new Date();
     const targetDateString = targetDate.toISOString().split('T')[0]; // YYYY-MM-DD format
     
+    console.log('[TimelinePreview] Merging modules for date:', targetDateString);
+    console.log('[TimelinePreview] Available modules:', {
+      qr: qrModules.length,
+      survey: surveyModules.length,
+      question: questionModules.length,
+      multipleChoice: multipleChoiceModules.length,
+      feedback: feedbackModules.length,
+      photoVideo: photoVideoModules.length
+    });
+    
     const base = [...processedItineraries];
     
     // Add QR modules for the selected date
     qrModules.forEach((q: any, idx: number) => {
-      // Use the actual date from the module
-      const moduleDate = q.date ? new Date(q.date) : targetDate;
-      const moduleDateString = moduleDate.toISOString().split('T')[0];
-      
-      if (moduleDateString === targetDateString) {
+      // Convert date to string for comparison (handle both DATE and string types)
+      const moduleDate = typeof q.date === 'string' ? q.date : q.date?.toISOString()?.split('T')[0];
+      console.log('[TimelinePreview] Checking QR module:', q.title, 'date:', moduleDate, 'target:', targetDateString, 'match:', moduleDate === targetDateString);
+      // Only add modules that match the selected date
+      if (moduleDate === targetDateString) {
         const [h, m] = q.time.split(':').map(Number);
         const dateTime = new Date(targetDate);
         dateTime.setHours(h, m, 0, 0);
         base.push({
           id: `qrcode-${idx}`,
           title: q.label || 'QR Code',
-          date: targetDate.toISOString().split('T')[0],
+          date: q.date,
           start_time: q.time,
           end_time: q.time,
           dateTime: dateTime,
@@ -424,18 +485,17 @@ const TimelinePreview = forwardRef(function TimelinePreview({
     
     // Add Survey modules for the selected date
     surveyModules.forEach((s: any, idx: number) => {
-      // Use the actual date from the module
-      const moduleDate = s.date ? new Date(s.date) : targetDate;
-      const moduleDateString = moduleDate.toISOString().split('T')[0];
-      
-      if (moduleDateString === targetDateString) {
+      // Convert date to string for comparison (handle both DATE and string types)
+      const moduleDate = typeof s.date === 'string' ? s.date : s.date?.toISOString()?.split('T')[0];
+      // Only add modules that match the selected date
+      if (moduleDate === targetDateString) {
         const [h, m] = s.time.split(':').map(Number);
         const dateTime = new Date(targetDate);
         dateTime.setHours(h, m, 0, 0);
         base.push({
           id: `survey-${idx}`,
           title: s.title || 'Survey',
-          date: targetDate.toISOString().split('T')[0],
+          date: s.date,
           start_time: s.time,
           end_time: s.time,
           dateTime: dateTime,
@@ -450,11 +510,11 @@ const TimelinePreview = forwardRef(function TimelinePreview({
     
     // Add Question modules for the selected date
     questionModules.forEach((q: any, idx: number) => {
-      // Use the actual date from the module
-      const moduleDate = q.date ? new Date(q.date) : targetDate;
-      const moduleDateString = moduleDate.toISOString().split('T')[0];
-      
-      if (moduleDateString === targetDateString) {
+      // Convert date to string for comparison (handle both DATE and string types)
+      const moduleDate = typeof q.date === 'string' ? q.date : q.date?.toISOString()?.split('T')[0];
+      console.log('[TimelinePreview] Checking Question module:', q.question, 'date:', moduleDate, 'target:', targetDateString, 'match:', moduleDate === targetDateString);
+      // Only add modules that match the selected date
+      if (moduleDate === targetDateString) {
         if (!base.some(e => (e as any).timestamp && formatTime(e.start_time) === q.time && e.title === q.question)) {
           const [h, m] = q.time.split(':').map(Number);
           const dateTime = new Date(targetDate);
@@ -462,7 +522,7 @@ const TimelinePreview = forwardRef(function TimelinePreview({
           base.push({
             id: `question-${idx}`,
             title: q.question,
-            date: targetDate.toISOString().split('T')[0],
+            date: q.date,
             start_time: q.time,
             end_time: q.time,
             dateTime: dateTime,
@@ -475,20 +535,45 @@ const TimelinePreview = forwardRef(function TimelinePreview({
       }
     });
     
+    // Add Multiple Choice modules for the selected date
+    multipleChoiceModules.forEach((q: any, idx: number) => {
+      // Convert date to string for comparison (handle both DATE and string types)
+      const moduleDate = typeof q.date === 'string' ? q.date : q.date?.toISOString()?.split('T')[0];
+      // Only add modules that match the selected date
+      if (moduleDate === targetDateString) {
+        if (!base.some(e => (e as any).timestamp && formatTime(e.start_time) === q.time && e.title === q.question)) {
+          const [h, m] = q.time.split(':').map(Number);
+          const dateTime = new Date(targetDate);
+          dateTime.setHours(h, m, 0, 0);
+          base.push({
+            id: `multiple-choice-${idx}`,
+            title: q.question,
+            date: q.date,
+            start_time: q.time,
+            end_time: q.time,
+            dateTime: dateTime,
+            endDateTime: dateTime,
+            timestamp: dateTime.getTime(),
+            endTimestamp: dateTime.getTime(),
+            module: 'multiple_choice',
+          } as any);
+        }
+      }
+    });
+    
     // Add Feedback modules for the selected date
     feedbackModules.forEach((f: any, idx: number) => {
-      // Use the actual date from the module
-      const moduleDate = f.date ? new Date(f.date) : targetDate;
-      const moduleDateString = moduleDate.toISOString().split('T')[0];
-      
-      if (moduleDateString === targetDateString) {
+      // Convert date to string for comparison (handle both DATE and string types)
+      const moduleDate = typeof f.date === 'string' ? f.date : f.date?.toISOString()?.split('T')[0];
+      // Only add modules that match the selected date
+      if (moduleDate === targetDateString) {
         const [h, m] = f.time.split(':').map(Number);
         const dateTime = new Date(targetDate);
         dateTime.setHours(h, m, 0, 0);
         base.push({
           id: `feedback-${idx}`,
           title: f.question || 'Feedback',
-          date: targetDate.toISOString().split('T')[0],
+          date: f.date,
           start_time: f.time,
           end_time: f.time,
           dateTime: dateTime,
@@ -501,9 +586,36 @@ const TimelinePreview = forwardRef(function TimelinePreview({
       }
     });
     
+    // Add Photo/Video modules for the selected date
+    photoVideoModules.forEach((p: any, idx: number) => {
+      // Convert date to string for comparison (handle both DATE and string types)
+      const moduleDate = typeof p.date === 'string' ? p.date : p.date?.toISOString()?.split('T')[0];
+      // Only add modules that match the selected date
+      if (moduleDate === targetDateString) {
+        const [h, m] = p.time.split(':').map(Number);
+        const dateTime = new Date(targetDate);
+        dateTime.setHours(h, m, 0, 0);
+        base.push({
+          id: `photo-video-${idx}`,
+          title: p.title || 'Photo/Video',
+          date: p.date,
+          start_time: p.time,
+          end_time: p.time,
+          dateTime: dateTime,
+          endDateTime: dateTime,
+          timestamp: dateTime.getTime(),
+          endTimestamp: dateTime.getTime(),
+          module: 'photo_video',
+          photoVideo: p,
+        } as any);
+      }
+    });
+    
     console.log('Merged timeline events:', base);
+    console.log('[TimelinePreview] Final merged events count:', base.length);
+    console.log('[TimelinePreview] Events with modules:', base.filter(e => (e as any).module).length);
     return base.sort((a, b) => (a as any).timestamp - (b as any).timestamp);
-  }, [processedItineraries, qrModules, surveyModules, questionModules, feedbackModules, selectedDate]);
+  }, [processedItineraries, qrModules, surveyModules, questionModules, multipleChoiceModules, feedbackModules, photoVideoModules, selectedDate]);
 
   // For timeline display, show events in a reasonable time window
   const visibleEvents = useMemo(() => {
@@ -754,8 +866,8 @@ const TimelinePreview = forwardRef(function TimelinePreview({
     } else if (event.module === 'feedback') {
       setSelectedFeedbackModule(event);
       setShowFeedbackPopup(true);
-    } else if (event.module === 'question') {
-      // Question modules show the current behavior
+    } else if (event.module === 'question' || event.module === 'multiple_choice' || event.module === 'photo_video') {
+      // Question, Multiple Choice, and Photo/Video modules show the current behavior
       triggerCardAnimation();
     } else {
       // Regular itinerary items
@@ -767,18 +879,17 @@ const TimelinePreview = forwardRef(function TimelinePreview({
     setAnimatingCard(true);
     setShowEventCard(true);
     setTimeout(() => setAnimatingCard(false), 300);
-    setTimeout(() => setShowEventCard(false), 4000);
+    // Removed auto-close timer - modal will stay open until manually closed
   };
 
   // Format date for display
   const formatDate = (dateString: string) => {
     if (!dateString) return '';
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-      weekday: 'short', 
-      month: 'short', 
-      day: 'numeric' 
-    });
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
   };
 
   // Determine event status
@@ -889,6 +1000,18 @@ const TimelinePreview = forwardRef(function TimelinePreview({
       });
     });
     
+    // Add Multiple Choice modules
+    multipleChoiceModules.forEach((module, index) => {
+      modules.push({
+        id: `multiple-choice-${index}`,
+        type: 'Multiple Choice',
+        title: module.question,
+        time: module.time,
+        data: module,
+        moduleType: 'multiple_choice'
+      });
+    });
+    
     // Add Feedback modules
     feedbackModules.forEach((module, index) => {
       modules.push({
@@ -901,8 +1024,20 @@ const TimelinePreview = forwardRef(function TimelinePreview({
       });
     });
     
+    // Add Photo/Video modules
+    photoVideoModules.forEach((module, index) => {
+      modules.push({
+        id: `photo-video-${index}`,
+        type: 'Photo/Video',
+        title: module.title,
+        time: module.time,
+        data: module,
+        moduleType: 'photo_video'
+      });
+    });
+    
     return modules.sort((a, b) => a.time.localeCompare(b.time));
-  }, [qrModules, surveyModules, questionModules, feedbackModules]);
+  }, [qrModules, surveyModules, questionModules, multipleChoiceModules, feedbackModules, photoVideoModules]);
 
   // Toggle module selection for deletion
   const toggleModuleSelection = (moduleId: string) => {
@@ -965,6 +1100,8 @@ const TimelinePreview = forwardRef(function TimelinePreview({
   // When finding activeQuestion, type it as QuestionModule | undefined
   const nowStr = `${currentTime.getHours().toString().padStart(2, '0')}:${currentTime.getMinutes().toString().padStart(2, '0')}`;
   const activeQuestion: QuestionModule | undefined = questionModules.find((q) => q.time === nowStr);
+  const activeMultipleChoice: any = multipleChoiceModules.find((q) => q.time === nowStr);
+  const activePhotoVideo: any = photoVideoModules.find((p) => p.time === nowStr);
 
   // Delete handler for question modules
   const handleDeleteQuestionModule = async (q: any) => {
@@ -1266,41 +1403,11 @@ const TimelinePreview = forwardRef(function TimelinePreview({
           animation: animatingCard ? 'milestoneExpand 0.3s ease-out' : 'eventCardSlideIn 0.3s ease-out',
           transformOrigin: 'center center',
         }}>
-          {/* Close button */}
-          <button
-            onClick={() => setShowEventCard(false)}
-            style={{
-              position: 'absolute',
-              top: 8,
-              right: 8,
-              background: 'none',
-              border: 'none',
-              color: isDark ? '#888' : '#666',
-              fontSize: 18,
-              cursor: 'pointer',
-              width: 36,
-              height: 36,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderRadius: 12,
-              transition: 'all 0.2s ease',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'none';
-            }}
-          >
-            ×
-          </button>
-
-          {/* Event header */}
+          {/* Event header - perfectly centered */}
           <div style={{
             textAlign: 'center',
             marginBottom: 16,
-            paddingRight: 20,
+            width: '100%',
           }}>
             <div style={{
               fontSize: 18,
@@ -1322,10 +1429,178 @@ const TimelinePreview = forwardRef(function TimelinePreview({
             <div style={{
               fontSize: 14,
               color: isDark ? '#aaa' : '#555',
+              marginBottom: 4,
             }}>
               {formatTime(selectedEvent.start_time)} - {formatTime(selectedEvent.end_time)}
             </div>
           </div>
+
+          {/* Module-specific details */}
+          {selectedEvent.module && (
+            <div style={{ marginBottom: 12 }}>
+              {selectedEvent.module === 'multiple_choice' && (
+                <div style={{
+                  padding: 12,
+                  background: isDark 
+                    ? 'rgba(255, 255, 255, 0.05)' 
+                    : 'rgba(0, 0, 0, 0.05)',
+                  borderRadius: 8,
+                  border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
+                }}>
+                  {/* Render Multiple Choice options as pills, no label or emoji */}
+                  {(() => {
+                    const moduleData = multipleChoiceModules.find(m => 
+                      m.question === selectedEvent.title && m.time === selectedEvent.start_time
+                    );
+                    const options = moduleData?.survey_data?.options || [];
+                    return (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        {options.map((option: string, idx: number) => (
+                          <div key={idx} style={{
+                            padding: '8px 12px',
+                            background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
+                            border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
+                            borderRadius: 4,
+                            color: isDark ? '#fff' : '#222',
+                            fontSize: 14,
+                            fontWeight: 400,
+                          }}>
+                            {option}
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {selectedEvent.module === 'qrcode' && (
+                <div style={{
+                  padding: 12,
+                  background: isDark 
+                    ? 'rgba(255, 255, 255, 0.05)' 
+                    : 'rgba(0, 0, 0, 0.05)',
+                  borderRadius: 8,
+                  border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
+                }}>
+                  <div style={{
+                    fontSize: 11,
+                    color: isDark ? '#888' : '#666',
+                    marginBottom: 8,
+                    textTransform: 'uppercase',
+                    letterSpacing: 0.5,
+                    fontWeight: 600,
+                  }}>
+                    QR Code Details
+                  </div>
+                  {(() => {
+                    const moduleData = qrModules.find(m => 
+                      (m.label || m.title) === selectedEvent.title && m.time === selectedEvent.start_time
+                    );
+                    return (
+                      <div style={{ fontSize: 12, color: isDark ? '#ccc' : '#555' }}>
+                        {moduleData?.link && (
+                          <div style={{ marginBottom: 4 }}>
+                            <strong>Link:</strong> {moduleData.link}
+                          </div>
+                        )}
+                        {moduleData?.file && (
+                          <div>
+                            <strong>File:</strong> {moduleData.file.split('/').pop()}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {selectedEvent.module === 'photo_video' && (
+                <div style={{
+                  padding: 12,
+                  background: isDark 
+                    ? 'rgba(255, 255, 255, 0.05)' 
+                    : 'rgba(0, 0, 0, 0.05)',
+                  borderRadius: 8,
+                  border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
+                }}>
+                  <div style={{
+                    fontSize: 11,
+                    color: isDark ? '#888' : '#666',
+                    marginBottom: 8,
+                    textTransform: 'uppercase',
+                    letterSpacing: 0.5,
+                    fontWeight: 600,
+                  }}>
+                    Photo/Video Prompt
+                  </div>
+                  <div style={{
+                    fontSize: 12,
+                    color: isDark ? '#ccc' : '#555',
+                    fontStyle: 'italic',
+                  }}>
+                    "{selectedEvent.title}"
+                  </div>
+                </div>
+              )}
+
+              {selectedEvent.module === 'feedback' && (
+                <div style={{
+                  padding: 12,
+                  background: isDark 
+                    ? 'rgba(255, 255, 255, 0.05)' 
+                    : 'rgba(0, 0, 0, 0.05)',
+                  borderRadius: 8,
+                  border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
+                }}>
+                  <div style={{
+                    fontSize: 11,
+                    color: isDark ? '#888' : '#666',
+                    marginBottom: 8,
+                    textTransform: 'uppercase',
+                    letterSpacing: 0.5,
+                    fontWeight: 600,
+                  }}>
+                    Feedback Request
+                  </div>
+                  <div style={{
+                    fontSize: 12,
+                    color: isDark ? '#ccc' : '#555',
+                  }}>
+                    {selectedEvent.title}
+                  </div>
+                </div>
+              )}
+
+              {selectedEvent.module === 'survey' && (
+                <div style={{
+                  padding: 12,
+                  background: isDark 
+                    ? 'rgba(255, 255, 255, 0.05)' 
+                    : 'rgba(0, 0, 0, 0.05)',
+                  borderRadius: 8,
+                  border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
+                }}>
+                  <div style={{
+                    fontSize: 11,
+                    color: isDark ? '#888' : '#666',
+                    marginBottom: 8,
+                    textTransform: 'uppercase',
+                    letterSpacing: 0.5,
+                    fontWeight: 600,
+                  }}>
+                    Survey
+                  </div>
+                  <div style={{
+                    fontSize: 12,
+                    color: isDark ? '#ccc' : '#555',
+                  }}>
+                    {selectedEvent.title}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Event details */}
           <div style={{ marginBottom: 12 }}>
@@ -1417,33 +1692,35 @@ const TimelinePreview = forwardRef(function TimelinePreview({
             </div>
           </div>
 
-          {isQuestionEvent && (
+          {/* Close button - centered at bottom */}
+          <div style={{
+            marginTop: 20,
+            textAlign: 'center',
+          }}>
             <button
+              onClick={() => setShowEventCard(false)}
               style={{
-                marginTop: 14,
-                padding: '8px 18px',
+                padding: '10px 24px',
                 borderRadius: 12,
                 background: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(36,36,40,0.10)',
                 color: isDark ? '#fff' : '#222',
-                fontWeight: 700,
+                fontWeight: 600,
                 fontSize: 14,
-                border: '1.5px solid #fff',
+                border: '1.5px solid rgba(255,255,255,0.3)',
                 cursor: 'pointer',
-                transition: 'background 0.2s',
+                transition: 'all 0.2s ease',
+                minWidth: 100,
               }}
-              onClick={() => {
-                // TODO: SUPABASE - Replace this localStorage logic with a DELETE call to the supabase table 'timeline_modules' where time and question match
-                const modules = JSON.parse(localStorage.getItem('timelineModules') || '[]');
-                const updated = modules.filter((m: any) => !(m.type === 'question' && m.time === selectedEvent.start_time && m.question === selectedEvent.title));
-                localStorage.setItem('timelineModules', JSON.stringify(updated));
-                setShowEventCard(false);
-                setShowDeleteSuccess(true);
-                setTimeout(() => setShowDeleteSuccess(false), 2000);
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.15)' : 'rgba(36,36,40,0.15)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.10)' : 'rgba(36,36,40,0.10)';
               }}
             >
-              Delete
+              Close
             </button>
-          )}
+          </div>
         </div>
       )}
 
@@ -1488,50 +1765,6 @@ const TimelinePreview = forwardRef(function TimelinePreview({
           }
         }
       `}</style>
-
-      {/* Active question popup */}
-      {activeQuestion && typeof activeQuestion === 'object' && 'question' in activeQuestion && (
-        <div style={{
-          position: 'absolute',
-          left: '50%',
-          top: '50%',
-          transform: 'translate(-50%, -50%)',
-          zIndex: 4000,
-          background: isDark ? 'rgba(36,36,40,0.92)' : 'rgba(255,255,255,0.92)',
-          borderRadius: 32,
-          boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.35)' : '0 8px 32px rgba(0,0,0,0.10)',
-          border: isDark ? '1.5px solid rgba(255,255,255,0.10)' : '1.5px solid rgba(0,0,0,0.08)',
-          backdropFilter: 'blur(16px)',
-          padding: '48px 40px 40px 40px',
-          minWidth: 420,
-          maxWidth: 520,
-          width: '95vw',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-        }}>
-          <div style={{ fontWeight: 800, fontSize: 26, marginBottom: 28, color: isDark ? '#fff' : '#222', letterSpacing: 0.2, textAlign: 'center' }}>
-            {activeQuestion.question}
-          </div>
-          <button
-            style={{
-              marginTop: 12,
-              padding: '12px 32px',
-              borderRadius: 14,
-              background: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(36,36,40,0.10)',
-              color: isDark ? '#fff' : '#222',
-              fontWeight: 700,
-              fontSize: 16,
-              border: '1.5px solid #fff',
-              cursor: 'pointer',
-              transition: 'background 0.2s',
-            }}
-            onClick={() => handleDeleteQuestionModule(activeQuestion)}
-          >
-            Delete
-          </button>
-        </div>
-      )}
 
       {/* Map popup */}
       {showMapPopup && (

@@ -8,7 +8,9 @@ import FeedbackGuestSelectionModal from '../components/FeedbackGuestSelectionMod
 import MultipleChoiceModuleModal from '../components/MultipleChoiceModuleModal';
 import PhotoVideoModuleModal from '../components/PhotoVideoModuleModal';
 import QuestionModal from '../components/QuestionModuleModal';
+import ModuleManagementModal from '../components/ModuleManagementModal';
 import { createClient } from '@supabase/supabase-js';
+import { getCurrentUser } from '../lib/auth';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
 const SERVICE_ROLE_KEY = import.meta.env.VITE_SERVICE_ROLE_KEY || '';
@@ -107,13 +109,22 @@ export default function EventPortalManagementPage() {
   const [confirmationMessage, setConfirmationMessage] = useState('');
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [feedbackModalTime, setFeedbackModalTime] = useState<Date>(new Date());
-  const [feedbackStep2, setFeedbackStep2] = useState<{ title: string; defaultRating: number; time: Date } | null>(null);
+  const [feedbackStep2, setFeedbackStep2] = useState<{ title: string; defaultRating: number; time: string; eventId: string; currentUser: { id: string } } | null>(null);
   const [showMultipleChoiceModal, setShowMultipleChoiceModal] = useState(false);
   const [showPhotoVideoModal, setShowPhotoVideoModal] = useState(false);
   // Add state for toast
   const [showCopyToast, setShowCopyToast] = useState(false);
   const [selectedGuestsForGenerate, setSelectedGuestsForGenerate] = useState<string[]>([]);
   const [customModal, setCustomModal] = useState<{ title: string; message: string; onClose?: () => void } | null>(null);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [showModuleManagement, setShowModuleManagement] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const user = await getCurrentUser();
+      setCurrentUser(user);
+    })();
+  }, []);
 
   useEffect(() => {
     if (!eventId) return;
@@ -1814,7 +1825,7 @@ export default function EventPortalManagementPage() {
                 width: 140,
                 textAlign: 'center',
               }}
-              onClick={() => alert('View Modules clicked!')}
+              onClick={() => setShowModuleManagement(true)}
             >
               View Modules
             </button>
@@ -1883,9 +1894,11 @@ export default function EventPortalManagementPage() {
             onClose={() => setShowQuestionModal(false)}
             onNext={(data: any) => {
               setShowQuestionModal(false);
-              // TODO: handle saving the question (call supabase, refresh timeline, etc.)
+              // handle post-save logic
             }}
             guests={guests}
+            eventId={eventId}
+            currentUser={currentUser}
           />
         )}
 
@@ -1918,13 +1931,31 @@ export default function EventPortalManagementPage() {
             open={!!feedbackStep2}
             onClose={() => setFeedbackStep2(null)}
             guests={guests}
-            onSave={(selectedGuests: string[]) => {
-              // --- SUPABASE: Insert feedback module with guest assignments
-              // Table: timeline_modules, Fields: event_id, module_type: 'feedback', time, title, default_rating, assigned_guests
-              // Use Supabase function 'add_timeline_module'
-              // TODO: Implement Supabase save logic here
+            onSave={async (selectedGuests: string[]) => {
+              if (!feedbackStep2) return;
+              // 1. Create the module (e.g., feedback)
+              const { data: module, error: moduleError } = await supabase
+                .from('timeline_modules')
+                .insert({
+                  event_id: eventId,
+                  module_type: 'feedback',
+                  ...feedbackStep2
+                })
+                .select()
+                .single();
+              if (moduleError) {
+                alert('Failed to create module: ' + moduleError.message);
+                return;
+              }
+              // 2. Assign to guests
+              await Promise.all(selectedGuests.map(guestId =>
+                supabase.from('timeline_module_guests').insert({
+                  module_id: module.id,
+                  guest_id: guestId
+                })
+              ));
               setFeedbackStep2(null);
-              // TODO: refresh modules after save
+              // Optionally refresh modules here
             }}
             moduleData={feedbackStep2}
           />
@@ -1934,15 +1965,13 @@ export default function EventPortalManagementPage() {
           <FeedbackModuleModal
             open={showFeedbackModal}
             onClose={() => setShowFeedbackModal(false)}
-            onNext={(data: { title: string; defaultRating: number }) => {
+            onNext={(data: any) => {
               setShowFeedbackModal(false);
-              setFeedbackStep2({
-                title: data.title,
-                defaultRating: data.defaultRating,
-                time: feedbackModalTime,
-              });
+              // Module is already saved in the modal
             }}
             guests={guests}
+            eventId={eventId}
+            currentUser={currentUser}
           />
         )}
 
@@ -1955,6 +1984,8 @@ export default function EventPortalManagementPage() {
               // TODO: handle step 2 for multiple choice
             }}
             guests={guests}
+            eventId={eventId}
+            currentUser={currentUser}
           />
         )}
 
@@ -1964,11 +1995,21 @@ export default function EventPortalManagementPage() {
             onClose={() => setShowPhotoVideoModal(false)}
             onNext={(data: any) => {
               setShowPhotoVideoModal(false);
-              // TODO: handle step 2 for photo/video
+              // Module is already saved in the modal
             }}
             guests={guests}
+            eventId={eventId}
+            currentUser={currentUser}
           />
         )}
+
+        {/* Module Management Modal */}
+        <ModuleManagementModal
+          open={showModuleManagement}
+          onClose={() => setShowModuleManagement(false)}
+          eventId={eventId}
+          isDark={isDark}
+        />
 
         {/* 2. Timeline Controller: draggable container for date picker and navigation arrows */}
         {/* Find the date picker and navigation arrows, and wrap them in a new absolutely positioned, draggable container called Timeline Controller. Do not change their logic or handlers. */}

@@ -126,7 +126,7 @@ type ActivityModule = {
 };
 
 type ItineraryItem = {
-  id: string;
+  id?: string;
   title: string;
   arrivalTime: string;
   startTime: string;
@@ -186,7 +186,7 @@ export default function CreateItinerary() {
   const [expandedItemIndex, setExpandedItemIndex] = useState<number | null>(null);
   const [editingItemIndex, setEditingItemIndex] = useState<number | null>(null);
   const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
-  const [isModuleSidebarCollapsed, setIsModuleSidebarCollapsed] = useState(false);
+  const [isModuleSidebarCollapsed, setIsModuleSidebarCollapsed] = useState(true);
   const [isEditMode, setIsEditMode] = useState(false);
   const [originalItinerary, setOriginalItinerary] = useState<Itinerary | null>(null);
   const [groupId, setGroupId] = useState<string | null>(null);
@@ -514,47 +514,64 @@ export default function CreateItinerary() {
       console.log('🔄 Starting save process for published itineraries...');
       console.log('📝 Items to save:', items);
       for (const item of items) {
+        // Validate required fields
+        if (!eventDetails.id || !currentUser.company_id || !currentUser.id || !item.title) {
+          alert('Missing required fields for itinerary.');
+          return;
+        }
+        // Date format validation
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(item.date)) {
+          alert(`Date must be in YYYY-MM-DD format. Found: ${item.date}`);
+          return;
+        }
+        // --- FIX: Remove string id before saving ---
+        let safeId = item.id;
+        if (typeof safeId === 'string' && (safeId.startsWith('item_') || isNaN(Number(safeId)))) {
+          safeId = undefined;
+        }
         const itineraryData = {
           event_id: eventDetails.id,
-          company_id: currentUser.company_id || '',
-          created_by: currentUser.id || '',
-          title: item.title || 'Untitled Itinerary',
+          company_id: currentUser.company_id,
+          created_by: currentUser.id,
+          title: item.title,
           description: item.details || '',
-          date: item.date || '',
-          arrival_time: item.arrivalTime || '',
-          start_time: item.startTime || '',
-          end_time: item.endTime || '',
-          location: item.location || '',
-          document_file_name: item.moduleValues?.document || '',
-          qrcode_url: item.moduleValues?.qrcode?.url || '',
-          qrcode_image: item.moduleValues?.qrcode?.image || '',
-          contact_name: item.moduleValues?.contact?.name || '',
-          contact_country_code: item.moduleValues?.contact?.countryCode || '',
-          contact_phone: item.moduleValues?.contact?.phone || '',
-          contact_email: item.moduleValues?.contact?.email || '',
+          date: item.date && item.date.trim() ? item.date : undefined,
+          arrival_time: item.arrivalTime || undefined,
+          start_time: item.startTime || undefined,
+          end_time: item.endTime || undefined,
+          location: item.location || undefined,
+          document_file_name: item.moduleValues?.document || undefined,
+          qrcode_url: item.moduleValues?.qrcode?.url || undefined,
+          qrcode_image: item.moduleValues?.qrcode?.image || undefined,
+          contact_name: item.moduleValues?.contact?.name || undefined,
+          contact_country_code: item.moduleValues?.contact?.countryCode || undefined,
+          contact_phone: item.moduleValues?.contact?.phone || undefined,
+          contact_email: item.moduleValues?.contact?.email || undefined,
           notification_times: item.moduleValues?.notifications || [],
           group_id: groupId || undefined,
-          group_name: groupName,
+          group_name: groupName || undefined,
           content: { originalItem: item },
           modules: item.modules || {},
           module_values: item.moduleValues || {},
           is_draft: false
         };
-        // Always treat as published: update if id exists, add if not
-        if (item.id) {
+        // Always treat as published: update if id exists and is a number, add if not
+        if (safeId && !isNaN(Number(safeId))) {
           try {
-            const result = await updateItinerary(String(item.id), itineraryData);
+            const result = await updateItinerary(String(safeId), itineraryData);
             console.log('✅ Update successful:', result);
           } catch (updateError) {
             console.error('❌ Update failed:', updateError);
             throw updateError;
           }
         } else {
+          // Log the data being sent
+          console.log('[handleSaveItinerary] About to insert:', itineraryData);
           try {
             const result = await addItinerary(itineraryData);
-            console.log('✅ Add successful:', result);
+            console.log('[handleSaveItinerary] Insert result:', result);
           } catch (addError) {
-            console.error('❌ Add failed:', addError);
+            console.error('[handleSaveItinerary] Insert error:', addError);
             throw addError;
           }
         }
@@ -576,7 +593,7 @@ export default function CreateItinerary() {
   const handleDownloadCSVTemplate = () => {
     // Basic form fields
     const basicHeaders = [
-      'Title', 'Arrival Time', 'Start Time', 'End Time', 'Location', 'Description', 'Date', 'Group ID', 'Group Name'
+      'Title', 'Arrival Time', 'Start Time', 'End Time', 'Location', 'Description', 'Date (YYYY-MM-DD)', 'Group ID', 'Group Name'
     ];
     
     // Detailed module-specific columns
@@ -618,14 +635,22 @@ export default function CreateItinerary() {
 
           const headers = lines[0].split(',').map(h => h.trim());
           const requiredHeaders = ['Title'];
+          const hasDateHeader = headers.includes('Date') || headers.includes('Date (YYYY-MM-DD)');
+          if (!hasDateHeader) {
+            return reject(new Error('CSV is missing required header: Date or Date (YYYY-MM-DD)'));
+          }
           for (const requiredHeader of requiredHeaders) {
             if (!headers.includes(requiredHeader)) {
               return reject(new Error(`CSV is missing required header: ${requiredHeader}`));
             }
           }
 
+          const dateHeader = headers.includes('Date (YYYY-MM-DD)') ? 'Date (YYYY-MM-DD)' : 'Date';
+
           const parsedData = lines.slice(1).map((line, rowIndex) => {
             const values = line.split(',').map(v => v.trim());
+            // Skip empty rows
+            if (values.every(v => !v)) return null;
             const entry: any = {
               modules: {},
               moduleValues: {}
@@ -642,7 +667,10 @@ export default function CreateItinerary() {
                 case 'End Time': entry.endTime = value; break;
                 case 'Location': entry.location = value; break;
                 case 'Description': entry.details = value; break;
-                case 'Date': entry.date = value; break;
+                case 'Date':
+                case 'Date (YYYY-MM-DD)':
+                  entry.date = toISODate(value);
+                  break;
                 case 'Group ID': entry.group_id = value; break;
                 case 'Group Name': entry.group_name = value; break;
                 
@@ -727,11 +755,12 @@ export default function CreateItinerary() {
               }
             });
             
-            if (!entry.title || !entry.startTime || !entry.endTime || !entry.date) {
-              throw new Error(`Row ${rowIndex + 2} is missing required fields: Title, Start Time, End Time, or Date.`);
+            // Only require title and date
+            if (!entry.title || !/^\d{4}-\d{2}-\d{2}$/.test(entry.date)) {
+              throw new Error(`Row ${rowIndex + 2} is missing required fields: Title or a valid Date (YYYY-MM-DD). Found: ${entry.date}`);
             }
             return entry;
-          });
+          }).filter(Boolean);
           resolve(parsedData);
         } catch (error) {
           reject(error instanceof Error ? error : new Error('Failed to parse CSV file. Please check its format.'));
@@ -746,7 +775,7 @@ export default function CreateItinerary() {
     try {
       const parsedItems = await parseItineraryCsv(file);
       const newDrafts = parsedItems.map(item => ({
-        id: `item_${Date.now()}_${Math.random()}`,
+        id: undefined, // Explicitly set id as undefined for new items
         title: item.title || '',
         arrivalTime: item.arrivalTime || '',
         startTime: item.startTime || '',
@@ -761,12 +790,16 @@ export default function CreateItinerary() {
       }));
 
       // Defensive check: filter out drafts missing required fields
-      const validDrafts = newDrafts.filter(d => d.title && d.startTime && d.endTime && d.date);
+      const validDrafts = newDrafts.filter(d => d.title && d.date);
       if (validDrafts.length < newDrafts.length) {
-        alert('Some rows in your CSV were missing required fields and were not added.');
-        console.warn('Invalid drafts:', newDrafts.filter(d => !(d.title && d.startTime && d.endTime && d.date)));
+        alert('Some rows in your CSV were missing required fields and were not added. Only Title and Date are required.');
+        console.warn('Invalid drafts:', newDrafts.filter(d => !(d.title && d.date)));
       }
-      setDrafts(d => [...d, ...validDrafts]);
+      setItems(items => {
+        const updated = [...items, ...validDrafts];
+        console.log('[CreateItinerary] Items after CSV upload:', updated);
+        return updated;
+      });
       setIsCsvModalOpen(false);
     } catch (error) {
       console.error('CSV upload error:', error);
@@ -2747,7 +2780,7 @@ function CustomDatePicker({ value, onChange, placeholder, isDark, colors, id, op
   );
 }
 
-// --- Custom Glassmorphic Time Picker ---
+// --- Standard Glassmorphic Time Picker (used throughout the app) ---
 interface CustomGlassTimePickerProps {
   value: string;
   onChange: (value: string) => void;
@@ -2759,6 +2792,16 @@ function CustomGlassTimePicker({ value, onChange, placeholder, isDark, colors }:
   const [open, setOpen] = React.useState(false);
   const [hour, setHour] = React.useState('');
   const [minute, setMinute] = React.useState('');
+  const ref = React.useRef<HTMLDivElement>(null);
+  
+  React.useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    if (open) document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [open]);
+  
   React.useEffect(() => {
     if (value && /^\d{2}:\d{2}$/.test(value)) {
       const [h, m] = value.split(':');
@@ -2766,17 +2809,37 @@ function CustomGlassTimePicker({ value, onChange, placeholder, isDark, colors }:
       setMinute(m);
     }
   }, [value]);
+  
   const handleSelect = (h: string, m: string) => {
     setHour(h);
     setMinute(m);
     onChange(`${h}:${m}`);
+    setOpen(false);
   };
+  
+  const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
+  const minutes = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'));
+  
   return (
-    <div style={{ position: 'relative', width: '100%' }}>
+    <div style={{ position: 'relative', width: '100%', boxSizing: 'border-box' }} ref={ref}>
       <input
         type="text"
-        value={`${hour}:${minute}`}
-        onChange={(e) => handleSelect(e.target.value.split(':')[0], e.target.value.split(':')[1])}
+        value={value}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        onChange={e => {
+          const val = e.target.value;
+          if (/^\d{2}:\d{2}$/.test(val)) {
+            const [h, m] = val.split(':');
+            setHour(h);
+            setMinute(m);
+            onChange(val);
+          } else {
+            setHour('');
+            setMinute('');
+            onChange(val);
+          }
+        }}
         placeholder={placeholder}
         style={{
           width: '100%',
@@ -2792,71 +2855,105 @@ function CustomGlassTimePicker({ value, onChange, placeholder, isDark, colors }:
           outline: 'none',
           boxShadow: 'none',
         }}
+        maxLength={5}
       />
       {open && (
         <div style={{
           position: 'absolute',
-          left: '50%',
+          left: 0,
           top: '100%',
-          transform: 'translate(-50%, 8px)',
-          zIndex: 1000,
-          width: 300,
-          ...getGlassStyles(isDark),
-          padding: 20,
-          boxSizing: 'border-box',
+          marginTop: 8,
+          width: '100%',
+          minWidth: '100%',
+          maxWidth: '100%',
+          display: 'flex',
+          gap: 8,
           borderRadius: 16,
           boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.3)' : '0 8px 32px rgba(0,0,0,0.1)',
           border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.18)' : '#e5e7eb'}`,
           background: isDark ? 'rgba(30, 30, 30, 0.95)' : 'rgba(255,255,255,0.95)',
+          zIndex: 1000,
+          maxHeight: 220,
+          overflow: 'hidden',
+          boxSizing: 'border-box',
         }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 4, marginBottom: 8 }}>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <label style={{ color: colors.textSecondary, marginBottom: 4 }}>Hour</label>
-              <input
-                type="number"
-                value={hour}
-                onChange={(e) => handleSelect(e.target.value, minute)}
+          <div style={{ flex: 1, overflowY: 'auto', maxHeight: 220 }}>
+            {hours.map(h => (
+              <div
+                key={h}
+                onMouseDown={() => handleSelect(h, minute || '00')}
                 style={{
-                  width: '100%',
-                  padding: '12px 16px',
-                  borderRadius: '12px',
-                  border: `2px solid ${colors.border}`,
-                  background: colors.inputBg,
-                  color: colors.text,
-                  fontSize: '16px',
-                  transition: 'all 0.2s ease',
-                  height: '48px',
-                  boxSizing: 'border-box',
-                  outline: 'none',
-                  boxShadow: 'none',
+                  padding: '8px 0',
+                  textAlign: 'center',
+                  background: h === hour ? '#fff' : 'transparent',
+                  color: h === hour ? '#000' : (isDark ? '#fff' : '#222'),
+                  fontWeight: h === hour ? 700 : 400,
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  fontSize: 16,
+                  transition: 'all 0.2s',
                 }}
-              />
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <label style={{ color: colors.textSecondary, marginBottom: 4 }}>Minute</label>
-              <input
-                type="number"
-                value={minute}
-                onChange={(e) => handleSelect(hour, e.target.value)}
+              >
+                {h}
+              </div>
+            ))}
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto', maxHeight: 220 }}>
+            {minutes.map(m => (
+              <div
+                key={m}
+                onMouseDown={() => handleSelect(hour || '00', m)}
                 style={{
-                  width: '100%',
-                  padding: '12px 16px',
-                  borderRadius: '12px',
-                  border: `2px solid ${colors.border}`,
-                  background: colors.inputBg,
-                  color: colors.text,
-                  fontSize: '16px',
-                  transition: 'all 0.2s ease',
-                  height: '48px',
-                  boxSizing: 'border-box',
-                  outline: 'none',
-                  boxShadow: 'none',
+                  padding: '8px 0',
+                  textAlign: 'center',
+                  background: m === minute ? '#fff' : 'transparent',
+                  color: m === minute ? '#000' : (isDark ? '#fff' : '#222'),
+                  fontWeight: m === minute ? 700 : 400,
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  fontSize: 16,
+                  transition: 'all 0.2s',
                 }}
-              />
-            </div>
+              >
+                {m}
+              </div>
+            ))}
           </div>
         </div>
       )}
     </div>
   );
+}
+
+// Helper to convert dd/mm/yyyy or mm/dd/yyyy to yyyy-mm-dd
+function toISODate(dateStr: string): string | undefined {
+  if (!dateStr) return undefined;
+  // Already in yyyy-mm-dd
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+  // dd/mm/yyyy or mm/dd/yyyy
+  const parts = dateStr.split(/[\/-]/);
+  if (parts.length === 3) {
+    let [a, b, c] = parts;
+    if (a.length === 4) return `${a}-${b.padStart(2, '0')}-${c.padStart(2, '0')}`; // yyyy-mm-dd
+    if (c.length === 4) {
+      // Try dd/mm/yyyy or mm/dd/yyyy
+      // If both day and month <= 12, assume mm/dd/yyyy (US style)
+      if (parseInt(a) > 12) return `${c}-${b.padStart(2, '0')}-${a.padStart(2, '0')}`; // dd/mm/yyyy
+      if (parseInt(b) > 12) return `${c}-${a.padStart(2, '0')}-${b.padStart(2, '0')}`; // mm/dd/yyyy
+      // Default to dd/mm/yyyy
+      return `${c}-${b.padStart(2, '0')}-${a.padStart(2, '0')}`;
+    }
+  }
+  return undefined;
+}
+
+// Helper to format yyyy-mm-dd to dd/mm/yyyy for UI display
+function formatDateDisplay(dateStr: string | undefined): string {
+  if (!dateStr) return '';
+  const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (match) {
+    const [, yyyy, mm, dd] = match;
+    return `${dd}/${mm}/${yyyy}`;
+  }
+  return dateStr;
 }

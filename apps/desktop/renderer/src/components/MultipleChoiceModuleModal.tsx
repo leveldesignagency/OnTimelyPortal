@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { ThemeContext } from '../ThemeContext';
+import { addTimelineModule, supabase } from '../lib/supabase';
 
 const getGlassStyles = (isDark: boolean) => ({
   background: isDark 
@@ -14,7 +15,7 @@ const getGlassStyles = (isDark: boolean) => ({
 });
 
 // --- Local Glassmorphic Date Picker ---
-function GlassDatePicker({ value, onChange, isDark }) {
+function GlassDatePicker({ value, onChange, isDark }: { value: string; onChange: (date: string) => void; isDark: boolean }) {
   const [show, setShow] = React.useState(false);
   const [month, setMonth] = React.useState(() => value ? new Date(value).getMonth() : new Date().getMonth());
   const [year, setYear] = React.useState(() => value ? new Date(value).getFullYear() : new Date().getFullYear());
@@ -25,15 +26,15 @@ function GlassDatePicker({ value, onChange, isDark }) {
     'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December'
   ];
-  const ref = React.useRef();
+  const ref = React.useRef<HTMLDivElement>(null);
   React.useEffect(() => {
-    function handleClick(e) {
-      if (ref.current && !ref.current.contains(e.target)) setShow(false);
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setShow(false);
     }
     if (show) document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, [show]);
-  function selectDate(day) {
+  function selectDate(day: number) {
     const mm = String(month + 1).padStart(2, '0');
     const dd = String(day).padStart(2, '0');
     onChange(`${year}-${mm}-${dd}`);
@@ -126,14 +127,14 @@ function GlassDatePicker({ value, onChange, isDark }) {
 }
 
 // --- Local Glassmorphic Time Picker ---
-function GlassTimePicker({ value, onChange, isDark }) {
+function GlassTimePicker({ value, onChange, isDark }: { value: string; onChange: (time: string) => void; isDark: boolean }) {
   const [open, setOpen] = React.useState(false);
   const [hour, setHour] = React.useState('');
   const [minute, setMinute] = React.useState('');
-  const ref = React.useRef();
+  const ref = React.useRef<HTMLDivElement>(null);
   React.useEffect(() => {
-    function handleClick(e) {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     }
     if (open) document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
@@ -145,7 +146,7 @@ function GlassTimePicker({ value, onChange, isDark }) {
       setMinute(m);
     }
   }, [value]);
-  const handleSelect = (h, m) => {
+  const handleSelect = (h: string, m: string) => {
     setHour(h);
     setMinute(m);
     onChange(`${h}:${m}`);
@@ -259,7 +260,24 @@ function GlassTimePicker({ value, onChange, isDark }) {
   );
 }
 
-export default function MultipleChoiceModuleModal({ open, onClose, onNext, guests }) {
+// Add prop types
+interface Guest {
+  id: string;
+  first_name?: string;
+  last_name?: string;
+  email: string;
+}
+
+interface MultipleChoiceModuleModalProps {
+  open: boolean;
+  onClose: () => void;
+  onNext: (data: any) => void;
+  guests: Guest[];
+  eventId: string;
+  currentUser: { id: string };
+}
+
+export default function MultipleChoiceModuleModal({ open, onClose, onNext, guests, eventId, currentUser }: MultipleChoiceModuleModalProps) {
   const { theme } = React.useContext(ThemeContext);
   const isDark = theme === 'dark';
   const [question, setQuestion] = useState('');
@@ -270,13 +288,14 @@ export default function MultipleChoiceModuleModal({ open, onClose, onNext, guest
     return now.toTimeString().slice(0,5);
   });
   const [step, setStep] = useState(1);
-  const [selectedGuests, setSelectedGuests] = useState([]);
+  const [selectedGuests, setSelectedGuests] = useState<string[]>([]);
+  const [showSuccessToast, setShowSuccessToast] = useState(false);
 
   if (!open) return null;
 
   const handleAddOption = () => setOptions([...options, '']);
-  const handleOptionChange = (idx, val) => setOptions(options.map((o, i) => i === idx ? val : o));
-  const handleRemoveOption = idx => setOptions(options.filter((_, i) => i !== idx));
+  const handleOptionChange = (idx: number, val: string) => setOptions(options.map((o, i) => i === idx ? val : o));
+  const handleRemoveOption = (idx: number) => setOptions(options.filter((_, i) => i !== idx));
 
   return (
     <div style={{
@@ -378,10 +397,64 @@ export default function MultipleChoiceModuleModal({ open, onClose, onNext, guest
           </div>
           <div style={{ display: 'flex', gap: 16, width: '100%', justifyContent: 'flex-end' }}>
             <button onClick={onClose} style={{ padding: '12px 28px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.18)', background: isDark ? '#222' : '#eee', color: isDark ? '#fff' : '#222', fontWeight: 600, fontSize: 16, cursor: 'pointer', marginRight: 8 }}>Cancel</button>
-            <button onClick={() => onNext({ question, options, date, time, guests: selectedGuests })} disabled={selectedGuests.length === 0} style={{ padding: '12px 28px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.18)', background: isDark ? '#444' : '#f3f4f6', color: isDark ? '#fff' : '#222', fontWeight: 700, fontSize: 16, cursor: selectedGuests.length ? 'pointer' : 'not-allowed', opacity: selectedGuests.length ? 1 : 0.7 }}>Save & Post</button>
+            <button onClick={async () => {
+              const module = await addTimelineModule({
+                event_id: eventId,
+                module_type: 'multiple_choice',
+                title: question,
+                time: time,
+                date: date,
+                question: question,
+                survey_data: { options: options.filter(opt => opt.trim()) },
+                created_by: currentUser.id,
+              });
+              if (module && module.id && selectedGuests.length > 0) {
+                await Promise.all(
+                  selectedGuests.map(guestId =>
+                    supabase.from('timeline_module_guests').insert({
+                      module_id: module.id,
+                      guest_id: guestId,
+                    })
+                  )
+                );
+              }
+              setTimeout(() => { window.dispatchEvent(new Event('refreshTimelineModules')); }, 300);
+              setShowSuccessToast(true);
+              setTimeout(() => setShowSuccessToast(false), 3000);
+              onNext({ question, time, selectedGuests });
+            }} style={{ 
+              padding: '12px 28px', 
+              borderRadius: 8, 
+              border: '1px solid rgba(255,255,255,0.18)', 
+              background: isDark ? '#444' : '#f3f4f6', 
+              color: isDark ? '#fff' : '#222', 
+              fontWeight: 700, 
+              fontSize: 16, 
+              cursor: selectedGuests.length ? 'pointer' : 'not-allowed', 
+              opacity: selectedGuests.length ? 1 : 0.7 
+            }}>Save & Post</button>
           </div>
         </div>}
       </div>
+      
+      {/* Success Toast */}
+      {showSuccessToast && (
+        <div style={{
+          position: 'fixed',
+          top: 24,
+          right: 24,
+          background: 'rgba(40,200,120,0.95)',
+          color: '#fff',
+          padding: '12px 24px',
+          borderRadius: 8,
+          fontWeight: 600,
+          fontSize: 16,
+          zIndex: 3000,
+          boxShadow: '0 2px 12px rgba(0,0,0,0.15)'
+        }}>
+          Multiple choice module created successfully!
+        </div>
+      )}
     </div>
   );
 } 

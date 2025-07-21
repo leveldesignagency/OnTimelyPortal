@@ -18,6 +18,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useFonts, Poppins_400Regular } from '@expo-google-fonts/poppins';
 import { WebView } from 'react-native-webview';
+import { LinearGradient } from 'expo-linear-gradient';
 
 interface GuestDashboardProps {
   guest: any;
@@ -48,6 +49,39 @@ const CARD_GLOW = 18;
 const CARD_BORDER_COLOR = '#fff';
 const CARD_BG = 'rgba(255,255,255,0.10)';
 const PLACEHOLDER_IMAGE = 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=800&q=80';
+
+const { width, height } = Dimensions.get('window');
+
+function GeometricOverlay() {
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      <View
+        style={{
+          position: 'absolute',
+          top: height * 0.18,
+          right: -width * 0.15,
+          width: width * 0.7,
+          height: width * 0.7,
+          borderRadius: width * 0.35,
+          backgroundColor: 'rgba(40,40,50,0.18)',
+          transform: [{ rotate: '18deg' }],
+        }}
+      />
+      <View
+        style={{
+          position: 'absolute',
+          top: height * 0.38,
+          left: -width * 0.2,
+          width: width * 0.5,
+          height: width * 0.5,
+          borderRadius: width * 0.25,
+          backgroundColor: 'rgba(40,40,50,0.10)',
+          transform: [{ rotate: '-12deg' }],
+        }}
+      />
+    </View>
+  );
+}
 
 export default function GuestDashboard({ guest, onLogout }: GuestDashboardProps) {
   // ALL HOOKS MUST BE CALLED FIRST - NO CONDITIONAL LOGIC BEFORE HOOKS
@@ -192,7 +226,14 @@ export default function GuestDashboard({ guest, onLogout }: GuestDashboardProps)
   const coverHeight = SCREEN_HEIGHT / 3;
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#000' }}>
+    <View style={{ flex: 1 }}>
+      <LinearGradient
+        colors={["#18181b", "#23272F"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+      <GeometricOverlay />
       {/* Remove fixed cover image, make it part of ScrollView */}
       <ScrollView contentContainerStyle={{ paddingHorizontal: 18, paddingBottom: 32 }}>
         {/* Cover Image (edge-to-edge, rounded corners, no inner shadow) */}

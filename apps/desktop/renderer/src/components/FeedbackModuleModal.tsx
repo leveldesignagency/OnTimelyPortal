@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { ThemeContext } from '../ThemeContext';
+import { addTimelineModule, supabase } from '../lib/supabase';
 
 const getGlassStyles = (isDark: boolean) => ({
   background: isDark 
@@ -12,6 +13,23 @@ const getGlassStyles = (isDark: boolean) => ({
     ? '0 8px 32px rgba(0,0,0,0.3)' 
     : '0 8px 32px rgba(0,0,0,0.1)',
 });
+
+// Add prop types
+interface Guest {
+  id: string;
+  first_name?: string;
+  last_name?: string;
+  email: string;
+}
+
+interface FeedbackModuleModalProps {
+  open: boolean;
+  onClose: () => void;
+  onNext: (data: any) => void;
+  guests: Guest[];
+  eventId: string;
+  currentUser: { id: string };
+}
 
 // --- Local Glassmorphic Date Picker ---
 function GlassDatePicker({ value, onChange, isDark }) {
@@ -260,7 +278,7 @@ function GlassTimePicker({ value, onChange, isDark }) {
   );
 }
 
-export default function FeedbackModuleModal({ open, onClose, onNext, guests }) {
+export default function FeedbackModuleModal({ open, onClose, onNext, guests, eventId, currentUser }: FeedbackModuleModalProps) {
   const { theme } = React.useContext(ThemeContext);
   const isDark = theme === 'dark';
   const [title, setTitle] = useState('');
@@ -272,7 +290,9 @@ export default function FeedbackModuleModal({ open, onClose, onNext, guests }) {
     const now = new Date();
     return now.toTimeString().slice(0,5);
   });
-  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const [step, setStep] = useState(1);
+  const [selectedGuests, setSelectedGuests] = useState<string[]>([]);
+  const [showSuccessToast, setShowSuccessToast] = useState(false);
 
   if (!open) return null;
 
@@ -306,7 +326,8 @@ export default function FeedbackModuleModal({ open, onClose, onNext, guests }) {
         alignItems: 'center',
         boxSizing: 'border-box',
       }}>
-        <h2 style={{ color: isDark ? '#fff' : '#111', fontWeight: 700, fontSize: 24, marginBottom: 24 }}>Create Feedback Module</h2>
+        {step === 1 && <>
+          <h2 style={{ color: isDark ? '#fff' : '#111', fontWeight: 700, fontSize: 24, marginBottom: 24 }}>Create Feedback Module</h2>
         <div style={{ width: '100%', boxSizing: 'border-box', marginBottom: 28 }}>
           <label style={{ color: isDark ? '#aaa' : '#444', fontWeight: 600, fontSize: 15, marginBottom: 8, alignSelf: 'flex-start' }}>Title</label>
           <input
@@ -368,9 +389,77 @@ export default function FeedbackModuleModal({ open, onClose, onNext, guests }) {
         </div>
         <div style={{ display: 'flex', gap: 16, width: '100%', justifyContent: 'flex-end' }}>
           <button onClick={onClose} style={{ padding: '12px 28px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.18)', background: isDark ? '#222' : '#eee', color: isDark ? '#fff' : '#222', fontWeight: 600, fontSize: 16, cursor: 'pointer', marginRight: 8 }}>Cancel</button>
-          <button onClick={() => onNext({ title, defaultRating: rating, date, time })} disabled={!title} style={{ padding: '12px 28px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.18)', background: isDark ? '#444' : '#f3f4f6', color: isDark ? '#fff' : '#222', fontWeight: 700, fontSize: 16, cursor: title ? 'pointer' : 'not-allowed', opacity: title ? 1 : 0.7 }}>Next</button>
+          <button onClick={() => setStep(2)} disabled={!title} style={{ padding: '12px 28px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.18)', background: isDark ? '#444' : '#f3f4f6', color: isDark ? '#fff' : '#222', fontWeight: 700, fontSize: 16, cursor: title ? 'pointer' : 'not-allowed', opacity: title ? 1 : 0.7 }}>Next</button>
         </div>
+        </>}
+        {step === 2 && <div style={{ width: '100%' }}>
+          <h2 style={{ color: isDark ? '#fff' : '#111', fontWeight: 700, fontSize: 22, marginBottom: 24 }}>Select Guests for Module</h2>
+          <div style={{ width: '100%', marginBottom: 18, display: 'flex', gap: 8 }}>
+            <button onClick={() => setSelectedGuests(guests.map(g => g.id))} style={{ flex: 1, padding: '10px 0', borderRadius: 8, border: '1px solid rgba(255,255,255,0.18)', background: isDark ? '#222' : '#eee', color: isDark ? '#fff' : '#222', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>Select All</button>
+            <button onClick={() => setSelectedGuests([])} style={{ flex: 1, padding: '10px 0', borderRadius: 8, border: '1px solid rgba(255,255,255,0.18)', background: isDark ? '#222' : '#eee', color: isDark ? '#fff' : '#222', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>Clear All</button>
+          </div>
+          <div style={{ width: '100%', maxHeight: 260, overflowY: 'auto', marginBottom: 24 }}>
+            {guests.map(g => (
+              <label key={g.id} style={{ display: 'flex', alignItems: 'center', padding: 10, borderRadius: 8, background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', marginBottom: 6, cursor: 'pointer' }}>
+                <input type="checkbox" checked={selectedGuests.includes(g.id)} onChange={() => setSelectedGuests(sel => sel.includes(g.id) ? sel.filter(i => i !== g.id) : [...sel, g.id])} style={{ marginRight: 12, width: 16, height: 16 }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 600, fontSize: 15 }}>{g.first_name || g.last_name ? `${g.first_name || ''} ${g.last_name || ''}`.trim() : g.email}</div>
+                  <div style={{ fontSize: 12, color: isDark ? '#aaa' : '#666' }}>{g.email}</div>
+                </div>
+              </label>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 16, width: '100%', justifyContent: 'flex-end' }}>
+            <button onClick={onClose} style={{ padding: '12px 28px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.18)', background: isDark ? '#222' : '#eee', color: isDark ? '#fff' : '#222', fontWeight: 600, fontSize: 16, cursor: 'pointer', marginRight: 8 }}>Cancel</button>
+            <button onClick={async () => {
+              const module = await addTimelineModule({
+                event_id: eventId,
+                module_type: 'feedback',
+                title: title,
+                time: time,
+                date: date,
+                label: title,
+                link: '',
+                file: null,
+                created_by: currentUser.id,
+              });
+              if (module && module.id && selectedGuests.length > 0) {
+                await Promise.all(
+                  selectedGuests.map(guestId =>
+                    supabase.from('timeline_module_guests').insert({
+                      module_id: module.id,
+                      guest_id: guestId,
+                    })
+                  )
+                );
+              }
+              setTimeout(() => { window.dispatchEvent(new Event('refreshTimelineModules')); }, 300);
+              setShowSuccessToast(true);
+              setTimeout(() => setShowSuccessToast(false), 3000);
+              onNext({ module, selectedGuests });
+            }} style={{ padding: '12px 28px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.18)', background: isDark ? '#444' : '#f3f4f6', color: isDark ? '#fff' : '#222', fontWeight: 700, fontSize: 16, cursor: 'pointer' }}>Save & Post</button>
+          </div>
+        </div>}
       </div>
+      
+      {/* Success Toast */}
+      {showSuccessToast && (
+        <div style={{
+          position: 'fixed',
+          top: 24,
+          right: 24,
+          background: 'rgba(40,200,120,0.95)',
+          color: '#fff',
+          padding: '12px 24px',
+          borderRadius: 8,
+          fontWeight: 600,
+          fontSize: 16,
+          zIndex: 3000,
+          boxShadow: '0 2px 12px rgba(0,0,0,0.15)'
+        }}>
+          Feedback module created successfully!
+        </div>
+      )}
     </div>
   );
 } 

@@ -30,6 +30,7 @@ import AddOnCard from './components/AddOnCard';
 import { User } from './lib/auth';
 import EventForm from './components/EventForm';
 import { getEventTeams } from './lib/supabase';
+import { getEventAddOns, upsertEventAddon } from './lib/supabase';
 
 function EventMetaInfo({ event, colors, isDark }: { event: any, colors: any, isDark: boolean }) {
   const [teamNames, setTeamNames] = useState<string[]>([]);
@@ -143,7 +144,11 @@ const DASHBOARD_MODULES: DashboardModules = {
     { key: 'safetyBeacon', label: 'Safety SOS', type: 'service', description: 'Emergency alert system for guests', icon: '🆘' },
     { key: 'gpsTracking', label: 'GPS Tracking', type: 'service', description: 'Track logistics team location', icon: 'pin' },
     { key: 'eventUpdates', label: 'Event Updates', type: 'service', description: 'Live event status notifications', icon: '🔔' },
-    { key: 'hotelBooking', label: 'Hotel Manager', type: 'service', description: 'Hotel reservation tracking', icon: 'hotel' }
+    { key: 'hotelBooking', label: 'Hotel Manager', type: 'service', description: 'Hotel reservation tracking', icon: 'hotel' },
+    // New Add Ons
+    { key: 'currencyConverter', label: 'Currency Converter', type: 'service', description: 'Convert currencies for international guests', icon: '💱' },
+    { key: 'translator', label: 'Translator', type: 'service', description: 'Translate text and phrases for guests', icon: '🌐' },
+    { key: 'offlineMaps', label: 'Offline Maps', type: 'service', description: 'Access maps without internet connection', icon: '🗺️' }
   ]
 };
 
@@ -580,51 +585,26 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
     }
   };
 
+  // Replace add-on loading logic
   useEffect(() => {
     if (!event?.id) return;
-    const loadEventData = async () => {
+    const loadAddOns = async () => {
       try {
-        // Load event modules from Supabase
-        const modules = await getEventModules(event.id);
+        const addOns = await getEventAddOns(event.id);
         setActiveModules(prev => ({
-          travel: prev.travel || [],
-          hotels: prev.hotels || [],
-          logistics: prev.logistics || [],
-          eventTracker: prev.eventTracker || [],
-          safety: prev.safety || [],
-          addons: (modules && modules.module_data && modules.module_data.addons) ? modules.module_data.addons : []
+          ...prev,
+          addons: addOns.filter(a => a.enabled).map(a => ({
+            id: a.addon_key,
+            name: a.addon_key,
+            type: a.addon_type || 'service',
+          }))
         }));
       } catch (error) {
-        if (error instanceof Error) {
-          console.error('Error loading event modules from Supabase:', error.message, error.stack, error);
-        } else {
-          console.error('Error loading event modules from Supabase:', error);
-        }
-        console.error('Event ID used for getEventModules:', event?.id);
-        // Fallback to localStorage for modules only
-        try {
-          const savedModules = localStorage.getItem(`event_modules_${event.id}`);
-          if (savedModules) {
-            const parsed = JSON.parse(savedModules);
-            setActiveModules(prev => ({
-              ...prev,
-              addons: parsed.addons || []
-            }));
-          }
-        } catch (localError) {
-          console.error('Error loading modules from localStorage fallback:', localError);
-        }
-        setActiveModules(prev => ({
-          travel: prev.travel || [],
-          hotels: prev.hotels || [],
-          logistics: prev.logistics || [],
-          eventTracker: prev.eventTracker || [],
-          safety: prev.safety || [],
-          addons: []
-        }));
+        console.error('Error loading add-ons from event_addons:', error);
+        setActiveModules(prev => ({ ...prev, addons: [] }));
       }
     };
-    loadEventData();
+    loadAddOns();
   }, [event?.id]);
 
   useEffect(() => {
@@ -668,8 +648,8 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
   // Update local itinerary state when real-time data changes
   useEffect(() => {
     if (realtimeItineraries) {
-      const saved = realtimeItineraries.filter(it => it.is_draft === false);
-      const drafts = realtimeItineraries.filter(it => it.is_draft === true);
+      const saved = realtimeItineraries.filter(it => !it.is_draft);
+      const drafts = realtimeItineraries.filter(it => !!it.is_draft);
       setSavedItineraries(saved);
       setDraftItineraries(drafts);
     }
@@ -958,16 +938,17 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
     }
   };
 
-  const handleMakeDraft = async (itineraryId: string) => {
+  const handleMakeDraft = async (itineraryId: number) => {
     if (!event) return;
-    
-    const itinerary = savedItineraries.find(it => it.id === itineraryId);
+    const itinerary = savedItineraries.find(it => Number(it.id) === Number(itineraryId));
     if (!itinerary) return;
-    
+
     try {
-      await updateItinerary(itinerary.id, { ...itinerary, is_draft: true });
+      console.log('Updating itinerary to draft:', itinerary.id, { is_draft: true });
+      const result = await updateItinerary(Number(itinerary.id), { is_draft: true });
+      console.log('Update result:', result);
       await refetchItineraries();
-      showSuccess('Itinerary moved to drafts successfully!');
+      showSuccess('Itinerary moved to drafts successfully!'); // Re-enabled
     } catch (error) {
       console.error('Error making itinerary draft:', error);
       showSuccess('Error moving to drafts. Please try again.');
@@ -1097,60 +1078,20 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
     }
   }
 
-  const handlePublishDraft = async (draftIndex: number) => {
-    if (!event) return;
-    
-    const draft = externalDraftItineraries[draftIndex];
-    if (!draft) return;
-    
+  const handlePublishDraft = async (draftId: string) => {
+    const draft = draftItineraries.find(d => d.id === draftId);
+    console.log('Entered handlePublishDraft', draftId, draft);
+    if (!event || !draft) return;
     try {
-      // Create the itinerary data for the published table
-      const itineraryData = {
-        event_id: event.id,
-        company_id: currentUser?.company_id || '',
-        created_by: currentUser?.id || '',
-        title: draft.title || 'Untitled Itinerary',
-        description: draft.description || '',
-        date: draft.date || '',
-        arrival_time: draft.arrival_time || '',
-        start_time: draft.start_time || '',
-        end_time: draft.end_time || '',
-        location: draft.location || '',
-        document_file_name: draft.document_file_name || '',
-        qrcode_url: draft.qrcode_url || '',
-        qrcode_image: draft.qrcode_image || '',
-        contact_name: draft.contact_name || '',
-        contact_country_code: draft.contact_country_code || '',
-        contact_phone: draft.contact_phone || '',
-        contact_email: draft.contact_email || '',
-        notification_times: draft.notification_times || [],
-        group_id: draft.group_id || undefined,
-        group_name: draft.group_name || undefined,
-        content: draft.content || {},
-        modules: (draft as any).modules || {},
-        module_values: (draft as any).module_values || {},
-        is_draft: false
-      };
-
-      // Add to published itineraries table
-      await addItinerary(itineraryData);
-      
-      // Delete from draft itineraries table
-      await deleteDraftItinerary(draft.id);
-      
-      // Refresh both lists
+      const result = await updateItinerary(Number(draft.id), { is_draft: false });
+      console.log('[PublishDraft] updateItinerary result:', result);
       await refetchItineraries();
-      
-      // Refetch drafts
-      const drafts = await getDraftItineraries(event.id, currentUser?.company_id || '');
-      setExternalDraftItineraries(drafts);
-      
       showSuccess('Draft published successfully!');
     } catch (error) {
       console.error('Error publishing draft:', error);
       showSuccess('Error publishing draft. Please try again.');
     }
-  };
+  }
 
   const handleDragStart = (e: React.DragEvent, moduleKey: string) => {
     e.dataTransfer.setData('text/plain', moduleKey);
@@ -1555,14 +1496,30 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
 
   const allFilteredSelected = filteredGuests.length > 0 && filteredGuests.every(guest => selectedGuestIds.includes(guest.id));
 
+  // Replace handleSaveAddOns logic
   const handleSaveAddOns = async () => {
     if (!event?.id) return;
     setIsSavingAddOns(true);
     setSaveAddOnsMessage(null);
     try {
-      const toSave = { addons: activeModules.addons };
-      console.log('DEBUG: handleSaveAddOns will save:', JSON.stringify(toSave, null, 2));
-      await saveEventModules(event.id, toSave);
+      // Get all possible add-ons
+      const allAddOnKeys = DASHBOARD_MODULES.addons.map(a => a.key);
+      // Get currently enabled add-ons
+      const enabledAddOnKeys = (activeModules.addons || []).map(a => a.name);
+      // Upsert each add-on
+      await Promise.all(allAddOnKeys.map(async key => {
+        const moduleInfo = DASHBOARD_MODULES.addons.find(a => a.key === key);
+        await upsertEventAddon({
+          event_id: event.id,
+          addon_key: key,
+          enabled: enabledAddOnKeys.includes(key),
+          addon_label: moduleInfo?.label,
+          addon_type: moduleInfo?.type,
+          addon_description: moduleInfo?.description,
+          addon_icon: moduleInfo?.icon,
+          is_active: true,
+        });
+      }));
       setSaveAddOnsMessage('Add-Ons saved!');
     } catch (error) {
       setSaveAddOnsMessage('Failed to save Add-Ons.');
@@ -1572,362 +1529,7 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
     }
   };
 
-  // Before the return statement in the component, add:
-  const addOnsList = (() => {
-    console.log('DEBUG: Rendering Add Ons', activeModules.addons);
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 24, minHeight: 100 }}>
-        {activeModules.addons && activeModules.addons.length > 0 && (
-          activeModules.addons.map((module, idx) => {
-            const moduleInfo = DASHBOARD_MODULES.addons.find(m =>
-              m.key === module.name ||
-              m.key === module.id ||
-              (module.name && m.key && module.name.includes(m.key)) ||
-              (module.id && m.key && module.id.includes(m.key))
-            );
-            if (!moduleInfo) return null;
-            return (
-              <AddOnCard
-                key={module.id}
-                title={moduleInfo.label}
-                description={moduleInfo.description}
-              />
-            );
-          })
-              )}
-
-      {/* Test Modal */}
-      {showEditEventModal && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0, 0, 0, 0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 2000
-        }}>
-          <div style={{
-            background: 'white',
-            padding: 20,
-            borderRadius: 8,
-            color: 'black'
-          }}>
-            <h2>Test Modal - Edit Event Modal is working!</h2>
-            <button onClick={() => setShowEditEventModal(false)}>Close</button>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Event Modal */}
-      {(() => {
-        const handleEditEvent = async (e: React.FormEvent) => {
-          e.preventDefault();
-          if (!currentEvent || !editEventData.name || !editEventData.from || !editEventData.to) {
-            alert('Please fill in all required fields');
-            return;
-          }
-          
-          setEditEventLoading(true);
-          try {
-            const updatedEvent = {
-              ...currentEvent,
-              name: editEventData.name,
-              from: editEventData.from,
-              to: editEventData.to,
-              description: editEventData.description,
-              location: editEventData.location,
-              time_zone: editEventData.timeZone
-            };
-            
-            // Update the event in the database
-            await updateEvent(currentEvent.id, updatedEvent);
-            
-            // Update local state
-            const updatedEvents = events.map(e => e.id === currentEvent.id ? updatedEvent : e);
-            // You might need to update the events prop or use a callback
-            
-            setShowEditEventModal(false);
-            showSuccess('Event updated successfully!');
-            
-            // Refresh the page to show updated data
-            window.location.reload();
-          } catch (error) {
-            console.error('Error updating event:', error);
-            alert('Error updating event. Please try again.');
-          } finally {
-            setEditEventLoading(false);
-          }
-        };
-
-        console.log('showEditEventModal:', showEditEventModal);
-        return showEditEventModal && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0, 0, 0, 0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 2000
-        }}>
-          <div style={{
-            ...getGlassStyles(isDark),
-            padding: 32,
-            minWidth: 400,
-            maxWidth: 500,
-            width: '90%',
-            maxHeight: '90vh',
-            overflowY: 'auto'
-          }}>
-            <form onSubmit={handleEditEvent}>
-              <div style={{ 
-                fontSize: 24, 
-                fontWeight: 600, 
-                marginBottom: 8, 
-                color: colors.text,
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center'
-              }}>
-                Edit Event
-                <button
-                  type="button"
-                  onClick={() => setShowEditEventModal(false)}
-                  style={{
-                    background: 'transparent',
-                    border: 'none',
-                    fontSize: 24,
-                    cursor: 'pointer',
-                    color: colors.textSecondary,
-                    padding: 4,
-                    borderRadius: 4,
-                    transition: 'color 0.2s'
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.color = colors.text; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.color = colors.textSecondary; }}
-                >
-                  ×
-                </button>
-              </div>
-              
-              {/* Event Name field */}
-              <div style={{ marginBottom: 20, width: '100%', position: 'relative' }}>
-                <label style={{ color: colors.text, fontWeight: 600, fontSize: 16, marginBottom: 8, display: 'block' }}>Event Name *</label>
-                <input
-                  type="text"
-                  value={editEventData.name}
-                  onChange={e => {
-                    if (e.target.value.length <= 20) setEditEventData(prev => ({ ...prev, name: e.target.value }));
-                  }}
-                  maxLength={20}
-                  style={{
-                    width: '100%',
-                    padding: '16px 20px',
-                    borderRadius: '12px',
-                    border: `2px solid ${colors.border}`,
-                    background: colors.inputBg,
-                    color: colors.text,
-                    fontSize: '20px',
-                    marginBottom: 0,
-                    minHeight: '56px',
-                    boxSizing: 'border-box',
-                    marginTop: 4,
-                    transition: 'all 0.2s',
-                    backdropFilter: 'blur(10px)'
-                  }}
-                  placeholder="What is your event called?"
-                  required
-                />
-                {/* Character count, far right */}
-                <div style={{ position: 'absolute', right: 12, top: 18, fontSize: 13, color: colors.textSecondary }}>
-                  {editEventData.name.length}/20
-                </div>
-              </div>
-
-              {/* Location field */}
-              <div style={{ marginBottom: 20, width: '100%' }}>
-                <label style={{ color: colors.text, fontWeight: 600, fontSize: 16, marginBottom: 8, display: 'block' }}>Location</label>
-                <input
-                  type="text"
-                  value={editEventData.location}
-                  onChange={e => setEditEventData(prev => ({ ...prev, location: e.target.value }))}
-                  style={{
-                    width: '100%',
-                    padding: '16px 20px',
-                    borderRadius: '12px',
-                    border: `2px solid ${colors.border}`,
-                    background: colors.inputBg,
-                    color: colors.text,
-                    fontSize: '20px',
-                    marginBottom: 0,
-                    minHeight: '56px',
-                    boxSizing: 'border-box',
-                    marginTop: 4,
-                    transition: 'all 0.2s',
-                    backdropFilter: 'blur(10px)'
-                  }}
-                  placeholder="Event location"
-                />
-              </div>
-
-              {/* Time Zone field */}
-              <div style={{ marginBottom: 20, width: '100%' }}>
-                <label style={{ color: colors.text, fontWeight: 600, fontSize: 16, marginBottom: 8, display: 'block' }}>Time Zone</label>
-                <select
-                  value={editEventData.timeZone}
-                  onChange={e => setEditEventData(prev => ({ ...prev, timeZone: e.target.value }))}
-                  style={{
-                    width: '100%',
-                    padding: '16px 20px',
-                    borderRadius: '12px',
-                    border: `2px solid ${colors.border}`,
-                    background: colors.inputBg,
-                    color: colors.text,
-                    fontSize: '20px',
-                    marginBottom: 0,
-                    minHeight: '56px',
-                    boxSizing: 'border-box',
-                    marginTop: 4,
-                    transition: 'all 0.2s',
-                    backdropFilter: 'blur(10px)',
-                    outline: 'none'
-                  }}
-                >
-                  <option value="UTC">UTC</option>
-                  <option value="America/New_York">Eastern Time</option>
-                  <option value="America/Chicago">Central Time</option>
-                  <option value="America/Denver">Mountain Time</option>
-                  <option value="America/Los_Angeles">Pacific Time</option>
-                  <option value="Europe/London">London</option>
-                  <option value="Europe/Paris">Paris</option>
-                  <option value="Asia/Tokyo">Tokyo</option>
-                  <option value="Australia/Sydney">Sydney</option>
-                </select>
-              </div>
-
-              {/* Description field */}
-              <div style={{ marginBottom: 20, width: '100%' }}>
-                <label style={{ color: colors.text, fontWeight: 600, fontSize: 16, marginBottom: 8, display: 'block' }}>Description</label>
-                <textarea
-                  value={editEventData.description}
-                  onChange={e => setEditEventData(prev => ({ ...prev, description: e.target.value }))}
-                  style={{
-                    width: '100%',
-                    padding: '16px 20px',
-                    borderRadius: '12px',
-                    border: `2px solid ${colors.border}`,
-                    background: colors.inputBg,
-                    color: colors.text,
-                    fontSize: '16px',
-                    marginBottom: 0,
-                    minHeight: '100px',
-                    boxSizing: 'border-box',
-                    marginTop: 4,
-                    transition: 'all 0.2s',
-                    backdropFilter: 'blur(10px)',
-                    resize: 'vertical',
-                    outline: 'none'
-                  }}
-                  placeholder="Event description"
-                />
-              </div>
-
-              {/* Date fields */}
-              <div style={{ display: 'flex', alignItems: 'center', marginBottom: 40, gap: 20, width: '100%' }}>
-                <div style={{ flex: 1 }}>
-                  <label style={{ color: colors.text, fontWeight: 600, fontSize: 16, marginBottom: 8, display: 'block' }}>Start Date *</label>
-                  <input
-                    type="date"
-                    value={editEventData.from}
-                    onChange={e => setEditEventData(prev => ({ ...prev, from: e.target.value }))}
-                    style={{
-                      width: '100%',
-                      padding: '16px 20px',
-                      borderRadius: '12px',
-                      border: `2px solid ${colors.border}`,
-                      background: colors.inputBg,
-                      color: colors.text,
-                      fontSize: '16px',
-                      marginBottom: 0,
-                      minHeight: '56px',
-                      boxSizing: 'border-box',
-                      marginTop: 4,
-                      transition: 'all 0.2s',
-                      backdropFilter: 'blur(10px)',
-                      outline: 'none'
-                    }}
-                    required
-                  />
-                </div>
-                <span style={{ fontSize: 32, color: colors.textSecondary, margin: '0 12px', userSelect: 'none', alignSelf: 'flex-end', marginBottom: 8 }}>&#9654;</span>
-                <div style={{ flex: 1 }}>
-                  <label style={{ color: colors.text, fontWeight: 600, fontSize: 16, marginBottom: 8, display: 'block' }}>End Date *</label>
-                  <input
-                    type="date"
-                    value={editEventData.to}
-                    onChange={e => setEditEventData(prev => ({ ...prev, to: e.target.value }))}
-                    style={{
-                      width: '100%',
-                      padding: '16px 20px',
-                      borderRadius: '12px',
-                      border: `2px solid ${colors.border}`,
-                      background: colors.inputBg,
-                      color: colors.text,
-                      fontSize: '16px',
-                      marginBottom: 0,
-                      minHeight: '56px',
-                      boxSizing: 'border-box',
-                      marginTop: 4,
-                      transition: 'all 0.2s',
-                      backdropFilter: 'blur(10px)',
-                      outline: 'none'
-                    }}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
-                <button
-                  type="button"
-                  onClick={() => setShowEditEventModal(false)}
-                  style={{
-                    ...getButtonStyles(isDark, 'secondary'),
-                    padding: '12px 24px',
-                    fontSize: 16
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={editEventLoading}
-                  style={{
-                    ...getButtonStyles(isDark, 'primary'),
-                    padding: '12px 24px',
-                    fontSize: 16,
-                    opacity: editEventLoading ? 0.7 : 1,
-                    cursor: editEventLoading ? 'not-allowed' : 'pointer'
-                  }}
-                >
-                  {editEventLoading ? 'UPDATING...' : 'UPDATE'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      );
-      })()}
-    </div>
-  );
-})();
+  // Remove all use of saveEventModules/getEventModules for add-ons
 
   if (!event) {
     return (
@@ -2202,8 +1804,16 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
     }
   };
 
-
-
+  // Add or import the formatDateDisplay helper if not present
+  function formatDateDisplay(dateStr: string | undefined): string {
+    if (!dateStr) return '';
+    const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (match) {
+      const [, yyyy, mm, dd] = match;
+      return `${dd}/${mm}/${yyyy}`;
+    }
+    return dateStr;
+  }
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: isDark ? '#121212' : '#f8f9fa' }}>
@@ -2937,53 +2547,26 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
 
           {activeTab === 'itineraries' && (
             <div style={{ marginBottom: 64, paddingBottom: 48 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-                <h2 style={mainTitleStyle}>Itineraries</h2>
-                
-                <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+              <h2 style={mainTitleStyle}>Itineraries</h2>
+
+              {/* Top row of controls */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <div style={{ display: 'flex', gap: '12px' }}>
                   {/* Select All Button - only show when select mode is active */}
                   {isItinerarySelectModeActive && (
                     <button
                       onClick={() => setShowBulkActionsModal(true)}
                       style={{
                         ...getButtonStyles(isDark, 'secondary'),
-                        fontSize: 16,
-                        minWidth: 160,
-                        minHeight: 48,
-                        height: 48,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: 8,
+                        minWidth: '120px',
+                        maxWidth: '140px',
                         whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
+                        textAlign: 'center',
                       }}
                     >
                       Select All
                     </button>
                   )}
-                  {/* Export CSV Button */}
-                  <button
-                    onClick={handleExportCsv}
-                    style={{
-                      ...getButtonStyles(isDark, 'secondary'),
-                      fontSize: 16,
-                      minWidth: 160,
-                      minHeight: 48,
-                      height: 48,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 8,
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                    }}
-                  >
-                    Export CSV
-                  </button>
-                  {/* Select Button */}
                   <button
                     onClick={() => {
                       const newMode = !isItinerarySelectModeActive;
@@ -2994,51 +2577,50 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                     }}
                     style={{
                       ...getButtonStyles(isDark, 'secondary'),
-                      fontSize: 16,
-                      minWidth: 160,
-                      minHeight: 48,
-                      height: 48,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 8,
+                      minWidth: '120px',
+                      maxWidth: '140px',
                       whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
+                      textAlign: 'center',
                     }}
                   >
                     {isItinerarySelectModeActive ? 'Unselect' : 'Select'}
                   </button>
-                  {/* Create Itinerary Button */}
                   <button
-                    onClick={() => navigate(`/event/${id}/itinerary/create`)}
+                    onClick={handleExportCsv}
                     style={{
-                      ...getButtonStyles(isDark, 'primary'),
-                      fontSize: 18,
-                      minWidth: 160,
-                      minHeight: 48,
-                      height: 48,
-                      width: 'auto',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
+                      ...getButtonStyles(isDark, 'secondary'),
+                      minWidth: '120px',
+                      maxWidth: '140px',
                       whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
+                      textAlign: 'center',
                     }}
                   >
-                    Create Itinerary
+                    Export CSV
                   </button>
                 </div>
+                <button
+                  onClick={() => navigate(`/event/${id}/itinerary/create`)}
+                  style={{
+                    ...getButtonStyles(isDark, 'primary'),
+                    minWidth: '120px',
+                    maxWidth: '180px',
+                    whiteSpace: 'nowrap',
+                    textAlign: 'center',
+                  }}
+                >
+                  Create Itinerary
+                </button>
               </div>
+
+              <hr style={{ margin: '16px 0', border: 'none', borderTop: '1px solid #e0e0e0' }} />
               
               {/* Sort by Date Dropdown */}
               <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: 16, gap: 12 }}>
-                <label style={{ fontWeight: 500, fontSize: 15, color: isDark ? '#fff' : '#222', marginRight: 8 }}>Sort by Date:</label>
                 <button
                   onClick={() => setFiltersItineraryDateSort(prev => prev === 'asc' ? 'desc' : 'asc')}
                   style={{
-                    minWidth: 160,
+                    minWidth: 80,
+                    width: 170, // Set fixed width
                     height: 44,
                     background: isDark ? 'rgba(30, 30, 30, 0.7)' : 'rgba(255, 255, 255, 0.7)',
                     border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.12)'}`,
@@ -3047,7 +2629,7 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                     color: isDark ? '#fff' : '#222',
                     fontSize: 17,
                     fontWeight: 600,
-                    padding: '0 24px',
+                    padding: '0 12px',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -3142,29 +2724,9 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
                       {groupItems.map((it, idx) => (
-                        <div 
-                          key={it.id} 
-                          style={{ 
-                            ...getGlassStyles(isDark),
-                            padding: '24px 20px', 
-                            marginBottom: 0,
-                            position: 'relative',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            border: selectedItineraryIds.includes(it.id!) 
-                              ? `2px solid ${isDark ? '#ffffff' : '#000000'}` 
-                              : `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
-                            transition: 'all 0.2s ease'
-                          }}
-                        >
-                          {/* Selection checkbox */}
+                        <div key={it.id} style={{ display: 'flex', alignItems: 'center', marginBottom: 0 }}>
                           {isItinerarySelectModeActive && (
-                            <div style={{ 
-                              position: 'absolute', 
-                              top: 16, 
-                              left: 16, 
-                              zIndex: 10 
-                            }}>
+                            <div style={{ marginRight: 16, display: 'flex', alignItems: 'center', height: '100%' }}>
                               <input
                                 type="checkbox"
                                 checked={selectedItineraryIds.includes(it.id!)}
@@ -3173,11 +2735,26 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                                   width: 20,
                                   height: 20,
                                   cursor: 'pointer',
-                                  accentColor: isDark ? '#ffffff' : '#000000'
+                                  accentColor: isDark ? '#ffffff' : '#000000',
+                                  verticalAlign: 'middle',
                                 }}
                               />
                             </div>
                           )}
+                          <div
+                            style={{
+                              ...getGlassStyles(isDark),
+                              padding: '24px 20px',
+                              position: 'relative',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              border: selectedItineraryIds.includes(it.id!)
+                                ? `2px solid ${isDark ? '#ffffff' : '#000000'}`
+                                : `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
+                              transition: 'all 0.2s ease',
+                              flex: 1,
+                            }}
+                          >
                           <div style={{ flex: 1, marginLeft: isSelectModeActive ? 40 : 0 }}>
                             <div style={{ fontWeight: 600, fontSize: 20, marginBottom: 12, color: isDark ? '#ffffff' : '#000000' }}>{it.title}</div>
                             <div>
@@ -3219,7 +2796,7 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                                         <span style={{ 
                                           fontWeight: 500, 
                                           color: isDark ? '#a1a1aa' : '#71717a' 
-                                        }}>Arrival:</span> {it.arrival_time}
+                                          }}>Arrival:</span> {formatDateDisplay(it.arrival_time)}
                                       </div>
                                     )}
                                     {it.start_time && it.end_time && (
@@ -3230,7 +2807,7 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                                         <span style={{ 
                                           fontWeight: 500, 
                                           color: isDark ? '#a1a1aa' : '#71717a' 
-                                        }}>Time:</span> {it.start_time} - {it.end_time}
+                                          }}>Time:</span> {formatDateDisplay(it.start_time)} - {formatDateDisplay(it.end_time)}
                                       </div>
                                     )}
                                     {it.date && (
@@ -3238,7 +2815,7 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                                         color: isDark ? '#d1d5db' : '#374151', 
                                         fontSize: 14 
                                       }}>
-                                        <span style={{ fontWeight: 500, color: isDark ? '#a1a1aa' : '#71717a', marginRight: 4 }}>Date:</span> {new Date(it.date).toLocaleDateString('en-GB', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
+                                          <span style={{ fontWeight: 500, color: isDark ? '#a1a1aa' : '#71717a', marginRight: 4 }}>Date:</span> {formatDateDisplay(it.date)}
                                       </div>
                                     )}
                                     {it.location && (
@@ -3343,16 +2920,17 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                                       </div>
                                     </div>
                                   )}
-                                </div>
                               </div>
                             </div>
                           </div>
-                          <div style={{ position: 'absolute', top: 16, right: 16, display: 'flex', gap: 4, alignItems: 'center' }}>
-                            <button title="Edit" onClick={() => navigate(`/event/${id}/itinerary/edit/${it.id}`)} style={{ background: 'none', border: 'none', color: isDark ? '#fff' : '#000', padding: 4, cursor: 'pointer' }}><Icon name="edit" style={{ fontSize: 16, color: isDark ? '#fff' : '#000' }} /></button>
-                            <button title="Duplicate" onClick={() => handleDuplicate(it)} style={{ background: 'none', border: 'none', color: isDark ? '#fff' : '#000', padding: 4, cursor: 'pointer' }}><Icon name="duplicate" style={{ fontSize: 16, color: isDark ? '#fff' : '#000' }} /></button>
-                            <button title="Share" onClick={() => { setItineraryToShare(it.id); setShowShareModal(true); }} style={{ background: 'none', border: 'none', color: isDark ? '#fff' : '#000', padding: 4, cursor: 'pointer' }}><Icon name="share" style={{ fontSize: 16, color: isDark ? '#fff' : '#000' }} /></button>
-                            <button title="Save as Draft" onClick={() => handleMakeDraft(it.id)} style={{ background: 'none', border: 'none', color: isDark ? '#fff' : '#000', padding: 4, cursor: 'pointer' }}><Icon name="saveAsDraft" style={{ fontSize: 16, color: isDark ? '#fff' : '#000' }} /></button>
-                            <button title="Delete" onClick={() => { setItineraryToDelete(it.id); setShowDeleteConfirm(true); }} style={{ background: 'none', border: 'none', color: isDark ? '#fff' : '#000', padding: 4, cursor: 'pointer' }}><Icon name="delete" style={{ fontSize: 16, color: isDark ? '#fff' : '#000' }} /></button>
+                          <div style={{ position: 'absolute', top: 8, right: 16, display: 'flex', gap: 4, alignItems: 'center' }}>
+                            <button title="Edit" onClick={() => navigate(`/event/${id}/itinerary/edit/${it.id}`)} style={{ background: 'transparent', border: 'none', padding: 4, cursor: 'pointer', boxShadow: 'none' }}><Icon name="edit" style={{ fontSize: 16, color: isDark ? '#fff' : '#000' }} /></button>
+                            <button title="Duplicate" onClick={() => handleDuplicate(it)} style={{ background: 'transparent', border: 'none', padding: 4, cursor: 'pointer', boxShadow: 'none' }}><Icon name="duplicate" style={{ fontSize: 16, color: isDark ? '#fff' : '#000' }} /></button>
+                            <button title="Share" onClick={() => { setItineraryToShare(it.id); setShowShareModal(true); }} style={{ background: 'transparent', border: 'none', padding: 4, cursor: 'pointer', boxShadow: 'none' }}><Icon name="share" style={{ fontSize: 16, color: isDark ? '#fff' : '#000' }} /></button>
+                            <button title="Save as Draft" onClick={() => handleMakeDraft(Number(it.id))} style={{ background: 'transparent', border: 'none', padding: 4, cursor: 'pointer', boxShadow: 'none' }}><Icon name="saveAsDraft" style={{ fontSize: 16, color: isDark ? '#fff' : '#000' }} /></button>
+                            <button title="Delete" onClick={() => { setItineraryToDelete(it.id); setShowDeleteConfirm(true); }} style={{ background: 'transparent', border: 'none', padding: 4, cursor: 'pointer', boxShadow: 'none' }}><Icon name="delete" style={{ fontSize: 16, color: isDark ? '#fff' : '#000' }} /></button>
+                              </div>
+                            </div>
                           </div>
                         </div>
                       ))}
@@ -3361,29 +2939,9 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                 ))}
                 {/* Render individual itineraries */}
                 {groupedItineraries.individuals.map((it, idx) => (
-                  <div 
-                    key={it.id} 
-                    style={{ 
-                      ...getGlassStyles(isDark),
-                      padding: '24px 20px', 
-                      marginBottom: 0,
-                      position: 'relative',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      border: selectedItineraryIds.includes(it.id!) 
-                        ? `2px solid ${isDark ? '#ffffff' : '#000000'}` 
-                        : `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
-                      transition: 'all 0.2s ease'
-                    }}
-                  >
-                    {/* Selection checkbox */}
+                  <div key={it.id} style={{ display: 'flex', alignItems: 'center', marginBottom: 0 }}>
                     {isItinerarySelectModeActive && (
-                      <div style={{ 
-                        position: 'absolute', 
-                        top: 16, 
-                        left: 16, 
-                        zIndex: 10 
-                      }}>
+                      <div style={{ marginRight: 16, display: 'flex', alignItems: 'center', height: '100%' }}>
                         <input
                           type="checkbox"
                           checked={selectedItineraryIds.includes(it.id!)}
@@ -3392,11 +2950,26 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                             width: 20,
                             height: 20,
                             cursor: 'pointer',
-                            accentColor: isDark ? '#ffffff' : '#000000'
+                            accentColor: isDark ? '#ffffff' : '#000000',
+                            verticalAlign: 'middle',
                           }}
                         />
                       </div>
                     )}
+                    <div
+                      style={{
+                        ...getGlassStyles(isDark),
+                        padding: '24px 20px',
+                        position: 'relative',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        border: selectedItineraryIds.includes(it.id!)
+                          ? `2px solid ${isDark ? '#ffffff' : '#000000'}`
+                          : `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
+                        transition: 'all 0.2s ease',
+                        flex: 1,
+                      }}
+                    >
                     <div style={{ flex: 1, marginLeft: isSelectModeActive ? 40 : 0 }}>
                       <div style={{ fontWeight: 600, fontSize: 20, marginBottom: 12, color: isDark ? '#ffffff' : '#000000' }}>{it.title}</div>
                       <div>
@@ -3438,7 +3011,7 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                                   <span style={{ 
                                     fontWeight: 500, 
                                     color: isDark ? '#a1a1aa' : '#71717a' 
-                                  }}>Arrival:</span> {it.arrival_time}
+                                    }}>Arrival:</span> {formatDateDisplay(it.arrival_time)}
                                 </div>
                               )}
                               {it.start_time && it.end_time && (
@@ -3449,7 +3022,7 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                                   <span style={{ 
                                     fontWeight: 500, 
                                     color: isDark ? '#a1a1aa' : '#71717a' 
-                                  }}>Time:</span> {it.start_time} - {it.end_time}
+                                    }}>Time:</span> {formatDateDisplay(it.start_time)} - {formatDateDisplay(it.end_time)}
                                 </div>
                               )}
                               {it.date && (
@@ -3457,7 +3030,7 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                                   color: isDark ? '#d1d5db' : '#374151', 
                                   fontSize: 14 
                                 }}>
-                                  <span style={{ fontWeight: 500, color: isDark ? '#a1a1aa' : '#71717a', marginRight: 4 }}>Date:</span> {new Date(it.date).toLocaleDateString('en-GB', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
+                                    <span style={{ fontWeight: 500, color: isDark ? '#a1a1aa' : '#71717a', marginRight: 4 }}>Date:</span> {formatDateDisplay(it.date)}
                                 </div>
                               )}
                               {it.location && (
@@ -3565,24 +3138,26 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                           </div>
                         </div>
                       </div>
-                      <div style={{ position: 'absolute', top: 16, right: 16, display: 'flex', gap: 4, alignItems: 'center' }}>
-                        <button title="Edit" onClick={() => navigate(`/event/${id}/itinerary/edit/${it.id}`)} style={{ background: 'none', border: 'none', color: isDark ? '#fff' : '#000', padding: 4, cursor: 'pointer' }}><Icon name="edit" style={{ fontSize: 16, color: isDark ? '#fff' : '#000' }} /></button>
-                        <button title="Duplicate" onClick={() => handleDuplicate(it)} style={{ background: 'none', border: 'none', color: isDark ? '#fff' : '#000', padding: 4, cursor: 'pointer' }}><Icon name="duplicate" style={{ fontSize: 16, color: isDark ? '#fff' : '#000' }} /></button>
-                        <button title="Share" onClick={() => { setItineraryToShare(it.id); setShowShareModal(true); }} style={{ background: 'none', border: 'none', color: isDark ? '#fff' : '#000', padding: 4, cursor: 'pointer' }}><Icon name="share" style={{ fontSize: 16, color: isDark ? '#fff' : '#000' }} /></button>
-                        <button title="Save as Draft" onClick={() => handleMakeDraft(it.id)} style={{ background: 'none', border: 'none', color: isDark ? '#fff' : '#000', padding: 4, cursor: 'pointer' }}><Icon name="saveAsDraft" style={{ fontSize: 16, color: isDark ? '#fff' : '#000' }} /></button>
-                        <button title="Delete" onClick={() => { setItineraryToDelete(it.id); setShowDeleteConfirm(true); }} style={{ background: 'none', border: 'none', color: isDark ? '#fff' : '#000', padding: 4, cursor: 'pointer' }}><Icon name="delete" style={{ fontSize: 16, color: isDark ? '#fff' : '#000' }} /></button>
+                      <div style={{ position: 'absolute', top: 8, right: 16, display: 'flex', gap: 4, alignItems: 'center' }}>
+                        <button title="Edit" onClick={() => navigate(`/event/${id}/itinerary/edit/${it.id}`)} style={{ background: 'transparent', border: 'none', padding: 4, cursor: 'pointer', boxShadow: 'none' }}><Icon name="edit" style={{ fontSize: 16, color: isDark ? '#fff' : '#000' }} /></button>
+                        <button title="Duplicate" onClick={() => handleDuplicate(it)} style={{ background: 'transparent', border: 'none', padding: 4, cursor: 'pointer', boxShadow: 'none' }}><Icon name="duplicate" style={{ fontSize: 16, color: isDark ? '#fff' : '#000' }} /></button>
+                        <button title="Share" onClick={() => { setItineraryToShare(it.id); setShowShareModal(true); }} style={{ background: 'transparent', border: 'none', padding: 4, cursor: 'pointer', boxShadow: 'none' }}><Icon name="share" style={{ fontSize: 16, color: isDark ? '#fff' : '#000' }} /></button>
+                        <button title="Save as Draft" onClick={() => handleMakeDraft(Number(it.id))} style={{ background: 'transparent', border: 'none', padding: 4, cursor: 'pointer', boxShadow: 'none' }}><Icon name="saveAsDraft" style={{ fontSize: 16, color: isDark ? '#fff' : '#000' }} /></button>
+                        <button title="Delete" onClick={() => { setItineraryToDelete(it.id); setShowDeleteConfirm(true); }} style={{ background: 'transparent', border: 'none', padding: 4, cursor: 'pointer', boxShadow: 'none' }}><Icon name="delete" style={{ fontSize: 16, color: isDark ? '#fff' : '#000' }} /></button>
+                        </div>
                       </div>
                     </div>
                   </div>
                 ))}
 
                 {/* Drafts Section */}
-                {externalDraftItineraries.length > 0 && (
-                  <div style={{ marginTop: 48, paddingTop: 32, borderTop: `2px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}` }}>
-                    <h3 style={mainTitleStyle}>Draft Itineraries</h3>
-                    
+                <div style={{ marginTop: 48, paddingTop: 32, borderTop: `2px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}` }}>
+                  <h3 style={mainTitleStyle}>Draft Itineraries</h3>
+                  {draftItineraries.length === 0 ? (
+                    <div style={{ color: '#aaa', fontSize: 16, margin: 24 }}>No drafts yet.</div>
+                  ) : (
                     <div style={{ display: 'grid', gap: 24 }}>
-                      {externalDraftItineraries.map((draft, draftIdx) => (
+                      {draftItineraries.map((draft, draftIdx) => (
                         <div
                           key={draft.id}
                           style={{
@@ -3603,19 +3178,19 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                             }}
                             style={{
                               position: 'absolute',
-                              top: 18,
-                              right: 18,
+                              top: 12, // move up a bit for bigger button
+                              right: 12,
                               background: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.06)',
                               color: isDark ? '#fff' : '#222',
-                              border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.18)' : '#bbb'}`,
+                              border: `2px solid ${isDark ? 'rgba(255,255,255,0.18)' : '#bbb'}`,
                               borderRadius: '50%',
-                              width: 18,
-                              height: 18,
-                              minWidth: 18,
-                              minHeight: 18,
+                              width: 32,
+                              height: 32,
+                              minWidth: 32,
+                              minHeight: 32,
                               boxShadow: isDark ? '0 2px 8px #0004' : '0 1px 4px #0001',
-                              fontSize: 12,
-                              fontWeight: 500,
+                              fontSize: 22,
+                              fontWeight: 700,
                               cursor: 'pointer',
                               transition: 'all 0.2s',
                               zIndex: 10,
@@ -3675,7 +3250,7 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                                         <span style={{ 
                                           fontWeight: 500, 
                                           color: isDark ? '#a1a1aa' : '#71717a' 
-                                        }}>Arrival:</span> {draft.arrival_time}
+                                        }}>Arrival:</span> {formatDateDisplay(draft.arrival_time)}
                                       </div>
                                     )}
                                     {draft.start_time && draft.end_time && (
@@ -3686,7 +3261,7 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                                         <span style={{ 
                                           fontWeight: 500, 
                                           color: isDark ? '#a1a1aa' : '#71717a' 
-                                        }}>Time:</span> {draft.start_time} - {draft.end_time}
+                                        }}>Time:</span> {formatDateDisplay(draft.start_time)} - {formatDateDisplay(draft.end_time)}
                                       </div>
                                     )}
                                     {draft.date && (
@@ -3694,7 +3269,7 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                                         color: isDark ? '#d1d5db' : '#374151', 
                                         fontSize: 14 
                                       }}>
-                                        <span style={{ fontWeight: 500, color: isDark ? '#a1a1aa' : '#71717a', marginRight: 4 }}>Date:</span> {new Date(draft.date).toLocaleDateString('en-GB', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
+                                        <span style={{ fontWeight: 500, color: isDark ? '#a1a1aa' : '#71717a', marginRight: 4 }}>Date:</span> {formatDateDisplay(draft.date)}
                                       </div>
                                     )}
                                     {draft.location && (
@@ -3733,41 +3308,20 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                                 padding: '8px 16px',
                                 minHeight: 36
                               }}
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.transform = 'scale(1.05)';
-                                e.currentTarget.style.boxShadow = isDark 
-                                  ? '0 6px 20px rgba(0, 0, 0, 0.4)' 
-                                  : '0 6px 20px rgba(0, 0, 0, 0.15)';
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.transform = 'scale(1)';
-                                e.currentTarget.style.boxShadow = isDark 
-                                  ? '0 4px 16px rgba(0, 0, 0, 0.2)' 
-                                  : '0 4px 16px rgba(0, 0, 0, 0.1)';
-                              }}
                             >
                               Edit
                             </button>
                             
                             <button
-                              onClick={() => handlePublishDraft(draftIdx)}
+                              onClick={() => {
+                                console.log('Publish clicked', draft.id, draft);
+                                handlePublishDraft(draft.id);
+                              }}
                               style={{
                                 ...getButtonStyles(isDark, 'secondary'),
                                 fontSize: 14,
                                 padding: '8px 16px',
                                 minHeight: 36
-                              }}
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.transform = 'scale(1.05)';
-                                e.currentTarget.style.boxShadow = isDark 
-                                  ? '0 6px 20px rgba(0, 0, 0, 0.4)' 
-                                  : '0 6px 20px rgba(0, 0, 0, 0.15)';
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.transform = 'scale(1)';
-                                e.currentTarget.style.boxShadow = isDark 
-                                  ? '0 4px 16px rgba(0, 0, 0, 0.2)' 
-                                  : '0 4px 16px rgba(0, 0, 0, 0.1)';
                               }}
                             >
                               Publish
@@ -3776,8 +3330,8 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                         </div>
                       ))}
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -3789,8 +3343,13 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
               {/* Top row of controls */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                 <div style={{ display: 'flex', gap: '12px' }}>
-                  <button onClick={() => navigate(`/event/${id}/add-guests`)} style={guestPageBlackButtonStyle}>
-                    Add Guests
+                  <button
+                    onClick={() => {
+                      setShowSendFormModal(true);
+                    }}
+                    style={guestPageBlackButtonStyle}
+                  >
+                    Send Form
                   </button>
                   <button onClick={() => navigate(`/event/${id}/add-guests?upload=1`)} style={guestPageWhiteButtonStyle}>
                     Upload .CSV
@@ -3799,13 +3358,8 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                     Download
                   </button>
                 </div>
-                <button
-                  onClick={() => {
-                    setShowSendFormModal(true);
-                  }}
-                  style={guestPageBlackButtonStyle}
-                >
-                  Send Form
+                <button onClick={() => navigate(`/event/${id}/add-guests`)} style={guestPageBlackButtonStyle}>
+                  Add Guests
                 </button>
               </div>
 
@@ -4147,7 +3701,21 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
               {saveAddOnsMessage && (
                 <div style={{ textAlign: 'center', color: isDark ? '#22c55e' : '#16a34a', marginBottom: 16, fontWeight: 600 }}>{saveAddOnsMessage}</div>
               )}
-              {addOnsList}
+              {activeModules.addons && activeModules.addons.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 24, minHeight: 100, marginBottom: 24 }}>
+                  {activeModules.addons.map((module, idx) => {
+                    const moduleInfo = DASHBOARD_MODULES.addons.find(m => m.key === module.name || m.key === module.id);
+                    if (!moduleInfo) return null;
+                    return (
+                      <AddOnCard
+                        key={module.id}
+                        title={moduleInfo.label}
+                        description={moduleInfo.description}
+                      />
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -4756,7 +4324,7 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                   // Save all as draft
                   const drafted: any[] = [];
                   for (const it of savedItineraries) {
-                    await handleMakeDraft(it.id);
+                    await handleMakeDraft(Number(it.id));
                     drafted.push(it);
                   }
                   setLastBulkAction({ action: 'draft', affected: drafted });

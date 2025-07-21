@@ -2,8 +2,12 @@ import { createClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 
-const supabaseUrl = Constants.expoConfig.extra.SUPABASE_URL;
-const supabaseAnonKey = Constants.expoConfig.extra.SUPABASE_ANON_KEY;
+const supabaseUrl = Constants.expoConfig?.extra?.SUPABASE_URL;
+const supabaseAnonKey = Constants.expoConfig?.extra?.SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error('Missing Supabase configuration. Please check your app.json or app.config.js');
+}
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
@@ -13,6 +17,15 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     detectSessionInUrl: false,
   },
 });
+
+export const getEventAddOns = async (eventId: string, email: string): Promise<any[]> => {
+  const { data, error } = await supabase.rpc('get_guest_event_addons', {
+    p_event_id: eventId,
+    p_email: email,
+  });
+  if (error) throw error;
+  return data || [];
+};
 
 // Types for your database tables
 export type Event = {
@@ -58,6 +71,33 @@ export type Guest = {
   created_at?: string;
   updated_at?: string;
   created_by?: string;
+  // Travel module fields
+  flight_number?: string;
+  arrival_airport?: string;
+  departure_date?: string;
+  arrival_date?: string;
+  departure_time?: string;
+  arrival_time?: string;
+  hotel_location?: string;
+  check_in_date?: string;
+  hotel_departure_date?: string;
+  check_in_time?: string;
+  train_booking_number?: string;
+  train_station?: string;
+  train_departure_date?: string;
+  train_arrival_date?: string;
+  train_departure_time?: string;
+  train_arrival_time?: string;
+  coach_booking_number?: string;
+  coach_station?: string;
+  coach_departure_date?: string;
+  coach_arrival_date?: string;
+  coach_departure_time?: string;
+  coach_arrival_time?: string;
+  event_reference?: string;
+  id_upload_url?: string;
+  id_upload_filename?: string;
+  id_upload_uploaded_at?: string;
 };
 
 export type ItineraryItem = {
