@@ -9,6 +9,8 @@ import MultipleChoiceModuleModal from '../components/MultipleChoiceModuleModal';
 import PhotoVideoModuleModal from '../components/PhotoVideoModuleModal';
 import QuestionModal from '../components/QuestionModuleModal';
 import ModuleManagementModal from '../components/ModuleManagementModal';
+import { DraggableAction } from '../components/DraggableAction';
+
 import { createClient } from '@supabase/supabase-js';
 import { getCurrentUser } from '../lib/auth';
 
@@ -905,13 +907,48 @@ export default function EventPortalManagementPage() {
             </div>
           </div>
 
-          {/* Placeholder Section */}
-          <div style={{ ...getSectionStyles(isDark), display: 'flex', flexDirection: 'column', height: '100%' }}>
+          {/* Guest Chat Section */}
+          <DraggableAction
+            action={{
+              name: `Guest Chat - ${event?.name || 'Event'}`,
+              icon: '💬',
+              type: 'navigate',
+              to: '/guest-chat'
+            }}
+            style={{ ...getSectionStyles(isDark), display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}
+          >
+            {/* Drag Icon */}
+            <div style={{
+              position: 'absolute',
+              top: '12px',
+              right: '12px',
+              display: 'grid',
+              gridTemplateColumns: 'repeat(3, 1fr)',
+              gridTemplateRows: 'repeat(2, 1fr)',
+              gap: '1px',
+              width: '18px',
+              height: '12px',
+              cursor: 'grab',
+              zIndex: 10
+            }}>
+              {[...Array(6)].map((_, i) => (
+                <div
+                  key={i}
+                  style={{
+                    width: '5px',
+                    height: '5px',
+                    background: isDark ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.3)',
+                    borderRadius: '1px'
+                  }}
+                />
+              ))}
+            </div>
+            
             <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 24, borderBottom: `2px solid ${isDark ? '#333' : '#e5e7eb'}`, paddingBottom: 12 }}>
-              Coming Soon
+              Guest Chat
             </h2>
             <p style={{ fontSize: 16, color: isDark ? '#ccc' : '#666', marginBottom: 0, marginRight: 0 }}>
-              More powerful features are coming to enhance your event management experience.
+              Chat with your guests in real-time. All messages are delivered instantly with push notifications.
             </p>
             <div style={{ flex: 1 }} />
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 24 }}>
@@ -922,27 +959,27 @@ export default function EventPortalManagementPage() {
                   width: 140,
                   fontSize: 13,
                   fontWeight: 600,
-                  cursor: 'not-allowed',
+                  cursor: 'pointer',
                   transition: 'all 0.2s ease',
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: 4,
                   background: isDark 
-                    ? 'rgba(255, 255, 255, 0.05)' 
-                    : 'rgba(255, 255, 255, 0.1)',
+                    ? 'rgba(255, 255, 255, 0.1)' 
+                    : 'rgba(255, 255, 255, 0.2)',
                   backdropFilter: 'blur(8px)',
                   border: isDark 
-                    ? '1px solid rgba(255, 255, 255, 0.1)' 
-                    : '1px solid rgba(0, 0, 0, 0.05)',
-                  color: isDark ? 'rgba(255, 255, 255, 0.5)' : 'rgba(0, 0, 0, 0.5)',
+                    ? '1px solid rgba(255, 255, 255, 0.2)' 
+                    : '1px solid rgba(0, 0, 0, 0.1)',
+                  color: isDark ? '#ffffff' : '#000000',
                 }}
-                disabled
+                onClick={() => navigate('/guest-chat', { state: { eventId } })}
               >
-                Disabled
+                Open Chat
               </button>
             </div>
-          </div>
+          </DraggableAction>
         </div>
 
         {/* Guest Access Management */}
@@ -2216,4 +2253,3 @@ function DraggableTimelineController({ isDark, DateSlider, handleTimelinePreviou
     </div>
   );
 }
-

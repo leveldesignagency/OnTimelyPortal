@@ -1,9 +1,16 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import styles from './Sidebar.module.css';
 import { EventType } from './types';
 import { ThemeContext } from './ThemeContext';
 import { supabase } from './lib/supabase';
+import { 
+  getUserQuickActions, 
+  addQuickAction, 
+  removeQuickAction, 
+  QuickAction as QuickActionType,
+  createNavigationQuickAction
+} from './lib/quickActions';
 
 const PAGE_LINKS = [
   { label: 'Dashboard', to: '/' },
@@ -19,12 +26,21 @@ interface SidebarProps {
   setOpen: (isOpen: boolean) => void;
 }
 
+interface QuickAction {
+  id: string;
+  name: string;
+  icon: string;
+  action: () => void;
+}
+
 function getEventStatus(event: EventType, today: Date) {
-  const from = new Date(event.from);
-  const to = new Date(event.to);
-  if (from <= today && today <= to) return 'live';
-  if (today < from) return 'upcoming';
-  return 'past';
+  const eventDate = new Date(event.date);
+  const diffTime = eventDate.getTime() - today.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  
+  if (diffDays < 0) return 'past';
+  if (diffDays === 0) return 'live';
+  return 'upcoming';
 }
 
 export default function Sidebar({ events = [], isOverlay, isOpen, setOpen }: SidebarProps) {
@@ -37,6 +53,46 @@ export default function Sidebar({ events = [], isOverlay, isOpen, setOpen }: Sid
   const upcomingEvents = events.filter(e => getEventStatus(e, today) === 'upcoming');
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const navigate = useNavigate();
+
+  // Quick Actions State
+  const [quickActions, setQuickActions] = useState<QuickAction[]>([]);
+  const [showQuickActionsDrawer, setShowQuickActionsDrawer] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
+
+  // Load quick actions from database on component mount
+  useEffect(() => {
+    loadQuickActions();
+  }, []);
+
+  const loadQuickActions = async () => {
+    try {
+      const actions = await getUserQuickActions();
+      const formattedActions: QuickAction[] = actions.map(action => ({
+        id: action.id,
+        name: action.name,
+        icon: action.icon,
+        action: () => {
+          if (action.action_type === 'navigate') {
+            const path = action.action_data?.path;
+            if (path) {
+              // Handle guest chat navigation with event ID
+              if (path === '/guest-chat' && action.event_id) {
+                navigate(path, { state: { eventId: action.event_id } });
+              } else {
+                navigate(path);
+              }
+            }
+          } else if (action.action_type === 'function') {
+            // Handle function actions if needed
+            console.log('Function action:', action.action_data);
+          }
+        }
+      }));
+      setQuickActions(formattedActions);
+    } catch (error) {
+      console.error('Error loading quick actions:', error);
+    }
+  };
 
   // Update selectedPage when route changes
   React.useEffect(() => {
@@ -66,6 +122,108 @@ export default function Sidebar({ events = [], isOverlay, isOpen, setOpen }: Sid
   const handleLogout = async () => {
     await supabase.auth.signOut();
     navigate('/login');
+  };
+
+  // Quick Actions Handlers
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    
+    const actionData = e.dataTransfer.getData('application/json');
+    if (actionData) {
+      try {
+        const action = JSON.parse(actionData);
+        
+        // Create the quick action for database
+        let quickActionInput;
+        
+        if (action.type === 'navigate') {
+          // Extract eventId from action name if it's a guest chat
+          let eventId = null;
+          let path = action.to;
+          
+          if (action.name.includes('Guest Chat')) {
+            const eventName = action.name.split(' - ')[1];
+            const event = events.find(e => e.name === eventName);
+            if (event) {
+              eventId = event.id;
+              path = '/guest-chat';
+            }
+          }
+          
+          quickActionInput = createNavigationQuickAction(
+            action.name,
+            action.icon,
+            path,
+            eventId
+          );
+        } else if (action.type === 'function') {
+          quickActionInput = {
+            name: action.name,
+            icon: action.icon,
+            action_type: 'function',
+            action_data: action.execute,
+            event_id: null
+          };
+        }
+        
+        if (quickActionInput) {
+          // Save to database
+          const newActionId = await addQuickAction(quickActionInput);
+          
+          if (newActionId) {
+            // Add to local state
+            const newQuickAction: QuickAction = {
+              id: newActionId,
+              name: action.name,
+              icon: action.icon,
+              action: () => {
+                // Use the same logic as loaded actions
+                if (action.type === 'navigate') {
+                  const path = quickActionInput.action_data?.path;
+                  if (path) {
+                    // Handle guest chat navigation with event ID
+                    if (path === '/guest-chat' && quickActionInput.event_id) {
+                      navigate(path, { state: { eventId: quickActionInput.event_id } });
+                    } else {
+                      navigate(path);
+                    }
+                  }
+                } else if (action.type === 'function') {
+                  // Handle function actions if needed
+                  console.log('Function action:', quickActionInput.action_data);
+                }
+              }
+            };
+            
+            setQuickActions(prev => [...prev, newQuickAction]);
+          }
+        }
+      } catch (error) {
+        console.error('Error parsing dropped action:', error);
+      }
+    }
+  };
+
+  const handleRemoveQuickAction = async (id: string) => {
+    try {
+      const success = await removeQuickAction(id);
+      if (success) {
+        setQuickActions(prev => prev.filter(action => action.id !== id));
+      }
+    } catch (error) {
+      console.error('Error removing quick action:', error);
+    }
   };
 
   return (
@@ -132,6 +290,219 @@ export default function Sidebar({ events = [], isOverlay, isOpen, setOpen }: Sid
         )}
         <hr className={styles.hr} />
         <div style={{ flex: 1 }} />
+        
+        {/* Quick Actions Drop Zone */}
+        <div
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          style={{
+            border: `2px dashed ${isDragOver ? '#00bfa5' : '#666'}`,
+            borderRadius: '8px',
+            padding: '16px',
+            marginBottom: '16px',
+            textAlign: 'center',
+            backgroundColor: isDragOver ? 'rgba(0, 191, 165, 0.1)' : 'transparent',
+            transition: 'all 0.2s ease',
+            cursor: 'pointer'
+          }}
+        >
+          <div style={{ 
+            fontSize: '12px', 
+            fontWeight: '500', 
+            color: isDragOver ? '#00bfa5' : '#999',
+            textTransform: 'uppercase',
+            letterSpacing: '0.5px'
+          }}>
+            Quick Action Drop
+          </div>
+        </div>
+
+        {/* Quick Actions Tab */}
+        {quickActions.length > 0 && (
+          <div
+            onClick={() => setShowQuickActionsDrawer(!showQuickActionsDrawer)}
+            style={{
+              position: 'absolute',
+              right: '-20px',
+              bottom: '80px',
+              width: '20px',
+              height: '60px',
+              backgroundColor: theme === 'dark' ? '#2a2a2a' : '#f0f0f0',
+              border: `1px solid ${theme === 'dark' ? '#444' : '#ddd'}`,
+              borderLeft: 'none',
+              borderRadius: '0 8px 8px 0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              boxShadow: '2px 0 8px rgba(0,0,0,0.1)',
+              transition: 'all 0.2s ease'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = theme === 'dark' ? '#3a3a3a' : '#e0e0e0';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = theme === 'dark' ? '#2a2a2a' : '#f0f0f0';
+            }}
+          >
+            <div style={{ 
+              width: '4px',
+              height: '16px',
+              backgroundColor: theme === 'dark' ? '#fff' : '#333',
+              borderRadius: '2px'
+            }} />
+          </div>
+        )}
+
+        {/* Quick Actions Drawer */}
+        {showQuickActionsDrawer && quickActions.length > 0 && (
+          <>
+            {/* Backdrop to handle outside clicks */}
+            <div
+              onClick={() => setShowQuickActionsDrawer(false)}
+              style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                width: '100vw',
+                height: '100vh',
+                backgroundColor: 'transparent',
+                zIndex: 999
+              }}
+            />
+            <div
+              style={{
+                position: 'absolute',
+                right: '-200px',
+                top: '0',
+                width: '200px',
+                height: '100%',
+                backgroundColor: theme === 'dark' ? '#2a2a2a' : '#f0f0f0',
+                border: `1px solid ${theme === 'dark' ? '#444' : '#ddd'}`,
+                borderLeft: '1.5px solid #fff',
+                borderRadius: '0 8px 8px 0',
+                padding: '20px',
+                boxShadow: '2px 0 8px rgba(0,0,0,0.1)',
+                zIndex: 1000
+              }}
+            >
+            <div style={{ 
+              fontSize: '16px', 
+              fontWeight: '600', 
+              color: theme === 'dark' ? '#fff' : '#333',
+              marginBottom: '20px',
+              textAlign: 'center'
+            }}>
+              Quick Actions
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {quickActions.map((action) => (
+                <div
+                  key={action.id}
+                  onClick={action.action}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    padding: '16px',
+                    borderRadius: '12px',
+                    backgroundColor: theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    position: 'relative',
+                    border: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
+                    backdropFilter: 'blur(10px)'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = theme === 'dark' ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)';
+                  }}
+                >
+                  <div style={{ fontSize: '28px', marginBottom: '12px' }}>{action.icon}</div>
+                  <div style={{ 
+                    fontSize: '13px', 
+                    color: theme === 'dark' ? '#fff' : '#333',
+                    textAlign: 'center',
+                    fontWeight: '600',
+                    lineHeight: '1.3'
+                  }}>
+                    {action.name}
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRemoveQuickAction(action.id);
+                    }}
+                    style={{
+                      position: 'absolute',
+                      top: '8px',
+                      right: '8px',
+                      background: 'transparent',
+                      border: `1px solid ${theme === 'dark' ? '#fff' : '#000'}`,
+                      borderRadius: '50%',
+                      width: '20px',
+                      height: '20px',
+                      color: theme === 'dark' ? '#fff' : '#000',
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'all 0.2s ease',
+                      lineHeight: '1',
+                      padding: 0
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = theme === 'dark' ? '#fff' : '#000';
+                      e.currentTarget.style.color = theme === 'dark' ? '#000' : '#fff';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'transparent';
+                      e.currentTarget.style.color = theme === 'dark' ? '#fff' : '#000';
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+            
+            {/* Minimize Button */}
+            <div style={{ 
+              position: 'absolute', 
+              bottom: '20px', 
+              left: '50%', 
+              transform: 'translateX(-50%)' 
+            }}>
+              <button
+                onClick={() => {
+                  setShowQuickActionsDrawer(false);
+                }}
+                style={{
+                  background: '#fff',
+                  border: 'none',
+                  borderRadius: '20px',
+                  width: '60px',
+                  height: '8px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  padding: 0
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = '#f0f0f0';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = '#fff';
+                }}
+              />
+            </div>
+          </div>
+          </>
+        )}
+
         <div className={styles.footer}>
           <div className={styles.footerItem}>Settings</div>
           <div className={styles.footerItem} onClick={() => setShowLogoutModal(true)} style={{ cursor: 'pointer', whiteSpace: 'nowrap', minWidth: 140 }}>

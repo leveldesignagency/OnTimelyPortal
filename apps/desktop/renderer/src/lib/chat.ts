@@ -112,7 +112,7 @@ export const getCompanyTeams = async (companyId: string): Promise<Team[]> => {
           user_id,
           role,
           joined_at,
-          user:users(*)
+          user:users!team_members_user_id_fkey(*)
         )
       `)
       .eq('company_id', companyId)
@@ -236,7 +236,7 @@ export const createTeam = async (
         memberInserts.push({
           team_id: teamData.id,
           user_id: memberId,
-          role: 'member' as const
+          role: 'admin' as const
         })
       }
     })
@@ -275,7 +275,7 @@ export const createTeam = async (
           user_id,
           role,
           joined_at,
-          user:users(*)
+          user:users!team_members_user_id_fkey(*)
         )
       `)
       .eq('id', teamData.id)
@@ -335,7 +335,7 @@ export const createTeamChat = async (
       .from('teams')
       .select(`
         *,
-        team_members(user_id, user:users(*))
+        team_members(user_id, user:users!team_members_user_id_fkey(*))
       `)
       .eq('id', teamId)
       .eq('company_id', companyId)
@@ -378,7 +378,7 @@ export const createTeamChat = async (
             joined_at,
             is_muted,
             is_pinned,
-            user:users(*)
+            user:users!chat_participants_user_id_fkey(*)
           )
         `)
         .eq('id', existingChat.id)
@@ -437,7 +437,8 @@ export const createTeamChat = async (
       role: "member" as const,
       joined_at: new Date().toISOString(),
       is_muted: false,
-      is_pinned: false
+      is_pinned: false,
+      company_id: companyId
     }))
 
     console.log('👥 Adding participants:', participantInserts.length, 'participants');
@@ -468,7 +469,7 @@ export const createTeamChat = async (
           joined_at,
           is_muted,
           is_pinned,
-          user:users(*)
+          user:users!chat_participants_user_id_fkey(*)
         )
       `)
       .eq('id', chatData.id)
@@ -575,7 +576,7 @@ export const createDirectChat = async (user1Id: string, user2Id: string, company
               joined_at,
               is_muted,
               is_pinned,
-              user:users(*)
+              user:users!chat_participants_user_id_fkey(*)
             )
           `)
           .eq('id', directChat.id)
@@ -617,8 +618,8 @@ export const createDirectChat = async (user1Id: string, user2Id: string, company
     const { error: participantsError } = await supabase
       .from('chat_participants')
       .insert([
-        { chat_id: chatData.id, user_id: user1Id, role: "member" as const },
-        { chat_id: chatData.id, user_id: user2Id, role: "member" as const }
+        { chat_id: chatData.id, user_id: user1Id, role: "member" as const, company_id: companyId },
+        { chat_id: chatData.id, user_id: user2Id, role: "member" as const, company_id: companyId }
       ])
 
     if (participantsError) {
@@ -642,7 +643,7 @@ export const createDirectChat = async (user1Id: string, user2Id: string, company
           joined_at,
           is_muted,
           is_pinned,
-          user:users(*)
+          user:users!chat_participants_user_id_fkey(*)
         )
       `)
       .eq('id', chatData.id)
@@ -732,7 +733,8 @@ export const createGroupChat = async (
       joined_at: new Date().toISOString(),
       is_muted: false,
       is_pinned: false,
-      role: "member" as const
+      role: "member" as const,
+      company_id: companyId
     }))
 
     console.log('📝 Participant inserts:', participantInserts);
@@ -764,7 +766,7 @@ export const createGroupChat = async (
           joined_at,
           is_muted,
           is_pinned,
-          user:users(*)
+          user:users!chat_participants_user_id_fkey(*)
         )
       `)
       .eq('id', chatData.id)
@@ -839,7 +841,7 @@ export const getUserChats = async (userId: string): Promise<Chat[]> => {
           is_muted,
           is_pinned,
           role,
-          user:users(*)
+          user:users!chat_participants_user_id_fkey(*)
         )
       `)
       .in('id', chatIds)
@@ -916,13 +918,13 @@ export const getChatMessages = async (chatId: string, limit: number = 50): Promi
       .from('messages')
       .select(`
         *,
-        sender:users(*),
+        sender:users!messages_sender_id_fkey(*),
         reactions:message_reactions(
           id,
           emoji,
           user_id,
           created_at,
-          user:users(*)
+          user:users!message_reactions_user_id_fkey(*)
         )
       `)
       .eq('chat_id', chatId)
@@ -984,13 +986,13 @@ export const sendMessage = async (
       })
       .select(`
         *,
-        sender:users(*),
+        sender:users!messages_sender_id_fkey(*),
         reactions:message_reactions(
           id,
           emoji,
           user_id,
           created_at,
-          user:users(*)
+          user:users!message_reactions_user_id_fkey(*)
         )
       `)
       .single()
@@ -1013,47 +1015,64 @@ export const sendMessage = async (
 // Add reaction to message
 export const addMessageReaction = async (messageId: string, userId: string, emoji: string): Promise<boolean> => {
   try {
-    const currentUser = getCurrentUser()
+    const currentUser = await getCurrentUser();
+    console.log('addMessageReaction params:', { messageId, userId, emoji, userIdType: typeof userId });
     if (!currentUser || currentUser.id !== userId) {
-      return false
+      console.error('addMessageReaction: User mismatch or not authenticated', { currentUser, userId });
+      return false;
     }
-
+    // Check if userId is a valid UUID (basic check)
+    if (!/^[0-9a-fA-F-]{36}$/.test(userId)) {
+      console.error('addMessageReaction: userId is not a valid UUID', { userId });
+      return false;
+    }
     const { error } = await supabase
       .from('message_reactions')
       .upsert({
         message_id: messageId,
         user_id: userId,
         emoji
-      })
-
-    return !error
+      });
+    if (error) {
+      console.error('addMessageReaction: Supabase error', error, { messageId, userId, emoji });
+      return false;
+    }
+    return true;
   } catch (error) {
-    console.error('Failed to add message reaction:', error)
-    return false
+    console.error('addMessageReaction: Exception', error, { messageId, userId, emoji });
+    return false;
   }
-}
+};
 
 // Remove reaction from message
 export const removeMessageReaction = async (messageId: string, userId: string, emoji: string): Promise<boolean> => {
   try {
-    const currentUser = getCurrentUser()
+    const currentUser = await getCurrentUser();
+    console.log('removeMessageReaction params:', { messageId, userId, emoji, userIdType: typeof userId });
     if (!currentUser || currentUser.id !== userId) {
-      return false
+      console.error('removeMessageReaction: User mismatch or not authenticated', { currentUser, userId });
+      return false;
     }
-
+    if (!/^[0-9a-fA-F-]{36}$/.test(userId)) {
+      console.error('removeMessageReaction: userId is not a valid UUID', { userId });
+      return false;
+    }
     const { error } = await supabase
       .from('message_reactions')
       .delete()
       .eq('message_id', messageId)
       .eq('user_id', userId)
-      .eq('emoji', emoji)
-
-    return !error
+      .eq('emoji', emoji);
+    if (error) {
+      console.error('removeMessageReaction: Supabase error', error, { messageId, userId, emoji });
+      return false;
+    }
+    return true;
   } catch (error) {
-    console.error('Failed to remove message reaction:', error)
-    return false
+    console.error('removeMessageReaction: Exception', error, { messageId, userId, emoji });
+    return false;
   }
-}
+};
 
 // Real-time subscriptions with company isolation
 export const subscribeToMessages = (chatId: string, onMessage: (message: Message) => void) => {
@@ -1081,13 +1100,13 @@ export const subscribeToMessages = (chatId: string, onMessage: (message: Message
           .from('messages')
           .select(`
             *,
-            sender:users(*),
+            sender:users!messages_sender_id_fkey(*),
             reactions:message_reactions(
               id,
               emoji,
               user_id,
               created_at,
-              user:users(*)
+              user:users!message_reactions_user_id_fkey(*)
             )
           `)
           .eq('id', payload.new.id)
@@ -1269,44 +1288,88 @@ export const removeUserFromGroup = async (
   removedBy: string
 ): Promise<boolean> => {
   try {
-    const currentUser = getCurrentUser()
+    console.log('🗑️ REMOVE USER FROM GROUP - Starting process:', {
+      chatId,
+      userId,
+      removedBy
+    });
+
+    const currentUser = await getCurrentUser()
     if (!currentUser || currentUser.id !== removedBy) {
+      console.error('❌ Authentication failed or user mismatch:', {
+        currentUser: currentUser?.id,
+        removedBy
+      });
       return false
     }
 
     // Validate chat access and company isolation
+    console.log('🔍 Validating chat access and permissions...');
     const { data: chat, error: chatError } = await supabase
       .from('chats')
       .select(`
         company_id, 
         created_by,
+        type,
+        name,
         chat_participants!inner(user_id)
       `)
       .eq('id', chatId)
       .eq('chat_participants.user_id', removedBy)
       .single()
 
-    if (chatError || !chat || !validateCompanyAccess(chat.company_id)) {
+    console.log('📋 Chat validation result:', { chat, chatError });
+
+    if (chatError || !chat) {
+      console.error('❌ Chat not found or access denied:', chatError);
       return false
     }
 
-    // Only the creator (admin) can remove users
-    const isCreator = chat.created_by === removedBy;
-    
-    if (!isCreator) {
+    if (!validateCompanyAccess(chat.company_id)) {
+      console.error('❌ Company access validation failed');
       return false
+    }
+
+    // Permission check based on chat type
+    console.log('🔍 Permission check:', {
+      chatType: chat.type,
+      chatCreator: chat.created_by,
+      removedBy,
+      userId
+    });
+    
+    if (chat.type === 'group') {
+      // For group chats, only the creator (admin) can remove users
+    const isCreator = chat.created_by === removedBy;
+    if (!isCreator) {
+        console.error('❌ Only group creator can remove users from groups');
+        return false;
+      }
+    } else if (chat.type === 'direct') {
+      // For direct chats, any participant can remove the other participant or themselves
+      const isParticipant = chat.chat_participants.some(p => p.user_id === removedBy);
+      if (!isParticipant) {
+        console.error('❌ Only chat participants can remove users from direct chats');
+        return false;
+      }
+    } else {
+      console.error('❌ Unsupported chat type for user removal:', chat.type);
+      return false;
     }
 
     // Check if creator is removing themselves
     const isCreatorLeavingGroup = userId === removedBy;
+    console.log('🔍 Self-removal check:', { userId, removedBy, isCreatorLeavingGroup });
     
     if (isCreatorLeavingGroup) {
       // Get other participants to potentially transfer ownership
       const otherMembers = chat.chat_participants.filter(p => p.user_id !== userId);
+      console.log('👥 Other members for ownership transfer:', otherMembers);
       
       if (otherMembers.length > 0) {
         // Transfer ownership to the first other member
         const newOwnerId = otherMembers[0].user_id;
+        console.log('🔄 Transferring ownership to:', newOwnerId);
         
         const { error: transferError } = await supabase
           .from('chats')
@@ -1314,7 +1377,7 @@ export const removeUserFromGroup = async (
           .eq('id', chatId);
           
         if (transferError) {
-          console.error('Failed to transfer ownership:', transferError);
+          console.error('❌ Failed to transfer ownership:', transferError);
           return false;
         }
         
@@ -1322,16 +1385,85 @@ export const removeUserFromGroup = async (
       }
     }
 
-    const { error } = await supabase
+    // First, let's verify the user actually exists in the chat_participants table
+    console.log('🔍 Checking if user exists in chat_participants before deletion...');
+    const { data: existingParticipant, error: checkError } = await supabase
+      .from('chat_participants')
+      .select('*')
+      .eq('chat_id', chatId)
+      .eq('user_id', userId)
+      .single();
+
+    console.log('📋 Pre-deletion check result:', { 
+      existingParticipant, 
+      checkError,
+      chatIdType: typeof chatId,
+      userIdType: typeof userId,
+      chatIdValue: chatId,
+      userIdValue: userId
+    });
+
+    if (!existingParticipant) {
+      console.error('❌ User not found in chat_participants table!');
+      return false;
+    }
+
+    // Attempt to remove user from chat participants
+    console.log('🗑️ Attempting to remove user from chat_participants...');
+    const { data: deleteResult, error: deleteError } = await supabase
       .from('chat_participants')
       .delete()
       .eq('chat_id', chatId)
       .eq('user_id', userId)
+      .select(); // Select to get the deleted row back
 
-    return !error
+    console.log('🔄 Delete operation result:', { 
+      deleteResult, 
+      deleteError,
+      deletedRows: deleteResult?.length || 0
+    });
+
+    // Double-check that the user was actually deleted
+    console.log('🔍 Verifying deletion by checking if user still exists...');
+    const { data: stillExists, error: verifyError } = await supabase
+      .from('chat_participants')
+      .select('*')
+      .eq('chat_id', chatId)
+      .eq('user_id', userId)
+      .single();
+
+    console.log('📋 Post-deletion verification:', { 
+      stillExists, 
+      verifyError,
+      userWasDeleted: verifyError?.code === 'PGRST116' // "not found" error
+    });
+
+    if (deleteError) {
+      console.error('❌ Database deletion failed:', deleteError);
+      console.error('❌ Error details:', {
+        message: deleteError.message,
+        details: deleteError.details,
+        hint: deleteError.hint,
+        code: deleteError.code
+      });
+      return false;
+    }
+
+    if (!deleteResult || deleteResult.length === 0) {
+      console.error('❌ No rows deleted - user may not be in the group or RLS policy prevented deletion');
+      return false;
+    }
+
+    console.log('✅ User successfully removed from group:', {
+      chatId,
+      userId,
+      deletedRows: deleteResult.length
+    });
+
+    return true;
   } catch (error) {
-    console.error('Failed to remove user from group:', error)
-    return false
+    console.error('💥 Failed to remove user from group:', error);
+    return false;
   }
 }
 
@@ -1424,7 +1556,7 @@ export const deleteChat = async (chatId: string): Promise<boolean> => {
   try {
     console.log('🗑️ Deleting chat:', chatId);
     
-    const currentUser = getCurrentUser();
+    const currentUser = await getCurrentUser();
     if (!currentUser) {
       console.error('❌ No authenticated user');
       return false;
@@ -1712,5 +1844,118 @@ export const leaveGroup = async (chatId: string, userId: string): Promise<boolea
   } catch (error) {
     console.error('Failed to leave group:', error)
     return false
+  }
+}
+
+// Delete a message
+export const deleteMessage = async (messageId: string): Promise<boolean> => {
+  try {
+    console.log('🗑️ Deleting message:', messageId);
+    
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      console.error('❌ No authenticated user');
+      return false;
+    }
+
+    // First, verify the user owns the message
+    const { data: message, error: messageError } = await supabase
+      .from('messages')
+      .select('sender_id, chat_id')
+      .eq('id', messageId)
+      .single();
+
+    if (messageError || !message) {
+      console.error('❌ Message not found:', messageError);
+      return false;
+    }
+
+    if (message.sender_id !== currentUser.id) {
+      console.error('❌ Cannot delete message: not the sender');
+      return false;
+    }
+
+    // Delete message reactions first
+    console.log('🧹 Deleting message reactions...');
+    const { error: reactionsError } = await supabase
+      .from('message_reactions')
+      .delete()
+      .eq('message_id', messageId);
+
+    if (reactionsError) {
+      console.error('❌ Failed to delete message reactions:', reactionsError);
+    } else {
+      console.log('✅ Message reactions deleted');
+    }
+
+    // Delete the message
+    console.log('🗑️ Deleting message...');
+    const { error: deleteError } = await supabase
+      .from('messages')
+      .delete()
+      .eq('id', messageId)
+      .eq('sender_id', currentUser.id);
+
+    if (deleteError) {
+      console.error('❌ Failed to delete message:', deleteError);
+      return false;
+    }
+
+    console.log('✅ Message deleted successfully');
+    return true;
+  } catch (error) {
+    console.error('💥 Failed to delete message:', error);
+    return false;
+  }
+};
+
+// Toggle chat archive status
+export const toggleChatArchive = async (chatId: string): Promise<boolean> => {
+  try {
+    console.log('📁 Toggling archive status for chat:', chatId);
+    
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      console.error('❌ No authenticated user');
+      return false;
+    }
+
+    // First, get the current chat to check permissions and current archive status
+    const { data: chat, error: chatError } = await supabase
+      .from('chats')
+      .select('is_archived, company_id, created_by, type')
+      .eq('id', chatId)
+      .single();
+
+    if (chatError || !chat) {
+      console.error('❌ Chat not found:', chatError);
+      return false;
+    }
+
+    // Validate company access
+    if (!validateCompanyAccess(chat.company_id)) {
+      console.error('❌ Company access denied');
+      return false;
+    }
+
+    console.log('📋 Current archive status:', chat.is_archived);
+
+    // Toggle the archive status
+    const newArchiveStatus = !chat.is_archived;
+    const { error: updateError } = await supabase
+      .from('chats')
+      .update({ is_archived: newArchiveStatus })
+      .eq('id', chatId);
+
+    if (updateError) {
+      console.error('❌ Failed to update archive status:', updateError);
+      return false;
+    }
+
+    console.log('✅ Chat archive status updated:', newArchiveStatus ? 'archived' : 'unarchived');
+    return true;
+  } catch (error) {
+    console.error('💥 Failed to toggle chat archive:', error);
+    return false;
   }
 } 

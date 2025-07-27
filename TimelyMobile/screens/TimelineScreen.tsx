@@ -326,6 +326,8 @@ export default function TimelineScreen({ guest }: { guest: any }) {
   // Add state for tracking answered modules
   const [answeredModules, setAnsweredModules] = useState<Set<string>>(new Set());
 
+  const [hasAutoScrolled, setHasAutoScrolled] = useState(false);
+
   // Function to check if a guest has already answered a module
   const checkIfModuleAnswered = async (moduleId: string) => {
     try {
@@ -439,6 +441,28 @@ export default function TimelineScreen({ guest }: { guest: any }) {
       return () => clearTimeout(timeout);
     }, [currentTime])
   );
+
+  // Scroll to current time when data loads and timeline is ready
+  useEffect(() => {
+    if (!loading && (itineraries.length > 0 || timelineModules.length > 0)) {
+      const timeout = setTimeout(() => {
+        if (scrollViewRef.current && timeScrollViewRef.current) {
+          const y = getYForTime(currentTime.getHours(), currentTime.getMinutes(), currentTime.getSeconds());
+          const centerOffset = SCREEN_HEIGHT / 2;
+          const scrollTarget = y - centerOffset;
+          scrollViewRef.current.scrollTo({
+            y: scrollTarget,
+            animated: false,
+          });
+          timeScrollViewRef.current.scrollTo({
+            y: scrollTarget,
+            animated: false,
+          });
+        }
+      }, 100); // Small delay to ensure ScrollView is fully rendered
+      return () => clearTimeout(timeout);
+    }
+  }, [loading, itineraries.length, timelineModules.length, currentTime]);
 
   // Fetch itineraries for selected date
   useEffect(() => {
@@ -1416,9 +1440,19 @@ export default function TimelineScreen({ guest }: { guest: any }) {
               style={{ flex: 1, width: '100%' }}
               contentContainerStyle={{ height: TIMELINE_HEIGHT, alignItems: 'center', width: '100%' }}
               showsVerticalScrollIndicator={false}
-              onScrollBeginDrag={() => {}}
-              onTouchStart={() => {}}
-              onMomentumScrollBegin={() => {}}
+              onLayout={() => {
+                if (
+                  !hasAutoScrolled &&
+                  !loading &&
+                  (itineraries.length > 0 || timelineModules.length > 0)
+                ) {
+                  const y = getYForTime(currentTime.getHours(), currentTime.getMinutes(), currentTime.getSeconds());
+                  const centerOffset = SCREEN_HEIGHT / 2;
+                  const scrollTarget = y - centerOffset;
+                  scrollViewRef.current?.scrollTo({ y: scrollTarget, animated: false });
+                  setHasAutoScrolled(true);
+                }
+              }}
             >
               {/* Current time indicator - now at the very top, above time labels */}
               <View
@@ -1446,7 +1480,7 @@ export default function TimelineScreen({ guest }: { guest: any }) {
                       }
                     ]}
                   >
-                    {String(hours).padStart(2, '0')}:{String(minutes).padStart(2, '0')}
+                    {String(hours).padStart(2, '0') + ':' + String(minutes).padStart(2, '0')}
                   </Text>
                 );
               })}
@@ -2143,9 +2177,19 @@ export default function TimelineScreen({ guest }: { guest: any }) {
               <View style={styles.answerInputContainer}>
                 <Text style={[styles.answerLabel, { textAlign: 'center' }]}>Time</Text>
                 <Text style={[styles.questionText, { textAlign: 'center' }]}>
-                  {selectedMilestone?.arrival_time && `Arrival: ${String(selectedMilestone.arrival_time)}`}
-                  {selectedMilestone?.start_time && `\nStart: ${String(selectedMilestone.start_time)}`}
-                  {selectedMilestone?.end_time && `\nEnd: ${String(selectedMilestone.end_time)}`}
+                  {(() => {
+                    let timeText = '';
+                    if (selectedMilestone?.arrival_time) {
+                      timeText += 'Arrival: ' + String(selectedMilestone.arrival_time);
+                    }
+                    if (selectedMilestone?.start_time) {
+                      timeText += (timeText ? '\n' : '') + 'Start: ' + String(selectedMilestone.start_time);
+                    }
+                    if (selectedMilestone?.end_time) {
+                      timeText += (timeText ? '\n' : '') + 'End: ' + String(selectedMilestone.end_time);
+                    }
+                    return timeText;
+                  })()}
                 </Text>
               </View>
               
@@ -2353,7 +2397,7 @@ const styles = StyleSheet.create({
     minWidth: 200,
     maxWidth: 280,
     borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'transparent',
     borderWidth: 1,
     borderColor: '#fff',
     padding: 16,

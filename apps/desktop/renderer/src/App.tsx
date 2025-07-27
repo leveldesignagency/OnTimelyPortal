@@ -23,7 +23,10 @@ import LinkItinerariesPage from './pages/LinkItinerariesPage';
 import AssignOverviewPage from './pages/AssignOverviewPage';
 import EventPortalManagementPage from './pages/EventPortalManagementPage';
 import EventHomepageBuilderPage from './pages/EventHomepageBuilderPage';
+import GuestChatPage from './pages/GuestChatPage';
 import NotificationsPage from './pages/NotificationsPage';
+import ExportReportPage from './pages/ExportReportPage';
+
 import { getEventsCreatedByUser } from './lib/supabase';
 
 // Update EventType to match Supabase Event type
@@ -40,6 +43,13 @@ const AppContent = () => {
   const [isSidebarOpen, setSidebarOpen] = useState(true);
   const isTeamsPage = location.pathname.startsWith('/teams');
   const isLoginPage = location.pathname === '/login';
+  
+  // Ensure sidebar is open for non-teams pages
+  useEffect(() => {
+    if (!isTeamsPage && !isLoginPage) {
+      setSidebarOpen(true);
+    }
+  }, [location.pathname, isTeamsPage, isLoginPage]);
 
   // Add event deletion handler
   const handleDeleteEvent = async (eventId: string) => {
@@ -266,7 +276,9 @@ const AppContent = () => {
     minHeight: '100vh',
     background: 'none',
     transition: 'margin-left 0.3s ease',
-    marginLeft: (isTeamsPage && !isLoginPage) ? '50px' : '0',
+    // For teams pages: small margin for collapsed overlay sidebar
+    // For other pages: account for fixed sidebar width
+    marginLeft: isLoginPage ? '0' : (isTeamsPage ? '50px' : '250px'),
     height: '100vh',
     overflowY: 'auto',
   }
@@ -309,7 +321,11 @@ const AppContent = () => {
           <Route path="/link-itineraries/:id" element={<LinkItinerariesPage />} />
           <Route path="/link-itineraries/:id/assign-overview" element={<AssignOverviewPage />} />
           <Route path="/event-portal-management" element={<ProtectedRoute><EventPortalManagementPage /></ProtectedRoute>} />
+          <Route path="/event-portal-management/:eventId" element={<ProtectedRoute><EventPortalManagementPage /></ProtectedRoute>} />
           <Route path="/event-homepage-builder" element={<ProtectedRoute><EventHomepageBuilderPage /></ProtectedRoute>} />
+          <Route path="/guest-chat" element={<ProtectedRoute><GuestChatPage /></ProtectedRoute>} />
+          <Route path="/export-report/:eventId" element={<ProtectedRoute><ExportReportPage /></ProtectedRoute>} />
+    
         </Routes>
       </main>
     </div>

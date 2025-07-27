@@ -7,8 +7,11 @@
   flex-direction: column;
   height: 100vh;
   transition: transform 0.3s ease, width 0.3s ease, background-color 0.2s ease, color 0.2s ease;
-  z-index: 1000;
+  z-index: 9999;
   flex-shrink: 0; /* Prevent sidebar from shrinking */
+  position: fixed;
+  left: 0;
+  top: 0;
 }
 
 .sidebarOverlay {

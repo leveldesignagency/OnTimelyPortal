@@ -1,19 +1,58 @@
+import 'react-native-get-random-values';
+
+// TextEncoder polyfill for React Native
+if (typeof global.TextEncoder === 'undefined') {
+  (global as any).TextEncoder = class TextEncoder {
+    encoding = 'utf-8';
+    encode(str: string) {
+      const utf8: number[] = [];
+      for (let i = 0; i < str.length; i++) {
+        let charcode = str.charCodeAt(i);
+        if (charcode < 0x80) utf8.push(charcode);
+        else if (charcode < 0x800) {
+          utf8.push(0xc0 | (charcode >> 6), 0x80 | (charcode & 0x3f));
+        } else if (charcode < 0xd800 || charcode >= 0xe000) {
+          utf8.push(0xe0 | (charcode >> 12), 0x80 | ((charcode >> 6) & 0x3f), 0x80 | (charcode & 0x3f));
+        } else {
+          i++;
+          charcode = 0x10000 + (((charcode & 0x3ff) << 10) | (str.charCodeAt(i) & 0x3f));
+          utf8.push(0xf0 | (charcode >> 18), 0x80 | ((charcode >> 12) & 0x3f), 0x80 | ((charcode >> 6) & 0x3f), 0x80 | (charcode & 0x3f));
+        }
+      }
+      return new Uint8Array(utf8);
+    }
+    encodeInto() {
+      throw new Error('encodeInto not implemented');
+    }
+  };
+}
+
 import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
-import { View, ActivityIndicator, StyleSheet, Text, Image } from 'react-native';
+import { View, ActivityIndicator, StyleSheet, Text, Image, TouchableOpacity, Alert } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import LoginScreen from './screens/LoginScreen';
 import GuestDashboard from './screens/GuestDashboard';
 import { ThemeProvider } from './ThemeContext';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import TimelineScreen from './screens/TimelineScreen';
 import GuestsProfile from './screens/GuestsProfile';
+import GuestChatScreen from './screens/GuestChatScreen';
+import TranslatorScreen from './screens/TranslatorScreen';
+import CurrencyConverterScreen from './screens/CurrencyConverterScreen';
+import OfflineMapsScreen from './screens/OfflineMapsScreen';
+import SOSScreen from './screens/SOSScreen';
+import GlobalAlertProvider from './components/GlobalAlertProvider';
 import { supabase } from './lib/supabase';
 import { pushNotificationService } from './lib/pushNotifications';
 import { getEventAddOns } from './lib/supabase';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 const Tab = createBottomTabNavigator();
+const Stack = createNativeStackNavigator();
 
 export default function App() {
   const [user, setUser] = useState<any>(null);
@@ -30,9 +69,6 @@ export default function App() {
   };
 
   useEffect(() => {
-    // Initialize push notifications
-    initializePushNotifications();
-    
     // Check for existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
@@ -47,6 +83,13 @@ export default function App() {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  // Initialize push notifications when user and guest profile are available
+  useEffect(() => {
+    if (user && guestProfile) {
+      initializePushNotifications();
+    }
+  }, [user, guestProfile]);
 
   // Fetch guest profile after login
   useEffect(() => {
@@ -79,8 +122,12 @@ export default function App() {
       const token = await pushNotificationService.registerForPushNotifications();
       
       if (token && user) {
-        // Save token to Supabase
-        await pushNotificationService.savePushTokenToSupabase(user.id, user.email);
+        // For guests, use email; for regular users, use user.id
+        if (guestProfile?.email) {
+          await pushNotificationService.savePushTokenToSupabase(user.id, guestProfile.email);
+        } else {
+          await pushNotificationService.savePushTokenToSupabase(user.id);
+        }
       }
     } catch (error) {
       console.error('Error initializing push notifications:', error);
@@ -88,9 +135,21 @@ export default function App() {
   };
 
   function MessagesScreen() {
-    return <View style={styles.center}><Text>Messages (Coming Soon)</Text></View>;
+    return <GuestChatScreen guest={guestProfile} />;
   }
-  function AppsScreen() {
+  function AppsStack() {
+    return (
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="AppsList" component={AppsListScreen} />
+        <Stack.Screen name="Translator" component={TranslatorScreen} />
+        <Stack.Screen name="CurrencyConverter" component={CurrencyConverterScreen} />
+        <Stack.Screen name="OfflineMaps" component={OfflineMapsScreen} />
+        <Stack.Screen name="SOS" component={SOSScreen} />
+      </Stack.Navigator>
+    );
+  }
+
+  function AppsListScreen({ navigation }: { navigation: any }) {
     // DEBUG: Log guestProfile and eventId
     console.log('[AppsScreen] guestProfile:', guestProfile);
     const [addOns, setAddOns] = useState<any[]>([]);
@@ -124,7 +183,7 @@ export default function App() {
       <View style={{ flex: 1, backgroundColor: '#181A20', padding: 16, paddingTop: 64 }}>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
           {addOns.map((addon, idx) => (
-            <View
+            <TouchableOpacity
               key={addon.addon_key}
               style={{
                 width: '47%',
@@ -141,11 +200,29 @@ export default function App() {
                 shadowRadius: 8,
                 elevation: 4,
               }}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                if (addon.addon_key === 'translator') {
+                  // Navigate to translator screen
+                  navigation.navigate('Translator');
+                } else if (addon.addon_key === 'currencyConverter') {
+                  // Navigate to currency converter screen
+                  navigation.navigate('CurrencyConverter');
+                } else if (addon.addon_key === 'offlineMaps') {
+                  // Navigate to offline maps screen
+                  navigation.navigate('OfflineMaps');
+                } else if (addon.addon_key === 'safetyBeacon') {
+                  // Navigate to SOS screen
+                  navigation.navigate('SOS');
+                } else {
+                  Alert.alert('Coming Soon', `${addon.addon_label || addon.addon_key} will be available soon!`);
+                }
+              }}
             >
               <Text style={{ fontSize: 38, marginBottom: 10 }}>{addon.addon_icon || '🧩'}</Text>
               <Text style={{ color: '#fff', fontSize: 17, fontWeight: 'bold', textAlign: 'center', marginBottom: 6 }}>{addon.addon_label || addon.addon_key}</Text>
               <Text style={{ color: '#aaa', fontSize: 13, textAlign: 'center' }}>{addon.addon_description}</Text>
-            </View>
+            </TouchableOpacity>
           ))}
         </View>
       </View>
@@ -179,59 +256,76 @@ export default function App() {
   }
 
   return (
-    <ThemeProvider>
-      <NavigationContainer>
-      <StatusBar style="auto" />
-        {user ? (
-          <Tab.Navigator
-            initialRouteName="Dashboard"
-            screenOptions={({ route }) => ({
-              headerShown: false,
-              tabBarShowLabel: false,
-              tabBarStyle: {
-                backgroundColor: '#181A20',
-                borderTopWidth: 0,
-                height: 70,
-                paddingBottom: 10,
-                paddingTop: 10,
-                elevation: 10,
-              },
-              tabBarIcon: ({ focused }) => {
-                const iconName = route.name as keyof typeof icons;
-                const iconSource = icons[iconName];
-                return (
-                  <Image
-                    source={iconSource}
-                    style={{
-                      width: focused ? 34 : 28,
-                      height: focused ? 34 : 28,
-                      tintColor: focused ? '#fff' : '#888',
-                      marginTop: focused ? -4 : 0,
-                      resizeMode: 'contain',
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <GlobalAlertProvider>
+        <ThemeProvider>
+          <NavigationContainer>
+          <StatusBar style="light" />
+          {user ? (
+            <Tab.Navigator
+              initialRouteName="Dashboard"
+              screenOptions={({ route }) => ({
+                headerShown: false,
+                tabBarShowLabel: false,
+                tabBarStyle: {
+                  backgroundColor: '#181A20',
+                  borderTopWidth: 0,
+                  height: 70,
+                  paddingBottom: 10,
+                  paddingTop: 10,
+                  elevation: 10,
+                },
+                tabBarIcon: ({ focused }) => {
+                  const iconName = route.name as keyof typeof icons;
+                  const iconSource = icons[iconName];
+                  return (
+                    <Image
+                      source={iconSource}
+                      style={{
+                        width: focused ? 34 : 28,
+                        height: focused ? 34 : 28,
+                        tintColor: focused ? '#fff' : '#888',
+                        marginTop: focused ? -4 : 0,
+                        resizeMode: 'contain',
+                      }}
+                    />
+                  );
+                },
+                tabBarButton: (props) => (
+                  <View
+                    {...props}
+                    onTouchEnd={(e) => {
+                      // Add haptic feedback on tab press
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      // Call the original onPress if it exists
+                      if (props.onPress) {
+                        props.onPress(e);
+                      }
                     }}
                   />
-                );
-              },
-            })}
-          >
-            {/* Order: Apps, Timeline, Dashboard (Home), Messages (Chat), Profile (right to left) */}
-            <Tab.Screen name="Apps" component={AppsScreen} />
-            <Tab.Screen name="Timeline">
-              {() => <TimelineScreen guest={guestProfile} />}
-            </Tab.Screen>
-            <Tab.Screen name="Dashboard">
-              {() => <GuestDashboard guest={guestProfile} onLogout={handleLogout} />}
-            </Tab.Screen>
-            <Tab.Screen name="Messages" component={MessagesScreen} />
-            <Tab.Screen name="Profile">
-              {() => <GuestsProfile guest={guestProfile} />}
-            </Tab.Screen>
-          </Tab.Navigator>
-        ) : (
-          <LoginScreen onLogin={handleLogin} />
-        )}
-      </NavigationContainer>
-    </ThemeProvider>
+                ),
+              })}
+            >
+              {/* Order: Apps, Timeline, Dashboard (Home), Messages (Chat), Profile (right to left) */}
+              <Tab.Screen name="Apps" component={AppsStack} />
+              <Tab.Screen name="Timeline">
+                {() => <TimelineScreen guest={guestProfile} />}
+              </Tab.Screen>
+              <Tab.Screen name="Dashboard">
+                {() => <GuestDashboard guest={guestProfile} onLogout={handleLogout} />}
+              </Tab.Screen>
+              <Tab.Screen name="Messages" component={MessagesScreen} />
+              <Tab.Screen name="Profile">
+                {() => <GuestsProfile guest={guestProfile} />}
+              </Tab.Screen>
+            </Tab.Navigator>
+          ) : (
+            <LoginScreen onLogin={handleLogin} />
+          )}
+        </NavigationContainer>
+        </ThemeProvider>
+      </GlobalAlertProvider>
+    </GestureHandlerRootView>
   );
 }
 

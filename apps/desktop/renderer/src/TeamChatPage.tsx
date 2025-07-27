@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { UserProfileModal } from './components/UserProfileModal';
 import { ThemeContext } from './ThemeContext';
 import { 
   getCurrentUser, 
@@ -24,8 +25,11 @@ import {
   Team as SupabaseTeam,
   removeUserFromGroup,
   deleteChat,
-  leaveGroup
+  leaveGroup,
+  toggleChatArchive
 } from './lib/chat';
+import { getUserAvatar, isAvatarUrl } from './lib/profile';
+import { supabase } from './lib/supabase';
 
 // Enhanced types for comprehensive chat features
 type MessageType = 'text' | 'file' | 'image' | 'audio' | 'location';
@@ -40,7 +44,7 @@ type Message = {
   id: string;
   text: string;
   sender: string;
-  timestamp: string;
+  timestamp: string; // Store raw date string from database
   type: MessageType;
   fileUrl?: string;
   fileName?: string;
@@ -51,6 +55,14 @@ type Message = {
   editedAt?: string;
   sent: boolean;
   sender_id?: string;
+};
+
+// Global hover popup management
+type HoverPopupState = {
+  activeMessageId: string | null;
+  position: { x: number; y: number } | null;
+  message: Message | null;
+  hideTimeoutId: number | null;
 };
 
 type UserStatus = 'online' | 'offline' | 'away' | 'busy';
@@ -65,6 +77,7 @@ type User = {
   phone?: string;
   role?: 'admin' | 'member';
   company_id?: string;
+  company_role?: string;
 };
 
 type Team = {
@@ -193,30 +206,45 @@ const convertSupabaseUser = (supabaseUser: AuthUser): User => ({
   status: 'online' as UserStatus,
   email: supabaseUser.email,
   company_id: supabaseUser.company_id,
-  role: supabaseUser.role as 'admin' | 'member'
+  role: supabaseUser.role as 'admin' | 'member',
+  company_role: (supabaseUser as any).company_role
 });
 
+
+
 // Helper function to convert Supabase message to local Message type
-const convertSupabaseMessage = (supabaseMessage: SupabaseMessage): Message => ({
-  id: supabaseMessage.id,
-  text: supabaseMessage.content,
-  sender: supabaseMessage.sender?.name || 'Unknown',
-  sender_id: supabaseMessage.sender_id,
-  timestamp: new Date(supabaseMessage.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-  type: supabaseMessage.message_type as MessageType,
-  fileUrl: supabaseMessage.file_url,
-  fileName: supabaseMessage.file_name,
-  fileSize: supabaseMessage.file_size,
-  reactions: supabaseMessage.reactions?.map(r => ({
-    emoji: r.emoji,
-    users: r.user_id ? [r.user_id] : [],
-    count: 1
-  })) || [],
-  replyTo: supabaseMessage.reply_to_id,
-  edited: supabaseMessage.is_edited,
-  editedAt: supabaseMessage.edited_at,
-  sent: true
-});
+const convertSupabaseMessage = (supabaseMessage: SupabaseMessage): Message => {
+  // Aggregate reactions by emoji - ENSURE NO DUPLICATES
+  const reactionMap: Record<string, { emoji: string, users: string[], count: number }> = {};
+  if (supabaseMessage.reactions) {
+    for (const r of supabaseMessage.reactions) {
+      if (!reactionMap[r.emoji]) {
+        reactionMap[r.emoji] = { emoji: r.emoji, users: [], count: 0 };
+      }
+      // Only add if this user hasn't already reacted with this emoji
+      if (!reactionMap[r.emoji].users.includes(r.user_id)) {
+        reactionMap[r.emoji].users.push(r.user_id);
+        reactionMap[r.emoji].count += 1;
+      }
+    }
+  }
+  return {
+    id: supabaseMessage.id,
+    text: supabaseMessage.content,
+    sender: supabaseMessage.sender?.name || 'Unknown',
+    sender_id: supabaseMessage.sender_id,
+    timestamp: supabaseMessage.created_at, // Store raw date string
+    type: supabaseMessage.message_type as MessageType,
+    fileUrl: supabaseMessage.file_url,
+    fileName: supabaseMessage.file_name,
+    fileSize: supabaseMessage.file_size,
+    reactions: Object.values(reactionMap),
+    replyTo: supabaseMessage.reply_to_id,
+    edited: supabaseMessage.is_edited,
+    editedAt: supabaseMessage.edited_at,
+    sent: true
+  };
+};
 
 // Helper function to convert Supabase chat to local Chat type
 const convertSupabaseChat = (supabaseChat: SupabaseChat): Chat => {
@@ -239,7 +267,7 @@ const convertSupabaseChat = (supabaseChat: SupabaseChat): Chat => {
     name: chatName,
     type: supabaseChat.type as ChatType,
     lastMessage: supabaseChat.last_message?.content || 'No messages yet',
-    timestamp: new Date(supabaseChat.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    timestamp: supabaseChat.updated_at, // Store raw date string
     unread: supabaseChat.unread_count || 0,
     avatar: supabaseChat.avatar || (chatName?.charAt(0) || 'C'),
       messages: [],
@@ -282,17 +310,45 @@ const getUserInitials = (name: string): string => {
   return (nameParts[0].charAt(0) + nameParts[nameParts.length - 1].charAt(0)).toUpperCase();
 };
 
+// Helper function to safely format timestamps
+const formatTimestamp = (timestamp: string): string => {
+  if (!timestamp) return '';
+  const date = new Date(timestamp);
+  if (isNaN(date.getTime())) {
+    return '';
+  }
+  return date.toLocaleTimeString([], { 
+    hour: '2-digit', 
+    minute: '2-digit' 
+  });
+};
+
 // Enhanced components
-const UserProfileCard: React.FC<{ user: User; isDark: boolean; notificationCount?: number }> = ({ user, isDark, notificationCount = 0 }) => {
+const UserProfileCard: React.FC<{ user: User; isDark: boolean; notificationCount?: number; onClick?: () => void }> = ({ user, isDark, notificationCount = 0, onClick }) => {
   const colors = themes[isDark ? 'dark' : 'light'];
   
   return (
-    <div style={{ 
+    <div 
+      style={{ 
       padding: '24px', 
       borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
       background: colors.panelBg,
-      position: 'relative'
-    }}>
+        position: 'relative',
+        cursor: onClick ? 'pointer' : 'default',
+        transition: 'background-color 0.2s ease'
+      }}
+      onClick={onClick}
+      onMouseEnter={e => {
+        if (onClick) {
+          e.currentTarget.style.background = isDark ? '#333333' : '#f0f0f0';
+        }
+      }}
+      onMouseLeave={e => {
+        if (onClick) {
+          e.currentTarget.style.background = colors.panelBg;
+        }
+      }}
+    >
       {/* Notification Badge */}
       {notificationCount > 0 && (
         <div style={{
@@ -332,9 +388,22 @@ const UserProfileCard: React.FC<{ user: User; isDark: boolean; notificationCount
           border: `2px solid ${colors.border}`,
           boxShadow: isDark 
             ? '0 4px 16px rgba(0,0,0,0.3)' 
-            : '0 4px 16px rgba(0,0,0,0.1)'
+            : '0 4px 16px rgba(0,0,0,0.1)',
+          overflow: 'hidden'
         }}>
-          {user.avatar}
+          {isAvatarUrl(user.avatar) ? (
+            <img
+              src={user.avatar}
+              alt={user.name}
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover'
+              }}
+            />
+          ) : (
+            user.avatar
+          )}
         </div>
         <div style={{ flex: 1 }}>
           <div style={{ 
@@ -351,7 +420,8 @@ const UserProfileCard: React.FC<{ user: User; isDark: boolean; notificationCount
             color: colors.textSecondary,
             display: 'flex',
             alignItems: 'center',
-            gap: '8px'
+            gap: '8px',
+            marginBottom: '4px'
           }}>
             <StatusIndicator status={user.status} />
             <span style={{ 
@@ -364,6 +434,16 @@ const UserProfileCard: React.FC<{ user: User; isDark: boolean; notificationCount
               <span>• Last seen {new Date(user.lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
             )}
           </div>
+          {user.company_role && (
+            <div style={{ 
+              fontSize: '13px', 
+              color: colors.textSecondary,
+              fontStyle: 'italic',
+              opacity: 0.8
+            }}>
+              {user.company_role}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -465,10 +545,10 @@ const ChatListItem = ({ chat, active, onClick, isDark }: { chat: Chat, active: b
               {getChatDisplayName(chat)}
             </span>
             {chat.isPinned && (
-              <span style={{ fontSize: '12px', color: colors.accent }}>📌</span>
+                              <span style={{ fontSize: '12px', color: colors.accent }}></span>
             )}
             {chat.isMuted && (
-              <span style={{ fontSize: '12px', color: colors.textSecondary }}>🔇</span>
+                              <span style={{ fontSize: '12px', color: colors.textSecondary }}></span>
             )}
           </div>
           <span style={{
@@ -478,7 +558,7 @@ const ChatListItem = ({ chat, active, onClick, isDark }: { chat: Chat, active: b
             marginLeft: '8px',
             fontWeight: '500'
           }}>
-            {chat.timestamp}
+            {formatTimestamp(chat.timestamp)}
           </span>
         </div>
         <div style={{
@@ -651,9 +731,45 @@ const ChatHeader = ({ chat, isDark, onToggleRightPanel }: {
             justifyContent: 'center',
             fontSize: '16px',
             fontWeight: '600',
-            boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.1)'
+            boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.1)',
+            overflow: 'hidden'
           }}>
-            {chat.avatar && chat.avatar.length <= 3 ? chat.avatar : getChatDisplayName(chat).charAt(0).toUpperCase()}
+            {(() => {
+              if (chat.type === 'direct' && chat.participants && CURRENT_USER) {
+                // For direct chats, get the other participant
+                const otherParticipant = chat.participants.find(p => p.id !== CURRENT_USER!.id);
+                if (otherParticipant && isAvatarUrl(otherParticipant.avatar)) {
+                  return (
+                    <img
+                      src={otherParticipant.avatar}
+                      alt={otherParticipant.name}
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover'
+                      }}
+                    />
+                  );
+                }
+                return getUserInitials(getChatDisplayName(chat));
+              } else {
+                // For group chats
+                if (chat.avatar && isAvatarUrl(chat.avatar)) {
+                  return (
+                    <img
+                      src={chat.avatar}
+                      alt={chat.name}
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover'
+                      }}
+                    />
+                  );
+                }
+                return chat.avatar && chat.avatar.length <= 3 ? chat.avatar : getUserInitials(getChatDisplayName(chat));
+              }
+            })()}
           </div>
           <div>
             <div style={{
@@ -688,7 +804,17 @@ const ChatHeader = ({ chat, isDark, onToggleRightPanel }: {
           cursor: 'pointer',
           padding: '8px',
           borderRadius: '8px',
-          transition: 'all 0.2s ease'
+          transition: 'none',
+          outline: 'none',
+          boxShadow: 'none'
+        }}
+        onFocus={e => {
+          e.currentTarget.style.outline = 'none';
+          e.currentTarget.style.boxShadow = 'none';
+        }}
+        onBlur={e => {
+          e.currentTarget.style.outline = 'none';
+          e.currentTarget.style.boxShadow = 'none';
         }}
       >
         <svg 
@@ -717,6 +843,22 @@ const MessageReactions = ({ reactions, onReact, isDark }: {
 }) => {
   const colors = themes[isDark ? 'dark' : 'light'];
   
+  // Double-check merge in case backend still sends duplicates
+  console.log('MessageReactions: incoming reactions', reactions);
+  const merged: Record<string, { emoji: string, count: number, users: string[] }> = {};
+  for (const r of reactions) {
+    if (!merged[r.emoji]) {
+      merged[r.emoji] = { emoji: r.emoji, count: 0, users: [] };
+    }
+    merged[r.emoji].count += r.count;
+    merged[r.emoji].users = Array.from(new Set([...merged[r.emoji].users, ...r.users]));
+  }
+  const mergedReactions = Object.values(merged);
+  console.log('MessageReactions: merged reactions', mergedReactions);
+  const maxToShow = 3;
+  const shown = mergedReactions.slice(0, maxToShow);
+  const extraCount = mergedReactions.length - maxToShow;
+
   return (
     <div style={{
       display: 'flex',
@@ -724,7 +866,7 @@ const MessageReactions = ({ reactions, onReact, isDark }: {
       marginTop: '8px',
       flexWrap: 'wrap'
     }}>
-      {reactions.map(reaction => (
+      {shown.map(reaction => (
         <button
           key={reaction.emoji}
           onClick={() => onReact(reaction.emoji)}
@@ -755,6 +897,21 @@ const MessageReactions = ({ reactions, onReact, isDark }: {
           <span style={{ fontWeight: '500' }}>{reaction.count}</span>
         </button>
       ))}
+      {extraCount > 0 && (
+        <span style={{
+          background: colors.hoverBg,
+          border: `1px solid ${colors.border}`,
+          borderRadius: '12px',
+          padding: '4px 8px',
+          fontSize: '12px',
+          color: colors.text,
+          display: 'flex',
+          alignItems: 'center',
+          fontWeight: 500,
+          marginLeft: '2px',
+          userSelect: 'none'
+        }}>+{extraCount}</span>
+      )}
     </div>
   );
 };
@@ -878,21 +1035,32 @@ const FilePreview = ({ message, isDark }: { message: Message, isDark: boolean })
   return null;
 };
 
-const MessageBubble = ({ message, sent, isDark, onReact, onReply }: { 
+const MessageBubble = ({ message, sent, isDark, onReact, onReply, onEdit, onDelete, isSelected, onSelect, deleting, editingMessageId, onShowHover, onHideHover }: { 
   message: Message, 
   sent: boolean, 
   isDark: boolean, 
   onReact: (messageId: string, emoji: string) => void,
-  onReply: (message: Message) => void 
+  onReply: (message: Message) => void,
+  onEdit: (message: Message) => void,
+  onDelete: (message: Message) => void,
+  isSelected?: boolean,
+  onSelect?: (messageId: string) => void,
+  deleting?: boolean,
+  editingMessageId?: string | null,
+  onShowHover?: (message: Message, event: React.MouseEvent) => void,
+  onHideHover?: () => void
 }) => {
   const colors = themes[isDark ? 'dark' : 'light'];
-  const [showReactions, setShowReactions] = useState(false);
-  const [showOptions, setShowOptions] = useState(false);
+  const [showActions, setShowActions] = useState(false);
 
   // Get sender initials for avatar
   const getSenderInitials = (senderName: string) => {
     return senderName.split(' ').map(name => name[0]).join('').toUpperCase().slice(0, 2);
   };
+
+  const emojis = ['👍', '❤️', '😂', '😮', '😢', '😡', '🎉', '👏', '🙏', '🔥', '💯', '✨', '💪', '🤔', '😎', '🥳', '😴', '🤯', '😍', '🤩', '😭', '🤬', '🤮', '🤧', '🤠', '👻', '🤖', '👽', '👾', '🤡', '👹', '👺', '💀', '☠️'];
+
+
 
   return (
     <div style={{
@@ -901,17 +1069,80 @@ const MessageBubble = ({ message, sent, isDark, onReact, onReply }: {
       marginBottom: '16px',
       paddingLeft: sent ? '60px' : '0px',
       paddingRight: sent ? '0px' : '60px',
-      alignItems: 'flex-end',
-      gap: '8px'
+      alignItems: 'flex-start',
+      gap: '8px',
+      position: 'relative'
     }}>
-      {/* Avatar for received messages */}
+      {/* Selection checkbox for delete mode */}
+      {deleting && sent && onSelect && (
+        <label style={{
+          display: 'inline-block',
+          width: 22,
+          height: 22,
+          position: 'relative',
+          cursor: 'pointer',
+          marginRight: 8,
+        }}>
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={() => onSelect(message.id)}
+            style={{
+              opacity: 0,
+              width: 22,
+              height: 22,
+              position: 'absolute',
+              left: 0,
+              top: 0,
+              margin: 0,
+              cursor: 'pointer',
+            }}
+          />
+          <span style={{
+            display: 'block',
+            width: 22,
+            height: 22,
+            borderRadius: '50%',
+            border: `2px solid ${isDark ? '#888' : '#bbb'}`,
+            background: 'transparent',
+            boxSizing: 'border-box',
+            position: 'relative',
+          }}>
+            {isSelected && (
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 14 14"
+                style={{
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  display: 'block',
+                }}
+              >
+                <circle cx="7" cy="7" r="7" fill={isDark ? '#222' : '#fff'} />
+                <path
+                  d="M4 7.5L6.2 10L10 5.5"
+                  stroke={isDark ? '#fff' : '#222'}
+                  strokeWidth="1.7"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            )}
+          </span>
+        </label>
+      )}
+
+      {/* Avatar for received messages - FIXED ALIGNMENT */}
       {!sent && (
         <div style={{
           width: '32px',
           height: '32px',
           borderRadius: '50%',
-          background: isDark ? 'linear-gradient(135deg, #4a4a4a, #2a2a2a)' : 'linear-gradient(135deg, #e9ecef, #dee2e6)',
-          color: isDark ? '#fff' : '#495057',
+          background: colors.accent,
+          color: isDark ? '#000000' : '#ffffff',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -919,15 +1150,33 @@ const MessageBubble = ({ message, sent, isDark, onReact, onReply }: {
           fontWeight: '600',
           flexShrink: 0,
           border: `2px solid ${isDark ? '#333' : '#fff'}`,
-          boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.1)'
+          boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.1)',
+          overflow: 'hidden',
+          alignSelf: 'flex-start',
+          marginTop: '8px'
         }}>
-          {getSenderInitials(message.sender)}
+          {CURRENT_USER && isAvatarUrl(CURRENT_USER.avatar) ? (
+            <img
+              src={CURRENT_USER.avatar}
+              alt={CURRENT_USER.name}
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover'
+              }}
+            />
+          ) : (
+            getSenderInitials(message.sender)
+          )}
         </div>
       )}
 
-      <div style={{
-        maxWidth: '70%',
-        position: 'relative'
+      {/* Bubble + reactions column - FIXED LAYOUT */}
+      <div style={{ 
+        display: 'flex', 
+        flexDirection: 'column', 
+        alignItems: sent ? 'flex-end' : 'flex-start', 
+        maxWidth: '70%' 
       }}>
         {message.replyTo && (
           <div style={{
@@ -944,7 +1193,7 @@ const MessageBubble = ({ message, sent, isDark, onReact, onReply }: {
         )}
         
         <div
-            style={{
+          style={{
             background: sent ? colors.messageBubbleSent : colors.messageBubble,
             color: sent ? (isDark ? colors.bg : '#ffffff') : colors.text,
             padding: '12px 16px',
@@ -957,9 +1206,44 @@ const MessageBubble = ({ message, sent, isDark, onReact, onReply }: {
               ? '0 4px 16px rgba(0,0,0,0.3)' 
               : '0 4px 16px rgba(0,0,0,0.1)'
           }}
-          onMouseEnter={() => setShowOptions(true)}
-          onMouseLeave={() => setShowOptions(false)}
+          onMouseEnter={() => setShowActions(true)}
+          onMouseLeave={() => setShowActions(false)}
         >
+          {/* Three dots menu - top left */}
+          {showActions && sent && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onShowHover?.(message, e);
+              }}
+              style={{
+                position: 'absolute',
+                top: '8px',
+                left: '8px',
+                background: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
+                border: 'none',
+                borderRadius: '50%',
+                width: '24px',
+                height: '24px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                fontSize: '14px',
+                color: isDark ? '#ffffff' : '#000000',
+                transition: 'all 0.2s ease',
+                zIndex: 10
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
+              }}
+            >
+              ⋮
+            </button>
+          )}
           {/* Message content */}
           {message.type === 'text' && (
             <div style={{ 
@@ -975,135 +1259,51 @@ const MessageBubble = ({ message, sent, isDark, onReact, onReply }: {
           {(message.type === 'file' || message.type === 'image') && (
             <FilePreview message={message} isDark={isDark} />
           )}
-
-          {/* Options menu */}
-          {showOptions && (
-            <div style={{
-              position: 'absolute',
-              top: '-40px',
-              right: sent ? '0px' : 'auto',
-              left: sent ? 'auto' : '0px',
-              background: colors.panelBg,
-              borderRadius: '8px',
-              padding: '4px',
-              display: 'flex',
-              gap: '4px',
-              boxShadow: isDark 
-                ? '0 4px 16px rgba(0,0,0,0.4)' 
-                : '0 4px 16px rgba(0,0,0,0.2)',
-              border: `1px solid ${colors.border}`,
-              zIndex: 10
-            }}>
-              <button
-                onClick={() => onReply(message)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  padding: '6px 8px',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '12px',
-                  color: colors.text,
-                  transition: 'background 0.2s ease'
-                }}
-                onMouseEnter={e => e.currentTarget.style.background = colors.hoverBg}
-                onMouseLeave={e => e.currentTarget.style.background = 'none'}
-              >
-                Reply
-              </button>
-              <button
-                onClick={() => setShowReactions(!showReactions)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  padding: '6px 8px',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '12px',
-                  color: colors.text,
-                  transition: 'background 0.2s ease'
-                }}
-                onMouseEnter={e => e.currentTarget.style.background = colors.hoverBg}
-                onMouseLeave={e => e.currentTarget.style.background = 'none'}
-              >
-                😊
-              </button>
-            </div>
-          )}
         </div>
-
-        {/* Delivery status rendered underneath the bubble */}
-        {sent && (
-          <div style={{
-            fontSize: '11px',
-            color: colors.textSecondary,
-            marginTop: '4px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '4px',
-            justifyContent: 'flex-end'
-          }}>
-            {message.edited && <span>edited</span>}
-            <span>{message.timestamp}</span>
-            <span style={{ 
-              color: message.sent ? colors.textSecondary : '#f59e0b' 
-            }}>
-              {message.sent ? '✓' : '⏳'}
-            </span>
-          </div>
-        )}
-
-        {/* Reactions */}
+        {/* Reactions below bubble - SINGLE CONTAINER */}
         {message.reactions && message.reactions.length > 0 && (
-          <MessageReactions reactions={message.reactions} onReact={(emoji) => onReact(message.id, emoji)} isDark={isDark} />
-        )}
-
-        {/* Reaction picker */}
-        {showReactions && (
           <div style={{
-            position: 'absolute',
-            top: '100%',
-            right: sent ? '0px' : 'auto',
-            left: sent ? 'auto' : '0px',
-            background: colors.panelBg,
-            borderRadius: '8px',
-            padding: '8px',
             display: 'flex',
             gap: '4px',
-            boxShadow: isDark 
-              ? '0 4px 16px rgba(0,0,0,0.4)' 
-              : '0 4px 16px rgba(0,0,0,0.2)',
-            border: `1px solid ${colors.border}`,
-            zIndex: 10,
-            marginTop: '4px'
+            marginTop: '8px',
+            flexWrap: 'wrap'
           }}>
-            {['👍', '❤️', '😂', '😮', '😢', '😡'].map(emoji => (
+            {message.reactions.map((reaction, index) => (
               <button
-                key={emoji}
-                onClick={() => {
-                  onReact(message.id, emoji);
-                  setShowReactions(false);
-                }}
+                key={`${reaction.emoji}-${index}`}
+                onClick={() => onReact(message.id, reaction.emoji)}
                 style={{
-                  background: 'none',
-                  border: 'none',
-                  padding: '4px',
-                  borderRadius: '4px',
+                  background: colors.hoverBg,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: '12px',
+                  padding: '4px 8px',
+                  fontSize: '12px',
                   cursor: 'pointer',
-                  fontSize: '16px',
-                  transition: 'background 0.2s ease'
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  color: colors.text,
+                  transition: 'all 0.2s ease',
+                  backdropFilter: 'blur(10px)'
                 }}
-                onMouseEnter={e => e.currentTarget.style.background = colors.hoverBg}
-                onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = colors.accent;
+                  e.currentTarget.style.color = isDark ? colors.bg : '#ffffff';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = colors.hoverBg;
+                  e.currentTarget.style.color = colors.text;
+                }}
               >
-                {emoji}
+                <span>{reaction.emoji}</span>
+                <span style={{ fontWeight: '500' }}>{reaction.count}</span>
               </button>
             ))}
           </div>
         )}
       </div>
 
-      {/* Avatar for sent messages */}
+      {/* Avatar for sent messages - FIXED ALIGNMENT */}
       {sent && (
         <div style={{
           width: '32px',
@@ -1111,28 +1311,47 @@ const MessageBubble = ({ message, sent, isDark, onReact, onReply }: {
           borderRadius: '50%',
           background: colors.accent,
           color: isDark ? '#000000' : '#ffffff',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
           fontSize: '12px',
           fontWeight: '600',
           flexShrink: 0,
           border: `2px solid ${isDark ? '#333' : '#fff'}`,
-          boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.1)'
+          boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.1)',
+          overflow: 'hidden',
+          alignSelf: 'flex-start',
+          marginTop: '8px'
         }}>
-          {getSenderInitials(message.sender)}
+          {CURRENT_USER && isAvatarUrl(CURRENT_USER.avatar) ? (
+            <img
+              src={CURRENT_USER.avatar}
+              alt={CURRENT_USER.name}
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover'
+              }}
+            />
+          ) : (
+            getSenderInitials(message.sender)
+          )}
         </div>
       )}
     </div>
   );
 };
 
-const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCancelReply }: { 
+const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCancelReply, editingMessageId, editText, onSaveEdit, onCancelEdit }: { 
   onSendMessage: (text: string, type?: MessageType) => void, 
   onFileUpload: (file: File) => void, 
   isDark: boolean,
   replyingTo?: Message | undefined,
-  onCancelReply?: () => void
+  onCancelReply?: () => void,
+  editingMessageId?: string | null,
+  editText?: string,
+  onSaveEdit?: (text: string) => void,
+  onCancelEdit?: () => void
 }) => {
     const [text, setText] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -1140,10 +1359,21 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
 
   const commonEmojis = ['😀', '😂', '😍', '🤔', '👍', '👎', '❤️', '🎉', '😢', '😡', '🔥', '💯'];
 
+  // Set text when editing starts
+  useEffect(() => {
+    if (editingMessageId && editText) {
+      setText(editText);
+    }
+  }, [editingMessageId, editText]);
+
     const handleSend = () => {
         if (text.trim()) {
-            onSendMessage(text.trim());
-            setText('');
+            if (editingMessageId && onSaveEdit) {
+                onSaveEdit(text);
+            } else {
+                onSendMessage(text.trim());
+                setText('');
+            }
         }
     };
 
@@ -1192,18 +1422,24 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
               fontSize: '14px',
               color: isDark ? '#adb5bd' : '#6c757d'
             }}>
-              ↩️ Replying to {replyingTo.sender}:
+              Replying to {replyingTo.sender}:
             </span>
-            <span style={{
-              fontSize: '14px',
-              color: isDark ? '#ffffff' : '#1a1a1a',
-              maxWidth: '200px',
+            <div style={{
+              background: isDark ? '#404040' : '#e9ecef',
+              padding: '8px 12px',
+              borderRadius: '12px',
+              maxWidth: '300px',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap'
             }}>
-              {replyingTo.text}
-            </span>
+              <span style={{
+                fontSize: '14px',
+                color: isDark ? '#ffffff' : '#1a1a1a'
+              }}>
+                {replyingTo.text}
+              </span>
+            </div>
           </div>
           <button
             onClick={onCancelReply}
@@ -1213,12 +1449,93 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
               color: isDark ? '#adb5bd' : '#6c757d',
               cursor: 'pointer',
               fontSize: '16px',
-              padding: '4px'
+              padding: '4px',
+              width: '32px',
+              height: '32px',
+              borderRadius: '50%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'background 0.2s ease'
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = isDark ? '#404040' : '#e9ecef';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'transparent';
             }}
           >
             ✕
           </button>
+        </div>
+      )}
+
+      {/* Edit Preview */}
+      {editingMessageId && editText && (
+        <div style={{
+          padding: '12px 24px',
+          background: isDark ? '#2a2a2a' : '#f8f9fa',
+          borderBottom: `1px solid ${isDark ? '#404040' : '#dee2e6'}`,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            flex: 1
+          }}>
+            <span style={{
+              fontSize: '14px',
+              color: isDark ? '#adb5bd' : '#6c757d'
+            }}>
+               Editing:
+            </span>
+            <div style={{
+              background: isDark ? '#404040' : '#e9ecef',
+              padding: '8px 12px',
+              borderRadius: '12px',
+              maxWidth: '300px',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap'
+            }}>
+              <span style={{
+                fontSize: '14px',
+                color: isDark ? '#ffffff' : '#1a1a1a'
+              }}>
+                {editText}
+              </span>
+            </div>
           </div>
+          <button
+            onClick={onCancelEdit}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: isDark ? '#adb5bd' : '#6c757d',
+              cursor: 'pointer',
+              fontSize: '16px',
+              padding: '4px',
+              width: '32px',
+              height: '32px',
+              borderRadius: '50%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'background 0.2s ease'
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = isDark ? '#404040' : '#e9ecef';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'transparent';
+            }}
+          >
+            ✕
+          </button>
+        </div>
       )}
 
       {/* Emoji Picker */}
@@ -1281,7 +1598,7 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
         {/* Single Input Field - Direct input with icons inside */}
             <input
                 type="text"
-          placeholder="Start Typing..."
+          placeholder={editingMessageId ? "Edit your message..." : "Type a message..."}
                 value={text}
                 onChange={(e) => setText(e.target.value)}
           onKeyPress={handleKeyPress}
@@ -1371,6 +1688,8 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
               }}
             />
           </button>
+
+
 
           {/* Send Button */}
           <button 
@@ -1516,8 +1835,8 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
 
   const handleDeleteGroup = async () => {
     if (chat.type === 'group' && CURRENT_USER) {
-      console.log('🗑️ DELETE GROUP - Starting process');
-      console.log('📋 Chat info:', {
+      console.log('DELETE GROUP - Starting process');
+      console.log('Chat info:', {
         chatId: chat.id,
         chatName: chat.name,
         participants: chat.participants.map(p => ({ id: p.id, name: p.name, role: p.role }))
@@ -1555,6 +1874,12 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
         onConfirm: async () => {
           try {
             console.log('🗑️ User confirmed deletion, attempting to delete group:', chat.id);
+            console.log('🔍 Debug chat object:', {
+              chatId: chat.id,
+              chatIdType: typeof chat.id,
+              chatName: chat.name,
+              fullChat: chat
+            });
             const success = await deleteChat(chat.id);
             console.log('🔄 Delete result:', success);
             
@@ -1636,6 +1961,12 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
         onConfirm: async () => {
           try {
             console.log('🗑️ User confirmed deletion, attempting to delete direct chat:', chat.id);
+            console.log('🔍 Debug direct chat object:', {
+              chatId: chat.id,
+              chatIdType: typeof chat.id,
+              chatName: chat.name,
+              fullChat: chat
+            });
             const success = await deleteChat(chat.id);
             console.log('🔄 Delete result:', success);
             
@@ -1694,8 +2025,20 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
   };
 
   const handleRemoveUser = (userId: string, userName: string) => {
-    if (chat.type === 'group' && userId !== CURRENT_USER?.id) {
+    console.log('🔘 BUTTON CLICKED - handleRemoveUser called:', {
+      userId,
+      userName,
+      chatType: chat?.type,
+      currentUserId: CURRENT_USER?.id,
+      willProceed: userId !== CURRENT_USER?.id
+    });
+    
+    // Allow removal for both group and direct chats (but not removing yourself)
+    if (userId !== CURRENT_USER?.id) {
+      console.log('✅ Proceeding to call onRemoveUser...');
       onRemoveUser(userId, userName);
+    } else {
+      console.log('❌ Cannot remove yourself - blocked');
     }
   };
 
@@ -1718,7 +2061,7 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
       position: 'absolute',
       right: 0,
       top: 0,
-      zIndex: 100,
+      zIndex: 2000,
       boxShadow: isDark ? '-4px 0 20px rgba(0,0,0,0.5)' : '-4px 0 20px rgba(0,0,0,0.15)',
       transform: isOpen ? 'translateX(0)' : 'translateX(100%)',
       transition: 'transform 0.3s ease'
@@ -1778,7 +2121,21 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
             maxHeight: '200px',
             overflowY: 'auto'
           }}>
-            {chat.participants.map((participant, idx) => (
+            {chat.participants.map((participant, idx) => {
+              // Debug logging to see what's in participant data
+              if (participant.avatar === 'DC') {
+                console.log('🐛 DEBUG - Participant with DC avatar:', {
+                  id: participant.id,
+                  name: participant.name,
+                  avatar: participant.avatar,
+                  rawParticipant: participant
+                });
+              }
+              
+              // Generate correct initials for this participant
+              const correctInitials = getUserInitials(participant.name || 'Unknown User');
+              
+              return (
               <div 
                 key={idx} 
             style={{
@@ -1810,9 +2167,22 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
               alignItems: 'center',
               justifyContent: 'center',
                     fontSize: '12px',
-                    fontWeight: '600'
+                    fontWeight: '600',
+                    overflow: 'hidden'
                   }}>
-                    {participant.avatar}
+                    {isAvatarUrl(participant.avatar) ? (
+                      <img
+                        src={participant.avatar}
+                        alt={participant.name}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover'
+                        }}
+                      />
+                    ) : (
+                      correctInitials
+                    )}
           </div>
                   <div style={{
                     position: 'absolute',
@@ -1881,7 +2251,7 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
                   </button>
                 )}
             </div>
-        ))}
+            )})}
             </div>
         </div>
       )}
@@ -1950,16 +2320,6 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
               padding: '6px 0'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <img 
-                  src={setting.iconSrc} 
-                  alt={setting.label}
-                  width={14}
-                  height={14}
-                  style={{ 
-                    filter: isDark ? 'invert(1)' : 'none',
-                    opacity: 0.8
-                  }}
-                />
                 <span style={{
                   fontSize: '13px',
                   color: isDark ? '#ffffff' : '#1a1a1a'
@@ -2057,7 +2417,7 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
                     e.currentTarget.style.background = isDark ? '#2a2a2a' : '#f8f9fa';
                   }}
                 >
-                  <span>🗑️</span>
+                  <span></span>
                   Delete Group
                 </button>
         )}
@@ -2100,7 +2460,7 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
                   e.currentTarget.style.background = isDark ? '#2a2a2a' : '#f8f9fa';
                 }}
               >
-                <span>🗑️</span>
+                <span></span>
                 Delete Chat
               </button>
             </div>
@@ -2585,6 +2945,234 @@ const ConfirmationModal = ({ modal, isDark }: {
   );
 };
 
+// Global Hover Popup Component
+const GlobalHoverPopup = ({ 
+  state, 
+  onClose, 
+  onReact, 
+  onReply, 
+  onEdit, 
+  onDelete, 
+  isDark,
+  onClearTimeout
+}: { 
+  state: HoverPopupState;
+  onClose: () => void;
+  onReact: (messageId: string, emoji: string) => void;
+  onReply: (message: Message) => void;
+  onEdit: (message: Message) => void;
+  onDelete: (message: Message) => void;
+  isDark: boolean;
+  onClearTimeout: () => void;
+}) => {
+  const emojis = ['👍', '❤️', '😂', '😮', '😢', '😡', '🎉', '👏', '🙏', '🔥', '💯', '✨', '💪', '🤔', '😎', '🥳', '😴', '🤯', '😍', '🤩', '😭', '🤬', '🤮', '🤧', '🤠', '👻', '🤖', '👽', '👾', '🤡', '👹', '👺', '💀', '☠️'];
+  
+  // SINGLE CLICK-OFF HANDLER
+  React.useEffect(() => {
+    if (!state.activeMessageId) return;
+    
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.hover-popup')) {
+        onClose();
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [state.activeMessageId, onClose]);
+
+  if (!state.activeMessageId || !state.position || !state.message) return null;
+
+  return (
+    <div
+      className="hover-popup"
+      style={{
+        position: 'fixed',
+        top: state.position.y,
+        left: state.position.x,
+        background: isDark ? '#2a2a2a' : '#ffffff',
+        borderRadius: '12px',
+        padding: '8px',
+        boxShadow: isDark ? '0 4px 12px rgba(0,0,0,0.3)' : '0 4px 12px rgba(0,0,0,0.15)',
+        border: `1px solid ${isDark ? '#404040' : '#e9ecef'}`,
+        zIndex: 999999, // HIGHEST POSSIBLE - above ALL UI elements
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '4px',
+        width: '280px',
+        backdropFilter: 'blur(10px)',
+        WebkitBackdropFilter: 'blur(10px)'
+      }}
+      onMouseEnter={() => {
+        // Clear any existing timeout when hovering over popup
+        onClearTimeout();
+      }}
+      onMouseLeave={() => {
+        // Start the 3-second delay when mouse leaves popup
+        onClose();
+      }}
+    >
+      {/* X Close Button */}
+      <button
+        onClick={onClose}
+        style={{
+          position: 'absolute',
+          top: '-8px',
+          right: '-8px',
+          background: isDark ? '#404040' : '#e9ecef',
+          border: `1px solid ${isDark ? '#404040' : '#e9ecef'}`,
+          color: isDark ? '#adb5bd' : '#6c757d',
+          fontSize: '16px',
+          fontWeight: 'bold',
+          cursor: 'pointer',
+          width: '20px',
+          height: '20px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderRadius: '50%',
+          transition: 'all 0.2s ease',
+          boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.1)',
+          zIndex: 1,
+          lineHeight: '1',
+          padding: 0,
+          minWidth: '20px',
+          minHeight: '20px'
+        }}
+        onMouseEnter={e => {
+          e.currentTarget.style.background = isDark ? '#dc2626' : '#ef4444';
+          e.currentTarget.style.color = '#ffffff';
+        }}
+        onMouseLeave={e => {
+          e.currentTarget.style.background = isDark ? '#404040' : '#e9ecef';
+          e.currentTarget.style.color = isDark ? '#adb5bd' : '#6c757d';
+        }}
+      >
+        ×
+      </button>
+      {/* Emoji reaction picker */}
+      <div style={{
+        maxHeight: '80px',
+        overflowY: 'auto',
+        display: 'grid',
+        gridTemplateColumns: 'repeat(8, 1fr)',
+        gap: '4px',
+        padding: '4px',
+        borderBottom: `1px solid ${isDark ? '#404040' : '#e9ecef'}`,
+        marginBottom: '8px'
+      }}>
+        {emojis.map((emoji, index) => (
+          <button
+            key={index}
+            onClick={() => {
+              onReact(state.message!.id, emoji);
+              onClose();
+            }}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              fontSize: '16px',
+              cursor: 'pointer',
+              padding: '4px',
+              borderRadius: '4px',
+              transition: 'background 0.2s ease'
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = isDark ? '#404040' : '#f8f9fa';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'transparent';
+            }}
+          >
+            {emoji}
+          </button>
+        ))}
+      </div>
+
+      {/* Action buttons */}
+      <div style={{
+        display: 'flex',
+        gap: '8px',
+        justifyContent: 'space-around'
+      }}>
+        <button
+          onClick={() => {
+            onReply(state.message!);
+            onClose();
+          }}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            fontSize: '14px',
+            cursor: 'pointer',
+            padding: '6px 8px',
+            borderRadius: '4px',
+            color: isDark ? '#ffffff' : '#1a1a1a',
+            transition: 'background 0.2s ease'
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.background = isDark ? '#404040' : '#f8f9fa';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background = 'transparent';
+          }}
+        >
+          Reply
+        </button>
+        <button
+          onClick={() => {
+            onEdit(state.message!);
+            onClose();
+          }}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            fontSize: '14px',
+            cursor: 'pointer',
+            padding: '6px 8px',
+            borderRadius: '4px',
+            color: isDark ? '#ffffff' : '#1a1a1a',
+            transition: 'background 0.2s ease'
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.background = isDark ? '#404040' : '#f8f9fa';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background = 'transparent';
+          }}
+        >
+          Edit
+        </button>
+        <button
+          onClick={() => {
+            onDelete(state.message!);
+            onClose();
+          }}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            fontSize: '14px',
+            cursor: 'pointer',
+            padding: '6px 8px',
+            borderRadius: '4px',
+            color: '#ef4444',
+            transition: 'background 0.2s ease'
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.background = isDark ? '#404040' : '#f8f9fa';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background = 'transparent';
+          }}
+        >
+          Delete
+        </button>
+      </div>
+    </div>
+  );
+};
+
 const MessageNotificationToast = ({ notification, onRemove, onMarkRead, onOpenChat, isDark }: { 
   notification: MessageNotification, 
   onRemove: (id: string) => void,
@@ -2631,13 +3219,13 @@ const MessageNotificationToast = ({ notification, onRemove, onMarkRead, onOpenCh
   const getChatIcon = () => {
     switch (notification.chatType) {
       case 'direct':
-        return '💬';
+        return '';
       case 'group':
-        return '👥';
+        return '';
       case 'team':
-        return '🏢';
+        return '';
       default:
-        return '💬';
+        return '';
     }
   };
 
@@ -2867,7 +3455,7 @@ export default function TeamChatPage() {
   const [groupName, setGroupName] = useState('');
   const [messageSearch, setMessageSearch] = useState('');
   const [isDarkMode, setIsDarkMode] = useState(false);
-  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [companyUsers, setCompanyUsers] = useState<User[]>([]);
   const [companyTeams, setCompanyTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
@@ -2875,6 +3463,8 @@ export default function TeamChatPage() {
   const [recentUsers, setRecentUsers] = useState<User[]>([]); // Track recent/frequent users
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [messageNotifications, setMessageNotifications] = useState<MessageNotification[]>([]);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [currentUserRefresh, setCurrentUserRefresh] = useState(0); // Force re-render when user profile changes
   const [confirmationModal, setConfirmationModal] = useState<ConfirmationModal>({
     isOpen: false,
     title: '',
@@ -2886,12 +3476,171 @@ export default function TeamChatPage() {
     type: 'warning'
   });
   
+  // New state for enhanced chat features
+  const [showActionModal, setShowActionModal] = useState(false);
+  const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
+  const [actionModalPosition, setActionModalPosition] = useState<{ x: number; y: number } | null>(null);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editText, setEditText] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [selectedMessages, setSelectedMessages] = useState<Set<string>>(new Set());
+  const [showReactionPicker, setShowReactionPicker] = useState(false);
+  const [reactionTarget, setReactionTarget] = useState<Message | null>(null);
+  const [reactionPopupPosition, setReactionPopupPosition] = useState({ x: 0, y: 0, width: 0 });
+  
+  // Global hover popup state
+  const [hoverPopupState, setHoverPopupState] = useState<HoverPopupState>({
+    activeMessageId: null,
+    position: null,
+    message: null,
+    hideTimeoutId: null
+  });
+  
   const messagesEndRef = useRef<null | HTMLDivElement>(null);
   const { theme } = useContext(ThemeContext);
 
   const isDark = theme === 'dark';
   const activeChat = chats.find(chat => chat.id === activeChatId);
   const colors = themes[isDark ? 'dark' : 'light'];
+
+  // Function to refresh current user with full profile data
+  const refreshCurrentUser = async () => {
+    try {
+      const user = await getCurrentUser();
+      if (!user) return;
+
+      console.log('🔍 Refreshing current user:', user.id);
+
+      // Get full profile data by email instead of ID
+      const { data: profileData, error: profileError } = await supabase
+        .rpc('get_user_profile_by_email', { user_email: user.email });
+
+      console.log('📊 Profile data response:', { profileData, profileError });
+
+      if (profileError || !profileData || profileData.length === 0) {
+        console.warn('⚠️ Could not fetch profile data, using auth data only');
+        CURRENT_USER = convertSupabaseUser(user);
+        setCurrentUserRefresh(prev => prev + 1);
+        return;
+      }
+
+      const profile = profileData[0];
+      console.log('👤 Raw profile data:', profile);
+      console.log('🖼️ Avatar URL from profile:', profile.avatar_url);
+      console.log('🔍 Is avatar URL check:', isAvatarUrl(profile.avatar_url));
+      
+      // Update CURRENT_USER with full profile data
+      CURRENT_USER = {
+        id: profile.id,
+        name: profile.name || 'Unknown User',
+        avatar: profile.avatar_url && isAvatarUrl(profile.avatar_url) 
+          ? profile.avatar_url 
+          : getUserInitials(profile.name || 'Unknown User'),
+        status: (profile.status || 'online') as UserStatus,
+        email: profile.email,
+        company_id: profile.company_id,
+        role: user.role as 'admin' | 'member',
+        company_role: profile.company_role
+      };
+      
+      console.log('✅ Current user refreshed with profile data:', CURRENT_USER);
+      console.log('🖼️ Final avatar value:', CURRENT_USER.avatar);
+      
+      // Force re-render
+      setCurrentUserRefresh(prev => prev + 1);
+    } catch (error) {
+      console.error('❌ Error refreshing current user:', error);
+    }
+  };
+
+  // Real-time subscription management
+  let userProfileSubscription: any = null;
+
+  const setupRealtimeSubscriptions = () => {
+    if (!CURRENT_USER?.company_id) return;
+
+    console.log('🔄 Setting up real-time user profile subscriptions...');
+
+    // Subscribe to user profile changes for company users
+    userProfileSubscription = supabase
+      .channel('user-profile-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'users',
+          filter: `company_id=eq.${CURRENT_USER.company_id}`
+        },
+        async (payload) => {
+          console.log('👤 User profile updated:', payload);
+          
+          const updatedUser = payload.new;
+          
+          // Update current user if it's their own profile
+          if (updatedUser.id === CURRENT_USER?.id) {
+            await refreshCurrentUser();
+            return;
+          }
+          
+          // Update other users in company users list
+          setCompanyUsers(prevUsers => 
+            prevUsers.map(user => 
+              user.id === updatedUser.id
+                ? {
+                    ...user,
+                    name: updatedUser.name || user.name,
+                    avatar: updatedUser.avatar_url && isAvatarUrl(updatedUser.avatar_url)
+                      ? updatedUser.avatar_url
+                      : getUserInitials(updatedUser.name || 'Unknown User'),
+                    status: (updatedUser.status || 'online') as UserStatus,
+                    email: updatedUser.email || user.email,
+                    company_id: updatedUser.company_id || user.company_id,
+                    role: user.role, // Keep existing role
+                    company_role: updatedUser.company_role
+                  }
+                : user
+            )
+          );
+
+          // Update chats to reflect profile changes in participant data
+          setChats(prevChats =>
+            prevChats.map(chat => ({
+              ...chat,
+              participants: chat.participants?.map(participant =>
+                participant.id === updatedUser.id
+                  ? {
+                      ...participant,
+                      name: updatedUser.name || participant.name,
+                      avatar: updatedUser.avatar_url && isAvatarUrl(updatedUser.avatar_url)
+                        ? updatedUser.avatar_url
+                        : getUserInitials(updatedUser.name || 'Unknown User'),
+                      status: (updatedUser.status || 'online') as UserStatus,
+                      company_role: updatedUser.company_role
+                    }
+                  : participant
+              )
+            }))
+          );
+
+          console.log('✅ Profile updates applied to UI');
+        }
+      )
+      .subscribe();
+
+    console.log('✅ Real-time user profile subscriptions active');
+  };
+
+  const cleanupRealtimeSubscriptions = () => {
+    console.log('🧹 Cleaning up real-time subscriptions...');
+    
+    if (userProfileSubscription) {
+      supabase.removeChannel(userProfileSubscription);
+      userProfileSubscription = null;
+    }
+    
+    console.log('✅ Real-time subscriptions cleaned up');
+  };
 
   // Initialize data on component mount
   useEffect(() => {
@@ -2907,10 +3656,22 @@ export default function TeamChatPage() {
       CURRENT_USER = convertSupabaseUser(user);
       console.log('👤 CURRENT_USER after conversion:', CURRENT_USER);
       console.log('🏢 CURRENT_USER company_id:', CURRENT_USER?.company_id);
+      
+      // Refresh current user with full profile data
+      await refreshCurrentUser();
+      
       await loadInitialData();
+      
+      // Set up real-time subscriptions after data is loaded
+      setupRealtimeSubscriptions();
     };
 
     initializeData();
+
+    // Cleanup subscriptions on unmount
+    return () => {
+      cleanupRealtimeSubscriptions();
+    };
   }, [navigate]);
 
   const loadInitialData = async () => {
@@ -3089,7 +3850,7 @@ export default function TeamChatPage() {
 
   const showBrowserNotification = (sender: string, message: string, chatName: string, chatType: ChatType) => {
     if ('Notification' in window && Notification.permission === 'granted') {
-      const icon = chatType === 'team' ? '🏢' : chatType === 'group' ? '👥' : '💬';
+      const icon = '';
       const title = chatType === 'direct' ? `${sender}` : `${sender} in ${chatName}`;
       const body = message.length > 100 ? message.substring(0, 100) + '...' : message;
       
@@ -3208,7 +3969,7 @@ export default function TeamChatPage() {
             ...chat, 
             messages: [...chat.messages, convertedMessage],
             lastMessage: message.content,
-            timestamp: new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            timestamp: message.created_at
           };
         }
         return chat;
@@ -3268,21 +4029,28 @@ export default function TeamChatPage() {
   };
 
   const handleStartNewChat = async (user: User) => {
+    console.log('🎯 HANDLE START NEW CHAT - Button clicked for user:', {
+      userId: user?.id,
+      userName: user?.name,
+      currentUser: CURRENT_USER?.id
+    });
+
     if (!CURRENT_USER) {
-      console.error('No current user found')
+      console.error('❌ No current user found')
       return
     }
     const authUser = await getCurrentUser();
     if (!authUser) {
-      console.error('No authenticated user found')
+      console.error('❌ No authenticated user found')
       return
     }
     if (!user?.id) {
-      console.error('Recipient user ID is missing!')
+      console.error('❌ Recipient user ID is missing!')
       return
     }
-    console.log('Creating direct chat:', { user1Id: CURRENT_USER.id, user2Id: user.id, companyId: authUser.company_id });
+    console.log('🚀 Creating direct chat:', { user1Id: CURRENT_USER.id, user2Id: user.id, companyId: authUser.company_id });
     try {
+      console.log('📞 Calling createDirectChat...');
       const newChat = await createDirectChat(CURRENT_USER.id, user.id, authUser.company_id)
       if (newChat) {
         const convertedChat = convertSupabaseChat(newChat)
@@ -3465,12 +4233,124 @@ export default function TeamChatPage() {
   };
 
   const handleReply = (message: Message) => {
-    setReplyingTo(message);
+    setReplyTo(message);
+    setEditingMessageId(null);
+    setEditText('');
   };
 
-  const handleCancelReply = () => {
-    setReplyingTo(null);
+  const handleEdit = (message: Message) => {
+    setEditingMessageId(message.id);
+    setEditText(message.text);
+    setReplyTo(null);
   };
+
+  const handleDelete = () => {
+    setDeleting(true);
+    setShowReactionPicker(false);
+    setReactionTarget(null);
+  };
+
+  const handleSaveEdit = async (text: string) => {
+    if (!editingMessageId || !text.trim()) return;
+    
+    try {
+      // Use the chat library function to edit the message
+      const { error } = await supabase
+        .from('messages')
+        .update({ 
+          content: text.trim(),
+          is_edited: true,
+          edited_at: new Date().toISOString()
+        })
+        .eq('id', editingMessageId)
+        .eq('sender_id', CURRENT_USER?.id);
+
+      if (error) {
+        console.error('Error editing message:', error);
+        return;
+      }
+
+      setEditingMessageId(null);
+      setEditText('');
+    } catch (error) {
+      console.error('Error editing message:', error);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingMessageId(null);
+    setEditText('');
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedMessages.size === 0) return;
+
+    try {
+      console.log('🗑️ Deleting selected messages:', Array.from(selectedMessages));
+      
+      for (const messageId of selectedMessages) {
+        console.log('🗑️ Deleting message:', messageId);
+        
+        // First delete message reactions
+        const { error: reactionsError } = await supabase
+          .from('message_reactions')
+          .delete()
+          .eq('message_id', messageId);
+        
+        if (reactionsError) {
+          console.error('Error deleting message reactions:', reactionsError);
+        }
+        
+        // Then delete the message itself
+        const { error: messageError } = await supabase
+          .from('messages')
+          .delete()
+          .eq('id', messageId)
+          .eq('sender_id', CURRENT_USER?.id); // Only allow deleting your own messages
+        
+        if (messageError) {
+          console.error('Error deleting message:', messageError);
+        } else {
+          console.log('✅ Message deleted successfully:', messageId);
+        }
+      }
+      
+      // Remove deleted messages from UI
+      setChats(prevChats =>
+        prevChats.map(chat =>
+          chat.id === activeChatId
+            ? {
+                ...chat,
+                messages: chat.messages.filter(msg => !selectedMessages.has(msg.id)),
+              }
+            : chat
+        )
+      );
+      setSelectedMessages(new Set());
+      setDeleting(false);
+      
+      console.log('✅ All selected messages deleted');
+    } catch (error) {
+      console.error('Error deleting messages:', error);
+    }
+  };
+
+  const handleCancelDelete = () => {
+    setSelectedMessages(new Set());
+    setDeleting(false);
+  };
+
+  const handleMessageSelect = (messageId: string) => {
+    const newSelected = new Set(selectedMessages);
+    if (newSelected.has(messageId)) {
+      newSelected.delete(messageId);
+    } else {
+      newSelected.add(messageId);
+    }
+    setSelectedMessages(newSelected);
+  };
+
+  const emojis = ['👍', '❤️', '😂', '😮', '😢', '😡', '🎉', '👏', '🙏', '🔥', '💯', '✨', '💪', '🤔', '😎', '🥳', '😴', '🤯', '😍', '🤩', '😭', '🤬', '🤮', '🤧', '🤠', '👻', '🤖', '👽', '👾', '🤡', '👹', '👺', '💀', '☠️', '👻', '👽', '👾', '🤖', '💩', '🤡', '👹', '👺', '💀', '☠️', '👻', '👽', '👾', '🤖', '💩', '🤡', '👹', '👺', '💀', '☠️'];
 
   const handleSendMessage = async (text: string, type: MessageType = 'text') => {
     if (!activeChatId || !CURRENT_USER) return;
@@ -3488,7 +4368,7 @@ export default function TeamChatPage() {
                   ...chat, 
                   messages: [...chat.messages, convertedMessage],
                   lastMessage: message.content,
-                  timestamp: new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                  timestamp: message.created_at
                 }
               : chat
           )
@@ -3509,7 +4389,7 @@ export default function TeamChatPage() {
       id: `msg_${Date.now()}`,
       text: file.name,
       sender: CURRENT_USER?.name || 'Unknown',
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      timestamp: new Date().toISOString(), // Store raw date string
       type: file.type.startsWith('image/') ? 'image' : 'file',
       fileName: file.name,
       fileSize: file.size,
@@ -3533,17 +4413,93 @@ export default function TeamChatPage() {
   };
 
   const handleReaction = async (messageId: string, emoji: string) => {
-    if (!CURRENT_USER) return;
-
     try {
-      await addMessageReaction(messageId, CURRENT_USER.id, emoji);
-      // Real-time updates will handle the UI update
+      if (!CURRENT_USER?.id) {
+        console.error('No current user found', { messageId, emoji, CURRENT_USER });
+        return;
+      }
+      console.log('handleReaction called', { messageId, emoji, userId: CURRENT_USER.id });
+      
+      // Check if user already has ANY reaction on this message (limit 1 per user per message)
+      const { data: existingReactions, error: checkError } = await supabase
+        .from('message_reactions')
+        .select('*')
+        .eq('message_id', messageId)
+        .eq('user_id', CURRENT_USER.id);
+      
+      if (checkError) {
+        console.error('Error checking existing reactions:', checkError, { messageId, emoji, userId: CURRENT_USER.id });
+        return;
+      }
+      
+      // If user already has a reaction, remove it first
+      if (existingReactions && existingReactions.length > 0) {
+        for (const reaction of existingReactions) {
+          await removeMessageReaction(messageId, CURRENT_USER.id, reaction.emoji);
+        }
+        
+        // If clicking the same emoji, just remove it (toggle off)
+        if (existingReactions.some(r => r.emoji === emoji)) {
+          // Just removed it, don't add it back
+        } else {
+          // Add the new emoji
+          await addMessageReaction(messageId, CURRENT_USER.id, emoji);
+        }
+      } else {
+        // No existing reaction, add the new one
+        await addMessageReaction(messageId, CURRENT_USER.id, emoji);
+      }
+      
+      // Refetch all reactions for this message
+      const { data: allReactions, error: fetchError } = await supabase
+        .from('message_reactions')
+        .select('emoji, user_id')
+        .eq('message_id', messageId);
+      if (!fetchError && allReactions) {
+        setChats(prevChats =>
+          prevChats.map(chat =>
+            chat.id === activeChatId
+              ? {
+                  ...chat,
+                  messages: chat.messages.map(msg =>
+                    msg.id === messageId
+                      ? {
+                          ...msg,
+                          reactions: Object.values(
+                            allReactions.reduce((acc, r) => {
+                              if (!acc[r.emoji]) acc[r.emoji] = { emoji: r.emoji, users: [], count: 0 };
+                              acc[r.emoji].users.push(r.user_id);
+                              acc[r.emoji].count += 1;
+                              return acc;
+                            }, {} as Record<string, { emoji: string, users: string[], count: number }>)
+                          ),
+                        }
+                      : msg
+                  ),
+                }
+              : chat
+          )
+        );
+      } else {
+        console.error('Error fetching all reactions:', fetchError, { messageId });
+      }
     } catch (error) {
-      console.error('Failed to add reaction:', error);
+      console.error('Error handling reaction:', error, { messageId, emoji, userId: CURRENT_USER?.id });
     }
   };
 
-  // Updated handler functions for button functionality
+  // Enhanced chat functions
+  const handleLongPressMessage = (message: Message, event: React.MouseEvent) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    
+    if (message.sender === CURRENT_USER?.name) {
+      // Own message - show action modal
+      setSelectedMessage(message);
+      setActionModalPosition({ x: rect.left + rect.width / 2, y: rect.top });
+      setShowActionModal(true);
+    }
+  };
+
   const handleToggleMute = (chatId: string) => {
     setChats(prevChats => 
       prevChats.map(chat => 
@@ -3564,21 +4520,44 @@ export default function TeamChatPage() {
     );
   };
 
-  const handleToggleArchive = (chatId: string) => {
+  const handleToggleArchive = async (chatId: string) => {
+    console.log('📁 TOGGLE ARCHIVE - Starting for chat:', chatId);
+    
+    const chat = chats.find(c => c.id === chatId);
+    if (!chat) {
+      console.error('❌ Chat not found in local state');
+      return;
+    }
+
+    console.log('📋 Current archive status in UI:', chat.isArchived);
+
+    try {
+      // Call database function
+      const success = await toggleChatArchive(chatId);
+      
+      if (success) {
+        // Update local state only if database update succeeded
     setChats(prevChats => 
-      prevChats.map(chat => 
-        chat.id === chatId 
-          ? { ...chat, isArchived: !chat.isArchived }
-          : chat
+          prevChats.map(c => 
+            c.id === chatId 
+              ? { ...c, isArchived: !c.isArchived }
+              : c
       )
     );
     
-    const chat = chats.find(c => c.id === chatId);
-    if (chat) {
+        const newStatus = !chat.isArchived;
+        console.log('✅ Archive status updated successfully:', newStatus);
       addNotification(
-        `Chat "${chat.name}" ${chat.isArchived ? 'unarchived' : 'archived'}`,
-        'info'
+          `Chat "${chat.name}" ${newStatus ? 'archived' : 'unarchived'}`,
+          'success'
       );
+      } else {
+        console.error('❌ Failed to toggle archive status');
+        addNotification('Failed to update archive status', 'error');
+      }
+    } catch (error) {
+      console.error('💥 Error toggling archive:', error);
+      addNotification('An error occurred while updating archive status', 'error');
     }
   };
 
@@ -3724,6 +4703,92 @@ export default function TeamChatPage() {
     selectChat(chatId);
   };
 
+  // Global hover popup management functions
+  const showHoverPopup = (message: Message, event: React.MouseEvent) => {
+    // Clear any existing timeout
+    if (hoverPopupState.hideTimeoutId) {
+      clearTimeout(hoverPopupState.hideTimeoutId);
+    }
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    
+    // Popup dimensions
+    const popupWidth = 280;
+    const popupHeight = 200;
+    
+    // Position popup below the bubble, starting from its right edge
+    let x = rect.right - popupWidth; // Start from right edge of bubble
+    let y = rect.bottom + 8; // Position below the bubble
+    
+    // If popup would go off the right side of screen, adjust to fit
+    if (x + popupWidth > viewportWidth - 10) {
+      x = viewportWidth - popupWidth - 10;
+    }
+    
+    // If popup would go off the left side of screen, adjust to fit
+    if (x < 10) {
+      x = 10;
+    }
+    
+    // If popup would go below screen, position it above the bubble
+    if (y + popupHeight > viewportHeight - 10) {
+      y = rect.top - popupHeight - 8;
+    }
+    
+    setHoverPopupState({
+      activeMessageId: message.id,
+      position: { x, y },
+      message: message,
+      hideTimeoutId: null
+    });
+  };
+
+  const hideHoverPopup = () => {
+    // Clear any existing timeout first
+    if (hoverPopupState.hideTimeoutId) {
+      clearTimeout(hoverPopupState.hideTimeoutId);
+    }
+    
+    // Set a 3-second delay before hiding
+    const timeoutId = window.setTimeout(() => {
+      setHoverPopupState({
+        activeMessageId: null,
+        position: null,
+        message: null,
+        hideTimeoutId: null
+      });
+    }, 3000);
+    
+    setHoverPopupState(prev => ({
+      ...prev,
+      hideTimeoutId: timeoutId
+    }));
+  };
+
+  const clearHoverTimeout = () => {
+    if (hoverPopupState.hideTimeoutId) {
+      clearTimeout(hoverPopupState.hideTimeoutId);
+      setHoverPopupState(prev => ({
+        ...prev,
+        hideTimeoutId: null
+      }));
+    }
+  };
+
+  // Cleanup timeouts on unmount
+  useEffect(() => {
+    return () => {
+      if (hoverPopupState.hideTimeoutId) {
+        clearTimeout(hoverPopupState.hideTimeoutId);
+      }
+    };
+  }, [hoverPopupState.hideTimeoutId]);
+
+  // Debug logging
+  console.log('🔍 Rendering TeamChatPage with CURRENT_USER:', CURRENT_USER);
+  
   // Add loading state check
   if (loading) {
   return (
@@ -3820,6 +4885,7 @@ export default function TeamChatPage() {
             }} 
             isDark={isDark} 
             notificationCount={messageNotifications.length}
+            onClick={() => setIsProfileModalOpen(true)}
           />
 
           {/* Search Bar with Glass Effect */}
@@ -3831,7 +4897,7 @@ export default function TeamChatPage() {
             <div style={{ position: 'relative' }}>
                 <input
                   type="text"
-                placeholder="Search conversations..."
+                placeholder="Search..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 style={{
@@ -3862,11 +4928,13 @@ export default function TeamChatPage() {
                 position: 'absolute',
                 left: '16px',
                 top: '50%',
-                transform: 'translateY(-50%)',
+                transform: 'translateY(-140%)',
                 pointerEvents: 'none',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center'
+                justifyContent: 'center',
+                height: '16px',
+                width: '16px'
               }}>
                 <svg 
                   width="16" 
@@ -3944,7 +5012,7 @@ export default function TeamChatPage() {
                   width: '100%',
                   padding: '12px 16px',
                   borderRadius: '12px',
-                  border: 'none',
+                  border: '1px solid #ffffff',
                   background: '#000000',
                   color: '#ffffff',
                   fontSize: '14px',
@@ -4418,7 +5486,7 @@ export default function TeamChatPage() {
                     }}>
                       {searchQuery.trim() === '' ? (
                         <div>
-                          <div style={{ fontSize: '48px', marginBottom: '16px' }}>👥</div>
+                          <div style={{ fontSize: '48px', marginBottom: '16px' }}></div>
                           <div style={{ fontWeight: '600', marginBottom: '8px' }}>No team members found</div>
                           <div style={{ fontSize: '13px', opacity: 0.8 }}>
                             Add team members to your company to start chatting
@@ -4494,14 +5562,44 @@ export default function TeamChatPage() {
           }}>
               {activeChat ? (
                   activeChat.messages.map((message, index) => (
-                <MessageBubble
-                  key={message.id}
-                  message={message}
-                  sent={message.sender === CURRENT_USER?.name}
-                  isDark={isDark}
-                  onReact={handleReaction}
-                  onReply={handleReply}
-                />
+                    <div key={message.id} style={{ marginBottom: '8px' }}>
+                      <MessageBubble
+                        message={message}
+                        sent={message.sender === CURRENT_USER?.name}
+                        isDark={isDark}
+                        onReact={handleReaction}
+                        onReply={handleReply}
+                        onEdit={handleEdit}
+                        onDelete={handleDelete}
+                        isSelected={selectedMessages.has(message.id)}
+                        onSelect={handleMessageSelect}
+                        deleting={deleting}
+                        editingMessageId={editingMessageId}
+                        onShowHover={showHoverPopup}
+                        onHideHover={hideHoverPopup}
+                      />
+                      {/* Timestamp and edited indicator outside bubble */}
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        marginTop: '4px',
+                        fontSize: '11px',
+                        color: isDark ? '#adb5bd' : '#6c757d',
+                        justifyContent: message.sender === CURRENT_USER?.name ? 'flex-end' : 'flex-start',
+                        paddingLeft: message.sender === CURRENT_USER?.name ? '0' : '48px',
+                        paddingRight: message.sender === CURRENT_USER?.name ? '48px' : '0'
+                      }}>
+                        {message.edited && (
+                          <span style={{ fontStyle: 'italic' }}>
+                            edited
+                          </span>
+                        )}
+                        <span>
+                          {formatTimestamp(message.timestamp)}
+                        </span>
+                      </div>
+                    </div>
                   ))
               ) : (
               <div style={{
@@ -4513,7 +5611,7 @@ export default function TeamChatPage() {
                 color: isDark ? '#6c757d' : '#adb5bd',
                 minHeight: '200px'
               }}>
-                <div style={{ fontSize: '48px', marginBottom: '16px', opacity: 0.6 }}>💬</div>
+                <div style={{ fontSize: '48px', marginBottom: '16px', opacity: 0.6 }}></div>
                 <h3 style={{
                   margin: 0,
                   fontSize: '16px',
@@ -4535,14 +5633,89 @@ export default function TeamChatPage() {
               <div ref={messagesEndRef} />
             </div>
 
+
+
+
+
+          {/* Delete mode controls */}
+          {deleting && (
+            <div style={{
+              background: colors.hoverBg,
+              padding: '12px 16px',
+              borderRadius: '8px',
+              marginBottom: '12px',
+              border: `1px solid #ef4444`,
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <div style={{
+                fontSize: '14px',
+                color: colors.text,
+                fontWeight: '500'
+              }}>
+                Select messages to delete ({selectedMessages.size} selected)
+              </div>
+              <div style={{
+                display: 'flex',
+                gap: '8px'
+              }}>
+                <button
+                  onClick={handleDeleteSelected}
+                  disabled={selectedMessages.size === 0}
+                  style={{
+                    background: '#ef4444',
+                    color: '#ffffff',
+                    border: 'none',
+                    padding: '10px 36px',
+                    borderRadius: '4px',
+                    fontSize: '15px',
+                    minWidth: 160,
+                    cursor: selectedMessages.size > 0 ? 'pointer' : 'not-allowed',
+                    opacity: selectedMessages.size > 0 ? 1 : 0.5,
+                    fontWeight: 600,
+                    whiteSpace: 'nowrap',
+                    lineHeight: 1.2,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  Delete Selected
+                </button>
+                <button
+                  onClick={handleCancelDelete}
+                  style={{
+                    background: 'transparent',
+                    color: colors.textSecondary,
+                    border: `1px solid ${isDark ? '#404040' : '#e9ecef'}`,
+                    padding: '6px 28px',
+                    borderRadius: '4px',
+                    fontSize: '15px',
+                    minWidth: 120,
+                    cursor: 'pointer',
+                    fontWeight: 500,
+                    marginLeft: 0,
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Message Input */}
           {activeChat && (
             <MessageInput
               onSendMessage={handleSendMessage}
               onFileUpload={handleFileUpload}
               isDark={isDark}
-              replyingTo={replyingTo || undefined}
-              onCancelReply={handleCancelReply}
+              replyingTo={replyTo || undefined}
+              onCancelReply={() => setReplyTo(null)}
+              editingMessageId={editingMessageId}
+              editText={editText}
+              onSaveEdit={handleSaveEdit}
+              onCancelEdit={handleCancelEdit}
             />
           )}
         </div>
@@ -4580,6 +5753,183 @@ export default function TeamChatPage() {
             backdropFilter: 'blur(2px)'
           }}
           onClick={() => setShowRightPanel(false)}
+        />
+      )}
+
+      {/* User Profile Modal */}
+      <UserProfileModal
+        isOpen={isProfileModalOpen}
+        onClose={(profileUpdated) => {
+          setIsProfileModalOpen(false);
+          if (profileUpdated) {
+            refreshCurrentUser();
+          }
+        }}
+      />
+
+      
+
+      {/* Action Modal for Own Messages */}
+      {showActionModal && selectedMessage && actionModalPosition && (
+        <div
+          style={{
+            position: 'fixed',
+            top: actionModalPosition.y,
+            left: actionModalPosition.x,
+            transform: 'translateX(-50%)',
+            background: isDark ? '#2a2a2a' : '#ffffff',
+            borderRadius: '12px',
+            padding: '8px',
+            boxShadow: isDark ? '0 4px 12px rgba(0,0,0,0.3)' : '0 4px 12px rgba(0,0,0,0.15)',
+            border: `1px solid ${isDark ? '#404040' : '#e9ecef'}`,
+            zIndex: 1000,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '4px',
+            minWidth: '120px'
+          }}
+        >
+          <button
+                         onClick={() => {
+               handleReply(selectedMessage);
+               setShowActionModal(false);
+               setSelectedMessage(null);
+             }}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              padding: '8px 12px',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              color: isDark ? '#ffffff' : '#1a1a1a',
+              fontSize: '14px',
+              textAlign: 'left',
+              transition: 'background 0.2s ease'
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = isDark ? '#404040' : '#f8f9fa';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'transparent';
+            }}
+          >
+            Reply
+          </button>
+          <button
+                         onClick={() => {
+               handleReaction(selectedMessage.id, '👍');
+               setShowActionModal(false);
+               setSelectedMessage(null);
+             }}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              padding: '8px 12px',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              color: isDark ? '#ffffff' : '#1a1a1a',
+              fontSize: '14px',
+              textAlign: 'left',
+              transition: 'background 0.2s ease'
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = isDark ? '#404040' : '#f8f9fa';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'transparent';
+            }}
+          >
+            React
+          </button>
+          <button
+            onClick={() => {
+              handleEdit(selectedMessage);
+              setShowActionModal(false);
+              setSelectedMessage(null);
+            }}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              padding: '8px 12px',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              color: isDark ? '#ffffff' : '#1a1a1a',
+              fontSize: '14px',
+              textAlign: 'left',
+              transition: 'background 0.2s ease'
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = isDark ? '#404040' : '#f8f9fa';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'transparent';
+            }}
+          >
+            Edit
+          </button>
+          <button
+            onClick={() => {
+              handleDelete();
+              setShowActionModal(false);
+              setSelectedMessage(null);
+            }}
+            disabled={deleting}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              padding: '8px 12px',
+              borderRadius: '6px',
+              cursor: deleting ? 'not-allowed' : 'pointer',
+              color: deleting ? (isDark ? '#666' : '#999') : '#ef4444',
+              fontSize: '14px',
+              textAlign: 'left',
+              transition: 'background 0.2s ease'
+            }}
+            onMouseEnter={e => {
+              if (!deleting) {
+                e.currentTarget.style.background = isDark ? '#404040' : '#f8f9fa';
+              }
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'transparent';
+            }}
+          >
+            {deleting ? '⏳ Deleting...' : '🗑️ Delete'}
+          </button>
+        </div>
+      )}
+
+
+
+      {/* Global Hover Popup */}
+      <GlobalHoverPopup
+        state={hoverPopupState}
+        onClose={hideHoverPopup}
+        onReact={handleReaction}
+        onReply={handleReply}
+        onEdit={handleEdit}
+        onDelete={handleDelete}
+        isDark={isDark}
+        onClearTimeout={clearHoverTimeout}
+      />
+
+      {/* Backdrop for modals */}
+      {showActionModal && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.3)',
+            zIndex: 999
+          }}
+          onClick={() => {
+            setShowActionModal(false);
+            setSelectedMessage(null);
+            setActionModalPosition(null);
+          }}
         />
       )}
     </div>

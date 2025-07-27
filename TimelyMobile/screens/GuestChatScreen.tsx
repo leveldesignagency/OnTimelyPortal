@@ -315,14 +315,6 @@ export default function GuestChatScreen({ guest }: GuestChatScreenProps) {
   const handleSaveEdit = async () => {
     if (!editingMessageId || !editText.trim()) return;
     
-    // Prevent editing optimistic messages (messages that haven't been saved to database yet)
-    if (editingMessageId.startsWith('optimistic-')) {
-      Alert.alert('Cannot Edit', 'Please wait for the message to be sent before editing.');
-      setEditingMessageId(null);
-      setEditText('');
-      return;
-    }
-    
     try {
       const { error } = await supabase.rpc('edit_guests_chat_message', {
         p_message_id: editingMessageId,
@@ -339,7 +331,7 @@ export default function GuestChatScreen({ guest }: GuestChatScreenProps) {
       // Update local state
       setMessages(prev => prev.map(msg => 
         msg.message_id === editingMessageId 
-          ? { ...msg, message_text: editText.trim(), is_edited: true, edited_at: new Date().toISOString() }
+          ? { ...msg, message_text: editText.trim() }
           : msg
       ));
       
@@ -782,7 +774,9 @@ export default function GuestChatScreen({ guest }: GuestChatScreenProps) {
                 alignItems: isCurrentUser ? 'flex-end' : 'flex-start',
                 marginLeft: isCurrentUser ? 0 : 4,
                 marginRight: isCurrentUser ? 4 : 0,
+                position: 'relative'
               }}>
+
                 {/* Faded preview of replied-to message */}
                 {repliedTo && (
                   <TouchableOpacity
@@ -803,9 +797,18 @@ export default function GuestChatScreen({ guest }: GuestChatScreenProps) {
                     </Text>
                   </TouchableOpacity>
                 )}
-                <GlassBubble isCurrentUser={isCurrentUser} isRecipient={!isCurrentUser}>
-                  <Text style={{ color: TEXT_COLOR, fontSize: 15, fontWeight: '500' }}>{renderMessageText(message.message_text)}</Text>
-                </GlassBubble>
+                <TouchableOpacity
+                  onPress={(event) => {
+                    if (isOwnMessage(message)) {
+                      showHoverPopup(message, event);
+                    }
+                  }}
+                  activeOpacity={isOwnMessage(message) ? 0.8 : 1}
+                >
+                  <GlassBubble isCurrentUser={isCurrentUser} isRecipient={!isCurrentUser}>
+                    <Text style={{ color: TEXT_COLOR, fontSize: 15, fontWeight: '500' }}>{renderMessageText(message.message_text)}</Text>
+                  </GlassBubble>
+                </TouchableOpacity>
                 {message.reactions && message.reactions.length > 0 && (
                   <View style={{
                     flexDirection: 'row',
@@ -965,67 +968,22 @@ export default function GuestChatScreen({ guest }: GuestChatScreenProps) {
     console.log(`[REACTIONS] Handling reaction: ${emoji} for message ${message.message_id}`);
     const alreadyReacted = message.reactions?.some(r => r.emoji === emoji && r.user_email === guest.email);
     console.log(`[REACTIONS] Already reacted: ${alreadyReacted}`);
-    
-    // Update local state immediately for instant feedback
-    setMessages(prev => prev.map(msg => {
-      if (msg.message_id === message.message_id) {
-        const currentReactions = msg.reactions || [];
-        let updatedReactions;
-        
-        if (alreadyReacted) {
-          // Remove reaction
-          updatedReactions = currentReactions.filter(r => !(r.emoji === emoji && r.user_email === guest.email));
-        } else {
-          // Add reaction
-          updatedReactions = [...currentReactions, { emoji, user_email: guest.email }];
-        }
-        
-        return { ...msg, reactions: updatedReactions };
-      }
-      return msg;
-    }));
-    
-    // Then call the database
     if (alreadyReacted) {
       const { error } = await supabase.rpc('remove_guests_chat_reaction', {
         p_message_id: message.message_id,
         p_user_email: guest.email,
         p_emoji: emoji,
       });
-      if (error) {
-        console.error('[REACTIONS] Error removing reaction:', error);
-        // Revert local state on error
-        setMessages(prev => prev.map(msg => {
-          if (msg.message_id === message.message_id) {
-            const currentReactions = msg.reactions || [];
-            const updatedReactions = [...currentReactions, { emoji, user_email: guest.email }];
-            return { ...msg, reactions: updatedReactions };
-          }
-          return msg;
-        }));
-      } else {
-        console.log('[REACTIONS] Successfully removed reaction');
-      }
+      if (error) console.error('[REACTIONS] Error removing reaction:', error);
+      else console.log('[REACTIONS] Successfully removed reaction');
     } else {
       const { error } = await supabase.rpc('add_guests_chat_reaction', {
         p_message_id: message.message_id,
         p_user_email: guest.email,
         p_emoji: emoji,
       });
-      if (error) {
-        console.error('[REACTIONS] Error adding reaction:', error);
-        // Revert local state on error
-        setMessages(prev => prev.map(msg => {
-          if (msg.message_id === message.message_id) {
-            const currentReactions = msg.reactions || [];
-            const updatedReactions = currentReactions.filter(r => !(r.emoji === emoji && r.user_email === guest.email));
-            return { ...msg, reactions: updatedReactions };
-          }
-          return msg;
-        }));
-      } else {
-        console.log('[REACTIONS] Successfully added reaction');
-      }
+      if (error) console.error('[REACTIONS] Error adding reaction:', error);
+      else console.log('[REACTIONS] Successfully added reaction');
     }
   };
 
@@ -1284,33 +1242,30 @@ export default function GuestChatScreen({ guest }: GuestChatScreenProps) {
             {/* Only show Edit/Delete for current user's messages */}
             {hoverPopupState.message.sender_email === guest.email && (
               <>
-                {/* Only show Edit for non-optimistic messages */}
-                {!hoverPopupState.message.message_id.startsWith('optimistic-') && (
-                  <TouchableOpacity
-                    onPress={() => {
-                      setEditingMessageId(hoverPopupState.message!.message_id);
-                      setEditText(hoverPopupState.message!.message_text);
-                      setEditText(hoverPopupState.message?.message_text || '');
-                      setHoverPopupState({
-                        activeMessageId: null,
-                        position: null,
-                        message: null
-                      });
-                      setReplyTo(null);
-                    }}
-                    style={{
-                      backgroundColor: 'rgba(255,255,255,0.15)',
-                      padding: 8,
-                      borderRadius: 8,
-                      justifyContent: 'center',
-                      alignItems: 'center',
-                      flex: 1,
-                      marginHorizontal: 2,
-                    }}
-                  >
-                    <Text style={{ color: '#ffffff', fontSize: 12, fontWeight: '600' }}>Edit</Text>
-                  </TouchableOpacity>
-                )}
+                <TouchableOpacity
+                  onPress={() => {
+                    setEditingMessageId(hoverPopupState.message!.message_id);
+                    setEditText(hoverPopupState.message!.message_text);
+                    setEditText(hoverPopupState.message?.message_text || '');
+                    setHoverPopupState({
+                      activeMessageId: null,
+                      position: null,
+                      message: null
+                    });
+                    setReplyTo(null);
+                  }}
+                  style={{
+                    backgroundColor: 'rgba(255,255,255,0.15)',
+                    padding: 8,
+                    borderRadius: 8,
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    flex: 1,
+                    marginHorizontal: 2,
+                  }}
+                >
+                  <Text style={{ color: '#ffffff', fontSize: 12, fontWeight: '600' }}>Edit</Text>
+                </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => {
                     deleteMessage(hoverPopupState.message!);
@@ -1380,60 +1335,6 @@ export default function GuestChatScreen({ guest }: GuestChatScreenProps) {
             ) : null
           }
         />
-        {/* Edit Preview */}
-        {editingMessageId && editText && (
-          <View style={{
-            padding: 12,
-            backgroundColor: '#23242b',
-            borderTopWidth: 1,
-            borderTopColor: '#404040',
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between'
-          }}>
-            <View style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              flex: 1
-            }}>
-              <Text style={{
-                fontSize: 14,
-                color: '#adb5bd',
-                marginRight: 8
-              }}>
-                Editing:
-              </Text>
-              <View style={{
-                backgroundColor: '#404040',
-                padding: 8,
-                borderRadius: 12,
-                flex: 1,
-                marginRight: 8
-              }}>
-                <Text style={{
-                  fontSize: 14,
-                  color: '#ffffff'
-                }} numberOfLines={2}>
-                  {editText}
-                </Text>
-              </View>
-            </View>
-            <TouchableOpacity
-              onPress={handleCancelEdit}
-              style={{
-                backgroundColor: 'transparent',
-                padding: 8,
-                borderRadius: 16,
-                width: 32,
-                height: 32,
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}
-            >
-              <Text style={{ color: '#adb5bd', fontSize: 16 }}>✕</Text>
-            </TouchableOpacity>
-          </View>
-        )}
         {/* Input */}
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}

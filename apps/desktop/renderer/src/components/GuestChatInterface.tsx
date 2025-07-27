@@ -14,6 +14,8 @@ interface Message {
   company_id: string;
   created_at: string;
   reply_to_message_id?: string | null; // Added for replies
+  is_edited?: boolean; // Added for edited status
+  edited_at?: string; // Added for edited timestamp
 }
 
 interface Guest {
@@ -211,58 +213,61 @@ const MessageBubble = ({ message, isDark, currentUserEmail, onReply, onReact, me
     <div 
       id={`message-${message.message_id}`}
       style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: sent ? 'flex-end' : 'flex-start',
-        marginBottom: '16px',
-        paddingLeft: sent ? '60px' : '0px',
-        paddingRight: sent ? '0px' : '60px',
         position: 'relative',
         background: highlightedMessageId === message.message_id ? (isDark ? 'rgba(128,128,128,0.28)' : 'rgba(128,128,128,0.18)') : undefined,
         transition: 'background 0.3s',
+        maxWidth: '100%',
+        overflow: 'hidden'
       }}
       onMouseEnter={() => setShowActions(true)}
-      onMouseLeave={() => { setShowActions(false); setShowEmojiPicker(false); }}
+      onMouseLeave={() => { 
+        setShowActions(false); 
+        setShowEmojiPicker(false);
+      }}
     >
-      {/* Sender name above bubble */}
-      <div style={{
-        fontSize: '12px',
-        color: colors.textSecondary,
-        marginBottom: '4px',
-        marginLeft: sent ? '0' : '42px',
-        marginRight: sent ? '42px' : '0',
-        fontWeight: '500'
+
+    <div style={{
+      display: 'flex',
+        justifyContent: sent ? 'flex-end' : 'flex-start',
+      marginBottom: '16px',
+      paddingLeft: sent ? '60px' : '0px',
+      paddingRight: sent ? '0px' : '60px',
+        alignItems: 'flex-start',
+        gap: '8px',
+        position: 'relative'
       }}>
-        {message.sender_name}
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start', justifyContent: sent ? 'flex-end' : 'flex-start', gap: '8px', position: 'relative' }}>
         {/* Avatar for received messages */}
         {!sent && <Avatar name={message.sender_name} avatarUrl={message.avatar_url} isDark={isDark} />}
-        <div style={{ position: 'relative', maxWidth: '70%' }}>
+        <div style={{
+          display: 'flex', 
+          flexDirection: 'column', 
+          alignItems: sent ? 'flex-end' : 'flex-start', 
+          maxWidth: '70%',
+          position: 'relative'
+        }}>
+
           {/* Bubble */}
           <div
             style={{
-              background: sent ? colors.messageBubbleSent : colors.messageBubble,
-              color: sent ? (isDark ? colors.bg : '#ffffff') : colors.text,
-              padding: '12px 16px',
-              borderRadius: sent ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
-              wordWrap: 'normal',
-              position: 'relative',
-              backdropFilter: 'blur(20px)',
-              border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
-              boxShadow: isDark 
-                ? '0 4px 16px rgba(0,0,0,0.3)' 
+          background: sent ? colors.messageBubbleSent : colors.messageBubble,
+          color: sent ? (isDark ? colors.bg : '#ffffff') : colors.text,
+          padding: '12px 16px',
+          borderRadius: sent ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
+          wordWrap: 'break-word',
+          position: 'relative',
+          backdropFilter: 'blur(20px)',
+          border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
+          boxShadow: isDark 
+            ? '0 4px 16px rgba(0,0,0,0.3)' 
                 : '0 4px 16px rgba(0,0,0,0.1)',
-              cursor: 'default',
-              maxWidth: '40vw',
-              overflowWrap: 'anywhere',
-              whiteSpace: 'normal',
-              wordBreak: 'normal',
+              cursor: sent ? 'pointer' : 'default',
             }}
-            onMouseEnter={(event) => {
-              // Only show hover popup for admin messages (sent messages)
-              if (sent && onShowHover) {
-                onShowHover(message, event);
+            onMouseEnter={() => setShowActions(true)}
+            onMouseLeave={() => setShowActions(false)}
+            onClick={(e) => {
+              if (sent) {
+                e.stopPropagation();
+                onShowHover?.(message, e);
               }
             }}
           >
@@ -273,40 +278,56 @@ const MessageBubble = ({ message, isDark, currentUserEmail, onReply, onReact, me
                 style={{
                   display: 'flex',
                   alignItems: 'flex-start',
-                  marginBottom: 6,
-                  marginLeft: 24,
+                  marginBottom: 8,
+                  marginLeft: 0,
                   alignSelf: 'flex-start',
                   cursor: 'pointer',
-                  opacity: 0.95,
+                  opacity: 0.8,
+                  borderLeft: `3px solid ${isDark ? '#60a5fa' : '#3b82f6'}`,
+                  paddingLeft: 8,
+                  transition: 'opacity 0.2s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.opacity = '1';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.opacity = '0.8';
                 }}
                 title="Jump to replied message"
               >
                 <div
                   style={{
                     borderRadius: repliedTo.sender_email === currentUserEmail
-                      ? '16px 16px 4px 16px'
-                      : '16px 16px 16px 4px',
-                    padding: '8px 14px',
-                    marginLeft: 0,
-                    maxWidth: 220,
-                    fontSize: 14,
-                    color: isDark ? '#111' : '#fff',
+                      ? '12px 12px 4px 12px'
+                      : '12px 12px 12px 4px',
+                    padding: '8px 12px',
+                    maxWidth: 250,
+                    fontSize: 12,
+                    color: isDark ? '#000000' : '#ffffff',
                     fontStyle: 'normal',
-                    boxShadow: 'none',
+                    boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.1)',
                     fontWeight: 400,
                     letterSpacing: 0.1,
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
-                    whiteSpace: 'normal',
-                    borderColor: highlightedMessageId === repliedTo.message_id ? (isDark ? 'rgba(128,128,128,0.7)' : 'rgba(128,128,128,0.7)') : (isDark ? '#888' : '#bbb'),
-                    border: `1.5px solid ${highlightedMessageId === repliedTo.message_id ? (isDark ? 'rgba(128,128,128,0.7)' : 'rgba(128,128,128,0.7)') : (isDark ? '#888' : '#bbb')}`,
-                    background: highlightedMessageId === repliedTo.message_id ? (isDark ? 'rgba(128,128,128,0.18)' : 'rgba(128,128,128,0.10)') : 'transparent',
-                    transition: 'background 0.3s, border-color 0.3s',
+                    whiteSpace: 'nowrap',
+                    border: `1px solid ${isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)'}`,
+                    background: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+                    transition: 'all 0.2s ease',
+                    backdropFilter: 'blur(10px)',
                   }}
                 >
-                  {repliedTo.message_text.length > 60 ? repliedTo.message_text.slice(0, 60) + '…' : repliedTo.message_text}
-                </div>
-              </div>
+                  <div style={{ 
+                    fontSize: 11, 
+                    color: isDark ? '#9ca3af' : '#6b7280', 
+                    marginBottom: 3,
+                    fontWeight: 600 
+                  }}>
+                    {repliedTo.sender_name}
+          </div>
+                  {repliedTo.message_text.length > 50 ? repliedTo.message_text.slice(0, 50) + '…' : repliedTo.message_text}
+        </div>
+      </div>
             )}
             {/* Main message text with link detection */}
             <div style={{ fontSize: '14px', lineHeight: '1.4', fontWeight: '400' }}>
@@ -342,85 +363,28 @@ const MessageBubble = ({ message, isDark, currentUserEmail, onReply, onReact, me
                 });
               })()}
             </div>
-          </div>
-          {/* Action bar, only for other users' messages on hover */}
-          {!sent && showActions && (
-            <div style={{
-              position: 'absolute',
-              left: 'calc(100% + 12px)',
-              top: 0,
+            {/* Timestamp and edit indicator */}
+      <div style={{
+        fontSize: '11px',
+        color: isDark ? '#000000' : '#ffffff',
+        marginTop: '4px',
               display: 'flex',
-              flexDirection: 'row', // horizontal
-              gap: 4,
-              zIndex: 10,
               alignItems: 'center',
+              gap: '4px'
             }}>
-              <button
-                style={{
-                  background: colors.buttonBg,
-                  color: colors.buttonText,
-                  border: 'none',
-                  borderRadius: 8,
-                  padding: '6px 10px',
-                  fontSize: 16,
-                  cursor: 'pointer',
-                  marginRight: 2
-                }}
-                onClick={() => onReply(message)}
-              >
-                &#x21A9;
-              </button>
-              <div
-                style={{ position: 'relative' }}
-                onMouseEnter={() => setShowEmojiPicker(true)}
-                onMouseLeave={() => setShowEmojiPicker(false)}
-              >
-                <button
-                  style={{
-                    background: colors.buttonBg,
-                    color: colors.buttonText,
-                    border: 'none',
-                    borderRadius: 8,
-                    padding: '6px 10px',
-                    fontSize: 16,
-                    cursor: 'pointer',
-                  }}
-                >
-                  😊
-                </button>
-                {showEmojiPicker && (
-                  <div style={{
-                    position: 'absolute',
-                    left: 0,
-                    top: '100%',
-                    width: 40,
-                    maxHeight: 200,
-                    overflowY: 'auto',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    background: colors.panelBg,
-                    borderRadius: 8,
-                    zIndex: 20,
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.12)'
-                  }}>
-                    {emojiList.map((emoji, idx) => (
-                      <React.Fragment key={emoji}>
-                        <button
-                          style={{ fontSize: 18, background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}
-                          onClick={() => onReact(message, emoji)}
-                        >
-                          {emoji}
-                        </button>
-                        {idx < emojiList.length - 1 && (
-                          <div style={{ height: 1, background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)', margin: '0 6px' }} />
-                        )}
-                      </React.Fragment>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <span>{new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+              {message.is_edited && (
+                <span style={{ 
+                  color: isDark ? '#000000' : '#ffffff', 
+                  fontStyle: 'italic',
+                  fontSize: '10px'
+                }}>
+                  (edited)
+                </span>
+              )}
             </div>
-          )}
+          </div>
+
           {/* At the bottom of the bubble, render emoji+count row */}
           <div style={{
             display: 'flex',
@@ -452,20 +416,146 @@ const MessageBubble = ({ message, isDark, currentUserEmail, onReply, onReact, me
             ))}
             {/* + button to open emoji picker if you want */}
           </div>
+
+          {/* Action buttons for received messages (left side) */}
+          {!sent && showActions && (
+            <div 
+              style={{
+                position: 'absolute',
+                top: '50%',
+                right: '-80px',
+                transform: 'translateY(-50%)',
+                display: 'flex',
+                flexDirection: 'row',
+                gap: '4px',
+                background: isDark ? '#2a2a2a' : '#ffffff',
+                borderRadius: '8px',
+                padding: '4px',
+                boxShadow: isDark ? '0 4px 12px rgba(0,0,0,0.3)' : '0 4px 12px rgba(0,0,0,0.15)',
+                border: `1px solid ${isDark ? '#404040' : '#e9ecef'}`,
+                zIndex: 10
+              }}
+              onMouseEnter={() => {
+                setShowActions(true);
+                setShowEmojiPicker(false);
+              }}
+              onMouseLeave={() => {
+                setShowActions(false);
+                setShowEmojiPicker(false);
+              }}
+            >
+              {/* Reply button */}
+              <button
+                onClick={() => onReply(message)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  fontSize: '16px',
+                  cursor: 'pointer',
+                  padding: '6px',
+                  borderRadius: '4px',
+                  color: isDark ? '#ffffff' : '#1a1a1a',
+                  transition: 'background 0.2s ease'
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = isDark ? '#404040' : '#f8f9fa';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = 'transparent';
+                }}
+                title="Reply"
+              >
+                ↺
+              </button>
+              
+              {/* Emoji reaction button */}
+              <button
+                onClick={() => {
+                  // Show emoji picker
+                  setShowEmojiPicker(true);
+                }}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  fontSize: '16px',
+                  cursor: 'pointer',
+                  padding: '6px',
+                  borderRadius: '4px',
+                  color: isDark ? '#ffffff' : '#1a1a1a',
+                  transition: 'background 0.2s ease'
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = isDark ? '#404040' : '#f8f9fa';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = 'transparent';
+                }}
+                title="React"
+              >
+                😀
+              </button>
+            </div>
+          )}
+
+          {/* Emoji picker for received messages */}
+          {!sent && showEmojiPicker && (
+            <div 
+              style={{
+                position: 'absolute',
+                top: '50%',
+                right: '-140px',
+                transform: 'translateY(-50%)',
+                background: isDark ? '#2a2a2a' : '#ffffff',
+                borderRadius: '12px',
+                padding: '8px',
+                boxShadow: isDark ? '0 4px 12px rgba(0,0,0,0.3)' : '0 4px 12px rgba(0,0,0,0.15)',
+                border: `1px solid ${isDark ? '#404040' : '#e9ecef'}`,
+                zIndex: 10,
+                display: 'grid',
+                gridTemplateColumns: 'repeat(6, 1fr)',
+                gap: '4px',
+                minWidth: '200px'
+              }}
+              onMouseEnter={() => {
+                setShowEmojiPicker(true);
+                setShowActions(true);
+              }}
+              onMouseLeave={() => {
+                setShowEmojiPicker(false);
+                setShowActions(false);
+              }}
+            >
+              {emojiList.slice(0, 12).map((emoji) => (
+                <button
+                  key={emoji}
+                  onClick={() => {
+                    onReact(message, emoji);
+                    setShowEmojiPicker(false);
+                  }}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    fontSize: '18px',
+                    cursor: 'pointer',
+                    padding: '4px',
+                    borderRadius: '4px',
+                    transition: 'background 0.2s ease'
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = isDark ? '#404040' : '#f8f9fa';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = 'transparent';
+                  }}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         {/* Avatar for sent messages */}
         {sent && <Avatar name={message.sender_name} avatarUrl={message.avatar_url} isDark={isDark} />}
-      </div>
-      {/* Timestamp below bubble */}
-      <div style={{
-        fontSize: '11px',
-        color: colors.textSecondary,
-        marginTop: '4px',
-        marginLeft: sent ? '0' : '42px',
-        marginRight: sent ? '42px' : '0',
-        textAlign: sent ? 'right' : 'left'
-      }}>
-        {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
       </div>
     </div>
   );
@@ -500,8 +590,8 @@ const MessageInput = ({ onSendMessage, isDark, sending, broadcastTyping, editing
         onSaveEdit(text);
         setText('');
       } else {
-        onSendMessage(text.trim());
-        setText('');
+      onSendMessage(text.trim());
+      setText('');
       }
     }
   };
@@ -524,6 +614,80 @@ const MessageInput = ({ onSendMessage, isDark, sending, broadcastTyping, editing
       borderTop: `1px solid ${isDark ? '#2a2a2a' : '#e9ecef'}`,
       position: 'relative'
     }}>
+      {/* Edit Preview */}
+      {editingMessageId && editText && (
+        <div style={{
+          padding: '12px 24px',
+          background: isDark ? '#2a2a2a' : '#f8f9fa',
+          borderBottom: `1px solid ${isDark ? '#404040' : '#dee2e6'}`,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            flex: 1
+          }}>
+            <span style={{
+              fontSize: '14px',
+              color: isDark ? '#adb5bd' : '#6c757d'
+            }}>
+               Editing:
+            </span>
+            <div style={{
+              background: isDark ? '#404040' : '#e9ecef',
+              padding: '8px 12px',
+              borderRadius: '12px',
+              maxWidth: '300px',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap'
+            }}>
+              <span style={{
+                fontSize: '14px',
+                color: isDark ? '#ffffff' : '#1a1a1a'
+              }}>
+                {editText}
+              </span>
+            </div>
+          </div>
+          <button
+            onClick={onCancelEdit}
+            style={{
+              background: isDark ? '#404040' : '#e9ecef',
+              border: 'none',
+              color: isDark ? '#adb5bd' : '#6c757d',
+              cursor: 'pointer',
+              fontSize: '16px',
+              fontWeight: 'bold',
+              width: '20px',
+              height: '20px',
+              borderRadius: '50%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'all 0.2s ease',
+              boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.1)',
+              lineHeight: '1',
+              padding: 0,
+              minWidth: '20px',
+              minHeight: '20px'
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = isDark ? '#dc2626' : '#ef4444';
+              e.currentTarget.style.color = '#ffffff';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = isDark ? '#404040' : '#e9ecef';
+              e.currentTarget.style.color = isDark ? '#adb5bd' : '#6c757d';
+            }}
+          >
+            ×
+          </button>
+        </div>
+      )}
       {/* Emoji Picker */}
       {showEmojiPicker && (
         <div style={{
@@ -699,6 +863,7 @@ export default function GuestChatInterface({ eventId, isDark, guests }: GuestCha
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [reactions, setReactions] = useState<{ [messageId: string]: { [emoji: string]: { count: number, reacted: boolean } } }>({});
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+  const [eventTitle, setEventTitle] = useState<string>('Guest Chat');
 
   // 1. Add hover popup state to GuestChatInterface
   const [hoverPopup, setHoverPopup] = useState<{
@@ -743,6 +908,32 @@ export default function GuestChatInterface({ eventId, isDark, guests }: GuestCha
     });
   };
   const hideHoverPopup = () => setHoverPopup({ message: null, position: null, visible: false });
+
+  // Fetch event title
+  const fetchEventTitle = async () => {
+    try {
+      if (!eventId) {
+        return;
+      }
+      
+      const { data, error } = await supabase
+        .from('events')
+        .select('name')
+        .eq('id', eventId)
+        .single();
+      
+      if (error) {
+        console.error('[GUESTS_CHAT] Error fetching event title:', error);
+        return;
+      }
+      
+      if (data && data.name) {
+        setEventTitle(data.name);
+      }
+    } catch (error) {
+      console.error('[GUESTS_CHAT] Error fetching event title:', error);
+    }
+  };
 
   const colors = themes[isDark ? 'dark' : 'light'];
 
@@ -868,6 +1059,9 @@ export default function GuestChatInterface({ eventId, isDark, guests }: GuestCha
 
       // Load initial messages
       await loadMessages();
+      
+      // Fetch event title
+      await fetchEventTitle();
     } catch (error) {
       console.error('[GUESTS_CHAT] Error initializing chat:', error);
     } finally {
@@ -1033,16 +1227,16 @@ export default function GuestChatInterface({ eventId, isDark, guests }: GuestCha
 
   const broadcastTyping = useCallback(() => {
     // Simple typing broadcast without debounce for now
-    if (!eventId || !currentUser) return;
-    const channel = supabase.channel(`mobile-guest-chat-${eventId}`);
-    channel.send({
-      type: 'broadcast',
-      event: 'typing',
-      payload: {
-        sender_email: currentUser.email,
-        sender_name: currentUser.name,
-      },
-    });
+      if (!eventId || !currentUser) return;
+      const channel = supabase.channel(`mobile-guest-chat-${eventId}`);
+      channel.send({
+        type: 'broadcast',
+        event: 'typing',
+        payload: {
+          sender_email: currentUser.email,
+          sender_name: currentUser.name,
+        },
+      });
   }, [eventId, currentUser]);
 
   // Handler for reply action
@@ -1055,20 +1249,44 @@ export default function GuestChatInterface({ eventId, isDark, guests }: GuestCha
     setReplyingTo(null);
   };
 
-  // Toggle reaction
+  // Toggle reaction - limit to 1 reaction per user with replace functionality
   const handleReact = async (message: Message, emoji: string) => {
     if (!currentUser) return;
-    const hasReacted = reactions[message.message_id]?.[emoji]?.reacted;
-    if (hasReacted) {
-      // Remove reaction
-      await supabase
-        .from('guests_chat_reactions')
-        .delete()
-        .eq('message_id', message.message_id)
-        .eq('user_email', currentUser.email)
-        .eq('emoji', emoji);
+    
+    // Check if user already has a reaction on this message
+    const existingReaction = reactions[message.message_id] 
+      ? Object.entries(reactions[message.message_id]).find(([_, data]) => data.reacted)
+      : null;
+    
+    if (existingReaction) {
+      const [existingEmoji, _] = existingReaction;
+      
+      if (existingEmoji === emoji) {
+        // Remove reaction if clicking the same emoji
+        await supabase
+          .from('guests_chat_reactions')
+          .delete()
+          .eq('message_id', message.message_id)
+          .eq('user_email', currentUser.email)
+          .eq('emoji', emoji);
+      } else {
+        // Replace existing reaction with new one
+        await supabase
+          .from('guests_chat_reactions')
+          .delete()
+          .eq('message_id', message.message_id)
+          .eq('user_email', currentUser.email);
+        
+        await supabase
+          .from('guests_chat_reactions')
+          .insert({
+            message_id: message.message_id,
+            user_email: currentUser.email,
+            emoji
+          });
+      }
     } else {
-      // Add reaction
+      // Add new reaction
       await supabase
         .from('guests_chat_reactions')
         .insert({
@@ -1077,6 +1295,7 @@ export default function GuestChatInterface({ eventId, isDark, guests }: GuestCha
           emoji
         });
     }
+    
     // Refetch reactions
     const { data, error } = await supabase
       .from('guests_chat_reactions')
@@ -1113,6 +1332,11 @@ export default function GuestChatInterface({ eventId, isDark, guests }: GuestCha
 
   // Handle edit message
   const handleEditMessage = (message: Message) => {
+    // Prevent editing optimistic messages (messages that haven't been saved to database yet)
+    if (message.message_id.startsWith('optimistic-')) {
+      alert('Please wait for the message to be sent before editing.');
+      return;
+    }
     setEditingMessageId(message.message_id);
     setEditText(message.message_text);
     setReplyingTo(null); // Clear any reply state
@@ -1121,6 +1345,14 @@ export default function GuestChatInterface({ eventId, isDark, guests }: GuestCha
   // Handle save edit
   const handleSaveEdit = async (text: string) => {
     if (!editingMessageId || !text.trim()) return;
+    
+    // Prevent editing optimistic messages
+    if (editingMessageId.startsWith('optimistic-')) {
+      alert('Cannot edit messages that are still being sent.');
+      setEditingMessageId(null);
+      setEditText('');
+      return;
+    }
     
     try {
       const { error } = await supabase.rpc('edit_guests_chat_message', {
@@ -1135,10 +1367,10 @@ export default function GuestChatInterface({ eventId, isDark, guests }: GuestCha
         return;
       }
       
-      // Update local state
+      // Update local state with edit status
       setMessages(prev => prev.map(msg => 
         msg.message_id === editingMessageId 
-          ? { ...msg, message_text: text.trim() }
+          ? { ...msg, message_text: text.trim(), is_edited: true, edited_at: new Date().toISOString() }
           : msg
       ));
       
@@ -1216,20 +1448,26 @@ export default function GuestChatInterface({ eventId, isDark, guests }: GuestCha
       flexDirection: 'column',
       background: colors.bg,
       minWidth: 0,
+      maxWidth: '100%',
+      overflowX: 'hidden',
       position: 'relative',
       margin: 0,
       padding: 0
     }}>
+
+
       {/* Messages Container */}
       <div 
         ref={messagesContainerRef}
         style={{
           flex: 1,
           overflowY: 'auto',
+          overflowX: 'hidden',
           padding: '16px 24px',
           display: 'flex',
           flexDirection: 'column',
-          gap: '8px'
+          gap: '8px',
+          maxWidth: '100%'
         }}
       >
         {messages.length === 0 ? (
@@ -1321,8 +1559,7 @@ export default function GuestChatInterface({ eventId, isDark, guests }: GuestCha
           borderBottom: `1px solid ${isDark ? '#404040' : '#dee2e6'}`,
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'space-between',
-          marginBottom: 0
+          justifyContent: 'space-between'
         }}>
           <div style={{
             display: 'flex',
@@ -1356,99 +1593,40 @@ export default function GuestChatInterface({ eventId, isDark, guests }: GuestCha
           <button
             onClick={handleCancelReply}
             style={{
-              background: 'transparent',
+              background: isDark ? '#404040' : '#e9ecef',
               border: 'none',
               color: isDark ? '#adb5bd' : '#6c757d',
               cursor: 'pointer',
               fontSize: '16px',
-              padding: '4px',
-              width: '32px',
-              height: '32px',
+              fontWeight: 'bold',
+              width: '20px',
+              height: '20px',
               borderRadius: '50%',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              transition: 'background 0.2s ease'
+              transition: 'all 0.2s ease',
+              boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.1)',
+              lineHeight: '1',
+              padding: 0,
+              minWidth: '20px',
+              minHeight: '20px'
             }}
             onMouseEnter={e => {
-              e.currentTarget.style.background = isDark ? '#404040' : '#e9ecef';
+              e.currentTarget.style.background = isDark ? '#dc2626' : '#ef4444';
+              e.currentTarget.style.color = '#ffffff';
             }}
             onMouseLeave={e => {
-              e.currentTarget.style.background = 'transparent';
+              e.currentTarget.style.background = isDark ? '#404040' : '#e9ecef';
+              e.currentTarget.style.color = isDark ? '#adb5bd' : '#6c757d';
             }}
           >
-            ✕
+            ×
           </button>
         </div>
       )}
 
-      {/* Edit Preview */}
-      {editingMessageId && editText && (
-        <div style={{
-          padding: '12px 24px',
-          background: isDark ? '#2a2a2a' : '#f8f9fa',
-          borderBottom: `1px solid ${isDark ? '#404040' : '#dee2e6'}`,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between'
-        }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            flex: 1
-          }}>
-            <span style={{
-              fontSize: '14px',
-              color: isDark ? '#adb5bd' : '#6c757d'
-            }}>
-              ✏️ Editing:
-            </span>
-            <div style={{
-              background: isDark ? '#404040' : '#e9ecef',
-              padding: '8px 12px',
-              borderRadius: '12px',
-              maxWidth: '300px',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap'
-            }}>
-              <span style={{
-                fontSize: '14px',
-                color: isDark ? '#ffffff' : '#1a1a1a'
-              }}>
-                {editText}
-              </span>
-            </div>
-          </div>
-          <button
-            onClick={handleCancelEdit}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: isDark ? '#adb5bd' : '#6c757d',
-              cursor: 'pointer',
-              fontSize: '16px',
-              padding: '4px',
-              width: '32px',
-              height: '32px',
-              borderRadius: '50%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              transition: 'background 0.2s ease'
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.background = isDark ? '#404040' : '#e9ecef';
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.background = 'transparent';
-            }}
-          >
-            ✕
-          </button>
-        </div>
-      )}
+
 
       <MessageInput
         onSendMessage={sendMessage}
@@ -1490,27 +1668,35 @@ export default function GuestChatInterface({ eventId, isDark, guests }: GuestCha
             onClick={hideHoverPopup}
             style={{
               position: 'absolute',
-              top: '4px',
-              left: '-10px', // Position to the left and slightly outside
-              background: isDark ? '#2a2a2a' : '#ffffff',
+              top: '-8px',
+              right: '-8px',
+              background: isDark ? '#404040' : '#e9ecef',
               border: `1px solid ${isDark ? '#404040' : '#e9ecef'}`,
-              color: isDark ? '#ffffff' : '#000000',
-              fontSize: '14px',
+              color: isDark ? '#adb5bd' : '#6c757d',
+              fontSize: '16px',
+              fontWeight: 'bold',
               cursor: 'pointer',
-              width: '24px',
-              height: '24px',
+              width: '20px',
+              height: '20px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              borderRadius: '50%', // Perfect circle
-              transition: 'background 0.2s ease',
-              boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.15)'
+              borderRadius: '50%',
+              transition: 'all 0.2s ease',
+              boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.1)',
+              zIndex: 1,
+              lineHeight: '1',
+              padding: 0,
+              minWidth: '20px',
+              minHeight: '20px'
             }}
             onMouseEnter={e => {
-              e.currentTarget.style.background = isDark ? '#404040' : '#f0f0f0';
+              e.currentTarget.style.background = isDark ? '#dc2626' : '#ef4444';
+              e.currentTarget.style.color = '#ffffff';
             }}
             onMouseLeave={e => {
-              e.currentTarget.style.background = isDark ? '#2a2a2a' : '#ffffff';
+              e.currentTarget.style.background = isDark ? '#404040' : '#e9ecef';
+              e.currentTarget.style.color = isDark ? '#adb5bd' : '#6c757d';
             }}
           >
             ×

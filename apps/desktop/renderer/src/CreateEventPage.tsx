@@ -1,6 +1,6 @@
 import React, { useState, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Event, insertActivityLog } from './lib/supabase';
+import { Event, insertActivityLog, assignTeamToEvent } from './lib/supabase';
 import { ThemeContext } from './ThemeContext';
 import ThemedIcon from './components/ThemedIcon';
 import { getCurrentUser } from './lib/auth';
@@ -415,6 +415,20 @@ export default function CreateEventPage({ onCreate }: CreateEventPageProps) {
         time_zone: timeZone,
       };
       const newEvent = await onCreate(eventData);
+      
+      // Assign selected teams to the event
+      if (selectedTeamIds.length > 0) {
+        try {
+          for (const teamId of selectedTeamIds) {
+            await assignTeamToEvent(teamId, newEvent.id, currentUser.id);
+          }
+          console.log(`Successfully assigned ${selectedTeamIds.length} team(s) to event`);
+        } catch (error) {
+          console.error('Error assigning teams to event:', error);
+          // Don't fail the event creation, just log the error
+        }
+      }
+      
       navigate(`/event/${newEvent.id}`);
       const user = await getCurrentUser();
       await insertActivityLog({

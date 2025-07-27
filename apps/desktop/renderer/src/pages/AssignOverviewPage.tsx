@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useContext } from 'react';
 import { ThemeContext } from '../ThemeContext';
-import { getGuests, getItineraries, getEventAssignments } from '../lib/supabase';
+import { getGuests, getItineraries, getEventAssignments, updateEvent } from '../lib/supabase';
 
 export default function AssignOverviewPage() {
   const { theme } = useContext(ThemeContext);
@@ -60,17 +60,41 @@ export default function AssignOverviewPage() {
           </button>
           <button
             style={{ width: 180, fontSize: 16, background: '#fff', color: '#000', border: 'none', borderRadius: 10, cursor: 'pointer', fontWeight: 700, boxShadow: '0 2px 8px rgba(0,0,0,0.08)', padding: '10px 0', letterSpacing: 1 }}
-            onClick={() => navigate('/event-portal-management', { 
-              state: { 
-                guestAssignments, 
-                guests, 
-                itineraries, 
-                eventAddOns,
-                eventId 
-              } 
-            })}
+            onClick={async () => {
+              try {
+                // Update event status to 'launched'
+                await updateEvent(eventId!, { status: 'launched' });
+                navigate('/event-portal-management', { 
+                  state: { 
+                    guestAssignments, 
+                    guests, 
+                    itineraries, 
+                    eventAddOns,
+                    eventId 
+                  } 
+                });
+              } catch (error) {
+                console.error('Error updating event status:', error);
+                // Still navigate even if update fails
+                navigate('/event-portal-management', { 
+                  state: { 
+                    guestAssignments, 
+                    guests, 
+                    itineraries, 
+                    eventAddOns,
+                    eventId 
+                  } 
+                });
+                // Navigate back to event dashboard with refresh flag
+                setTimeout(() => {
+                  navigate(`/event/${eventId}`, { 
+                    state: { refreshEvent: true } 
+                  });
+                }, 100);
+              }
+            }}
           >
-            Confirm
+            Launch Event
           </button>
         </div>
         <h1 style={{ fontSize: 32, fontWeight: 700, marginBottom: 32, paddingRight: 40 }}>Assign Overview</h1>
@@ -87,17 +111,41 @@ export default function AssignOverviewPage() {
         </button>
         <button
           style={{ width: 140, fontSize: 16, background: '#fff', color: '#000', border: 'none', borderRadius: 10, cursor: 'pointer', fontWeight: 700, boxShadow: '0 2px 8px rgba(0,0,0,0.08)', padding: '10px 0', letterSpacing: 1 }}
-          onClick={() => navigate('/event-portal-management', { 
-            state: { 
-              guestAssignments, 
-              guests, 
-              itineraries, 
-              eventAddOns,
-              eventId 
-            } 
-          })}
+          onClick={async () => {
+            try {
+              // Update event status to 'launched'
+              await updateEvent(eventId!, { status: 'launched' });
+              navigate('/event-portal-management', { 
+                state: { 
+                  guestAssignments, 
+                  guests, 
+                  itineraries, 
+                  eventAddOns,
+                  eventId 
+                } 
+              });
+            } catch (error) {
+              console.error('Error updating event status:', error);
+              // Still navigate even if update fails
+              navigate('/event-portal-management', { 
+                state: { 
+                  guestAssignments, 
+                  guests, 
+                  itineraries, 
+                  eventAddOns,
+                  eventId 
+                } 
+              });
+              // Navigate back to event dashboard with refresh flag
+              setTimeout(() => {
+                navigate(`/event/${eventId}`, { 
+                  state: { refreshEvent: true } 
+                });
+              }, 100);
+            }
+          }}
         >
-          Confirm
+          Launch Event
         </button>
       </div>
       <h1 style={{ fontSize: 36, fontWeight: 800, marginBottom: 40, letterSpacing: 1 }}>Assign Overview</h1>

@@ -7,6 +7,7 @@ import { ThemeContext } from './ThemeContext';
 import SendFormModal from './components/SendFormModal';
 import { getCurrentUser } from './lib/auth';
 import { useRealtimeGuests, useRealtimeItineraries } from './hooks/useRealtime';
+import { DraggableAction } from './components/DraggableAction';
 import { 
   addMultipleGuests, 
   convertCsvToGuests, 
@@ -21,6 +22,8 @@ import {
   getDraftItineraries,
   deleteDraftItinerary,
   updateEvent,
+  assignTeamToEvent,
+  getEvent,
   type Guest,
   type Itinerary,
   deleteEvent as supabaseDeleteEvent
@@ -140,11 +143,11 @@ const DASHBOARD_MODULES: DashboardModules = {
     { key: 'guestExport', label: 'Guest Export', type: 'tool', description: 'Export guest lists' }
   ],
   addons: [
-    { key: 'flightTracker', label: 'Flight Tracker', type: 'service', description: 'Real-time flight status tracking', icon: 'flight' },
+    { key: 'flightTracker', label: 'Flight Tracker', type: 'service', description: 'Real-time flight status tracking', icon: '✈️' },
     { key: 'safetyBeacon', label: 'Safety SOS', type: 'service', description: 'Emergency alert system for guests', icon: '🆘' },
-    { key: 'gpsTracking', label: 'GPS Tracking', type: 'service', description: 'Track logistics team location', icon: 'pin' },
+    { key: 'gpsTracking', label: 'GPS Tracking', type: 'service', description: 'Track logistics team location', icon: '📍' },
     { key: 'eventUpdates', label: 'Event Updates', type: 'service', description: 'Live event status notifications', icon: '🔔' },
-    { key: 'hotelBooking', label: 'Hotel Manager', type: 'service', description: 'Hotel reservation tracking', icon: 'hotel' },
+    { key: 'hotelBooking', label: 'Hotel Manager', type: 'service', description: 'Hotel reservation tracking', icon: '🏨' },
     // New Add Ons
     { key: 'currencyConverter', label: 'Currency Converter', type: 'service', description: 'Convert currencies for international guests', icon: '💱' },
     { key: 'translator', label: 'Translator', type: 'service', description: 'Translate text and phrases for guests', icon: '🌐' },
@@ -241,7 +244,56 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
   // Use real-time itineraries hook
   const { itineraries: realtimeItineraries, loading: itinerariesLoading, error: itinerariesError, refetch: refetchItineraries } = useRealtimeItineraries(id || null);
 
-  const event = events.find(e => e.id === id);
+  const [currentEvent, setCurrentEvent] = useState(events.find(e => e.id === id));
+  
+  // Refresh event data when component mounts or when events prop changes
+  useEffect(() => {
+    const updatedEvent = events.find(e => e.id === id);
+    setCurrentEvent(updatedEvent);
+  }, [events, id]);
+  
+  // Periodically refresh event data to ensure status is up to date
+  useEffect(() => {
+    const refreshEventData = async () => {
+      try {
+        const updatedEvent = await getEvent(id!);
+        setCurrentEvent(updatedEvent);
+      } catch (error) {
+        console.error('Error refreshing event data:', error);
+      }
+    };
+    
+    // Refresh immediately
+    refreshEventData();
+    
+    // Refresh every 5 seconds
+    const interval = setInterval(refreshEventData, 5000);
+    
+    return () => clearInterval(interval);
+  }, [id]);
+  
+  // Refresh event data when navigating back (check location state)
+  useEffect(() => {
+    if (location.state?.refreshEvent) {
+      // Force refresh by fetching the latest event data from database
+      const refreshEventData = async () => {
+        try {
+          const updatedEvent = await getEvent(id!);
+          setCurrentEvent(updatedEvent);
+        } catch (error) {
+          console.error('Error refreshing event data:', error);
+          // Fallback to events prop
+          const updatedEvent = events.find(e => e.id === id);
+          setCurrentEvent(updatedEvent);
+        }
+      };
+      refreshEventData();
+      // Clear the refresh flag
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location.state, events, id, navigate]);
+  
+  const event = currentEvent;
   const [activeTab, setActiveTab] = useState('settings');
   const [guests, setGuests] = useState<GuestType[]>([]);
   const [savedItineraries, setSavedItineraries] = useState<ItineraryType[]>([]);
@@ -365,7 +417,6 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
   const [sendError, setSendError] = useState('');
 
   const { id: eventId } = useParams();
-  const currentEvent = events.find(e => e.id === eventId);
 
   // Refs for click-outside detection
   const optionsMenuRef = useRef<HTMLDivElement>(null);
@@ -1529,6 +1580,38 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
     }
   };
 
+  // Handle delete add-on
+  const handleDeleteAddOn = async (addonKey: string) => {
+    if (!event?.id) return;
+    
+    try {
+      // Remove from local state
+      setActiveModules(prev => ({
+        ...prev,
+        addons: prev.addons.filter(a => a.name !== addonKey && a.id !== addonKey)
+      }));
+      
+      // Update in database
+      await upsertEventAddon({
+        event_id: event.id,
+        addon_key: addonKey,
+        enabled: false,
+        addon_label: DASHBOARD_MODULES.addons.find(a => a.key === addonKey)?.label,
+        addon_type: DASHBOARD_MODULES.addons.find(a => a.key === addonKey)?.type,
+        addon_description: DASHBOARD_MODULES.addons.find(a => a.key === addonKey)?.description,
+        addon_icon: DASHBOARD_MODULES.addons.find(a => a.key === addonKey)?.icon,
+        is_active: false,
+      });
+      
+      setSaveAddOnsMessage('Add-On removed!');
+      setTimeout(() => setSaveAddOnsMessage(null), 2000);
+    } catch (error) {
+      console.error('Error deleting add-on:', error);
+      setSaveAddOnsMessage('Failed to remove Add-On.');
+      setTimeout(() => setSaveAddOnsMessage(null), 2000);
+    }
+  };
+
   // Remove all use of saveEventModules/getEventModules for add-ons
 
   if (!event) {
@@ -1833,7 +1916,17 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
           right: 0,
           width: showModules ? 320 : 32, 
           height: '100vh',
-          background: isDark ? '#2a2a2a' : '#1a1a1a', 
+          background: isDark
+            ? 'rgba(0, 0, 0, 0.35)'
+            : 'rgba(255, 255, 255, 0.9)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          border: isDark
+            ? '1.5px solid rgba(255,255,255,0.12)'
+            : '1.5px solid #e5e7eb',
+          boxShadow: isDark
+            ? '0 8px 32px rgba(0,0,0,0.3)'
+            : '0 8px 32px rgba(0,0,0,0.08)',
           color: '#fff',
           transition: 'width 0.3s ease',
           display: 'flex',
@@ -1938,8 +2031,8 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
           color: isDark ? '#ffffff' : '#222',
           width: '100%'
         }}>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0 }}>
-            <h1 style={mainTitleStyle}>{currentEvent?.name || 'Event Dashboard'}</h1>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0, width: '100%' }}>
+            <h1 style={{ ...mainTitleStyle, textAlign: 'left', width: '100%' }}>{currentEvent?.name || 'Event Dashboard'}</h1>
             {currentEvent && (
               <EventMetaInfo event={currentEvent} colors={colors} isDark={isDark} />
             )}
@@ -1958,84 +2051,113 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                 <h2 style={mainTitleStyle}>Event Dashboard</h2>
                 <div style={{ display: 'flex', gap: 12 }}>
-                  <button
-                    onClick={() => navigate(`/link-itineraries/${currentEvent?.id}`)}
-                    style={{
-                      background: isDark 
-                        ? 'rgba(255, 255, 255, 0.1)' 
-                        : 'rgba(255, 255, 255, 0.2)',
-                      backdropFilter: 'blur(10px)',
-                      border: isDark 
-                        ? '1px solid rgba(255, 255, 255, 0.2)' 
-                        : '1px solid rgba(0, 0, 0, 0.1)',
-                      color: isDark ? '#ffffff' : '#000000',
-                      borderRadius: 12,
-                      padding: '16px 32px',
-                      fontSize: 16,
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      boxShadow: isDark 
-                        ? '0 8px 32px rgba(0, 0, 0, 0.3)' 
-                        : '0 8px 32px rgba(0, 0, 0, 0.1)',
-                      transition: 'all 0.2s ease',
-                      outline: 'none',
-                      minWidth: '140px',
-                      maxWidth: '180px',
-                      whiteSpace: 'nowrap',
-                      marginBottom: 24,
-                      textAlign: 'center',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 0 // Remove any gap
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = isDark 
-                        ? 'rgba(255, 255, 255, 0.15)' 
-                        : 'rgba(255, 255, 255, 0.3)';
-                      e.currentTarget.style.transform = 'translateY(-2px)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = isDark 
-                        ? 'rgba(255, 255, 255, 0.1)' 
-                        : 'rgba(255, 255, 255, 0.2)';
-                      e.currentTarget.style.transform = 'translateY(0px)';
+                  <DraggableAction
+                    action={{
+                      name: 'Launch Event',
+                      icon: '🚀',
+                      type: 'navigate',
+                      to: `/link-itineraries/${currentEvent?.id}`
                     }}
                   >
-                  Launch Event
-                  </button>
-                  <button
-                    onClick={() => {
-                      console.log('Edit Event button clicked!');
-                      handleOpenEditEventModal();
+                    <button
+                      onClick={() => navigate(`/link-itineraries/${currentEvent?.id}`)}
+                      style={{
+                        background: event?.status === 'launched' 
+                          ? '#4CAF50' 
+                          : (isDark 
+                            ? 'rgba(255, 255, 255, 0.1)' 
+                            : 'rgba(255, 255, 255, 0.2)'),
+                        backdropFilter: 'blur(10px)',
+                        border: event?.status === 'launched'
+                          ? '1px solid #4CAF50'
+                          : (isDark 
+                            ? '1px solid rgba(255, 255, 255, 0.2)' 
+                            : '1px solid rgba(0, 0, 0, 0.1)'),
+                        color: event?.status === 'launched' ? '#ffffff' : (isDark ? '#ffffff' : '#000000'),
+                        borderRadius: 12,
+                        padding: '16px 32px',
+                        fontSize: 16,
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        boxShadow: isDark 
+                          ? '0 8px 32px rgba(0, 0, 0, 0.3)' 
+                          : '0 8px 32px rgba(0, 0, 0, 0.1)',
+                        transition: 'all 0.2s ease',
+                        outline: 'none',
+                        minWidth: '140px',
+                        maxWidth: '180px',
+                        whiteSpace: 'nowrap',
+                        marginBottom: 24,
+                        textAlign: 'center',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 0 // Remove any gap
+                      }}
+                      onMouseEnter={(e) => {
+                        if (event?.status === 'launched') {
+                          e.currentTarget.style.background = '#45a049';
+                        } else {
+                          e.currentTarget.style.background = isDark 
+                            ? 'rgba(255, 255, 255, 0.15)' 
+                            : 'rgba(255, 255, 255, 0.3)';
+                        }
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                      }}
+                      onMouseLeave={(e) => {
+                        if (event?.status === 'launched') {
+                          e.currentTarget.style.background = '#4CAF50';
+                        } else {
+                          e.currentTarget.style.background = isDark 
+                            ? 'rgba(255, 255, 255, 0.1)' 
+                            : 'rgba(255, 255, 255, 0.2)';
+                        }
+                        e.currentTarget.style.transform = 'translateY(0px)';
+                      }}
+                    >
+                    {event?.status === 'launched' ? 'Event Launched' : 'Launch Event'}
+                    </button>
+                  </DraggableAction>
+                  <DraggableAction
+                    action={{
+                      name: 'Edit Event',
+                      icon: '✏️',
+                      type: 'function',
+                      execute: () => handleOpenEditEventModal()
                     }}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      background: isDark 
-                        ? 'rgba(255, 255, 255, 0.1)' 
-                        : 'rgba(255, 255, 255, 0.2)',
-                      backdropFilter: 'blur(10px)',
-                      border: isDark 
-                        ? '1px solid rgba(255, 255, 255, 0.2)' 
-                        : '1px solid rgba(0, 0, 0, 0.1)',
-                      color: isDark ? '#ffffff' : '#000000',
-                      borderRadius: 12,
-                      padding: '16px 32px',
-                      fontSize: 16,
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      boxShadow: isDark 
-                        ? '0 8px 32px rgba(0, 0, 0, 0.3)' 
-                        : '0 8px 32px rgba(0, 0, 0, 0.1)',
-                      transition: 'all 0.2s ease',
-                      outline: 'none',
-                      minWidth: '140px',
-                      maxWidth: '180px',
-                      whiteSpace: 'nowrap',
-                      marginBottom: 24,
-                      textAlign: 'center',
+                  >
+                    <button
+                      onClick={() => {
+                        console.log('Edit Event button clicked!');
+                        handleOpenEditEventModal();
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: isDark 
+                          ? 'rgba(255, 255, 255, 0.1)' 
+                          : 'rgba(255, 255, 255, 0.2)',
+                        backdropFilter: 'blur(10px)',
+                        border: isDark 
+                          ? '1px solid rgba(255, 255, 255, 0.2)' 
+                          : '1px solid rgba(0, 0, 0, 0.1)',
+                        color: isDark ? '#ffffff' : '#000000',
+                        borderRadius: 12,
+                        padding: '16px 32px',
+                        fontSize: 16,
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        boxShadow: isDark 
+                          ? '0 8px 32px rgba(0, 0, 0, 0.3)' 
+                          : '0 8px 32px rgba(0, 0, 0, 0.1)',
+                        transition: 'all 0.2s ease',
+                        outline: 'none',
+                        minWidth: '140px',
+                        maxWidth: '180px',
+                        whiteSpace: 'nowrap',
+                        marginBottom: 24,
+                        textAlign: 'center',
                     }}
                     onMouseEnter={(e) => {
                       e.currentTarget.style.background = isDark 
@@ -2052,6 +2174,7 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                   >
                     Edit Event
                   </button>
+                  </DraggableAction>
                 </div>
               </div>
               
@@ -2144,25 +2267,30 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
               <div style={quickActionsStyle}>
                 <h3 style={{ fontSize: 30, fontWeight: 600, marginBottom: 24 }}>Quick Actions</h3>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
-                  <button style={{ 
-                    background: '#000', 
-                    color: '#fff', 
-                    border: 'none', 
-                    borderRadius: 12, 
-                    padding: '16px 20px',
-                    cursor: 'pointer',
-                    fontSize: 15,
-                    fontWeight: 500,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8
-                  }}>
+                  <button 
+                    onClick={() => navigate(`/export-report/${event?.id}`)}
+                    style={{ 
+                      background: isDark ? '#23242b' : '#f8f9fa', 
+                      color: isDark ? '#fff' : '#000', 
+                      border: isDark ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid rgba(0, 0, 0, 0.1)', 
+                      borderRadius: 12, 
+                      padding: '16px 20px',
+                      cursor: 'pointer',
+                      fontSize: 15,
+                      fontWeight: 500,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                      textAlign: 'center'
+                    }}
+                  >
                     Export Report
                   </button>
                   <button style={{ 
-                    background: '#333', 
-                    color: '#fff', 
-                    border: 'none', 
+                    background: isDark ? '#23242b' : '#f8f9fa', 
+                    color: isDark ? '#fff' : '#000', 
+                    border: isDark ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid rgba(0, 0, 0, 0.1)', 
                     borderRadius: 12, 
                     padding: '16px 20px',
                     cursor: 'pointer',
@@ -2170,14 +2298,16 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                     fontWeight: 500,
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 8
+                    justifyContent: 'center',
+                    gap: 8,
+                    textAlign: 'center'
                   }}>
                     Send Announcement
                   </button>
                   <button style={{ 
-                    background: '#666', 
-                    color: '#fff', 
-                    border: 'none', 
+                    background: isDark ? '#23242b' : '#f8f9fa', 
+                    color: isDark ? '#fff' : '#000', 
+                    border: isDark ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid rgba(0, 0, 0, 0.1)', 
                     borderRadius: 12, 
                     padding: '16px 20px',
                     cursor: 'pointer',
@@ -2185,24 +2315,33 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                     fontWeight: 500,
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 8
+                    justifyContent: 'center',
+                    gap: 8,
+                    textAlign: 'center'
                   }}>
                     Emergency Alert
                   </button>
-                  <button style={{ 
-                    background: '#999', 
-                    color: '#fff', 
-                    border: 'none', 
-                    borderRadius: 12, 
-                    padding: '16px 20px',
-                    cursor: 'pointer',
-                    fontSize: 15,
-                    fontWeight: 500,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8
-                  }}>
-                    Track Logistics
+                  <button 
+                    onClick={() => navigate(`/event-portal-management/${event?.id}`)}
+                    style={{ 
+                      background: isDark ? '#23242b' : '#f8f9fa', 
+                      color: isDark ? '#fff' : '#000', 
+                      border: isDark ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid rgba(0, 0, 0, 0.1)', 
+                      borderRadius: 12, 
+                      padding: '16px 20px',
+                      cursor: event?.status === 'launched' ? 'pointer' : 'not-allowed',
+                      fontSize: 15,
+                      fontWeight: 500,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                      textAlign: 'center',
+                      opacity: event?.status === 'launched' ? 1 : 0.5,
+                      pointerEvents: event?.status === 'launched' ? 'auto' : 'none'
+                    }}
+                  >
+                    Event Portal
                   </button>
                 </div>
               </div>
@@ -3683,16 +3822,17 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                 style={{
                   margin: '0 auto 24px auto',
                   display: 'block',
-                  padding: '12px 32px',
-                  borderRadius: 12,
-                  background: isDark ? '#22c55e' : '#16a34a',
-                  color: '#fff',
+                  padding: '12px 24px',
+                  borderRadius: 8,
+                  background: isDark ? '#fff' : '#000',
+                  color: isDark ? '#000' : '#fff',
                   fontWeight: 600,
-                  fontSize: 16,
-                  border: 'none',
+                  fontSize: 14,
+                  border: '1.5px solid',
+                  borderColor: isDark ? '#444' : '#bbb',
                   cursor: isSavingAddOns ? 'not-allowed' : 'pointer',
                   opacity: isSavingAddOns ? 0.7 : 1,
-                  boxShadow: isDark ? '0 2px 8px #22c55e44' : '0 2px 8px #16a34a44',
+                  maxWidth: '140px',
                   transition: 'all 0.2s',
                 }}
               >
@@ -3711,6 +3851,8 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                         key={module.id}
                         title={moduleInfo.label}
                         description={moduleInfo.description}
+                        emoji={moduleInfo.icon}
+                        onDelete={() => handleDeleteAddOn(module.name || module.id)}
                       />
                     );
                   })}
@@ -4512,6 +4654,8 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                     setEditEventLoading(false);
                     return;
                   }
+                  
+                  // Update event details
                   const updatedEvent = {
                     ...currentEvent,
                     name: values.name,
@@ -4522,6 +4666,25 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                     time_zone: values.timeZone
                   };
                   await updateEvent(currentEvent.id, updatedEvent);
+                  
+                  // Handle team assignments
+                  if (values.teamIds && values.teamIds.length > 0) {
+                    try {
+                      // Get current user for assignment
+                      const currentUser = await getCurrentUser();
+                      if (currentUser) {
+                        // Assign each selected team to the event
+                        for (const teamId of values.teamIds) {
+                          await assignTeamToEvent(teamId, currentEvent.id, currentUser.id);
+                        }
+                        console.log(`Successfully assigned ${values.teamIds.length} team(s) to event`);
+                      }
+                    } catch (error) {
+                      console.error('Error assigning teams to event:', error);
+                      // Don't fail the event update, just log the error
+                    }
+                  }
+                  
                   setShowEditEventModal(false);
                   showSuccess('Event updated successfully!');
                   window.location.reload();

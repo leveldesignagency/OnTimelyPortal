@@ -70,20 +70,38 @@ class PushNotificationService {
   }
 
   // Save push token to Supabase
-  async savePushTokenToSupabase(userId: string, guestId?: string): Promise<boolean> {
+  async savePushTokenToSupabase(userId: string, guestEmail?: string): Promise<boolean> {
     try {
       if (!this.expoPushToken) {
         console.log('No push token available');
         return false;
       }
 
-      // Use a unique identifier for the device since getDeviceIdAsync is deprecated
+      // For guests, use the guest email to update token via RPC function
+      if (guestEmail) {
+        const { data: result, error } = await supabase
+          .rpc('update_guest_push_token', {
+            guest_email: guestEmail,
+            new_push_token: this.expoPushToken,
+            device_identifier: `mobile-${Platform.OS}-${Device.deviceName || 'unknown'}`,
+            device_platform: Platform.OS
+          });
+
+        if (error) {
+          console.error('Error updating guest push token:', error);
+          return false;
+        }
+
+        console.log('Guest push token saved successfully:', result);
+        return result || false;
+      }
+
+      // For regular users, use the existing logic
       const deviceId = `${Platform.OS}-${Device.deviceName || 'unknown'}-${Date.now()}`;
       const platform = Platform.OS as 'ios' | 'android';
 
       const tokenData: PushTokenData = {
         user_id: userId,
-        guest_id: guestId,
         expo_push_token: this.expoPushToken,
         device_id: deviceId,
         platform,
@@ -103,7 +121,6 @@ class PushNotificationService {
           .from('user_push_tokens')
           .update({
             expo_push_token: this.expoPushToken,
-            guest_id: guestId,
             updated_at: new Date().toISOString(),
           })
           .eq('id', existingToken.id);

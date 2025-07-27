@@ -4,6 +4,7 @@ import { ThemeContext } from './ThemeContext';
 import { getCurrentUser, getCompanyUsers, getCompanyEvents, getUserNameById } from './lib/auth';
 import { supabase, subscribeToActivityLog } from './lib/supabase';
 import { User } from './lib/auth';
+import { DraggableAction } from './components/DraggableAction';
 
 type EventType = {
   id: string;
@@ -681,98 +682,134 @@ const Dashboard = ({ events: propEvents }: DashboardProps) => {
             flex: 1,
             height: '100%',
           }}>
-            <button 
-              style={{
-                ...quickActionButtonStyle,
-                height: '100%',
-                minHeight: 0,
-                aspectRatio: 'auto',
-                fontSize: 25,
-                fontWeight: 500,
-                borderRadius: 12,
-                padding: 0,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-              onClick={() => navigate('/create-event')}
-              onMouseEnter={e => {
-                e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.95)';
-                e.currentTarget.style.boxShadow = isDark ? '0 2px 12px rgba(0,0,0,0.25)' : '0 2px 12px rgba(0,0,0,0.08)';
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.8)';
-                e.currentTarget.style.boxShadow = isDark ? '0 4px 20px rgba(0,0,0,0.3)' : '0 4px 20px rgba(0,0,0,0.1)';
+            <DraggableAction
+              action={{
+                name: 'Create Event',
+                icon: '📅',
+                type: 'navigate',
+                to: '/create-event'
               }}
             >
-              Create Event
-            </button>
-            <button 
-              style={{ 
-                ...quickActionButtonStyle, 
-                height: '100%',
-                minHeight: 0,
-                aspectRatio: 'auto',
-                fontSize: 25,
-                fontWeight: 500,
-                borderRadius: 12,
-              }}
-              onClick={() => navigate('/teams')}
-              onMouseEnter={e => {
-                e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.95)';
-                e.currentTarget.style.boxShadow = isDark ? '0 2px 12px rgba(0,0,0,0.25)' : '0 2px 12px rgba(0,0,0,0.08)';
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.8)';
-                e.currentTarget.style.boxShadow = isDark ? '0 4px 20px rgba(0,0,0,0.3)' : '0 4px 20px rgba(0,0,0,0.1)';
-              }}
-            >
-              Go to Teams
-            </button>
-            <button
-              style={{ 
-                ...quickActionButtonStyle, 
-                height: '100%',
-                minHeight: 0,
-                aspectRatio: 'auto',
-                fontSize: 25,
-                fontWeight: 500,
-                borderRadius: 12,
-              }}
-              onClick={() => navigate('/guests')}
-              onMouseEnter={e => {
-                e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.95)';
-                e.currentTarget.style.boxShadow = isDark ? '0 2px 12px rgba(0,0,0,0.25)' : '0 2px 12px rgba(0,0,0,0.08)';
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.8)';
-                e.currentTarget.style.boxShadow = isDark ? '0 4px 20px rgba(0,0,0,0.3)' : '0 4px 20px rgba(0,0,0,0.1)';
+              <button 
+                style={{
+                  ...quickActionButtonStyle,
+                  height: '100%',
+                  minHeight: 0,
+                  aspectRatio: 'auto',
+                  fontSize: 25,
+                  fontWeight: 500,
+                  borderRadius: 12,
+                  padding: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+                onClick={() => navigate('/create-event')}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.95)';
+                  e.currentTarget.style.boxShadow = isDark ? '0 2px 12px rgba(0,0,0,0.25)' : '0 2px 12px rgba(0,0,0,0.08)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.8)';
+                  e.currentTarget.style.boxShadow = isDark ? '0 4px 20px rgba(0,0,0,0.3)' : '0 4px 20px rgba(0,0,0,0.1)';
+                }}
+              >
+                Create Event
+              </button>
+            </DraggableAction>
+            <DraggableAction
+              action={{
+                name: 'Go to Teams',
+                icon: '👥',
+                type: 'navigate',
+                to: '/teams'
               }}
             >
-              Manage Guests
-            </button>
-            <button
-              style={{ 
-                ...quickActionButtonStyle, 
-                height: '100%',
-                minHeight: 0,
-                aspectRatio: 'auto',
-                fontSize: 25,
-                fontWeight: 500,
-                borderRadius: 12,
-              }}
-              onClick={() => window.open('https://help.yourapp.com', '_blank')}
-              onMouseEnter={e => {
-                e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.95)';
-                e.currentTarget.style.boxShadow = isDark ? '0 2px 12px rgba(0,0,0,0.25)' : '0 2px 12px rgba(0,0,0,0.08)';
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.8)';
-                e.currentTarget.style.boxShadow = isDark ? '0 4px 20px rgba(0,0,0,0.3)' : '0 4px 20px rgba(0,0,0,0.1)';
+              <button 
+                style={{ 
+                  ...quickActionButtonStyle, 
+                  height: '100%',
+                  minHeight: 0,
+                  aspectRatio: 'auto',
+                  fontSize: 25,
+                  fontWeight: 500,
+                  borderRadius: 12,
+                }}
+                onClick={() => navigate('/teams')}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.95)';
+                  e.currentTarget.style.boxShadow = isDark ? '0 2px 12px rgba(0,0,0,0.25)' : '0 2px 12px rgba(0,0,0,0.08)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.8)';
+                  e.currentTarget.style.boxShadow = isDark ? '0 4px 20px rgba(0,0,0,0.3)' : '0 4px 20px rgba(0,0,0,0.1)';
+                }}
+              >
+                Go to Teams
+              </button>
+            </DraggableAction>
+            <DraggableAction
+              action={{
+                name: 'Manage Guests',
+                icon: '👤',
+                type: 'navigate',
+                to: '/guests'
               }}
             >
-              Help Centre
-            </button>
+              <button
+                style={{ 
+                  ...quickActionButtonStyle, 
+                  height: '100%',
+                  minHeight: 0,
+                  aspectRatio: 'auto',
+                  fontSize: 25,
+                  fontWeight: 500,
+                  borderRadius: 12,
+                }}
+                onClick={() => navigate('/guests')}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.95)';
+                  e.currentTarget.style.boxShadow = isDark ? '0 2px 12px rgba(0,0,0,0.25)' : '0 2px 12px rgba(0,0,0,0.08)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.8)';
+                  e.currentTarget.style.boxShadow = isDark ? '0 4px 20px rgba(0,0,0,0.3)' : '0 4px 20px rgba(0,0,0,0.1)';
+                }}
+              >
+                Manage Guests
+              </button>
+            </DraggableAction>
+            <DraggableAction
+              action={{
+                name: 'Help Centre',
+                icon: '❓',
+                type: 'function',
+                execute: () => window.open('https://help.yourapp.com', '_blank')
+              }}
+            >
+              <button
+                style={{ 
+                  ...quickActionButtonStyle, 
+                  height: '100%',
+                  minHeight: 0,
+                  aspectRatio: 'auto',
+                  fontSize: 25,
+                  fontWeight: 500,
+                  borderRadius: 12,
+                }}
+                onClick={() => window.open('https://help.yourapp.com', '_blank')}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.95)';
+                  e.currentTarget.style.boxShadow = isDark ? '0 2px 12px rgba(0,0,0,0.25)' : '0 2px 12px rgba(0,0,0,0.08)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.8)';
+                  e.currentTarget.style.boxShadow = isDark ? '0 4px 20px rgba(0,0,0,0.3)' : '0 4px 20px rgba(0,0,0,0.1)';
+                }}
+              >
+                Help Centre
+              </button>
+            </DraggableAction>
           </div>
         </div>
       </div>

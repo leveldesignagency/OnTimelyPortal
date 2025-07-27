@@ -19,7 +19,8 @@ RETURNS TABLE(
   created_at TIMESTAMPTZ,
   company_id UUID,
   is_edited BOOLEAN,
-  edited_at TIMESTAMPTZ
+  edited_at TIMESTAMPTZ,
+  reply_to_message_id UUID
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -45,7 +46,8 @@ BEGIN
     gcm.created_at,
     gcm.company_id,
     gcm.is_edited,
-    gcm.edited_at
+    gcm.edited_at,
+    gcm.reply_to_message_id
   FROM guests_chat_messages gcm
   LEFT JOIN users u ON gcm.sender_type = 'admin' AND gcm.sender_email = u.email
   WHERE gcm.event_id = p_event_id

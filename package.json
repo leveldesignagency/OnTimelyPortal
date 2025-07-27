@@ -25,6 +25,7 @@
   "version": "1.0.0",
   "dependencies": {
     "@expo/vector-icons": "^14.1.0",
+    "@react-native-community/slider": "^4.5.7",
     "@react-native/virtualized-lists": "^0.80.1",
     "@react-navigation/bottom-tabs": "^7.4.2",
     "expo": "~50.0.17",

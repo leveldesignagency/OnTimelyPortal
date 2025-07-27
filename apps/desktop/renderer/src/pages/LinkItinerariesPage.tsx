@@ -3,7 +3,7 @@ import React, { useContext, useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ThemeContext } from '../ThemeContext';
 import { useRealtimeGuests, useRealtimeItineraries } from '../hooks/useRealtime';
-import { getEventModules } from '../lib/supabase';
+import { getEventAddOns } from '../lib/supabase';
 import { supabase } from '../lib/supabase';
 
 export default function EventLauncher() {
@@ -25,22 +25,17 @@ export default function EventLauncher() {
   const [activeAddOns, setActiveAddOns] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [assignmentsSaved, setAssignmentsSaved] = useState(false);
+  const [hasLocalChanges, setHasLocalChanges] = useState(false);
 
   // Load existing assignments from database
   useEffect(() => {
-    console.log('useEffect triggered, eventId:', eventId, 'assignmentsSaved:', assignmentsSaved);
+    console.log('useEffect triggered, eventId:', eventId);
     if (!eventId) {
       console.log('No eventId, skipping loadAssignments');
       return;
     }
 
-    // Only load on initial mount (when assignments are empty) or after successful save
-    const hasAssignments = Object.values(guestAssignments).some(arr => arr && arr.length > 0);
-    if (hasAssignments && !assignmentsSaved) {
-      console.log('Skipping loadAssignments - has unsaved local changes');
-      return;
-    }
-
+    // Always load assignments on mount, regardless of current state
     console.log('About to call loadAssignments with eventId:', eventId);
 
     const loadAssignments = async () => {
@@ -48,12 +43,92 @@ export default function EventLauncher() {
         setIsLoading(true);
         console.log('Loading assignments for event:', eventId);
         
-        // Call the database function to get all assignments for this event
+        // Try direct query first since RPC might not exist
+        console.log('Trying direct query for assignments...');
+        
+        // Try different possible table names
+        let directData = null;
+        let directError = null;
+        
+        // Try the most likely table name first
+        const { data: data1, error: error1 } = await supabase
+          .from('guest_itinerary_assignments')
+          .select('*')
+          .eq('event_id', eventId);
+        
+        if (!error1 && data1) {
+          directData = data1;
+          directError = error1;
+          console.log('Found data in guest_itinerary_assignments table');
+        } else {
+          console.log('guest_itinerary_assignments table error:', error1);
+          
+          // Try alternative table name
+          const { data: data2, error: error2 } = await supabase
+            .from('guest_assignments')
+            .select('*')
+            .eq('event_id', eventId);
+          
+          if (!error2 && data2) {
+            directData = data2;
+            directError = error2;
+            console.log('Found data in guest_assignments table');
+          } else {
+            console.log('guest_assignments table error:', error2);
+            
+            // Try another possible table name
+            const { data: data3, error: error3 } = await supabase
+              .from('itinerary_assignments')
+              .select('*')
+              .eq('event_id', eventId);
+            
+            if (!error3 && data3) {
+              directData = data3;
+              directError = error3;
+              console.log('Found data in itinerary_assignments table');
+            } else {
+              console.log('itinerary_assignments table error:', error3);
+              directError = error3;
+            }
+          }
+        }
+        
+        console.log('Direct query response:', { directData, directError });
+        
+        if (!directError && directData && directData.length > 0) {
+          // Convert direct query results to the same format
+          const assignments: {[guestId: string]: string[]} = {};
+          directData.forEach((row: any) => {
+            console.log('Processing row:', row);
+            
+            // Try different possible column names
+            const guestId = row.guest_id || row.guestId || row.id;
+            const itineraryId = (row.itinerary_id || row.itineraryId || row.itinerary_id).toString();
+            
+            console.log('Processing assignment from direct query:', { guestId, itineraryId });
+            
+            if (guestId && itineraryId) {
+              if (!assignments[guestId]) {
+                assignments[guestId] = [];
+              }
+              assignments[guestId].push(itineraryId);
+            }
+          });
+          
+          console.log('Final assignments from direct query:', assignments);
+          setGuestAssignments(assignments);
+          setAssignmentsSaved(true);
+          setHasLocalChanges(false);
+          return;
+        }
+
+        // Fallback to RPC function if direct query doesn't work
+        console.log('Direct query returned no data, trying RPC function...');
         const { data, error } = await supabase.rpc('get_event_assignments', {
           event_identifier: eventId
         });
 
-        console.log('Raw database response:', { data, error });
+        console.log('RPC function response:', { data, error });
 
         if (error) {
           console.error('Error loading assignments:', error, JSON.stringify(error));
@@ -83,9 +158,12 @@ export default function EventLauncher() {
         }
 
         console.log('Final assignments object:', assignments);
+        console.log('Available guests:', guests.map(g => ({ id: g.id, name: g.first_name + ' ' + g.last_name })));
+        console.log('Available itineraries:', itineraries.map(i => ({ id: i.id, title: i.title })));
         console.log('Setting guestAssignments state to:', assignments);
-    setGuestAssignments(assignments);
+        setGuestAssignments(assignments);
         setAssignmentsSaved(true); // Mark as saved since we loaded from DB
+        setHasLocalChanges(false); // Reset local changes flag
       } catch (error) {
         console.error('Error loading assignments:', error);
       } finally {
@@ -94,7 +172,7 @@ export default function EventLauncher() {
     };
 
     loadAssignments();
-  }, [eventId]); // Remove assignmentsSaved from dependencies to prevent loops
+  }, [eventId]); // Only depend on eventId
 
   // Save assignments to database
   const saveAssignments = async (assignments: {[guestId: string]: string[]}) => {
@@ -102,17 +180,28 @@ export default function EventLauncher() {
     try {
       setIsLoading(true);
       
-      for (const guestId of Object.keys(assignments)) {
+      // Filter out any assignments with undefined or invalid guest IDs
+      const validAssignments = Object.entries(assignments).filter(([guestId, itineraryIds]) => {
+        return guestId && guestId !== 'undefined' && itineraryIds && itineraryIds.length > 0;
+      });
+      
+      if (validAssignments.length === 0) {
+        console.log('No valid assignments to save');
+        return true;
+      }
+      
+      for (const [guestId, itineraryIds] of validAssignments) {
+        // Clear existing assignments for this guest
         await supabase.rpc('clear_guest_assignments', {
           guest_identifier: guestId,
           event_identifier: eventId
         });
       }
       
-      for (const [guestId, itineraryIds] of Object.entries(assignments)) {
-        if (itineraryIds && itineraryIds.length > 0) {
-          const bigintItineraryIds = itineraryIds.map(id => parseInt(id));
-          
+      for (const [guestId, itineraryIds] of validAssignments) {
+        const bigintItineraryIds = itineraryIds.map(id => parseInt(id)).filter(id => !isNaN(id));
+        
+        if (bigintItineraryIds.length > 0) {
           const { error } = await supabase.rpc('assign_itineraries_to_guests', {
             guest_identifiers: [guestId],
             itinerary_identifiers: bigintItineraryIds,
@@ -144,16 +233,26 @@ export default function EventLauncher() {
   const assignItinerariesToGuests = async (guestIds: string[], itineraryIds: string[]) => {
     console.log('assignItinerariesToGuests called with:', { guestIds, itineraryIds });
     
+    // Filter out any invalid guest IDs or itinerary IDs
+    const validGuestIds = guestIds.filter(id => id && id !== 'undefined');
+    const validItineraryIds = itineraryIds.filter(id => id && id !== 'undefined');
+    
+    if (validGuestIds.length === 0 || validItineraryIds.length === 0) {
+      console.log('No valid guest IDs or itinerary IDs to assign');
+      return;
+    }
+    
     const newAssignments = { ...guestAssignments };
-    guestIds.forEach(guestId => {
+    validGuestIds.forEach(guestId => {
       const current = newAssignments[guestId] || [];
-      newAssignments[guestId] = Array.from(new Set([...current, ...itineraryIds]));
+      newAssignments[guestId] = Array.from(new Set([...current, ...validItineraryIds]));
     });
     
     console.log('Setting state to:', newAssignments);
     
     // Mark as unsaved immediately to prevent useEffect from overriding
     setAssignmentsSaved(false);
+    setHasLocalChanges(true);
     
     // Update state immediately so tags appear right away
     setGuestAssignments(newAssignments);
@@ -162,6 +261,7 @@ export default function EventLauncher() {
     const success = await saveAssignments(newAssignments);
     if (success !== false) {
       setAssignmentsSaved(true);
+      setHasLocalChanges(false);
     }
   };
 
@@ -185,6 +285,7 @@ export default function EventLauncher() {
       const newAssignments = { ...guestAssignments };
       newAssignments[guestId] = (newAssignments[guestId] || []).filter(id => id !== itineraryId);
       setGuestAssignments(newAssignments);
+      setHasLocalChanges(true);
     } catch (error) {
       console.error('Error removing assignment:', error);
     } finally {
@@ -205,13 +306,27 @@ export default function EventLauncher() {
     e.preventDefault();
     console.log('🎯 DRAG DROP STARTED for guest:', guestId, 'with itineraries:', draggedItineraryIds);
     
+    // Validate guestId is not undefined
+    if (!guestId || guestId === 'undefined') {
+      console.error('Invalid guest ID:', guestId);
+      return;
+    }
+    
     // If multiple guests are selected, assign to all selected guests; otherwise, just the one dropped on
     const targetGuests = selectedGuests.length > 1 ? selectedGuests : [guestId];
     
-    console.log('🎯 Target guests:', targetGuests);
+    // Filter out any undefined guest IDs
+    const validTargetGuests = targetGuests.filter(id => id && id !== 'undefined');
+    
+    if (validTargetGuests.length === 0) {
+      console.error('No valid target guests');
+      return;
+    }
+    
+    console.log('🎯 Target guests:', validTargetGuests);
     console.log('🎯 Current guestAssignments before drop:', guestAssignments);
     
-    await assignItinerariesToGuests(targetGuests, draggedItineraryIds);
+    await assignItinerariesToGuests(validTargetGuests, draggedItineraryIds);
     setDraggedItineraryIds([]);
     
     console.log('🎯 DRAG DROP COMPLETED');
@@ -284,11 +399,13 @@ export default function EventLauncher() {
     async function fetchAddOns() {
       if (!eventId) return;
       try {
-        const modules = await getEventModules(eventId);
-        // Only use .module_data.addons
-        const addons = modules?.module_data?.addons || [];
-        setActiveAddOns(addons);
+        const addons = await getEventAddOns(eventId);
+        // Filter to only enabled add-ons
+        const enabledAddons = addons.filter(addon => addon.enabled);
+        setActiveAddOns(enabledAddons);
+        console.log('Fetched add-ons:', enabledAddons);
       } catch (e) {
+        console.error('Error fetching add-ons:', e);
         setActiveAddOns([]);
       }
     }
@@ -322,8 +439,10 @@ export default function EventLauncher() {
                   setGuestAssignments(cleared);
                   // Reset assignment saved state
                   setAssignmentsSaved(false);
+                  setHasLocalChanges(true);
                   // Then save to database
                   await saveAssignments(cleared);
+                  setHasLocalChanges(false);
                 }}
                 style={{ width: 140, fontSize: 16, background: isDark ? '#232323' : '#fff', color: isDark ? '#fff' : '#222', border: '1.5px solid', borderColor: isDark ? '#444' : '#bbb', borderRadius: 8, cursor: 'pointer', padding: '10px 0', fontWeight: 600 }}
                 disabled={isLoading}
@@ -537,7 +656,7 @@ export default function EventLauncher() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {activeAddOns.map((addOn) => (
                     <div
-                      key={addOn.id || addOn.name}
+                      key={addOn.id}
                       style={{
                         border: isDark ? '1.5px solid #fff' : '1.5px solid #222',
                         borderRadius: 8,
@@ -553,7 +672,8 @@ export default function EventLauncher() {
                         gap: 10,
                       }}
                     >
-                      {addOn.name || addOn.type || addOn.key}
+                      {addOn.addon_icon && <span style={{ fontSize: '16px' }}>{addOn.addon_icon}</span>}
+                      {addOn.addon_label || addOn.addon_key}
                     </div>
                   ))}
               </div>
