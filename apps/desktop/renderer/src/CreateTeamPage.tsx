@@ -543,7 +543,7 @@ const CreateTeamPage: React.FC = () => {
           fontWeight: '600',
           color: colors.text
         }}>
-          Company Teams ({existingTeams.length})
+                      Company Workspace ({existingTeams.length})
         </h2>
       </div>
 
@@ -557,7 +557,7 @@ const CreateTeamPage: React.FC = () => {
             fontSize: '48px', 
             marginBottom: '16px',
             fontWeight: '300'
-          }}>Teams</div>
+                      }}>Workspace</div>
           <h3 style={{ margin: '0 0 8px 0', fontSize: '18px', color: colors.text }}>No teams yet</h3>
           <p style={{ margin: 0, fontSize: '14px' }}>Create your first team to get started with collaboration</p>
         </div>
@@ -686,7 +686,7 @@ const CreateTeamPage: React.FC = () => {
                 margin: '0 0 24px 0',
                 fontSize: '32px',
                 fontWeight: '700',
-                color: 'rgba(255, 255, 255, 0.95)',
+                color: colors.text,
                 lineHeight: '1.1',
                 textAlign: 'left'
               }}>
@@ -697,7 +697,7 @@ const CreateTeamPage: React.FC = () => {
               <p style={{
                 margin: '0 0 80px 0',
                 fontSize: '14px',
-                color: 'rgba(255, 255, 255, 0.7)',
+                color: colors.textSecondary,
                 lineHeight: '1.5',
                 textAlign: 'left'
               }}>
@@ -710,7 +710,7 @@ const CreateTeamPage: React.FC = () => {
                   margin: '0 0 20px 0',
                   fontSize: '18px',
                   fontWeight: '600',
-                  color: 'rgba(255, 255, 255, 0.9)',
+                  color: colors.text,
                   textAlign: 'left'
                 }}>
                   Team Members
@@ -721,7 +721,7 @@ const CreateTeamPage: React.FC = () => {
                     team.members.slice(0, 4).map((member: any, index: number) => (
                       <div key={member.id || index} style={{
                         fontSize: '14px',
-                        color: 'rgba(255, 255, 255, 0.7)',
+                        color: colors.textSecondary,
                         marginBottom: '12px',
                         textAlign: 'left',
                         lineHeight: '1.4'
@@ -732,7 +732,7 @@ const CreateTeamPage: React.FC = () => {
                   ) : (
                     <div style={{
                       fontSize: '14px',
-                      color: 'rgba(255, 255, 255, 0.5)',
+                      color: colors.textSecondary,
                       fontStyle: 'italic',
                       textAlign: 'left'
                     }}>
@@ -743,7 +743,7 @@ const CreateTeamPage: React.FC = () => {
                   {team.members && team.members.length > 4 && (
                     <div style={{
                       fontSize: '13px',
-                      color: 'rgba(255, 255, 255, 0.5)',
+                      color: colors.textSecondary,
                       marginTop: '8px',
                       fontStyle: 'italic',
                       textAlign: 'left'
@@ -1209,7 +1209,7 @@ const CreateTeamPage: React.FC = () => {
             color: colors.text,
             minWidth: 'fit-content'
           }}>
-            Teams Management
+            Workspace Management
           </h1>
           
           <div style={{

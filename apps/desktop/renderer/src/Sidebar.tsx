@@ -15,7 +15,7 @@ import {
 const PAGE_LINKS = [
   { label: 'Dashboard', to: '/' },
   { label: 'Create Event', to: '/create-event' },
-  { label: 'Teams', to: '/teams' },
+  { label: 'Workspace', to: '/teams' },
 ];
 
 // Add EventType definition for Sidebar props
@@ -34,13 +34,21 @@ interface QuickAction {
 }
 
 function getEventStatus(event: EventType, today: Date) {
-  const eventDate = new Date(event.date);
-  const diffTime = eventDate.getTime() - today.getTime();
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  const eventStart = new Date(event.from);
+  const eventEnd = new Date(event.to);
   
-  if (diffDays < 0) return 'past';
-  if (diffDays === 0) return 'live';
-  return 'upcoming';
+  // Event is live if today is between start and end dates (inclusive)
+  if (today >= eventStart && today <= eventEnd) {
+    return 'live';
+  }
+  
+  // Event is upcoming if start date is in the future
+  if (today < eventStart) {
+    return 'upcoming';
+  }
+  
+  // Event is past if end date has passed
+  return 'past';
 }
 
 export default function Sidebar({ events = [], isOverlay, isOpen, setOpen }: SidebarProps) {
@@ -51,8 +59,16 @@ export default function Sidebar({ events = [], isOverlay, isOpen, setOpen }: Sid
   const { theme, toggleTheme } = useContext(ThemeContext);
   const liveEvents = events.filter(e => getEventStatus(e, today) === 'live');
   const upcomingEvents = events.filter(e => getEventStatus(e, today) === 'upcoming');
+  const pastEvents = events.filter(e => getEventStatus(e, today) === 'past');
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const navigate = useNavigate();
+
+  // Collapsible sections state
+  const [collapsedSections, setCollapsedSections] = useState({
+    live: false,
+    upcoming: false,
+    finished: false
+  });
 
   // Quick Actions State
   const [quickActions, setQuickActions] = useState<QuickAction[]>([]);
@@ -226,6 +242,13 @@ export default function Sidebar({ events = [], isOverlay, isOpen, setOpen }: Sid
     }
   };
 
+  const toggleSection = (section: 'live' | 'upcoming' | 'finished') => {
+    setCollapsedSections(prev => ({
+      ...prev,
+      [section]: !prev[section]
+    }));
+  };
+
   return (
     <>
       {isOverlay && isOpen && <div className={styles.backdrop} onClick={() => setOpen(false)} />}
@@ -250,43 +273,130 @@ export default function Sidebar({ events = [], isOverlay, isOpen, setOpen }: Sid
           ))}
         </nav>
         <hr className={styles.hr} />
-        <div className={styles.sectionTitle}>LIVE EVENTS</div>
-        {liveEvents.length > 0 && (
-          <nav className={styles.nav}>
-            {liveEvents.map(event => (
-              <div key={event.id} className={styles.navItem}>
-                <Link
-                  to={`/event/${event.id}`}
-                  className={selectedPage === `/event/${event.id}` ? `${styles.navLink} ${styles.navLinkActive}` : styles.navLink}
-                  onClick={() => setSelectedPage(`/event/${event.id}`)}
-                >
-                  {event.name}
-                </Link>
-              </div>
-            ))}
-          </nav>
+        <div className={styles.sectionTitle} style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'space-between',
+          cursor: 'pointer'
+        }} onClick={() => toggleSection('live')}>
+          LIVE EVENTS
+          <span style={{ 
+            fontSize: '12px', 
+            color: theme === 'dark' ? '#888' : '#666',
+            transition: 'transform 0.2s ease',
+            transform: collapsedSections.live ? 'rotate(-90deg)' : 'rotate(0deg)'
+          }}>
+            ▼
+          </span>
+        </div>
+        {!collapsedSections.live && liveEvents.length > 0 && (
+          <div className={styles.eventScrollContainer} style={{ 
+            maxHeight: '200px', 
+            overflowY: 'auto',
+            marginBottom: '8px'
+          }}>
+            <nav className={styles.nav}>
+              {liveEvents.map(event => (
+                <div key={event.id} className={styles.navItem}>
+                  <Link
+                    to={`/event/${event.id}`}
+                    className={selectedPage === `/event/${event.id}` ? `${styles.navLink} ${styles.navLinkActive}` : styles.navLink}
+                    onClick={() => setSelectedPage(`/event/${event.id}`)}
+                  >
+                    {event.name}
+                  </Link>
+                </div>
+              ))}
+            </nav>
+          </div>
         )}
         
         {/* Add spacing and divider between Live and Upcoming events */}
         <div style={{ marginTop: '24px' }}>
           <hr className={styles.hr} />
-          <div className={styles.sectionTitle}>UPCOMING EVENTS</div>
+          <div className={styles.sectionTitle} style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'space-between',
+            cursor: 'pointer'
+          }} onClick={() => toggleSection('upcoming')}>
+            UPCOMING EVENTS
+            <span style={{ 
+              fontSize: '12px', 
+              color: theme === 'dark' ? '#888' : '#666',
+              transition: 'transform 0.2s ease',
+              transform: collapsedSections.upcoming ? 'rotate(-90deg)' : 'rotate(0deg)'
+            }}>
+              ▼
+            </span>
+          </div>
         </div>
         
-        {upcomingEvents.length > 0 && (
-          <nav className={styles.nav}>
-            {upcomingEvents.map(event => (
-              <div key={event.id} className={styles.navItem}>
-                <Link
-                  to={`/event/${event.id}`}
-                  className={selectedPage === `/event/${event.id}` ? `${styles.navLink} ${styles.navLinkActive}` : styles.navLink}
-                  onClick={() => setSelectedPage(`/event/${event.id}`)}
-                >
-                  {event.name}
-                </Link>
-              </div>
-            ))}
-          </nav>
+        {!collapsedSections.upcoming && upcomingEvents.length > 0 && (
+          <div className={styles.eventScrollContainer} style={{ 
+            maxHeight: '200px', 
+            overflowY: 'auto',
+            marginBottom: '8px'
+          }}>
+            <nav className={styles.nav}>
+              {upcomingEvents.map(event => (
+                <div key={event.id} className={styles.navItem}>
+                  <Link
+                    to={`/event/${event.id}`}
+                    className={selectedPage === `/event/${event.id}` ? `${styles.navLink} ${styles.navLinkActive}` : styles.navLink}
+                    onClick={() => setSelectedPage(`/event/${event.id}`)}
+                  >
+                    {event.name}
+                  </Link>
+                </div>
+              ))}
+            </nav>
+          </div>
+        )}
+        
+        {/* Add spacing and divider between Upcoming and Finished events */}
+        {pastEvents.length > 0 && (
+          <div style={{ marginTop: '24px' }}>
+            <hr className={styles.hr} />
+            <div className={styles.sectionTitle} style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'space-between',
+              cursor: 'pointer'
+            }} onClick={() => toggleSection('finished')}>
+              FINISHED EVENTS
+              <span style={{ 
+                fontSize: '12px', 
+                color: theme === 'dark' ? '#888' : '#666',
+                transition: 'transform 0.2s ease',
+                transform: collapsedSections.finished ? 'rotate(-90deg)' : 'rotate(0deg)'
+              }}>
+                ▼
+              </span>
+            </div>
+          </div>
+        )}
+        
+        {!collapsedSections.finished && pastEvents.length > 0 && (
+          <div className={styles.eventScrollContainer} style={{ 
+            maxHeight: '200px', 
+            overflowY: 'auto',
+            marginBottom: '8px'
+          }}>
+            <nav className={styles.nav}>
+              {pastEvents.map(event => (
+                <div key={event.id} className={styles.navItem}>
+                  <Link
+                    to={`/event/${event.id}`}
+                    className={selectedPage === `/event/${event.id}` ? `${styles.navLink} ${styles.navLinkActive}` : styles.navLink}
+                    onClick={() => setSelectedPage(`/event/${event.id}`)}
+                  >
+                    {event.name}
+                  </Link>
+                </div>
+              ))}
+            </nav>
+          </div>
         )}
         <hr className={styles.hr} />
         <div style={{ flex: 1 }} />

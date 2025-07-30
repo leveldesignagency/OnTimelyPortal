@@ -1334,9 +1334,8 @@ export default function CreateItinerary() {
                         openDropdown={openDropdown}
                         setOpenDropdown={setOpenDropdown}
                       />
-                      <div style={{ fontWeight: 600, fontSize: 12, marginTop: 4, letterSpacing: 0.5, color: colors.textSecondary, textTransform: 'uppercase', textAlign: 'center' }}>Date</div>
                     </div>
-                    {/* Time Fields with Labels Underneath */}
+                    {/* Time Fields */}
                     {([
                       ['arrivalTime', 'Arrival Time'],
                       ['startTime', 'Start Time'],
@@ -1350,7 +1349,6 @@ export default function CreateItinerary() {
                           isDark={isDark}
                           colors={colors}
                         />
-                        <div style={{ fontWeight: 600, fontSize: 12, marginTop: 4, letterSpacing: 0.5, color: colors.textSecondary, textTransform: 'uppercase', textAlign: 'center' }}>{label}</div>
                       </div>
                     ))}
                   </div>

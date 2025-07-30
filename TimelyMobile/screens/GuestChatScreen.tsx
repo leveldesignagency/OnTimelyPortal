@@ -31,6 +31,8 @@ import { debounce } from 'lodash';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { soundEffects } from '../lib/soundEffects';
+import AnnouncementChatItem from '../components/AnnouncementChatItem';
+import announcementService, { Announcement } from '../lib/announcementService';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -53,9 +55,10 @@ interface Message {
 
 interface GuestChatScreenProps {
   guest: any;
+  onAnnouncementPress?: (announcement: Announcement) => void;
 }
 
-export default function GuestChatScreen({ guest }: GuestChatScreenProps) {
+export default function GuestChatScreen({ guest, onAnnouncementPress }: GuestChatScreenProps) {
   // ALL HOOKS MUST BE AT THE TOP - NO EXCEPTIONS
   const { theme } = useTheme();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -88,6 +91,7 @@ export default function GuestChatScreen({ guest }: GuestChatScreenProps) {
   const [reactionPopupPosition, setReactionPopupPosition] = useState<{ x: number; y: number; width: number } | null>(null);
   const [navigateToMessageId, setNavigateToMessageId] = useState<string | null>(null);
   const [swipeHapticTriggered, setSwipeHapticTriggered] = useState<{ [key: string]: boolean }>({});
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   
   // ALL REFS
   const typingTimeouts = useRef<{ [email: string]: NodeJS.Timeout }>({});
@@ -307,6 +311,66 @@ export default function GuestChatScreen({ guest }: GuestChatScreenProps) {
       }
     };
   }, []);
+
+  // Load announcements
+  useEffect(() => {
+    const loadAnnouncements = async () => {
+      console.log('[DEBUG] GuestChatScreen - guest:', guest);
+      console.log('[DEBUG] GuestChatScreen - event_id:', guest?.event_id);
+      
+      if (!guest?.event_id) {
+        console.log('[DEBUG] GuestChatScreen - No event_id available');
+        return;
+      }
+      
+      console.log('[DEBUG] GuestChatScreen - Using eventId:', guest.event_id);
+      
+      try {
+        console.log('[DEBUG] GuestChatScreen - Calling getAnnouncements...');
+        const data = await announcementService.getAnnouncements(guest.event_id);
+        console.log('[DEBUG] GuestChatScreen - getAnnouncements result:', data);
+        setAnnouncements(data);
+        console.log('[GuestChatScreen] Loaded announcements:', data.length);
+      } catch (error) {
+        console.error('[GuestChatScreen] Error loading announcements:', error);
+      }
+    };
+
+    loadAnnouncements();
+  }, [guest?.event_id]);
+
+  // Subscribe to new announcements
+  useEffect(() => {
+    if (!guest?.event_id) {
+      console.log('[GuestChatScreen] No event_id available for subscription');
+      return;
+    }
+    
+    console.log('[GuestChatScreen] Subscribing to announcements for eventId:', guest.event_id);
+    
+    let subscription: any = null;
+    
+    const setupSubscription = async () => {
+      try {
+        subscription = await announcementService.subscribeToAnnouncements(
+          guest.event_id,
+          (announcement) => {
+            console.log('[GuestChatScreen] Received new announcement:', announcement);
+            setAnnouncements(prev => [...prev, announcement]); // Add new announcement to the end
+          }
+        );
+      } catch (error) {
+        console.error('[GuestChatScreen] Error setting up subscription:', error);
+      }
+    };
+    setupSubscription();
+
+    return () => {
+      if (subscription && typeof subscription.unsubscribe === 'function') {
+        subscription.unsubscribe();
+      }
+    };
+  }, [guest?.event_id]);
 
   // NOW ALL NON-HOOK FUNCTIONS AND CONSTANTS
   const commonEmojis = ['😀', '😂', '😍', '🤔', '👍', '👎', '❤️', '🎉', '😢', '😡', '🔥', '💯'];
@@ -890,12 +954,24 @@ export default function GuestChatScreen({ guest }: GuestChatScreenProps) {
       });
     });
 
+    // Add announcements at the bottom as new entries
+    announcements.forEach((announcement) => {
+      flatData.push({
+        type: 'announcement',
+        ...announcement,
+        key: `announcement-${announcement.id}`
+      });
+    });
+
     return flatData;
   };
 
   const renderItem = ({ item }: { item: any }) => {
     if (item.type === 'date') {
       return renderDateSeparator(item.date);
+    }
+    if (item.type === 'announcement') {
+      return <AnnouncementChatItem announcement={item} onPress={() => onAnnouncementPress?.(item)} />;
     }
     return renderMessage({ item });
   };

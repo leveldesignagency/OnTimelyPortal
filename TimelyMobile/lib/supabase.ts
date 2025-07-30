@@ -27,6 +27,39 @@ export const getEventAddOns = async (eventId: string, email: string): Promise<an
   return data || [];
 };
 
+// Delete an event
+export const deleteEvent = async (id: string) => {
+  try {
+    const { error } = await supabase
+      .from('events')
+      .delete()
+      .eq('id', id)
+    
+    if (error) {
+      console.error('Error deleting event:', error);
+      throw error;
+    }
+    
+    console.log('Event deleted successfully:', id);
+    return true;
+  } catch (error) {
+    console.error('Exception deleting event:', error);
+    throw error;
+  }
+};
+
+// Update an event
+export const updateEvent = async (id: string, updates: Partial<Event>) => {
+  const { data, error } = await supabase
+    .from('events')
+    .update(updates)
+    .eq('id', id)
+    .select()
+  
+  if (error) throw error
+  return data[0]
+};
+
 // Types for your database tables
 export type Event = {
   id: string;

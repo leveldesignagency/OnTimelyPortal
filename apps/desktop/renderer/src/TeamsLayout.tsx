@@ -59,7 +59,7 @@ export default function TeamsLayout() {
   return (
     <div style={{ display: 'flex', height: '100vh' }}>
       <aside style={secondarySidebarStyle}>
-        <h2 style={titleStyle}>TEAMS</h2>
+
         <nav style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           {teamNavLinks.map(({ to, icon }) => (
             <NavLink

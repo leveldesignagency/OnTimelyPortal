@@ -167,6 +167,7 @@ export default function GuestDashboard({ guest, onLogout }: GuestDashboardProps)
   ];
 
   const handleLogout = async () => {
+    console.log('[GuestDashboard] Logout button pressed');
     Alert.alert(
       'Logout',
       'Are you sure you want to logout?',
@@ -176,12 +177,8 @@ export default function GuestDashboard({ guest, onLogout }: GuestDashboardProps)
           text: 'Logout',
           style: 'destructive',
           onPress: async () => {
-            const { error } = await signOut();
-            if (error) {
-              Alert.alert('Error', 'Failed to logout');
-            } else {
-              onLogout();
-            }
+            console.log('[GuestDashboard] Logout confirmed, calling onLogout');
+            onLogout();
           },
         },
       ]

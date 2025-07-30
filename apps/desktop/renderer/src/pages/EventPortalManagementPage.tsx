@@ -1,5 +1,5 @@
 import React, { useState, useContext, useEffect, useRef, useMemo } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ThemeContext } from '../ThemeContext';
 import TimelinePreview from '../components/TimelinePreview';
 import { supabase, getEvent, getGuests, getItineraries, getEventAssignments, type Event } from '../lib/supabase';
@@ -54,9 +54,16 @@ export default function EventPortalManagementPage() {
   const { theme } = useContext(ThemeContext);
   const isDark = theme === 'dark';
   const timelineRef = useRef<any>(null);
+  const { eventId: urlEventId } = useParams();
   
-  // Get eventId from location.state or fallback
-  const eventId = location.state?.eventId;
+  // Get eventId from URL params, location.state, or fallback
+  const eventId = urlEventId || location.state?.eventId;
+  
+  // Debug logging
+  console.log('🔍 EventPortalManagementPage loaded');
+  console.log('🔍 URL eventId:', urlEventId);
+  console.log('🔍 Location state eventId:', location.state?.eventId);
+  console.log('🔍 Final eventId:', eventId);
 
   // Add state for guests, itineraries, assignments, and loading
   const [guests, setGuests] = useState<any[]>([]);
@@ -259,7 +266,11 @@ export default function EventPortalManagementPage() {
       
       console.log('Creating guest logins for guests:', guestsList);
       const newLogins: GuestLogin[] = [];
-      const errors: string[] = [];
+      const duplicateEmails: string[] = [];
+      const specialCharEmails: string[] = [];
+      const invalidFormatEmails: string[] = [];
+      const missingEmails: string[] = [];
+      const otherErrors: string[] = [];
       
       for (const guest of guestsList) {
         try {
@@ -267,18 +278,18 @@ export default function EventPortalManagementPage() {
           
           // Validate email format
           if (!isValidEmail(guestEmail)) {
-            errors.push(`Invalid email format: ${guest.email}`);
+            invalidFormatEmails.push(guest.email);
             continue;
           }
           
           // Check for international characters that might cause issues
           if (hasInternationalChars(guestEmail)) {
-            errors.push(`Email contains international characters that may not be supported: ${guest.email}`);
+            specialCharEmails.push(guest.email);
             continue;
           }
           
           if (!guestEmail) {
-            errors.push(`Guest email is missing for: ${guest.first_name} ${guest.last_name}`);
+            missingEmails.push(`${guest.first_name} ${guest.last_name}`);
             continue;
           }
           
@@ -294,12 +305,21 @@ export default function EventPortalManagementPage() {
           
           if (loginError) {
             console.error('🚨 Failed to create guest login:', loginError);
-            errors.push(`Failed to create login for ${guestEmail}: ${loginError.message}`);
+            const errorMessage = loginError.message;
+            
+            // Categorize errors
+            if (errorMessage.includes('duplicate key value violates unique constraint')) {
+              duplicateEmails.push(guestEmail);
+            } else if (errorMessage.includes('international characters') || errorMessage.includes('special characters')) {
+              specialCharEmails.push(guestEmail);
+            } else {
+              otherErrors.push(`${guestEmail}: ${errorMessage}`);
+            }
             continue;
           }
           
           if (!loginData || loginData.length === 0) {
-            errors.push(`No login data returned for ${guestEmail}`);
+            otherErrors.push(`No login data returned for ${guestEmail}`);
             continue;
           }
           
@@ -315,17 +335,42 @@ export default function EventPortalManagementPage() {
           
         } catch (error) {
           console.error(`Error processing guest ${guest.email}:`, error);
-          errors.push(`Failed to process ${guest.email}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          otherErrors.push(`Failed to process ${guest.email}: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
       }
       
       setGuestLogins(newLogins);
       setIsGeneratingLogins(false);
       
-      if (errors.length > 0) {
+      // Build concise error message
+      let errorMessage = `Successfully created ${newLogins.length} guest accounts.`;
+      
+      if (duplicateEmails.length > 0 || specialCharEmails.length > 0 || invalidFormatEmails.length > 0 || missingEmails.length > 0 || otherErrors.length > 0) {
+        errorMessage += '\n\nErrors:';
+        
+        if (duplicateEmails.length > 0) {
+          errorMessage += `\n• ${duplicateEmails.length} duplicate emails (${duplicateEmails.slice(0, 3).join(', ')}${duplicateEmails.length > 3 ? ' +' + (duplicateEmails.length - 3) + ' more' : ''})`;
+        }
+        
+        if (specialCharEmails.length > 0) {
+          errorMessage += `\n• ${specialCharEmails.length} emails with special characters (${specialCharEmails.slice(0, 3).join(', ')}${specialCharEmails.length > 3 ? ' +' + (specialCharEmails.length - 3) + ' more' : ''})`;
+        }
+        
+        if (invalidFormatEmails.length > 0) {
+          errorMessage += `\n• ${invalidFormatEmails.length} invalid email formats (${invalidFormatEmails.slice(0, 3).join(', ')}${invalidFormatEmails.length > 3 ? ' +' + (invalidFormatEmails.length - 3) + ' more' : ''})`;
+        }
+        
+        if (missingEmails.length > 0) {
+          errorMessage += `\n• ${missingEmails.length} missing emails (${missingEmails.slice(0, 3).join(', ')}${missingEmails.length > 3 ? ' +' + (missingEmails.length - 3) + ' more' : ''})`;
+        }
+        
+        if (otherErrors.length > 0) {
+          errorMessage += `\n• ${otherErrors.length} other errors`;
+        }
+        
         setCustomModal({
           title: 'Some guests could not be processed',
-          message: `Successfully created ${newLogins.length} guest accounts.\n\nErrors:\n${errors.join('\n')}`,
+          message: errorMessage,
         });
       } else {
         setShowSuccessModal(true);
@@ -352,14 +397,17 @@ export default function EventPortalManagementPage() {
       const selectedGuests = guests.filter((guest: any) => selectedGuestsForRegenerate.includes(guest.id));
       console.log('Regenerating guest logins for guests:', selectedGuests);
       const updatedLogins: GuestLogin[] = [];
-      const errors: string[] = [];
+      const duplicateEmails: string[] = [];
+      const specialCharEmails: string[] = [];
+      const missingEmails: string[] = [];
+      const otherErrors: string[] = [];
       
       for (const guest of selectedGuests) {
         try {
           const guestEmail = sanitizeEmail(guest.email);
           
           if (!guestEmail) {
-            errors.push(`Guest email is missing for: ${guest.first_name} ${guest.last_name}`);
+            missingEmails.push(`${guest.first_name} ${guest.last_name}`);
             continue;
           }
           
@@ -375,12 +423,21 @@ export default function EventPortalManagementPage() {
           
           if (loginError) {
             console.error('🚨 Failed to regenerate guest login:', loginError);
-            errors.push(`Failed to regenerate login for ${guestEmail}: ${loginError.message}`);
+            const errorMessage = loginError.message;
+            
+            // Categorize errors
+            if (errorMessage.includes('duplicate key value violates unique constraint')) {
+              duplicateEmails.push(guestEmail);
+            } else if (errorMessage.includes('international characters') || errorMessage.includes('special characters')) {
+              specialCharEmails.push(guestEmail);
+            } else {
+              otherErrors.push(`${guestEmail}: ${errorMessage}`);
+            }
             continue;
           }
           
           if (!loginData || loginData.length === 0) {
-            errors.push(`No login data returned for ${guestEmail}`);
+            otherErrors.push(`No login data returned for ${guestEmail}`);
             continue;
           }
           
@@ -396,7 +453,7 @@ export default function EventPortalManagementPage() {
           
         } catch (error) {
           console.error(`Error regenerating login for guest ${guest.email}:`, error);
-          errors.push(`Failed to regenerate login for ${guest.email}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          otherErrors.push(`Failed to regenerate login for ${guest.email}: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
       }
       
@@ -417,10 +474,31 @@ export default function EventPortalManagementPage() {
       setIsGeneratingLogins(false);
       setSelectedGuestsForRegenerate([]);
       
-      if (errors.length > 0) {
+      // Build concise error message
+      let errorMessage = `Successfully regenerated ${updatedLogins.length} guest logins.`;
+      
+      if (duplicateEmails.length > 0 || specialCharEmails.length > 0 || missingEmails.length > 0 || otherErrors.length > 0) {
+        errorMessage += '\n\nErrors:';
+        
+        if (duplicateEmails.length > 0) {
+          errorMessage += `\n• ${duplicateEmails.length} duplicate emails (${duplicateEmails.slice(0, 3).join(', ')}${duplicateEmails.length > 3 ? ' +' + (duplicateEmails.length - 3) + ' more' : ''})`;
+        }
+        
+        if (specialCharEmails.length > 0) {
+          errorMessage += `\n• ${specialCharEmails.length} emails with special characters (${specialCharEmails.slice(0, 3).join(', ')}${specialCharEmails.length > 3 ? ' +' + (specialCharEmails.length - 3) + ' more' : ''})`;
+        }
+        
+        if (missingEmails.length > 0) {
+          errorMessage += `\n• ${missingEmails.length} missing emails (${missingEmails.slice(0, 3).join(', ')}${missingEmails.length > 3 ? ' +' + (missingEmails.length - 3) + ' more' : ''})`;
+        }
+        
+        if (otherErrors.length > 0) {
+          errorMessage += `\n• ${otherErrors.length} other errors`;
+        }
+        
         setCustomModal({
           title: 'Some guest logins could not be regenerated',
-          message: `Successfully regenerated ${updatedLogins.length} guest logins.\n\nErrors:\n${errors.join('\n')}`,
+          message: errorMessage,
         });
       } else {
         setShowSuccessModal(true);

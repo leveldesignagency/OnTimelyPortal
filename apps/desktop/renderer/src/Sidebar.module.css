@@ -170,4 +170,40 @@
     height: 100%;
     background: rgba(0,0,0,0.5);
     z-index: 999;
+}
+
+/* Custom scrollbar for event sections */
+.eventScrollContainer::-webkit-scrollbar {
+  width: 6px;
+}
+
+.eventScrollContainer::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.eventScrollContainer::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+
+.eventScrollContainer::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Dark theme scrollbar */
+.dark .eventScrollContainer::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.dark .eventScrollContainer::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Light theme scrollbar */
+.light .eventScrollContainer::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.light .eventScrollContainer::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
 } 

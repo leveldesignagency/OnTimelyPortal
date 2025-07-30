@@ -104,6 +104,7 @@ interface Guest {
 
 interface GuestsProfileProps {
   guest?: any;
+  onLogout?: () => void;
 }
 
 const SECTION_CONFIG = [
@@ -213,7 +214,7 @@ function GeometricOverlay() {
   );
 }
 
-export default function GuestsProfile({ guest: propGuest }: GuestsProfileProps) {
+export default function GuestsProfile({ guest: propGuest, onLogout }: GuestsProfileProps) {
   const { theme } = useTheme();
   const navigation = useNavigation();
   const [guest, setGuest] = useState<Guest | null>(null);
@@ -383,8 +384,13 @@ export default function GuestsProfile({ guest: propGuest }: GuestsProfileProps) 
   };
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    (navigation as any).reset({ index: 0, routes: [{ name: 'LoginScreen' }] });
+    console.log('[GuestsProfile] Logout button pressed');
+    if (onLogout) {
+      console.log('[GuestsProfile] Calling onLogout prop');
+      onLogout();
+    } else {
+      console.log('[GuestsProfile] No onLogout prop provided');
+    }
   };
 
   // Helper function to format time from HH:MM:SS to HH:MM

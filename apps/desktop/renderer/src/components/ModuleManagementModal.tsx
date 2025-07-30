@@ -165,6 +165,7 @@ interface Module {
   title?: string;
   question?: string;
   time: string;
+  date?: string;
   label?: string;
   link?: string;
   file?: string;
@@ -734,6 +735,17 @@ interface EditModuleModalProps {
 function EditModuleModal({ module, onClose, onSave, isDark }: EditModuleModalProps) {
   const [title, setTitle] = useState(module.title || module.question || '');
   const [time, setTime] = useState(module.time);
+  const [date, setDate] = useState(() => {
+    // Convert YYYY-MM-DD to DD/MM/YYYY for display
+    if (module?.date && module.date.includes('-')) {
+      const parts = module.date.split('-');
+      if (parts.length === 3) {
+        const [year, month, day] = parts;
+        return `${day}/${month}/${year}`;
+      }
+    }
+    return module?.date || new Date().toLocaleDateString('en-GB').split('/').reverse().join('/');
+  });
   const [step, setStep] = useState(1);
   const [timePickerOpen, setTimePickerOpen] = useState(false);
   
@@ -748,7 +760,18 @@ function EditModuleModal({ module, onClose, onSave, isDark }: EditModuleModalPro
   const [prompt, setPrompt] = useState(module.title || '');
 
   const handleSave = () => {
-    const updates: Partial<Module> = { time };
+    // Convert DD/MM/YYYY to YYYY-MM-DD for database
+    const convertDateForDatabase = (dateString: string) => {
+      if (!dateString || !dateString.includes('/')) return dateString;
+      const parts = dateString.split('/');
+      if (parts.length === 3) {
+        const [day, month, year] = parts;
+        return `${year}-${month}-${day}`;
+      }
+      return dateString;
+    };
+
+    const updates: Partial<Module> = { time, date: convertDateForDatabase(date) };
     
     if (module.module_type === 'question' || module.module_type === 'multiple_choice') {
       updates.question = title;
@@ -980,23 +1003,58 @@ function EditModuleModal({ module, onClose, onSave, isDark }: EditModuleModalPro
                 </div>
               )}
               
-              {/* Time Field */}
-              <div style={{ marginBottom: 24 }}>
-                <label style={{ 
-                  display: 'block', 
-                  color: isDark ? '#aaa' : '#444', 
-                  fontWeight: 600, 
-                  fontSize: 15, 
-                  marginBottom: 8 
-                }}>
-                  Time
-                </label>
-                <GlassTimePicker 
-                  value={time} 
-                  onChange={setTime} 
-                  isDark={isDark} 
-                  onOpenChange={setTimePickerOpen}
-                />
+              {/* Date and Time Fields */}
+              <div style={{ display: 'flex', gap: 16, marginBottom: 24 }}>
+                {/* Date Field */}
+                <div style={{ flex: 1 }}>
+                  <label style={{ 
+                    display: 'block', 
+                    color: isDark ? '#aaa' : '#444', 
+                    fontWeight: 600, 
+                    fontSize: 15, 
+                    marginBottom: 8 
+                  }}>
+                    Date
+                  </label>
+                  <input
+                    type="text"
+                    value={date}
+                    onChange={e => setDate(e.target.value)}
+                    placeholder="DD/MM/YYYY"
+                    style={{ 
+                      width: '100%', 
+                      padding: '14px 18px', 
+                      borderRadius: 10, 
+                      border: `2px solid ${isDark ? '#333' : '#ddd'}`, 
+                      background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', 
+                      color: isDark ? '#fff' : '#111', 
+                      fontSize: 18, 
+                      outline: 'none', 
+                      marginTop: 4, 
+                      transition: 'all 0.2s', 
+                      backdropFilter: 'blur(10px)' 
+                    }}
+                  />
+                </div>
+                
+                {/* Time Field */}
+                <div style={{ flex: 1 }}>
+                  <label style={{ 
+                    display: 'block', 
+                    color: isDark ? '#aaa' : '#444', 
+                    fontWeight: 600, 
+                    fontSize: 15, 
+                    marginBottom: 8 
+                  }}>
+                    Time
+                  </label>
+                  <GlassTimePicker 
+                    value={time} 
+                    onChange={setTime} 
+                    isDark={isDark} 
+                    onOpenChange={setTimePickerOpen}
+                  />
+                </div>
               </div>
             </div>
           )}

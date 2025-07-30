@@ -34,6 +34,7 @@ import { User } from './lib/auth';
 import EventForm from './components/EventForm';
 import { getEventTeams } from './lib/supabase';
 import { getEventAddOns, upsertEventAddon } from './lib/supabase';
+import AnnouncementModal from './components/AnnouncementModal';
 
 function EventMetaInfo({ event, colors, isDark }: { event: any, colors: any, isDark: boolean }) {
   const [teamNames, setTeamNames] = useState<string[]>([]);
@@ -462,6 +463,7 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
     teamIds: [] as string[]
   });
   const [editEventLoading, setEditEventLoading] = useState(false);
+  const [showAnnouncementModal, setShowAnnouncementModal] = useState(false);
 
   // Success message function
   const showSuccess = (message: string) => {
@@ -2269,13 +2271,9 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
                   <button 
                     onClick={() => navigate(`/export-report/${event?.id}`)}
-                    style={{ 
-                      background: isDark ? '#23242b' : '#f8f9fa', 
-                      color: isDark ? '#fff' : '#000', 
-                      border: isDark ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid rgba(0, 0, 0, 0.1)', 
-                      borderRadius: 12, 
+                    style={{
+                      ...getButtonStyles(isDark, 'primary'),
                       padding: '16px 20px',
-                      cursor: 'pointer',
                       fontSize: 15,
                       fontWeight: 500,
                       display: 'flex',
@@ -2287,30 +2285,25 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                   >
                     Export Report
                   </button>
-                  <button style={{ 
-                    background: isDark ? '#23242b' : '#f8f9fa', 
-                    color: isDark ? '#fff' : '#000', 
-                    border: isDark ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid rgba(0, 0, 0, 0.1)', 
-                    borderRadius: 12, 
-                    padding: '16px 20px',
-                    cursor: 'pointer',
-                    fontSize: 15,
-                    fontWeight: 500,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 8,
-                    textAlign: 'center'
-                  }}>
+                  <button 
+                    onClick={() => setShowAnnouncementModal(true)}
+                    style={{
+                      ...getButtonStyles(isDark, 'secondary'),
+                      padding: '16px 20px',
+                      fontSize: 15,
+                      fontWeight: 500,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                      textAlign: 'center'
+                    }}
+                  >
                     Send Announcement
                   </button>
-                  <button style={{ 
-                    background: isDark ? '#23242b' : '#f8f9fa', 
-                    color: isDark ? '#fff' : '#000', 
-                    border: isDark ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid rgba(0, 0, 0, 0.1)', 
-                    borderRadius: 12, 
+                  <button style={{
+                    ...getButtonStyles(isDark, 'secondary'),
                     padding: '16px 20px',
-                    cursor: 'pointer',
                     fontSize: 15,
                     fontWeight: 500,
                     display: 'flex',
@@ -2322,14 +2315,20 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                     Emergency Alert
                   </button>
                   <button 
-                    onClick={() => navigate(`/event-portal-management/${event?.id}`)}
-                    style={{ 
-                      background: isDark ? '#23242b' : '#f8f9fa', 
-                      color: isDark ? '#fff' : '#000', 
-                      border: isDark ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid rgba(0, 0, 0, 0.1)', 
-                      borderRadius: 12, 
+                    onClick={() => {
+                      console.log('🔍 Event Portal clicked');
+                      console.log('🔍 Event ID:', event?.id);
+                      console.log('🔍 Event status:', event?.status);
+                      console.log('🔍 Is launched:', event?.status === 'launched');
+                      if (event?.status === 'launched') {
+                        navigate(`/event-portal-management/${event?.id}`);
+                      } else {
+                        console.log('❌ Event not launched, navigation blocked');
+                      }
+                    }}
+                    style={{
+                      ...getButtonStyles(isDark, event?.status === 'launched' ? 'primary' : 'secondary'),
                       padding: '16px 20px',
-                      cursor: event?.status === 'launched' ? 'pointer' : 'not-allowed',
                       fontSize: 15,
                       fontWeight: 500,
                       display: 'flex',
@@ -2337,6 +2336,7 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                       justifyContent: 'center',
                       gap: 8,
                       textAlign: 'center',
+                      cursor: event?.status === 'launched' ? 'pointer' : 'not-allowed',
                       opacity: event?.status === 'launched' ? 1 : 0.5,
                       pointerEvents: event?.status === 'launched' ? 'auto' : 'none'
                     }}
@@ -2590,19 +2590,29 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
               <div style={eventSettingsStyle}>
                 <h3 style={{ fontSize: 30, fontWeight: 600, marginBottom: 28 }}>Event Settings</h3>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                  <button style={{ 
-                    ...getGlassStyles(isDark),
-                    background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
-                    color: isDark ? '#fff' : '#374151',
-                    border: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid #d1d5db',
-                    borderRadius: 8, 
-                    padding: '16px 20px',
-                    cursor: 'pointer',
-                    fontSize: 16,
-                    fontWeight: 500,
-                    textAlign: 'left',
-                    boxShadow: 'none',
-                  }}>
+                  <button 
+                    onClick={() => navigate(`/event/${id}/notification-settings`)}
+                    style={{ 
+                      ...getGlassStyles(isDark),
+                      background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
+                      color: isDark ? '#fff' : '#374151',
+                      border: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid #d1d5db',
+                      borderRadius: 8, 
+                      padding: '16px 20px',
+                      cursor: 'pointer',
+                      fontSize: 16,
+                      fontWeight: 500,
+                      textAlign: 'left',
+                      boxShadow: 'none',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)';
+                    }}
+                  >
                     Notification Settings
                   </button>
                   <button style={{ 
@@ -2758,15 +2768,15 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                 <button
                   onClick={() => setFiltersItineraryDateSort(prev => prev === 'asc' ? 'desc' : 'asc')}
                   style={{
-                    minWidth: 80,
-                    width: 170, // Set fixed width
+                    minWidth: '120px',
+                    maxWidth: '180px',
                     height: 44,
                     background: isDark ? 'rgba(30, 30, 30, 0.7)' : 'rgba(255, 255, 255, 0.7)',
                     border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.12)'}`,
                     borderRadius: 14,
                     boxShadow: isDark ? '0 4px 16px rgba(0,0,0,0.18)' : '0 4px 16px rgba(0,0,0,0.08)',
                     color: isDark ? '#fff' : '#222',
-                    fontSize: 17,
+                    fontSize: 16,
                     fontWeight: 600,
                     padding: '0 12px',
                     display: 'flex',
@@ -2777,6 +2787,8 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                     transition: 'background 0.2s',
                     position: 'relative',
                     zIndex: 2,
+                    whiteSpace: 'nowrap',
+                    textAlign: 'center',
                   }}
                 >
                   {filtersItineraryDateSort === 'asc' ? 'Date Ascending' : 'Date Descending'}
@@ -4297,55 +4309,76 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
+          paddingLeft: '280px', // Account for sidebar width
         }}>
           <div style={{
             background: isDark ? 'rgba(30,30,30,0.95)' : 'rgba(255,255,255,0.95)',
             backdropFilter: 'blur(10px)',
             WebkitBackdropFilter: 'blur(10px)',
             borderRadius: 16,
-            padding: 32,
             minWidth: 700,
             maxWidth: '90vw',
             maxHeight: '80vh',
-            overflow: 'auto',
             boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
             color: isDark ? '#fff' : '#222',
             border: isDark ? '1.5px solid rgba(255,255,255,0.2)' : '1.5px solid rgba(0,0,0,0.1)',
+            display: 'flex',
+            flexDirection: 'column',
           }}>
-            <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 18 }}>Preview Itinerary CSV Export</div>
-            <div style={{ overflowX: 'auto', marginBottom: 24 }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 15 }}>
-                <thead>
-                  <tr>
-                    <th style={{ padding: 8, borderBottom: '2px solid #ddd', background: isDark ? '#23234a' : '#f3f4f6', color: isDark ? '#fff' : '#222', fontWeight: 700 }}>Title</th>
-                    <th style={{ padding: 8, borderBottom: '2px solid #ddd', background: isDark ? '#23234a' : '#f3f4f6', color: isDark ? '#fff' : '#222', fontWeight: 700 }}>Description</th>
-                    <th style={{ padding: 8, borderBottom: '2px solid #ddd', background: isDark ? '#23234a' : '#f3f4f6', color: isDark ? '#fff' : '#222', fontWeight: 700 }}>Date</th>
-                    <th style={{ padding: 8, borderBottom: '2px solid #ddd', background: isDark ? '#23234a' : '#f3f4f6', color: isDark ? '#fff' : '#222', fontWeight: 700 }}>Arrival Time</th>
-                    <th style={{ padding: 8, borderBottom: '2px solid #ddd', background: isDark ? '#23234a' : '#f3f4f6', color: isDark ? '#fff' : '#222', fontWeight: 700 }}>Start Time</th>
-                    <th style={{ padding: 8, borderBottom: '2px solid #ddd', background: isDark ? '#23234a' : '#f3f4f6', color: isDark ? '#fff' : '#222', fontWeight: 700 }}>End Time</th>
-                    <th style={{ padding: 8, borderBottom: '2px solid #ddd', background: isDark ? '#23234a' : '#f3f4f6', color: isDark ? '#fff' : '#222', fontWeight: 700 }}>Location</th>
-                    <th style={{ padding: 8, borderBottom: '2px solid #ddd', background: isDark ? '#23234a' : '#f3f4f6', color: isDark ? '#fff' : '#222', fontWeight: 700 }}>Group Name</th>
-                    <th style={{ padding: 8, borderBottom: '2px solid #ddd', background: isDark ? '#23234a' : '#f3f4f6', color: isDark ? '#fff' : '#222', fontWeight: 700 }}>Group ID</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {savedItineraries.map((it, idx) => (
-                    <tr key={it.id || idx}>
-                      <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{it.title}</td>
-                      <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{it.description}</td>
-                      <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{it.date}</td>
-                      <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{it.arrival_time}</td>
-                      <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{it.start_time}</td>
-                      <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{it.end_time}</td>
-                      <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{it.location}</td>
-                      <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{it.group_name}</td>
-                      <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{it.group_id}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            {/* Header */}
+            <div style={{ padding: '32px 32px 0 32px' }}>
+              <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 18 }}>Preview Itinerary CSV Export</div>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 16 }}>
+            
+            {/* Scrollable Content */}
+            <div style={{ 
+              flex: 1, 
+              overflow: 'auto', 
+              padding: '0 32px',
+              maxHeight: 'calc(80vh - 140px)' // Account for header and footer
+            }}>
+              <div style={{ overflowX: 'auto', marginBottom: 24, maxWidth: '100%' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 800, maxWidth: 1200 }}>
+                  <thead>
+                    <tr>
+                      <th style={{ padding: 8, borderBottom: '2px solid #ddd', background: isDark ? '#23234a' : '#f3f4f6', color: isDark ? '#fff' : '#222', fontWeight: 700, textAlign: 'left' }}>Title</th>
+                      <th style={{ padding: 8, borderBottom: '2px solid #ddd', background: isDark ? '#23234a' : '#f3f4f6', color: isDark ? '#fff' : '#222', fontWeight: 700, textAlign: 'left' }}>Description</th>
+                      <th style={{ padding: 8, borderBottom: '2px solid #ddd', background: isDark ? '#23234a' : '#f3f4f6', color: isDark ? '#fff' : '#222', fontWeight: 700, textAlign: 'left' }}>Date</th>
+                      <th style={{ padding: 8, borderBottom: '2px solid #ddd', background: isDark ? '#23234a' : '#f3f4f6', color: isDark ? '#fff' : '#222', fontWeight: 700, textAlign: 'left' }}>Arrival Time</th>
+                      <th style={{ padding: 8, borderBottom: '2px solid #ddd', background: isDark ? '#23234a' : '#f3f4f6', color: isDark ? '#fff' : '#222', fontWeight: 700, textAlign: 'left' }}>Start Time</th>
+                      <th style={{ padding: 8, borderBottom: '2px solid #ddd', background: isDark ? '#23234a' : '#f3f4f6', color: isDark ? '#fff' : '#222', fontWeight: 700, textAlign: 'left' }}>End Time</th>
+                      <th style={{ padding: 8, borderBottom: '2px solid #ddd', background: isDark ? '#23234a' : '#f3f4f6', color: isDark ? '#fff' : '#222', fontWeight: 700, textAlign: 'left' }}>Location</th>
+                      <th style={{ padding: 8, borderBottom: '2px solid #ddd', background: isDark ? '#23234a' : '#f3f4f6', color: isDark ? '#fff' : '#222', fontWeight: 700, textAlign: 'left' }}>Group Name</th>
+                      <th style={{ padding: 8, borderBottom: '2px solid #ddd', background: isDark ? '#23234a' : '#f3f4f6', color: isDark ? '#fff' : '#222', fontWeight: 700, textAlign: 'left' }}>Group ID</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {savedItineraries.map((it, idx) => (
+                      <tr key={it.id || idx}>
+                        <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'left' }}>{it.title}</td>
+                        <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'left' }}>{it.description}</td>
+                        <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'left' }}>{it.date}</td>
+                        <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'left' }}>{it.arrival_time}</td>
+                        <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'left' }}>{it.start_time}</td>
+                        <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'left' }}>{it.end_time}</td>
+                        <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'left' }}>{it.location}</td>
+                        <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'left' }}>{it.group_name}</td>
+                        <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'left' }}>{it.group_id}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            
+            {/* Footer with buttons - always visible */}
+            <div style={{ 
+              padding: '24px 32px 32px 32px', 
+              borderTop: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(0,0,0,0.1)',
+              display: 'flex', 
+              justifyContent: 'flex-end', 
+              gap: 16 
+            }}>
               <button
                 onClick={() => setShowCsvExportModal(false)}
                 style={{
@@ -4699,6 +4732,16 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
           </div>
         </div>
       )}
+
+      {/* Announcement Modal */}
+      <AnnouncementModal
+        isOpen={showAnnouncementModal}
+        onClose={() => setShowAnnouncementModal(false)}
+        eventId={event?.id || ''}
+        onSuccess={() => {
+          showSuccess('Announcement sent successfully!');
+        }}
+      />
     </div>
   );
 }

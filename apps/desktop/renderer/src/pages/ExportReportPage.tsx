@@ -137,6 +137,15 @@ export default function ExportReportPage() {
       category: 'Analytics',
       estimatedSize: '~25KB',
       includes: ['Feature Usage', 'User Engagement', 'Time Spent', 'Popular Features']
+    },
+    {
+      id: 'module-responses',
+      name: 'Module Responses',
+      description: 'All guest responses to timeline modules and interactive content',
+      type: 'csv',
+      category: 'Guest Data',
+      estimatedSize: '~150KB',
+      includes: ['Guest Responses', 'Module Interactions', 'Response Timestamps', 'Answer Content']
     }
   ];
 
@@ -300,6 +309,9 @@ export default function ExportReportPage() {
             break;
           case 'addon-usage':
             data = await exportAddonUsage();
+            break;
+          case 'module-responses':
+            data = await exportModuleResponses();
             break;
           default:
             throw new Error(`Unknown bundle type: ${job.bundleId}`);
@@ -595,6 +607,74 @@ export default function ExportReportPage() {
     }
   };
 
+  const exportModuleResponses = async () => {
+    try {
+      if (!resolvedEventId) {
+        console.error('❌ No eventId provided for module responses export');
+        return [];
+      }
+      
+      console.log('🔍 Starting exportModuleResponses for eventId:', resolvedEventId);
+      
+      // Get current authenticated user
+      const currentUser = await getCurrentUser();
+      console.log('🔍 Current authenticated user:', currentUser);
+      
+      if (!currentUser) {
+        console.error('❌ No authenticated user found');
+        return [];
+      }
+      
+      // Query guest_module_answers with guest information
+      const { data: moduleResponses, error } = await supabase
+        .from('guest_module_answers')
+        .select(`
+          *,
+          guests!inner(
+            first_name,
+            last_name,
+            email,
+            company_id
+          )
+        `)
+        .eq('event_id', resolvedEventId)
+        .eq('guests.company_id', currentUser.company_id)
+        .order('timestamp', { ascending: false });
+      
+      if (error) {
+        console.error('❌ Error fetching module responses:', error);
+        return [];
+      }
+      
+      console.log('🔍 Direct module responses query result:', moduleResponses);
+      console.log('🔍 Number of module responses found:', moduleResponses?.length || 0);
+      
+      if (!moduleResponses || moduleResponses.length === 0) {
+        console.log('📝 No module responses found, returning empty array with headers');
+        return [];
+      }
+      
+      // Transform the data to flatten the guest information
+      const transformedResponses = moduleResponses.map(response => ({
+        id: response.id,
+        event_id: response.event_id,
+        module_id: response.module_id,
+        guest_id: response.guest_id,
+        guest_name: `${response.guests?.first_name || ''} ${response.guests?.last_name || ''}`.trim(),
+        guest_email: response.guests?.email || '',
+        answer_text: response.answer_text,
+        timestamp: response.timestamp,
+        created_at: response.created_at
+      }));
+      
+      console.log('🔍 Transformed module responses:', transformedResponses);
+      return transformedResponses;
+    } catch (error: any) {
+      console.warn('❌ Error fetching module responses:', error);
+      return [];
+    }
+  };
+
   const createDownloadUrl = (data: any[], filename: string, bundleId: string): string => {
     console.log(`🔧 Creating download URL for ${bundleId}`);
     console.log(`🔧 Data passed to createDownloadUrl:`, data);
@@ -639,7 +719,8 @@ export default function ExportReportPage() {
       'itineraries': ['ID', 'Event ID', 'Company ID', 'Title', 'Items', 'Status', 'Is Published', 'Created At', 'Updated At', 'Created By'],
       'guests': ['ID', 'Event ID', 'Company ID', 'First Name', 'Middle Name', 'Last Name', 'Email', 'Contact Number', 'Country Code', 'ID Type', 'ID Number', 'ID Country', 'Date of Birth', 'Gender', 'Group ID', 'Group Name', 'Next of Kin Name', 'Next of Kin Email', 'Next of Kin Phone Country', 'Next of Kin Phone', 'Dietary', 'Medical', 'Modules', 'Module Values', 'Prefix', 'Status', 'Created At', 'Updated At', 'Created By'],
       'guest-chat': ['ID', 'Event ID', 'Sender ID', 'Receiver ID', 'Message', 'Timestamp', 'Chat Session ID', 'Created At'],
-      'addon-usage': ['ID', 'Event ID', 'Addon ID', 'User ID', 'Feature', 'Usage Count', 'Total Time (ms)', 'Last Used', 'Created At']
+      'addon-usage': ['ID', 'Event ID', 'Addon ID', 'User ID', 'Feature', 'Usage Count', 'Total Time (ms)', 'Last Used', 'Created At'],
+      'module-responses': ['ID', 'Event ID', 'Module ID', 'Guest ID', 'Guest Name', 'Guest Email', 'Answer Text', 'Timestamp', 'Created At']
     };
     
     const headers = headersByBundle[bundleId] || Object.keys(data[0] || {});
@@ -701,6 +782,10 @@ export default function ExportReportPage() {
           else if (header === 'Usage Count') value = row.usage_count || row.usageCount || '';
           else if (header === 'Total Time (ms)') value = row.total_time_ms || row.totalTimeMs || '';
           else if (header === 'Last Used') value = row.last_used || row.lastUsed || '';
+          else if (header === 'Guest Name') value = row.guest_name || '';
+          else if (header === 'Guest Email') value = row.guest_email || '';
+          else if (header === 'Answer Text') value = row.answer_text || row.answerText || '';
+          else if (header === 'Module ID') value = row.module_id || row.moduleId || '';
           else {
             // Try direct field name or fallback
             value = row[headerLower] || row[header] || row[header.toLowerCase()] || '';
@@ -912,28 +997,61 @@ export default function ExportReportPage() {
           }
         ];
         
-      case 'addon-usage':
-        return [
-          {
-            ...baseData,
-            addon_id: 'offline-maps',
-            user_id: 'guest-1',
-            feature: 'map_download',
-            usage_count: 3,
-            total_time_ms: 45000,
-            last_used: new Date().toISOString()
-          },
-          {
-            ...baseData,
-            id: 'test-2',
-            addon_id: 'translator',
-            user_id: 'guest-2',
-            feature: 'translate_text',
-            usage_count: 12,
-            total_time_ms: 120000,
-            last_used: new Date().toISOString()
-          }
-        ];
+              case 'addon-usage':
+          return [
+            {
+              ...baseData,
+              addon_id: 'offline-maps',
+              user_id: 'guest-1',
+              feature: 'map_download',
+              usage_count: 3,
+              total_time_ms: 45000,
+              last_used: new Date().toISOString()
+            },
+            {
+              ...baseData,
+              id: 'test-2',
+              addon_id: 'translator',
+              user_id: 'guest-2',
+              feature: 'translate_text',
+              usage_count: 12,
+              total_time_ms: 120000,
+              last_used: new Date().toISOString()
+            }
+          ];
+          
+        case 'module-responses':
+          return [
+            {
+              ...baseData,
+              module_id: 'question-1',
+              guest_id: 'guest-1',
+              guest_name: 'John Doe',
+              guest_email: 'john.doe@example.com',
+              answer_text: 'I really enjoyed the welcome session!',
+              timestamp: new Date().toISOString()
+            },
+            {
+              ...baseData,
+              id: 'test-2',
+              module_id: 'feedback-1',
+              guest_id: 'guest-2',
+              guest_name: 'Jane Smith',
+              guest_email: 'jane.smith@example.com',
+              answer_text: 'The event organization was excellent. Great job!',
+              timestamp: new Date(Date.now() + 3600000).toISOString()
+            },
+            {
+              ...baseData,
+              id: 'test-3',
+              module_id: 'multiple-choice-1',
+              guest_id: 'guest-3',
+              guest_name: 'Mike Johnson',
+              guest_email: 'mike.johnson@example.com',
+              answer_text: 'Option 2',
+              timestamp: new Date(Date.now() + 7200000).toISOString()
+            }
+          ];
         
       default:
         return [baseData];

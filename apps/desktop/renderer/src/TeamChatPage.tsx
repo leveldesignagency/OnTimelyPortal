@@ -619,13 +619,13 @@ const SearchResultItem = ({ user, onClick, isDark }: { user: User, onClick: () =
       width: '40px',
       height: '40px',
       borderRadius: '50%',
-      backgroundColor: isDark ? '#444' : '#e9ecef',
+      backgroundColor: '#10b981',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
       fontSize: '16px',
       fontWeight: 'bold',
-      color: isDark ? '#ffffff' : '#495057',
+      color: '#ffffff',
       marginRight: '12px'
     }}>
       {user.avatar && user.avatar.length <= 3 ? user.avatar : user.name.charAt(0).toUpperCase()}
@@ -668,20 +668,20 @@ const TeamSearchResultItem = ({ team, onClick, isDark }: { team: Team, onClick: 
       e.currentTarget.style.backgroundColor = isDark ? '#1e1e1e' : '#ffffff';
     }}
   >
-        <div style={{
-      width: '40px',
-      height: '40px',
-      borderRadius: '8px',
-      backgroundColor: isDark ? '#444' : '#e9ecef',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      fontSize: '16px',
-      fontWeight: 'bold',
-      color: isDark ? '#ffffff' : '#495057',
-      marginRight: '12px'
-    }}>
-      {getTeamInitials(team)}
+                <div style={{
+          width: '40px',
+          height: '40px',
+          borderRadius: '8px',
+          backgroundColor: '#10b981',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '16px',
+          fontWeight: 'bold',
+          color: '#ffffff',
+          marginRight: '12px'
+        }}>
+          {getTeamInitials(team)}
         </div>
     <div style={{ flex: 1 }}>
       <div style={{ 
@@ -5242,21 +5242,21 @@ export default function TeamChatPage() {
                         <span style={{ color: 'white', fontSize: '10px', fontWeight: 'bold' }}>✓</span>
                       )}
                     </div>
-                    <div style={{
-                      width: '32px',
-                      height: '32px',
-                      borderRadius: '50%',
-                      background: isDark ? 'linear-gradient(135deg, #4a4a4a, #2a2a2a)' : 'linear-gradient(135deg, #e9ecef, #dee2e6)',
-                      color: isDark ? '#fff' : '#495057',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '12px',
-                      fontWeight: '600',
-                      marginRight: '12px',
-                      flexShrink: 0
-                    }}>
-                      {user.avatar}
+                                    <div style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '50%',
+                  background: '#10b981',
+                  color: '#ffffff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '12px',
+                  fontWeight: '600',
+                  marginRight: '12px',
+                  flexShrink: 0
+                }}>
+                  {user.avatar}
                 </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{
@@ -5463,7 +5463,7 @@ export default function TeamChatPage() {
                         textTransform: 'uppercase',
                         letterSpacing: '0.5px'
                       }}>
-                        Teams
+                        Workspace
                     </div>
                       {teamSearchResults.map(team => 
                         <TeamSearchResultItem 

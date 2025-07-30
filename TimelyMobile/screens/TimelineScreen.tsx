@@ -222,9 +222,28 @@ async function fetchTimelineModules(eventId: string, selectedDate: Date, guestId
       console.error('[TimelineScreen] Error details:', JSON.stringify(error, null, 2));
       console.error('[TimelineScreen] Error message:', error?.message);
       console.error('[TimelineScreen] Error code:', error?.code);
-      return [];
+      
+      // Fallback: Try direct query
+      console.log('[FALLBACK] Trying direct query for modules...');
+      const { data: fallbackData, error: fallbackError } = await supabase
+        .from('timeline_modules')
+        .select('*')
+        .eq('event_id', eventId)
+        .eq('date', selectedDateStr);
+      
+      if (fallbackError) {
+        console.error('[FALLBACK] Error in direct query:', fallbackError);
+        return [];
+      }
+      
+      console.log('[FALLBACK] Direct query result:', fallbackData);
+      return fallbackData || [];
     }
     console.log('[RPC] Guest modules result:', data);
+    console.log('[RPC] Number of modules found:', data?.length || 0);
+    if (data && data.length > 0) {
+      console.log('[RPC] First module:', data[0]);
+    }
     return data || [];
   } catch (err) {
     console.error('[TimelineScreen] Exception in fetchTimelineModules:', err);
@@ -298,17 +317,11 @@ export default function TimelineScreen({ guest }: { guest: any }) {
   const [feedbackComment, setFeedbackComment] = useState('');
   const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
   
-  // Add state for survey/multiple choice module
-  const [surveyModule, setSurveyModule] = useState<any | null>(null);
-  const [surveyModalVisible, setSurveyModalVisible] = useState(false);
+  // Add state for multiple choice module
   const [selectedOption, setSelectedOption] = useState<string>('');
   const [isSubmittingSurvey, setIsSubmittingSurvey] = useState(false);
   const [pollResults, setPollResults] = useState<any[]>([]);
   const [isLoadingResults, setIsLoadingResults] = useState(false);
-  
-  // Add state for QR code module
-  const [qrModule, setQrModule] = useState<any | null>(null);
-  const [qrModalVisible, setQrModalVisible] = useState(false);
   
   // Add state for photo/video module
   const [photoVideoModule, setPhotoVideoModule] = useState<any | null>(null);
@@ -571,18 +584,18 @@ export default function TimelineScreen({ guest }: { guest: any }) {
       const currentMinute = now.getMinutes();
       const currentSecond = now.getSeconds();
       
-      console.log('[AUTO] 🔍 CHECKING FOR UPCOMING ITEMS...');
-      console.log('[AUTO] Current time:', `${currentHour}:${currentMinute}:${currentSecond}`);
-      console.log('[AUTO] Items to check:', mergedItems.length);
+      // console.log('[AUTO] 🔍 CHECKING FOR UPCOMING ITEMS...');
+      // console.log('[AUTO] Current time:', `${currentHour}:${currentMinute}:${currentSecond}`);
+      // console.log('[AUTO] Items to check:', mergedItems.length);
       
       // Don't check if modal is already visible
-      if (countdownModalVisible || questionModalVisible || feedbackModalVisible || surveyModalVisible || qrModalVisible || photoVideoModalVisible) {
-        console.log('[AUTO] Modal already visible, skipping check');
+      if (countdownModalVisible || questionModalVisible || feedbackModalVisible || photoVideoModalVisible) {
+        // console.log('[AUTO] Modal already visible, skipping check');
         return;
       }
       
       if (mergedItems.length === 0) {
-        console.log('[AUTO] ❌ No items to check');
+        // console.log('[AUTO] ❌ No items to check');
         return;
       }
       
@@ -608,22 +621,22 @@ export default function TimelineScreen({ guest }: { guest: any }) {
         // Convert to seconds for more precise comparison
         const diffSeconds = (diffMinutes * 60) - currentSecond;
         
-        console.log('[AUTO] 📊 Item:', item.title, 'Time:', item.start_time, 'Diff minutes:', diffMinutes, 'Diff seconds:', diffSeconds);
+        // console.log('[AUTO] 📊 Item:', item.title, 'Time:', item.start_time, 'Diff minutes:', diffMinutes, 'Diff seconds:', diffSeconds);
         
         // Trigger if item starts within the next 2 minutes (120 seconds)
         const shouldTrigger = diffSeconds >= -30 && diffSeconds <= 120;
         
         if (shouldTrigger) {
-          console.log('[AUTO] 🎉 FOUND UPCOMING ITEM:', item.title, 'Diff seconds:', diffSeconds);
+          // console.log('[AUTO] 🎉 FOUND UPCOMING ITEM:', item.title, 'Diff seconds:', diffSeconds);
         }
         
         return shouldTrigger;
       });
       
       if (upcoming) {
-        console.log('[AUTO] 🚨 TRIGGERING COUNTDOWN FOR:', upcoming.title);
-        console.log('[AUTO] 🚨 Item time:', upcoming.start_time);
-        console.log('[AUTO] 🚨 Current time:', `${currentHour}:${currentMinute}:${currentSecond}`);
+        // console.log('[AUTO] 🚨 TRIGGERING COUNTDOWN FOR:', upcoming.title);
+        // console.log('[AUTO] 🚨 Item time:', upcoming.start_time);
+        // console.log('[AUTO] 🚨 Current time:', `${currentHour}:${currentMinute}:${currentSecond}`);
         
         // Calculate countdown seconds
         const timeParts = upcoming.start_time.split(':');
@@ -634,7 +647,7 @@ export default function TimelineScreen({ guest }: { guest: any }) {
         const diffMinutes = itemTotalMinutes - currentTotalMinutes;
         const diffSeconds = Math.max(0, (diffMinutes * 60) - currentSecond);
         
-        console.log('[AUTO] 🚨 Countdown seconds:', diffSeconds);
+        // console.log('[AUTO] 🚨 Countdown seconds:', diffSeconds);
         
         setUpcomingItem(upcoming);
         setCountdownModalVisible(true);
@@ -642,13 +655,13 @@ export default function TimelineScreen({ guest }: { guest: any }) {
         setAnimationPhase('countdown');
         
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        console.log('[AUTO] ✅ COUNTDOWN MODAL TRIGGERED!');
+        // console.log('[AUTO] ✅ COUNTDOWN MODAL TRIGGERED!');
       }
     };
 
     const interval = setInterval(checkUpcomingItem, 1000);
     return () => clearInterval(interval);
-  }, [currentTime, selectedDate, mergedItems, countdownModalVisible, questionModalVisible, feedbackModalVisible, surveyModalVisible, qrModalVisible, photoVideoModalVisible]);
+  }, [currentTime, selectedDate, mergedItems, countdownModalVisible, questionModalVisible, feedbackModalVisible, photoVideoModalVisible]);
 
   // Separate countdown timer effect
   useEffect(() => {
@@ -656,9 +669,9 @@ export default function TimelineScreen({ guest }: { guest: any }) {
 
     const countdownInterval = setInterval(() => {
       setCountdownSeconds(prev => {
-        console.log('[CountdownTimer] Current seconds:', prev);
+        // console.log('[CountdownTimer] Current seconds:', prev);
         if (prev <= 1) {
-          console.log('[CountdownTimer] 🚀 Countdown finished, starting animations!');
+          // console.log('[CountdownTimer] 🚀 Countdown finished, starting animations!');
           setAnimationPhase('title');
           setTimeout(() => setAnimationPhase('info'), 1500);
           setTimeout(() => setAnimationPhase('description'), 3000);
@@ -734,32 +747,7 @@ export default function TimelineScreen({ guest }: { guest: any }) {
     return `${day}/${month}/${year}`;
   };
 
-  // Handle QR code viewing
-  const handleQRCodeView = () => {
-    if (upcomingItem?.qr_code) {
-      // For now, just show an alert. In a real app, you'd open a QR code viewer
-      Alert.alert('QR Code', 'QR Code viewer would open here');
-    }
-  };
 
-  // Handle document download
-  const handleDocumentDownload = () => {
-    if (upcomingItem?.document) {
-      // For now, just show an alert. In a real app, you'd download the document
-      Alert.alert('Document', 'Document download would start here');
-    }
-  };
-
-  // Handle link opening
-  const handleLinkOpen = async () => {
-    if (upcomingItem?.link) {
-      try {
-        await Linking.openURL(String(upcomingItem.link));
-      } catch (error) {
-        Alert.alert('Error', 'Could not open link');
-      }
-    }
-  };
 
   // Handle question answer submission
   const handleQuestionSubmit = async () => {
@@ -947,132 +935,7 @@ export default function TimelineScreen({ guest }: { guest: any }) {
   };
 
   // Handle survey/multiple choice submission
-  const handleSurveySubmit = async () => {
-    if (!surveyModule || !selectedOption) {
-      setErrorMessage('Please select an option');
-      setShowErrorModal(true);
-      return;
-    }
 
-    setIsSubmittingSurvey(true);
-    
-    try {
-      console.log('[SURVEY] Submitting survey for module:', surveyModule.id);
-      console.log('[SURVEY] Selected option:', selectedOption);
-      
-      // Create answer text with selected option
-      const answerText = JSON.stringify({
-        selectedOption: selectedOption,
-        timestamp: new Date().toISOString()
-      });
-      
-      // Extract the actual UUID from the module ID (remove "module-" prefix)
-      const actualModuleId = surveyModule.id.startsWith('module-') ? surveyModule.id.substring(7) : surveyModule.id;
-      
-      console.log('[SURVEY] Using actual module ID:', actualModuleId);
-      
-      // Submit to Supabase using the function
-      const { data, error } = await supabase.rpc('insert_guest_module_answer', {
-        p_guest_id: fullGuest.id,
-        p_module_id: actualModuleId,
-        p_answer_text: answerText,
-        p_event_id: fullGuest.event_id
-      });
-      
-      if (error) throw error;
-      
-      console.log('[SURVEY] Function response:', data);
-      
-      if (!data.success) {
-        // Handle duplicate vote gracefully
-        if (data.error && data.error.includes('already exists')) {
-          setToastMessage('You have already voted in this poll!');
-          setShowToast(true);
-          setTimeout(() => setShowToast(false), 2500);
-          
-          // Close the modal
-          setSurveyModalVisible(false);
-          setSurveyModule(null);
-          setSelectedOption('');
-          return;
-        }
-        throw new Error(data.error || 'Failed to submit survey');
-      }
-      
-      // Refresh poll results
-      console.log('[SURVEY] Refreshing poll results...');
-      console.log('[SURVEY] Survey module ID:', surveyModule.id);
-      await fetchPollResults(surveyModule.id);
-      
-      // Show custom toast
-      setToastMessage('Your vote has been submitted!');
-      setShowToast(true);
-      setTimeout(() => setShowToast(false), 2500);
-      
-      // Update answered modules list
-      const moduleIdForAnswer = surveyModule.id.startsWith('module-') ? surveyModule.id.substring(7) : surveyModule.id;
-      setAnsweredModules(prev => new Set([...prev, moduleIdForAnswer]));
-      
-      // Close the modal
-      setSurveyModalVisible(false);
-      setSurveyModule(null);
-      setSelectedOption('');
-      
-    } catch (error: any) {
-      console.error('[SURVEY] Error submitting survey:', error);
-      setErrorMessage(`Failed to submit survey: ${error?.message || 'Unknown error'}`);
-      setShowErrorModal(true);
-    } finally {
-      setIsSubmittingSurvey(false);
-    }
-  };
-
-  // Fetch poll results for a module
-  const fetchPollResults = async (moduleId: string) => {
-    setIsLoadingResults(true);
-    try {
-      // Extract the actual UUID from the module ID (remove "module-" prefix)
-      const actualModuleId = moduleId.startsWith('module-') ? moduleId.substring(7) : moduleId;
-      
-      console.log('[POLL] Fetching results for module ID:', moduleId);
-      console.log('[POLL] Actual UUID:', actualModuleId);
-      
-      const { data, error } = await supabase
-        .from('guest_module_answers')
-        .select('*')
-        .eq('module_id', actualModuleId);
-      
-      if (error) throw error;
-      console.log('[POLL] Found results:', data?.length || 0);
-      console.log('[POLL] Results data:', data);
-      setPollResults(data || []);
-      
-      // Check if current user has already voted
-      const userVote = data?.find(result => result.guest_id === fullGuest.id);
-      if (userVote) {
-        try {
-          const parsedVote = JSON.parse(userVote.answer_text);
-          setSelectedOption(parsedVote.selectedOption);
-          console.log('[POLL] User has already voted:', parsedVote.selectedOption);
-        } catch (error) {
-          console.error('[POLL] Error parsing user vote:', error);
-        }
-      }
-    } catch (error) {
-      console.error('[POLL] Error fetching results:', error);
-      setPollResults([]);
-    } finally {
-      setIsLoadingResults(false);
-    }
-  };
-
-  // Handle survey modal close
-  const handleSurveyClose = () => {
-    setSurveyModalVisible(false);
-    setSurveyModule(null);
-    setSelectedOption('');
-    setPollResults([]);
-  };
 
   // Handle photo/video submission
   const handlePhotoVideoSubmit = async () => {
@@ -1544,53 +1407,7 @@ export default function TimelineScreen({ guest }: { guest: any }) {
                   );
                 }
                 
-                // If this is a survey/multiple choice module, open the survey modal on press
-                if (item.is_module && (item.module_type === 'survey' || item.module_type === 'multiple_choice')) {
-                  return (
-                    <View key={item.id} style={[styles.itemContainer, { top: y }]}> 
-                      <TouchableOpacity
-                        style={styles.milestoneContainer}
-                        onPress={() => {
-                          console.log('[POLL] Opening survey modal with item:', item);
-                          console.log('[POLL] Item survey_data:', item.survey_data);
-                          setSurveyModule(item);
-                          setSurveyModalVisible(true);
-                          setSelectedOption('');
-                          fetchPollResults(item.id);
-                          
-                          // Check if user has already answered this module
-                          const moduleIdToCheck = item.id.startsWith('module-') ? item.id.substring(7) : item.id;
-                          if (answeredModules.has(item.id) || answeredModules.has(moduleIdToCheck)) {
-                            console.log('[POLL] User has already answered this module');
-                          }
-                        }}
-                        activeOpacity={0.7}
-                      >
-                        <View style={styles.milestone} />
-                        <Text style={styles.milestoneTitle}>{String(item.title || 'Survey')}</Text>
-                      </TouchableOpacity>
-                    </View>
-                  );
-                }
-                
-                // If this is a QR code module, open the QR modal on press
-                if (item.is_module && item.module_type === 'qrcode') {
-                  return (
-                    <View key={item.id} style={[styles.itemContainer, { top: y }]}> 
-                      <TouchableOpacity
-                        style={styles.milestoneContainer}
-                        onPress={() => {
-                          setQrModule(item);
-                          setQrModalVisible(true);
-                        }}
-                        activeOpacity={0.7}
-                      >
-                        <View style={styles.milestone} />
-                        <Text style={styles.milestoneTitle}>{String(item.title || 'QR Code')}</Text>
-                      </TouchableOpacity>
-                    </View>
-                  );
-                }
+
                 
                 // If this is a photo/video module, open the photo/video modal on press
                 if (item.is_module && item.module_type === 'photo_video') {
@@ -1942,114 +1759,7 @@ export default function TimelineScreen({ guest }: { guest: any }) {
         </TouchableWithoutFeedback>
       </Modal>
       
-      {/* Survey/Multiple Choice Module Modal */}
-      {surveyModalVisible && surveyModule && (
-        <Modal
-          visible={surveyModalVisible}
-          animationType="slide"
-          transparent
-          onRequestClose={() => setSurveyModalVisible(false)}
-        >
-          {/* ...modal content... */}
-          <View style={styles.modalContent}>
-            {/* ...survey question and options... */}
-            {/* Disable all options if already answered */}
-            {surveyModule.options.map((option: string, idx: number) => (
-              <TouchableOpacity
-                key={idx}
-                style={[
-                  styles.optionButton,
-                  selectedOption === option && styles.selectedOptionButton,
-                  answeredModules.has(surveyModule.id) && styles.disabledOption,
-                ]}
-                onPress={() => {
-                  if (!answeredModules.has(surveyModule.id)) {
-                    setSelectedOption(option);
-                  }
-                }}
-                disabled={answeredModules.has(surveyModule.id)}
-              >
-                <Text style={styles.pollOptionText}>{option}</Text>
-              </TouchableOpacity>
-            ))}
-            {/* Submit button logic */}
-            {answeredModules.has(surveyModule.id) ? (
-              <View style={styles.submittedButton}>
-                <Text style={styles.submittedButtonText}>✓ Submitted</Text>
-              </View>
-            ) : (
-              <TouchableOpacity
-                style={styles.submitButton}
-                onPress={handleSurveySubmit}
-                disabled={!selectedOption || answeredModules.has(surveyModule.id)}
-              >
-                <Text style={styles.submitButtonText}>Submit</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </Modal>
-      )}
-      
-      {/* QR Code Module Modal */}
-      <Modal
-        visible={qrModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setQrModalVisible(false)}
-      >
-        <View style={styles.fullScreenModal}>
-          <LinearGradient
-            colors={["#000000", "#1a1a1a", "#000000"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={StyleSheet.absoluteFill}
-          />
-          
-          <View style={styles.questionContainer}>
-            {/* Close Button */}
-            <TouchableOpacity 
-              style={styles.questionCloseButton}
-              onPress={() => setQrModalVisible(false)}
-            >
-              <Text style={styles.questionCloseText}>✕</Text>
-            </TouchableOpacity>
-            
-            {/* QR Code Content */}
-            <View style={styles.questionContent}>
-              <Text style={[styles.questionTitle, { textAlign: 'center' }]}>QR Code</Text>
-              <Text style={[styles.questionText, { textAlign: 'center' }]}>{String(qrModule?.title || 'QR Code Information')}</Text>
-              
-              {/* QR Code Details */}
-              <View style={styles.answerInputContainer}>
-                <Text style={[styles.answerLabel, { textAlign: 'center' }]}>QR Code Details</Text>
-                {qrModule?.link && (
-                  <TouchableOpacity 
-                    style={styles.qrCodeButton}
-                    onPress={() => {
-                      Linking.openURL(String(qrModule.link));
-                      setQrModalVisible(false);
-                    }}
-                  >
-                    <Text style={styles.qrCodeText}>Open Link</Text>
-                  </TouchableOpacity>
-                )}
-                {qrModule?.file && (
-                  <TouchableOpacity 
-                    style={styles.documentButton}
-                    onPress={() => {
-                      // Handle file download
-                      Alert.alert('File Download', 'File download would start here');
-                      setQrModalVisible(false);
-                    }}
-                  >
-                    <Text style={styles.documentText}>Download File</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            </View>
-          </View>
-        </View>
-      </Modal>
+
       
       {/* Photo/Video Module Modal */}
       <Modal

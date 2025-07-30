@@ -26,6 +26,8 @@ import EventHomepageBuilderPage from './pages/EventHomepageBuilderPage';
 import GuestChatPage from './pages/GuestChatPage';
 import NotificationsPage from './pages/NotificationsPage';
 import ExportReportPage from './pages/ExportReportPage';
+import NotificationSettingsPage from './pages/NotificationSettingsPage';
+import SettingsPage from './pages/SettingsPage';
 
 import { getEventsCreatedByUser } from './lib/supabase';
 
@@ -325,6 +327,8 @@ const AppContent = () => {
           <Route path="/event-homepage-builder" element={<ProtectedRoute><EventHomepageBuilderPage /></ProtectedRoute>} />
           <Route path="/guest-chat" element={<ProtectedRoute><GuestChatPage /></ProtectedRoute>} />
           <Route path="/export-report/:eventId" element={<ProtectedRoute><ExportReportPage /></ProtectedRoute>} />
+          <Route path="/event/:id/notification-settings" element={<ProtectedRoute><NotificationSettingsPage /></ProtectedRoute>} />
+          <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
     
         </Routes>
       </main>

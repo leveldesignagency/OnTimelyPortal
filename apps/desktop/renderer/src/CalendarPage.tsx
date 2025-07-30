@@ -789,10 +789,10 @@ Check the browser console for detailed diagnostic information.`);
         <button
           onClick={() => setShowAddEvent(true)}
           style={{
-            ...glassStyle,
+            background: '#10b981',
             padding: '12px 16px',
-            border: '1.5px solid rgba(255, 255, 255, 0.8)',
-            color: colors.text,
+            border: 'none',
+            color: '#fff',
             fontSize: '14px',
             fontWeight: '600',
             cursor: 'pointer',
@@ -804,13 +804,17 @@ Check the browser console for detailed diagnostic information.`);
             marginLeft: '20px',
             width: '110px',
             height: '44px',
-            whiteSpace: 'nowrap'
+            whiteSpace: 'nowrap',
+            borderRadius: '8px',
+            boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)'
           }}
           onMouseEnter={(e) => {
             e.currentTarget.style.transform = 'translateY(-2px)';
+            e.currentTarget.style.boxShadow = '0 6px 16px rgba(16, 185, 129, 0.4)';
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.transform = 'translateY(0px)';
+            e.currentTarget.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.3)';
           }}
         >
           <span style={{ fontSize: '16px' }}>+</span>
@@ -1213,15 +1217,23 @@ Check the browser console for detailed diagnostic information.`);
             <div style={{ 
               display: 'grid', 
               gridTemplateColumns: 'repeat(7, 1fr)', 
-              marginBottom: '8px' 
+              marginBottom: '16px',
+              padding: '16px 20px',
+              background: 'rgba(255,255,255,0.02)',
+              borderRadius: '16px',
+              border: '1px solid rgba(255,255,255,0.1)',
+              backdropFilter: 'blur(10px)',
+              boxShadow: '0 4px 16px rgba(0,0,0,0.1)'
             }}>
               {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
                 <div key={day} style={{
-                  padding: '12px',
+                  padding: '8px',
                   textAlign: 'center',
-                  fontSize: '14px',
-                  fontWeight: '600',
-                  color: colors.textSecondary
+                  fontSize: '12px',
+                  fontWeight: '700',
+                  color: '#666',
+                  textTransform: 'uppercase',
+                  letterSpacing: '1px'
                 }}>
                   {day}
                 </div>
@@ -1232,8 +1244,14 @@ Check the browser console for detailed diagnostic information.`);
             <div style={{ 
               display: 'grid', 
               gridTemplateColumns: 'repeat(7, 1fr)', 
-              gap: '2px',
-              flex: '1'
+              gap: '8px',
+              flex: '1',
+              padding: '20px',
+              background: 'rgba(255,255,255,0.02)',
+              borderRadius: '16px',
+              border: '1px solid rgba(255,255,255,0.1)',
+              backdropFilter: 'blur(10px)',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.1)'
             }}>
               {generateCalendarDays().map((date, index) => {
                 const dayEvents = date ? getEventsForDate(date) : [];
@@ -1276,15 +1294,16 @@ Check the browser console for detailed diagnostic information.`);
                     }}
                     style={{
                       padding: '8px',
-                      borderRadius: '8px',
-                      background: date ? (isSelected ? colors.text : colors.hover) : 'transparent',
-                      border: isToday ? `2px solid ${colors.text}` : `1px solid ${colors.border}`,
+                      borderRadius: '12px',
+                      background: date ? (isSelected ? '#10b981' : 'rgba(255, 255, 255, 0.05)') : 'transparent',
+                      border: isToday ? `2px solid #10b981` : `1px solid rgba(255, 255, 255, 0.1)`,
                       cursor: date ? 'pointer' : 'default',
                       minHeight: '100px',
                       display: 'flex',
                       flexDirection: 'column',
                       transition: 'all 0.2s ease',
-                      overflow: 'hidden'
+                      overflow: 'hidden',
+                      margin: '2px'
                     }}
                   >
                     {date && (
@@ -1292,7 +1311,7 @@ Check the browser console for detailed diagnostic information.`);
                         <div style={{
                           fontSize: '14px',
                           fontWeight: isToday ? '700' : '500',
-                          color: isSelected ? (isDark ? '#000' : '#fff') : (isToday ? colors.text : colors.text),
+                          color: isSelected ? '#fff' : (isToday ? '#10b981' : colors.text),
                           marginBottom: '6px',
                           flexShrink: 0
                         }}>
