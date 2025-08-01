@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,1735 +6,1326 @@ import {
   TouchableOpacity,
   FlatList,
   StyleSheet,
-  Dimensions,
-  SafeAreaView,
-  ActivityIndicator,
   Alert,
-  Keyboard,
+  Dimensions,
   TouchableWithoutFeedback,
   KeyboardAvoidingView,
   Platform,
+  StatusBar,
   Image,
   Modal,
-  Linking,
-  ScrollView,
-  StatusBar,
+  ActivityIndicator,
 } from 'react-native';
-import { Swipeable } from 'react-native-gesture-handler';
-import { BlurView } from 'expo-blur';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
-import { useTheme } from '../ThemeContext';
-import * as Haptics from 'expo-haptics';
-import { pushNotificationService } from '../lib/pushNotifications';
+import GlobalHeader from '../components/GlobalHeader';
 import { LinearGradient } from 'expo-linear-gradient';
-import { debounce } from 'lodash';
-import { useFocusEffect } from '@react-navigation/native';
-import { Ionicons } from '@expo/vector-icons';
-import { soundEffects } from '../lib/soundEffects';
-import AnnouncementChatItem from '../components/AnnouncementChatItem';
-import announcementService, { Announcement } from '../lib/announcementService';
+import { BlurView } from 'expo-blur';
+import announcementService from '../lib/announcementService';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 interface Message {
   message_id: string;
   event_id: string;
+  sender_email: string;
   sender_name: string;
   sender_type: 'admin' | 'guest';
-  sender_email: string;
-  avatar_url?: string | null;
+  avatar_url?: string;
   message_text: string;
   message_type: string;
-  company_id: string;
   created_at: string;
-  reply_to_message_id?: string | null;
-  reactions?: { emoji: string; user_email: string }[];
-  is_edited?: boolean;
+  company_id: string;
+  is_edited: boolean;
   edited_at?: string;
+  reply_to_message_id?: string;
+  reactions?: any[];
+}
+
+interface Announcement {
+  id: string;
+  event_id: string;
+  company_id: string;
+  title: string;
+  description?: string;
+  image_url?: string;
+  link_url?: string;
+  scheduled_for?: string;
+  sent_at?: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
 }
 
 interface GuestChatScreenProps {
-  guest: any;
-  onAnnouncementPress?: (announcement: Announcement) => void;
+  route: {
+    params: {
+      eventId: string;
+      eventName?: string;
+      guest: any;
+    };
+  };
+  navigation: any;
+  onAnnouncementPress?: (announcement: any) => void;
 }
 
-export default function GuestChatScreen({ guest, onAnnouncementPress }: GuestChatScreenProps) {
-  // ALL HOOKS MUST BE AT THE TOP - NO EXCEPTIONS
-  const { theme } = useTheme();
+const GuestChatScreen: React.FC<GuestChatScreenProps> = ({ route, navigation }) => {
+  const { eventId, eventName, guest } = route.params;
+  
+  // Debug the event name
+  console.log('[DEBUG] Event name from params:', eventName);
+  console.log('[DEBUG] Event ID from params:', eventId);
+  console.log('[DEBUG] Guest object:', guest);
+  console.log('[DEBUG] Guest event_id:', guest?.event_id);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [newMessage, setNewMessage] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [sending, setSending] = useState(false);
-  const [isInitializing, setIsInitializing] = useState(true);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
-  const [refreshing, setRefreshing] = useState(false);
-  const [eventName, setEventName] = useState<string>(guest?.event_name || guest?.event_title || '');
-  const [typingUsers, setTypingUsers] = useState<{ [email: string]: string }>({});
-  const [channel, setChannel] = useState<any>(null);
+  
+  // Debug messages state changes
+  useEffect(() => {
+    console.log('📨 Messages state updated, count:', messages.length);
+    if (messages.length > 0) {
+      console.log('📨 Last message:', messages[messages.length - 1]);
+    }
+  }, [messages]);
+  const [messageText, setMessageText] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
   const [hoverPopupState, setHoverPopupState] = useState<{
-    activeMessageId: string | null;
-    position: { x: number; y: number } | null;
-    message: Message | null;
-  }>({
-    activeMessageId: null,
-    position: null,
-    message: null
-  });
-  const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
-  const [deleting, setDeleting] = useState(false);
+    visible: boolean;
+    messageId: string;
+    position: { x: number; y: number };
+  }>({ visible: false, messageId: '', position: { x: 0, y: 0 } });
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
   const [replyTo, setReplyTo] = useState<Message | null>(null);
-  const [showReactionPicker, setShowReactionPicker] = useState(false);
-  const [reactionTarget, setReactionTarget] = useState<Message | null>(null);
-  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
-  const [reactionPopupPosition, setReactionPopupPosition] = useState<{ x: number; y: number; width: number } | null>(null);
-  const [navigateToMessageId, setNavigateToMessageId] = useState<string | null>(null);
-  const [swipeHapticTriggered, setSwipeHapticTriggered] = useState<{ [key: string]: boolean }>({});
+  const [deleting, setDeleting] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
+  const [typingUsers, setTypingUsers] = useState<string[]>([]);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
+  const [channel, setChannel] = useState<any>(null);
+  const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
-  
-  // ALL REFS
-  const typingTimeouts = useRef<{ [email: string]: NodeJS.Timeout }>({});
+  const [onlineGuests, setOnlineGuests] = useState<string[]>([]);
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  const [showActionSheet, setShowActionSheet] = useState(false);
+  const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
+
+  const bubbleRefs = useRef<{ [key: string]: any }>({});
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const bubbleRefs = useRef<{ [id: string]: any }>({});
+  const typingTimeouts = useRef<{ [key: string]: NodeJS.Timeout }>({});
   const flatListRef = useRef<FlatList>(null);
-  const textInputRef = useRef<TextInput>(null);
-  const messageRefs = useRef<{ [id: string]: any }>({});
 
-  // ALL DERIVED STATE AND MEMOIZED VALUES
-  const isDark = theme === 'dark';
-  const sortedMessages = useMemo(() => {
-    return [...messages].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-  }, [messages]);
+  useEffect(() => {
+    console.log('🔄 useEffect triggered with eventId:', eventId);
+    console.log('🔄 Guest data:', guest);
+    console.log('🔄 Guest event_id:', guest?.event_id);
+    
+    if (guest && guest.event_id) {
+      console.log('✅ Guest data available, setting up polling');
+      loadMessages();
+      setupPolling();
+      setupAnnouncementSubscription();
+    } else {
+      console.log('❌ Guest data not available yet');
+    }
+    
+    // Cleanup function
+    return () => {
+      if (channel) {
+        try {
+          channel.unsubscribe();
+        } catch (error) {
+          console.log('[CHAT] Error cleaning up channel:', error);
+        }
+      }
+      // Clear polling interval
+      if (pollingInterval) {
+        clearInterval(pollingInterval);
+        console.log('🔄 Polling interval cleared');
+      }
+      // Clear typing timeouts
+      Object.values(typingTimeouts.current).forEach(timeout => {
+        if (timeout) clearTimeout(timeout);
+      });
+    };
+  }, [eventId, guest]);
 
-  // ALL CALLBACKS
-  const broadcastTyping = useCallback(
-    debounce(() => {
-      if (channel && guest?.email && guest?.name) {
-        channel.send({
-          type: 'broadcast',
-          event: 'user_typing',
-          payload: { 
-            email: guest.email, 
-            name: guest.name, 
-            event_id: guest.event_id 
+  // Auto-scroll to bottom when messages change or screen is focused
+  useEffect(() => {
+    const scrollToBottom = () => {
+      if (flatListRef.current && messages.length > 0) {
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      }
+    };
+
+    // Scroll to bottom when messages change
+    if (messages.length > 0) {
+      scrollToBottom();
+    }
+
+    // Add focus listener
+    const unsubscribe = navigation.addListener('focus', () => {
+      setTimeout(scrollToBottom, 200);
+    });
+
+    return unsubscribe;
+  }, [messages, navigation]);
+
+  // Function to enrich messages with avatar URLs for admin users
+  const enrichMessagesWithAvatars = async (messages: any[]) => {
+    const enrichedMessages = [...messages];
+    
+    // Get unique admin user emails
+    const adminEmails = [...new Set(
+      messages
+        .filter(msg => msg.sender_type === 'admin')
+        .map(msg => msg.sender_email)
+    )];
+    
+    console.log('[AVATAR ENRICHMENT] Admin emails found:', adminEmails);
+    
+    if (adminEmails.length > 0) {
+      // Fetch avatar URLs for admin users
+      const { data: users, error } = await supabase
+        .from('users')
+        .select('email, avatar_url')
+        .in('email', adminEmails);
+      
+      console.log('[AVATAR ENRICHMENT] Users fetched:', users);
+      console.log('[AVATAR ENRICHMENT] Error:', error);
+      
+      if (!error && users) {
+        // Create a map of email to avatar_url
+        const avatarMap = users.reduce((map: any, user: any) => {
+          map[user.email] = user.avatar_url;
+          return map;
+        }, {});
+        
+        console.log('[AVATAR ENRICHMENT] Avatar map:', avatarMap);
+        
+        // Enrich messages with avatar URLs
+        enrichedMessages.forEach(msg => {
+          if (msg.sender_type === 'admin' && avatarMap[msg.sender_email]) {
+            msg.avatar_url = avatarMap[msg.sender_email];
+            console.log(`[AVATAR ENRICHMENT] Added avatar for ${msg.sender_email}:`, avatarMap[msg.sender_email]);
           }
         });
       }
-    }, 300),
-    [channel, guest?.email, guest?.name, guest?.event_id]
-  );
-
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    try {
-      await initializeChat();
-    } finally {
-      setRefreshing(false);
     }
-  }, []);
-
-  // Navigate to a specific message and highlight it
-  const navigateToMessage = useCallback((messageId: string) => {
-    setNavigateToMessageId(messageId);
-    setHighlightedMessageId(messageId);
     
-    // Find the message index in the flat list data
-    const flatData = renderFlatListData();
-    const messageIndex = flatData.findIndex(item => 
-      item.type === 'message' && item.message_id === messageId
-    );
-    
-    if (messageIndex !== -1) {
-      // Scroll to the message with haptic feedback
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      
-      setTimeout(() => {
-        try {
-          flatListRef.current?.scrollToIndex({
-            index: messageIndex,
-            animated: true,
-            viewPosition: 0.3
-          });
-        } catch (error) {
-          console.log('[NAVIGATE] Error scrolling to message:', error);
-          // Fallback to scrollToEnd if scrollToIndex fails
-          flatListRef.current?.scrollToEnd({ animated: true });
-        }
-      }, 100);
-      
-      // Clear highlight after 2 seconds
-      setTimeout(() => {
-        setHighlightedMessageId(null);
-        setNavigateToMessageId(null);
-      }, 2000);
-    }
-  }, [messages]);
+    return enrichedMessages;
+  };
 
-  // Handle swipe gesture with haptic feedback
-  const handleSwipeOpen = useCallback((message: Message) => {
-    setReplyTo(message);
-    setHighlightedMessageId(message.message_id);
-    setTimeout(() => setHighlightedMessageId(null), 1200);
-  }, []);
-
-  const handleSwipeClose = useCallback(() => {
-    setHighlightedMessageId(null);
-  }, []);
-
-  // ALL EFFECTS (in order)
-  useEffect(() => {
-    if (!eventName && guest?.event_id) {
-      supabase
-        .from('events')
-        .select('name')
-        .eq('id', guest.event_id)
-        .single()
-        .then(({ data, error }) => {
-          if (data && data.name) setEventName(data.name);
-        });
-    }
-  }, [guest?.event_id, eventName]);
-
-  useEffect(() => {
-    if (guest?.event_id && guest?.email) {
-      initializeChat();
-    }
-  }, [guest]);
-
-  // Initialize sound effects
-  useEffect(() => {
-    soundEffects.initialize();
-    return () => {
-      soundEffects.cleanup();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!guest?.event_id) return;
-    const ch = supabase.channel(`mobile-guest-chat-${guest.event_id}`);
-    ch.on('postgres_changes', {
-      event: 'INSERT',
-      schema: 'public',
-      table: 'guests_chat_messages',
-      filter: `event_id=eq.${guest.event_id}`,
-    }, (payload) => {
-      setMessages((prev) => {
-        // Only operate on Message[]
-        const idx = prev.findIndex((m) => m.message_id.startsWith('optimistic') && isSameMessage(m, payload.new as any));
-        if (idx !== -1) {
-          const copy = [...prev];
-          copy[idx] = payload.new as Message;
-          return copy;
-        }
-        if (prev.some((m) => m.message_id === (payload.new as any).message_id)) return prev;
-        return [...prev, payload.new as Message];
-      });
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    });
-    ch.on('broadcast', { event: 'typing' }, (payload) => {
-      const { sender_email, sender_name } = payload.payload;
-      console.log('[CHAT] Received typing event from', sender_email, sender_name);
-      if (sender_email === guest.email) return;
-      setTypingUsers((prev) => {
-        const updated = { ...prev, [sender_email]: sender_name };
-        if (typingTimeouts.current[sender_email]) clearTimeout(typingTimeouts.current[sender_email]);
-        typingTimeouts.current[sender_email] = setTimeout(() => {
-          setTypingUsers((prev2) => {
-            const copy = { ...prev2 };
-            delete copy[sender_email];
-            return copy;
-          });
-        }, 2500);
-        return updated;
-      });
-    });
-    ch.subscribe();
-    setChannel(ch);
-    return () => {
-      supabase.removeChannel(ch);
-      Object.values(typingTimeouts.current).forEach(clearTimeout);
-      typingTimeouts.current = {};
-    };
-  }, [guest?.event_id, guest?.email]);
-
-  useEffect(() => {
-    if (!guest?.event_id) return;
-    const ch = supabase.channel(`mobile-guest-chat-reactions-${guest.event_id}`);
-    ch.on('postgres_changes', {
-      event: '*',
-      schema: 'public',
-      table: 'guests_chat_reactions',
-    }, (payload) => {
-      // Refetch messages to update reactions
-      loadMessages();
-    });
-    ch.subscribe();
-    return () => {
-      supabase.removeChannel(ch);
-    };
-  }, [guest?.event_id]);
-
-  useEffect(() => {
-    if (messages.length > 0) {
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
-    }
-  }, [messages]);
-
-  useFocusEffect(
-    useCallback(() => {
-      if (guest?.event_id && guest?.email) {
-        initializeChat();
-      }
-    }, [guest?.event_id, guest?.email])
-  );
-
-  useEffect(() => {
-    const keyboardWillShow = Keyboard.addListener('keyboardWillShow', (e) => {
-      setKeyboardHeight(e.endCoordinates.height);
-    });
-    
-    const keyboardWillHide = Keyboard.addListener('keyboardWillHide', () => {
-      setKeyboardHeight(0);
-    });
-
-    return () => {
-      keyboardWillShow?.remove();
-      keyboardWillHide?.remove();
-    };
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (hoverTimeoutRef.current) {
-        clearTimeout(hoverTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  // Load announcements
-  useEffect(() => {
-    const loadAnnouncements = async () => {
-      console.log('[DEBUG] GuestChatScreen - guest:', guest);
-      console.log('[DEBUG] GuestChatScreen - event_id:', guest?.event_id);
-      
-      if (!guest?.event_id) {
-        console.log('[DEBUG] GuestChatScreen - No event_id available');
-        return;
-      }
-      
-      console.log('[DEBUG] GuestChatScreen - Using eventId:', guest.event_id);
-      
-      try {
-        console.log('[DEBUG] GuestChatScreen - Calling getAnnouncements...');
-        const data = await announcementService.getAnnouncements(guest.event_id);
-        console.log('[DEBUG] GuestChatScreen - getAnnouncements result:', data);
-        setAnnouncements(data);
-        console.log('[GuestChatScreen] Loaded announcements:', data.length);
-      } catch (error) {
-        console.error('[GuestChatScreen] Error loading announcements:', error);
-      }
-    };
-
-    loadAnnouncements();
-  }, [guest?.event_id]);
-
-  // Subscribe to new announcements
-  useEffect(() => {
-    if (!guest?.event_id) {
-      console.log('[GuestChatScreen] No event_id available for subscription');
+  const loadOlderMessages = async () => {
+    if (!guest || !guest.event_id || loadingOlder || !hasMoreMessages) {
       return;
     }
     
-    console.log('[GuestChatScreen] Subscribing to announcements for eventId:', guest.event_id);
-    
-    let subscription: any = null;
-    
-    const setupSubscription = async () => {
-      try {
-        subscription = await announcementService.subscribeToAnnouncements(
-          guest.event_id,
-          (announcement) => {
-            console.log('[GuestChatScreen] Received new announcement:', announcement);
-            setAnnouncements(prev => [...prev, announcement]); // Add new announcement to the end
-          }
-        );
-      } catch (error) {
-        console.error('[GuestChatScreen] Error setting up subscription:', error);
-      }
-    };
-    setupSubscription();
-
-    return () => {
-      if (subscription && typeof subscription.unsubscribe === 'function') {
-        subscription.unsubscribe();
-      }
-    };
-  }, [guest?.event_id]);
-
-  // NOW ALL NON-HOOK FUNCTIONS AND CONSTANTS
-  const commonEmojis = ['😀', '😂', '😍', '🤔', '👍', '👎', '❤️', '🎉', '😢', '😡', '🔥', '💯'];
-
-  // Edit message handlers
-  const handleSaveEdit = async () => {
-    if (!editingMessageId || !editText.trim()) return;
-    
+    setLoadingOlder(true);
     try {
-      const { error } = await supabase.rpc('edit_guests_chat_message', {
-        p_message_id: editingMessageId,
-        p_user_email: guest?.email,
-        p_new_text: editText.trim(),
+      // Get the total count of messages to calculate the correct offset
+      const { data: countData, error: countError } = await supabase
+        .from('guests_chat_messages')
+        .select('message_id', { count: 'exact' })
+        .eq('event_id', guest.event_id);
+      
+      if (countError) {
+        console.error('Error getting message count:', countError);
+        return;
+      }
+      
+      const totalMessages = countData?.length || 0;
+      const limit = 50;
+      const offset = Math.max(0, totalMessages - limit - messages.length); // Get older messages
+      
+      const { data: messagesData, error } = await supabase.rpc('get_guests_chat_messages', {
+        p_event_id: guest.event_id,
+        p_user_email: guest.email,
+        p_limit: limit,
+        p_offset: offset,
       });
       
       if (error) {
-        console.error('Error editing message:', error);
-        Alert.alert('Error', 'Failed to edit message. Please try again.');
+        console.error('Error loading older messages:', error);
         return;
       }
       
-      // Update local state
-      setMessages(prev => prev.map(msg => 
-        msg.message_id === editingMessageId 
-          ? { ...msg, message_text: editText.trim() }
-          : msg
-      ));
+      // Filter out messages we already have
+      const existingMessageIds = new Set(messages.map(m => m.message_id));
+      const newMessages = messagesData?.filter((msg: any) => !existingMessageIds.has(msg.message_id)) || [];
       
-      // Clear editing state
-      setEditingMessageId(null);
-      setEditText('');
-    } catch (error) {
-      console.error('Error editing message:', error);
-      Alert.alert('Error', 'Failed to edit message. Please try again.');
-    }
-  };
-  
-  const handleCancelEdit = () => {
-    setEditingMessageId(null);
-    setEditText('');
-  };
-
-  // Add highlight state for swiped message
-  // Add state for reaction popup position
-
-  const setupKeyboardListeners = () => {
-    const keyboardWillShow = Keyboard.addListener('keyboardWillShow', (e) => {
-      setKeyboardHeight(e.endCoordinates.height);
-    });
-    
-    const keyboardWillHide = Keyboard.addListener('keyboardWillHide', () => {
-      setKeyboardHeight(0);
-    });
-
-    return () => {
-      keyboardWillShow.remove();
-      keyboardWillHide.remove();
-    };
-  };
-
-  const initializeChat = async () => {
-    try {
-      setIsInitializing(true);
-      
-      if (!guest?.event_id || !guest?.email) {
-        console.error('[MOBILE GUEST CHAT] Missing guest event_id or email');
+      if (newMessages.length === 0) {
+        setHasMoreMessages(false);
         return;
       }
-
-      console.log('[MOBILE GUEST CHAT] Initializing chat for guest:', guest.email, 'event:', guest.event_id);
-
-      // Initialize guest chat for this event using new system
-      const { error: initError } = await supabase.rpc('initialize_guests_chat', { 
-        p_event_id: guest.event_id 
-      });
-
-      if (initError) {
-        console.error('[MOBILE GUEST CHAT] Error initializing chat:', initError);
+      
+      // Enrich messages with avatar URLs for admin users
+      const enrichedMessages = await enrichMessagesWithAvatars(newMessages);
+      
+      // Add older messages to the beginning
+      setMessages(prev => [...enrichedMessages, ...prev]);
+      
+      // Check if we have more messages to load
+      if (newMessages.length < 50) {
+        setHasMoreMessages(false);
       }
-
-      // Load initial messages
-      await loadMessages();
-
     } catch (error) {
-      console.error('[MOBILE GUEST CHAT] Error initializing chat:', error);
-      Alert.alert('Chat Error', 'Unable to initialize chat. Please try again.');
+      console.error('Error in loadOlderMessages:', error);
     } finally {
-      setIsInitializing(false);
-      setLoading(false);
+      setLoadingOlder(false);
     }
   };
 
   const loadMessages = async () => {
-    if (!guest?.event_id) return;
-
+    if (!guest || !guest.event_id) return;
+    
     try {
-      const { data: messagesData, error } = await supabase
-        .rpc('get_guests_chat_messages', {
-          p_event_id: guest.event_id,
-          p_user_email: guest.email,  // Add the missing user email parameter
-          p_limit: 100,
-          p_offset: 0
-        });
+      console.log('📨 Loading messages for event:', guest.event_id);
+      
+      // First, get the total count of messages to calculate the correct offset
+      const { data: countData, error: countError } = await supabase
+        .from('guests_chat_messages')
+        .select('message_id', { count: 'exact' })
+        .eq('event_id', guest.event_id);
+      
+      if (countError) {
+        console.error('Error getting message count:', countError);
+        return;
+      }
+      
+      const totalMessages = countData?.length || 0;
+      const limit = 100;
+      const offset = Math.max(0, totalMessages - limit); // Get the last 100 messages
+      
+      const { data, error } = await supabase.rpc('get_guests_chat_messages', {
+        p_event_id: guest.event_id,
+        p_user_email: guest.email,
+        p_limit: limit,
+        p_offset: offset
+      });
 
       if (error) {
-        console.error('[MOBILE GUEST CHAT] Error loading messages:', error);
+        console.error('Error loading messages:', error);
         return;
       }
 
-      console.log('[MOBILE GUEST CHAT] Raw messages data:', messagesData);
-      console.log('[MOBILE GUEST CHAT] Loaded messages:', messagesData?.length || 0);
+      console.log('📨 Loaded messages:', data?.length || 0);
       
-      // For each message, fetch reactions
-      const messagesWithReactions = await Promise.all((messagesData as any[]).map(async (msg) => {
-        const { data: reactions } = await supabase.rpc('get_guests_chat_reactions', { p_message_id: msg.message_id });
-        console.log(`[REACTIONS] Message ${msg.message_id} reactions:`, reactions);
-        console.log(`[AVATAR] Message ${msg.message_id} avatar_url:`, msg.avatar_url);
-        
-        // Map the backend data to our Message interface
-        const mappedMessage: Message = {
-          message_id: msg.message_id,
-          event_id: msg.event_id,
-          sender_name: msg.sender_name,
-          sender_type: msg.sender_type,
-          sender_email: msg.sender_email,
-          avatar_url: msg.avatar_url, // This should now work since backend returns avatar_url
-          message_text: msg.message_text,
-          message_type: msg.message_type,
-          company_id: msg.company_id,
-          created_at: msg.created_at,
-          reply_to_message_id: msg.reply_to_message_id || null,
-          reactions: reactions || [],
-          is_edited: msg.is_edited || false,
-          edited_at: msg.edited_at || null
-        };
-        
-        return mappedMessage;
-      }));
-      
-      console.log('[MOBILE GUEST CHAT] Mapped messages:', messagesWithReactions);
-      setMessages(messagesWithReactions);
-      // Don't reverse since DB returns correct order
-
+      // Enrich messages with avatar URLs for admin users
+      const enrichedMessages = await enrichMessagesWithAvatars(data || []);
+      setMessages(enrichedMessages);
+      setIsLoading(false);
     } catch (error) {
-      console.error('[MOBILE GUEST CHAT] Error in loadMessages:', error);
+      console.error('Error loading messages:', error);
+      setIsLoading(false);
     }
   };
 
-  // Optimistic UI: add message immediately
+
+
   const sendMessage = async () => {
-    if (!newMessage.trim() || !guest?.event_id || !guest?.email || sending) return;
-    const messageText = newMessage.trim();
-    setNewMessage('');
-    setSending(true);
-    Keyboard.dismiss();
-    
-    // Play send message sound
-    soundEffects.playSendMessage();
+    if (!messageText.trim() || !guest || !guest.event_id) return;
+
+    const textToSend = messageText.trim();
+    setMessageText(''); // Clear input immediately
+
+    // Create optimistic message
     const optimisticMessage: Message = {
-      message_id: 'optimistic-' + Date.now(),
+      message_id: `temp-${Date.now()}`,
       event_id: guest.event_id,
-      sender_name: guest.first_name + ' ' + guest.last_name,
-      sender_type: 'guest',
       sender_email: guest.email,
-      avatar_url: guest.avatar_url || null,
-      message_text: messageText,
+      sender_name: guest.first_name && guest.last_name ? `${guest.first_name} ${guest.last_name}` : guest.first_name || guest.last_name || 'Guest',
+      sender_type: 'guest',
+      avatar_url: guest.avatar_url,
+      message_text: textToSend,
       message_type: 'text',
-      company_id: guest.company_id,
       created_at: new Date().toISOString(),
-      reply_to_message_id: replyTo?.message_id || null,
+      company_id: guest.company_id,
+      is_edited: false,
+      reply_to_message_id: replyTo?.message_id,
     };
-    setMessages((prev) => [...prev, optimisticMessage]);
-    setReplyTo(null); // Clear reply state after sending
-    console.log('[OPTIMISTIC] Added optimistic message:', optimisticMessage);
+
+    // Add optimistic message
+    setMessages(prev => [...prev, optimisticMessage]);
+
     try {
       const rpcParams: any = {
         p_event_id: guest.event_id,
         p_sender_email: guest.email,
-        p_message_text: messageText,
+        p_message_text: textToSend,
         p_message_type: 'text',
       };
       if (replyTo?.message_id) {
         rpcParams.p_reply_to_message_id = replyTo.message_id;
-        console.log('[REPLY] Adding reply_to_message_id to RPC params:', replyTo.message_id);
       }
-      console.log('[SEND] Calling send_guests_chat_message with params:', rpcParams);
-      const { data: result, error } = await supabase
-        .rpc('send_guests_chat_message', rpcParams);
+
+      const { data, error } = await supabase.rpc('send_guests_chat_message', rpcParams);
+
       if (error) {
-        console.error('[SEND] Error from send_guests_chat_message:', error);
-        setMessages((prev) => prev.filter((m) => m.message_id !== optimisticMessage.message_id));
-        setNewMessage(messageText);
-        Alert.alert('Send Failed', 'Unable to send message. Please try again.');
+        console.error('[GUESTS_CHAT] Error sending message:', error);
+        // Remove optimistic message on error
+        setMessages(prev => prev.filter(msg => msg.message_id !== optimisticMessage.message_id));
+        setMessageText(textToSend); // Restore message text
         return;
       }
-      console.log('[SEND] Successfully sent message, result:', result);
-      // The realtime payload will replace the optimistic message
+
+      // Replace optimistic message with real message
+      if (data && data.success) {
+        // The SQL function returns JSON, not an array
+        setMessages(prev => prev.map(msg => 
+          msg.message_id === optimisticMessage.message_id ? {
+            message_id: data.message_id,
+            event_id: guest.event_id,
+            sender_email: guest.email,
+            sender_name: data.sender_name,
+            sender_type: data.sender_type,
+            avatar_url: guest.avatar_url,
+            message_text: textToSend,
+            message_type: 'text',
+            created_at: new Date().toISOString(),
+            company_id: guest.company_id,
+            is_edited: false,
+            edited_at: undefined,
+            reply_to_message_id: replyTo?.message_id,
+            reactions: []
+          } : msg
+        ));
+      }
+
+      setReplyTo(null);
     } catch (error) {
-      console.error('[SEND] Exception in sendMessage:', error);
-      setMessages((prev) => prev.filter((m) => m.message_id !== optimisticMessage.message_id));
-      setNewMessage(messageText);
-      Alert.alert('Send Failed', 'Unable to send message. Please try again.');
-    } finally {
-      setSending(false);
+      console.error('[GUESTS_CHAT] Error sending message:', error);
+      // Remove optimistic message on error
+      setMessages(prev => prev.filter(msg => msg.message_id !== optimisticMessage.message_id));
+      setMessageText(textToSend); // Restore message text
     }
   };
 
-  const markMessagesAsRead = async () => {
-    // Skip marking messages as read for now - function not implemented
-    console.log('[MOBILE GUEST CHAT] Skipping mark as read - function not implemented yet');
-  };
+  const deleteMessage = async (message: Message) => {
+    if (!guest) return;
 
-  const scrollToBottom = () => {
-    if (flatListRef.current && messages.length > 0) {
-      flatListRef.current.scrollToEnd({ animated: true });
-    }
-  };
-
-  const formatTime = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('en-US', { 
-      hour: '2-digit', 
-      minute: '2-digit',
-      hour12: true 
-    });
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-
-    if (date.toDateString() === today.toDateString()) {
-      return 'Today';
-    } else if (date.toDateString() === yesterday.toDateString()) {
-      return 'Yesterday';
-    } else {
-      return date.toLocaleDateString('en-US', { 
-        month: 'short', 
-        day: 'numeric' 
-      });
-    }
-  };
-
-  const getMessageGroups = () => {
-    const groups: { date: string; messages: Message[] }[] = [];
-    let currentDate = '';
-    let currentGroup: Message[] = [];
-
-    messages.forEach(message => {
-      const messageDate = formatDate(message.created_at);
-      
-      if (messageDate !== currentDate) {
-        if (currentGroup.length > 0) {
-          groups.push({ date: currentDate, messages: currentGroup });
-        }
-        currentDate = messageDate;
-        currentGroup = [message];
-      } else {
-        currentGroup.push(message);
-      }
-    });
-
-    if (currentGroup.length > 0) {
-      groups.push({ date: currentDate, messages: currentGroup });
-    }
-
-    return groups;
-  };
-
-  const ADMIN_BUBBLE = '#00bfa5'; // teal accent for admin
-  const GUEST_BUBBLE = '#23242b'; // dark card for guests
-  const BG_COLOR = '#181A20';
-  const TEXT_COLOR = '#fff';
-  const TEXT_SECONDARY = '#aaa';
-  const GLASS_BG = 'rgba(36, 37, 42, 0.7)';
-  const BORDER_COLOR = 'rgba(255,255,255,0.12)';
-  const GRADIENT_COLORS = ['#23242b', '#2e2e38', '#3a3a4a'] as any;
-
-            const Avatar = ({ name, avatarUrl }: { name: string; avatarUrl?: string | null }) => {
-              const initials = name
-                ? name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
-                : '?';
-              
-              // Debug logging
-              console.log(`[AVATAR DEBUG] Name: ${name}, Avatar URL: ${avatarUrl}, Type: ${typeof avatarUrl}`);
-              
-              if (avatarUrl) {
-                console.log(`[AVATAR DEBUG] Showing profile photo for: ${name}`);
-                return (
-                  <Image
-                    source={{ uri: avatarUrl }}
-                    style={{ width: 36, height: 36, borderRadius: 18, marginHorizontal: 10, backgroundColor: GUEST_BUBBLE }}
-                    resizeMode="cover"
-                  />
-                );
-              }
-              console.log(`[AVATAR DEBUG] Showing initials for: ${name}`);
-              return (
-                <View style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 18,
-                  backgroundColor: GUEST_BUBBLE,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  marginHorizontal: 10,
-                }}>
-                  <Text style={{ color: TEXT_COLOR, fontWeight: 'bold', fontSize: 16 }}>{initials}</Text>
-                </View>
-              );
-            };
-
-  const GlassBubble = ({ children, isCurrentUser, isRecipient }: { children: React.ReactNode, isCurrentUser: boolean, isRecipient: boolean }) => {
-    if (isRecipient) {
-      // Gradient glass for recipient
-      return (
-        <LinearGradient
-          colors={GRADIENT_COLORS}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={{
-            borderRadius: 18,
-            borderWidth: 1.5,
-            borderColor: BORDER_COLOR,
-            overflow: 'hidden',
-          }}
-        >
-          <BlurView intensity={30} tint="dark" style={{ borderRadius: 18, padding: 14 }}>
-            {children}
-          </BlurView>
-        </LinearGradient>
-      );
-    }
-    // Glass only for sender
-    return (
-      <BlurView intensity={30} tint="dark" style={{
-        backgroundColor: GLASS_BG,
-        borderRadius: 18,
-        borderWidth: 1.5,
-        borderColor: BORDER_COLOR,
-        padding: 14,
-        overflow: 'hidden',
-      }}>
-        {children}
-      </BlurView>
-    );
-  };
-
-  // Helper to detect and render URLs as clickable links
-  function renderMessageText(text: string) {
-    // Updated regex to match both http/https and www. links
-    const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/g;
-    const parts = text.split(urlRegex);
-    return parts.map((part, i) => {
-      if (urlRegex.test(part)) {
-        // Ensure www. links have http:// prefix
-        const url = part.startsWith('www.') ? `https://${part}` : part;
-        return (
-          <Text
-            key={i}
-            style={{ color: '#ffffff', textDecorationLine: 'underline' }}
-            onPress={() => {
-              try {
-                Linking.openURL(url);
-              } catch (error) {
-                console.error('Error opening URL:', error);
-              }
-            }}
-          >
-            {part}
-          </Text>
-        );
-      }
-      return <Text key={i}>{part}</Text>;
-    });
-  }
-
-  const renderLeftActions = () => (
-    <View style={{
-      flex: 1,
-      backgroundColor: '#23242b',
-      justifyContent: 'center',
-      alignItems: 'flex-start',
-      paddingLeft: 24,
-    }}>
-      <Ionicons name="arrow-undo" size={28} color="#00bfa5" />
-    </View>
-  );
-
-  const renderMessage = ({ item: message }: { item: Message }) => {
-    const isCurrentUser = message.sender_email === guest.email;
-    const isAdmin = message.sender_type === 'admin';
-    const isHighlighted = highlightedMessageId === message.message_id;
-    // Find replied-to message if this is a reply
-    const repliedTo = message.reply_to_message_id
-      ? messages.find((m) => m.message_id === message.reply_to_message_id)
-      : null;
-    return (
-      <Swipeable
-        renderLeftActions={() => (
-          <View style={{ width: 1, backgroundColor: 'transparent' }} />
-        )}
-        leftThreshold={25}
-        friction={2}
-        onSwipeableLeftWillOpen={() => {
-          // Trigger haptic feedback early in the swipe
-          if (!swipeHapticTriggered[message.message_id]) {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            setSwipeHapticTriggered(prev => ({ ...prev, [message.message_id]: true }));
-          }
-          handleSwipeOpen(message);
-        }}
-        onSwipeableClose={() => {
-          handleSwipeClose();
-          // Reset haptic trigger when swipe closes
-          setSwipeHapticTriggered(prev => ({ ...prev, [message.message_id]: false }));
-        }}
-      >
-        <View style={{
-          width: '100%',
-          backgroundColor: isHighlighted ? 'rgba(255,255,255,0.07)' : 'transparent',
-          borderRadius: isHighlighted ? 0 : 0,
-          paddingVertical: 0,
-          paddingHorizontal: 0,
-          // No transition (not supported in RN ViewStyle)
-        }}>
-          <TouchableWithoutFeedback
-            onLongPress={(event) => {
-              if (isOwnMessage(message)) {
-                // Show hover popup for own messages
-                showHoverPopup(message, event);
-              } else {
-                // Show reaction picker for other messages
-                if (bubbleRefs.current[message.message_id]) {
-                  bubbleRefs.current[message.message_id].measure((fx: number, fy: number, width: number, height: number, px: number, py: number) => {
-                    setReactionPopupPosition({ x: px, y: py + height, width });
-                    setReactionTarget(message);
-                    setShowReactionPicker(true);
-                  });
-                } else {
-                  setReactionPopupPosition(null);
-                  setReactionTarget(message);
-                  setShowReactionPicker(true);
-                }
-              }
-            }}
-          >
-            <View
-              ref={ref => { if (ref) bubbleRefs.current[message.message_id] = ref; }}
-              onLayout={() => {}}
-              style={{
-                flexDirection: isCurrentUser ? 'row-reverse' : 'row',
-                alignItems: 'center',
-                marginVertical: 6,
-                justifyContent: isCurrentUser ? 'flex-end' : 'flex-start',
-                alignSelf: isCurrentUser ? 'flex-end' : 'flex-start',
-                // No highlight here, handled by parent
-              }}
-            >
-                                  <Avatar name={message.sender_name} avatarUrl={message.avatar_url} />
-              <View style={{
-                maxWidth: '75%',
-                alignItems: isCurrentUser ? 'flex-end' : 'flex-start',
-                marginLeft: isCurrentUser ? 0 : 4,
-                marginRight: isCurrentUser ? 4 : 0,
-                position: 'relative'
-              }}>
-
-                {/* Faded preview of replied-to message */}
-                {repliedTo && (
-                  <TouchableOpacity
-                    onPress={() => navigateToMessage(repliedTo.message_id)}
-                    style={{
-                      backgroundColor: 'rgba(255,255,255,0.07)',
-                      borderRadius: 10,
-                      padding: 6,
-                      marginBottom: 4,
-                      alignSelf: 'stretch',
-                      borderLeftWidth: 2,
-                      borderLeftColor: '#00bfa5',
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={{ color: '#aaa', fontSize: 12 }} numberOfLines={1} ellipsizeMode="tail">
-                      {repliedTo.sender_name}: {repliedTo.message_text}
-                    </Text>
-                  </TouchableOpacity>
-                )}
-                <TouchableOpacity
-                  onPress={(event) => {
-                    if (isOwnMessage(message)) {
-                      showHoverPopup(message, event);
-                    }
-                  }}
-                  activeOpacity={isOwnMessage(message) ? 0.8 : 1}
-                >
-                  <GlassBubble isCurrentUser={isCurrentUser} isRecipient={!isCurrentUser}>
-                    <Text style={{ color: TEXT_COLOR, fontSize: 15, fontWeight: '500' }}>{renderMessageText(message.message_text)}</Text>
-                  </GlassBubble>
-                </TouchableOpacity>
-                {message.reactions && message.reactions.length > 0 && (
-                  <View style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    alignSelf: isCurrentUser ? 'flex-end' : 'flex-start',
-                    backgroundColor: '#23242b',
-                    borderRadius: 12,
-                    paddingHorizontal: 6,
-                    paddingVertical: 2,
-                    marginTop: 4,
-                    marginLeft: isCurrentUser ? 0 : 46,
-                    marginRight: isCurrentUser ? 46 : 0,
-                    shadowColor: '#000',
-                    shadowOpacity: 0.1,
-                    shadowRadius: 2,
-                  }}>
-                    {(() => {
-                      const reactionCounts = message.reactions.reduce((acc, r) => {
-                        acc[r.emoji] = acc[r.emoji] ? acc[r.emoji] + 1 : 1;
-                        return acc;
-                      }, {} as Record<string, number>);
-                      console.log(`[REACTIONS] Rendering reactions for message ${message.message_id}:`, reactionCounts);
-                      console.log(`[REACTIONS] Raw reactions array:`, message.reactions);
-                      return Object.entries(reactionCounts).map(([emoji, count]) => (
-                        <View key={emoji} style={{ flexDirection: 'row', alignItems: 'center', marginHorizontal: 2 }}>
-                          <Text style={{ fontSize: 16 }}>{emoji}</Text>
-                          {count > 1 && <Text style={{ color: '#aaa', fontSize: 12, marginLeft: 2 }}>{count}</Text>}
-                        </View>
-                      ));
-                    })()}
-                  </View>
-                )}
-                <Text style={{ color: TEXT_SECONDARY, fontSize: 11, marginTop: 4, textAlign: isCurrentUser ? 'right' : 'left' }}>
-                  {message.sender_name} • {formatTime(message.created_at)}
-                  {message.is_edited && (
-                    <Text style={{ color: '#888', fontStyle: 'italic' }}> (edited)</Text>
-                  )}
-                </Text>
-              </View>
-            </View>
-          </TouchableWithoutFeedback>
-        </View>
-      </Swipeable>
-    );
-  };
-
-  const renderDateSeparator = (date: string) => (
-    <View style={{ alignItems: 'center', marginVertical: 12 }}>
-      <View style={{
-        backgroundColor: '#23242b',
-        borderRadius: 12,
-        paddingHorizontal: 14,
-        paddingVertical: 4,
-      }}>
-        <Text style={{ color: TEXT_COLOR, fontSize: 12, fontWeight: '600' }}>{date}</Text>
-      </View>
-    </View>
-  );
-
-  const renderFlatListData = () => {
-    const groups = getMessageGroups();
-    const flatData: any[] = [];
-
-    groups.forEach((group, groupIndex) => {
-      // Add date separator
-      flatData.push({
-        type: 'date',
-        date: group.date,
-        key: `date-${groupIndex}`
-      });
-
-      // Add messages
-      group.messages.forEach((message) => {
-        flatData.push({
-          type: 'message',
-          ...message,
-          key: message.message_id
-        });
-      });
-    });
-
-    // Add announcements at the bottom as new entries
-    announcements.forEach((announcement) => {
-      flatData.push({
-        type: 'announcement',
-        ...announcement,
-        key: `announcement-${announcement.id}`
-      });
-    });
-
-    return flatData;
-  };
-
-  const renderItem = ({ item }: { item: any }) => {
-    if (item.type === 'date') {
-      return renderDateSeparator(item.date);
-    }
-    if (item.type === 'announcement') {
-      return <AnnouncementChatItem announcement={item} onPress={() => onAnnouncementPress?.(item)} />;
-    }
-    return renderMessage({ item });
-  };
-
-  const EmptyState = () => (
-    <View style={styles.emptyState}>
-      <Text style={styles.emptyEmoji}>💬</Text>
-      <Text style={[styles.emptyTitle, { color: isDark ? '#FFFFFF' : '#000000' }]}>
-        No messages yet
-      </Text>
-      <Text style={[styles.emptySubtitle, { color: isDark ? 'rgba(255, 255, 255, 0.6)' : 'rgba(0, 0, 0, 0.6)' }]}>
-        Start a conversation with the event organizers
-      </Text>
-    </View>
-  );
-
-  // Typing indicator text
-  const typingNames = Object.values(typingUsers).filter(name => name && name !== guest.first_name + ' ' + guest.last_name);
-  const typingText = typingNames.length > 0 ? `${typingNames.join(', ')} ${typingNames.length === 1 ? 'is' : 'are'} typing...` : '';
-
-  // Delete message logic
-  const deleteMessage = async (message: Message | null) => {
-    if (!message) return;
-    setDeleting(true);
     try {
-      // Call Supabase RPC for delete (to be implemented on backend)
-      const { error } = await supabase.rpc('delete_guests_chat_message', {
-        p_message_id: message.message_id,
-        p_user_email: guest.email,
-      });
+      const { error } = await supabase
+        .from('guests_chat_messages')
+        .delete()
+        .eq('message_id', message.message_id);
+
       if (error) {
-        Alert.alert('Delete Failed', 'Unable to delete message.');
-      } else {
-        setMessages((prev) => prev.filter((m) => m.message_id !== message.message_id) as Message[]);
-        setShowReactionPicker(false); // Close reaction picker on delete
-        setReactionTarget(null);
+        console.error('Error deleting message:', error);
+        return;
       }
-    } catch (e) {
-      Alert.alert('Delete Failed', 'Unable to delete message.');
-    } finally {
-      setDeleting(false);
+
+      // Remove from local state
+      setMessages(prev => prev.filter(msg => msg.message_id !== message.message_id));
+    } catch (error) {
+      console.error('Error deleting message:', error);
     }
   };
 
-  // Edit message logic
-  const editMessage = async (message: Message | null) => {
-    if (!message || !editText.trim()) return;
+  const editMessage = async (messageId: string, newText: string) => {
+    if (!guest) return;
+
     try {
-      const { error } = await supabase.rpc('edit_guests_chat_message', {
-        p_message_id: message.message_id,
-        p_user_email: guest.email,
-        p_new_text: editText.trim(),
-      });
-      if (!error) {
-        setMessages((prev) => prev.map((m) => m.message_id === message.message_id ? { ...m, message_text: editText.trim() } : m) as Message[]);
-        setEditingMessageId(null);
-        setEditText('');
-        setShowReactionPicker(false); // Close reaction picker on edit
-        setReactionTarget(null);
-      } else {
-        Alert.alert('Edit Failed', 'Unable to edit message.');
+      const { error } = await supabase
+        .from('guests_chat_messages')
+        .update({
+          message_text: newText,
+          is_edited: true,
+          edited_at: new Date().toISOString()
+        })
+        .eq('message_id', messageId);
+
+      if (error) {
+        console.error('Error editing message:', error);
+        return;
       }
-    } catch (e) {
-      Alert.alert('Edit Failed', 'Unable to edit message.');
+
+      // Update local state
+      setMessages(prev => prev.map(msg => 
+        msg.message_id === messageId 
+          ? { ...msg, message_text: newText, is_edited: true, edited_at: new Date().toISOString() }
+          : msg
+      ));
+
+      setEditingMessageId(null);
+      setEditText('');
+    } catch (error) {
+      console.error('Error editing message:', error);
     }
   };
 
-  // On emoji tap, add or remove reaction
   const handleReaction = async (message: Message, emoji: string) => {
-    console.log(`[REACTIONS] Handling reaction: ${emoji} for message ${message.message_id}`);
-    const alreadyReacted = message.reactions?.some(r => r.emoji === emoji && r.user_email === guest.email);
-    console.log(`[REACTIONS] Already reacted: ${alreadyReacted}`);
-    if (alreadyReacted) {
-      const { error } = await supabase.rpc('remove_guests_chat_reaction', {
-        p_message_id: message.message_id,
-        p_user_email: guest.email,
-        p_emoji: emoji,
-      });
-      if (error) console.error('[REACTIONS] Error removing reaction:', error);
-      else console.log('[REACTIONS] Successfully removed reaction');
-    } else {
+    if (!guest) return;
+
+    try {
       const { error } = await supabase.rpc('add_guests_chat_reaction', {
         p_message_id: message.message_id,
         p_user_email: guest.email,
-        p_emoji: emoji,
+        p_emoji: emoji
       });
-      if (error) console.error('[REACTIONS] Error adding reaction:', error);
-      else console.log('[REACTIONS] Successfully added reaction');
+
+      if (error) {
+        console.error('Error adding reaction:', error);
+        return;
+      }
+
+      // Optimistic update
+      setMessages(prev => prev.map(msg => {
+        if (msg.message_id === message.message_id) {
+          const reactions = msg.reactions || [];
+          const existingReaction = reactions.find(r => r.user_email === guest.email && r.emoji === emoji);
+          
+          if (existingReaction) {
+            return msg; // Already reacted
+          }
+          
+          return {
+            ...msg,
+            reactions: [...reactions, { emoji, user_email: guest.email }]
+          };
+        }
+        return msg;
+      }));
+    } catch (error) {
+      console.error('Error adding reaction:', error);
     }
   };
 
-  // In long-press modal, show options based on eligibility
-  const canEdit = selectedMessage && selectedMessage.sender_email === guest.email && (Date.now() - new Date(selectedMessage.created_at).getTime() < 15 * 60 * 1000);
-  const canDelete = selectedMessage && (selectedMessage.sender_email === guest.email || selectedMessage.sender_type === 'admin');
-
-  // Helper: is current user's message
-  const isOwnMessage = (msg: Message) => msg.sender_email === guest.email;
-
-  // Hover popup management functions (similar to desktop version)
-  const showHoverPopup = (message: Message, event: any) => {
-    // Clear any existing timeout
-    if (hoverTimeoutRef.current) {
-      clearTimeout(hoverTimeoutRef.current);
-    }
-
-    // Get the actual position of the message bubble
-    if (bubbleRefs.current[message.message_id]) {
-      bubbleRefs.current[message.message_id].measure((fx: number, fy: number, width: number, height: number, px: number, py: number) => {
-        const viewportWidth = SCREEN_WIDTH;
-        const viewportHeight = SCREEN_HEIGHT;
-        
-        // Smaller popup dimensions
-        const popupWidth = 240;
-        const popupHeight = 160;
-        
-        // Calculate center position based on the message bubble
-        let x = px + (width / 2) - (popupWidth / 2);
-        let y = py + height + 8; // Position below the bubble
-        
-        // Ensure popup doesn't go off screen
-        if (y + popupHeight > viewportHeight - 20) {
-          // If it would go below screen, position it above the bubble
-          y = py - popupHeight - 8;
-        }
-        
-        // Ensure popup doesn't go off the sides
-        if (x < 10) {
-          x = 10;
-        }
-        if (x + popupWidth > viewportWidth - 10) {
-          x = viewportWidth - popupWidth - 10;
-        }
-        
-        setHoverPopupState({
-          activeMessageId: message.message_id,
-          position: { x, y },
-          message: message
-        });
-      });
-    } else {
-      // Fallback positioning if ref is not available
-      const viewportWidth = SCREEN_WIDTH;
-      const viewportHeight = SCREEN_HEIGHT;
-      const popupWidth = 240;
-      const popupHeight = 160;
-      
-      let x = (viewportWidth - popupWidth) / 2;
-      let y = viewportHeight / 2 - popupHeight / 2;
-      
-      setHoverPopupState({
-        activeMessageId: message.message_id,
-        position: { x, y },
-        message: message
-      });
-    }
+  const handleLongPress = (message: Message) => {
+    setSelectedMessage(message);
+    setShowActionSheet(true);
   };
 
-  const hideHoverPopup = () => {
-    // Clear any existing timeout first
-    if (hoverTimeoutRef.current) {
-      clearTimeout(hoverTimeoutRef.current);
+  const handleReply = (message: Message) => {
+    setReplyTo(message);
+    setShowActionSheet(false);
+  };
+
+  const handleEdit = (message: Message) => {
+    setEditingMessageId(message.message_id);
+    setEditText(message.message_text);
+    setShowActionSheet(false);
+  };
+
+    const setupPolling = () => {
+    console.log('🔄 setupPolling called');
+    if (!guest || !guest.event_id) {
+      console.log('❌ Cannot setup polling - missing guest or event_id');
+      return;
+    }
+
+    console.log('🔄 Setting up polling for event:', guest.event_id);
+    
+    // Poll every 2 seconds for new messages
+    const pollInterval = setInterval(async () => {
+      try {
+        console.log('🔄 Polling for new messages...');
+        const { data: newMessages, error } = await supabase
+          .rpc('get_guests_chat_messages', {
+            p_event_id: guest.event_id,
+            p_user_email: guest.email,
+            p_limit: 1000,
+            p_offset: 0
+          });
+
+        if (error) {
+          console.log('❌ Polling error:', error);
+          return;
+        }
+
+        if (newMessages && newMessages.length > 0) {
+          console.log('🔄 Polling found messages:', newMessages.length);
+          console.log('🔄 Latest message from polling:', newMessages[newMessages.length - 1]);
+          
+          // Enrich messages with avatars
+          const enrichedMessages = await enrichMessagesWithAvatars(newMessages);
+          
+          setMessages(prev => {
+            // Check for new messages that aren't already in state
+            const existingIds = new Set(prev.map(msg => msg.message_id));
+            const trulyNewMessages = enrichedMessages.filter(msg => !existingIds.has(msg.message_id));
+            
+            if (trulyNewMessages.length > 0) {
+              console.log('🔄 Adding new messages from polling:', trulyNewMessages.length);
+              console.log('🔄 New message details:', trulyNewMessages[0]);
+              const updated = [...prev, ...trulyNewMessages];
+              return updated.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+            } else {
+              console.log('🔄 No new messages found in polling');
+            }
+            
+            return prev;
+          });
+        } else {
+          console.log('🔄 No messages returned from polling');
+        }
+      } catch (error) {
+        console.log('❌ Polling error:', error);
+      }
+    }, 2000); // Poll every 2 seconds
+
+    // Store the interval ID so we can clear it later
+    setPollingInterval(pollInterval);
+    console.log('🔄 Polling interval set:', pollInterval);
+  };
+
+  const setupAnnouncementSubscription = () => {
+    if (!guest || !guest.event_id) return;
+
+    announcementService.subscribeToAnnouncements(guest.event_id, (newAnnouncement) => {
+      console.log('📢 New announcement received:', newAnnouncement);
+      setAnnouncements(prev => {
+        const updated = [...prev, newAnnouncement];
+        // Sort by created_at to maintain chronological order
+        return updated.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      });
+    });
+  };
+
+  const handleTyping = () => {
+    if (!guest || !guest.event_id) return;
+    
+    setIsTyping(true);
+    
+    // Clear existing timeout
+    if (typingTimeouts.current[guest.email]) {
+      clearTimeout(typingTimeouts.current[guest.email]);
     }
     
-    // Set a 3-second delay before hiding
-    hoverTimeoutRef.current = setTimeout(() => {
-      setHoverPopupState({
-        activeMessageId: null,
-        position: null,
-        message: null
+    // Send typing event
+    if (channel) {
+      channel.send({
+        type: 'broadcast',
+        event: 'typing',
+        payload: { email: guest.email, name: `${guest.first_name} ${guest.last_name}`, isTyping: true }
       });
-      hoverTimeoutRef.current = null;
+    }
+    
+    // Set timeout to stop typing
+    typingTimeouts.current[guest.email] = setTimeout(() => {
+      setIsTyping(false);
+      if (channel) {
+        channel.send({
+          type: 'broadcast',
+          event: 'typing',
+          payload: { email: guest.email, name: `${guest.first_name} ${guest.last_name}`, isTyping: false }
+        });
+      }
     }, 3000);
   };
 
-  const clearHoverTimeout = () => {
-    if (hoverTimeoutRef.current) {
-      clearTimeout(hoverTimeoutRef.current);
-      hoverTimeoutRef.current = null;
+  const stopTyping = () => {
+    if (!guest || !channel) return;
+    
+    setIsTyping(false);
+    if (typingTimeouts.current[guest.email]) {
+      clearTimeout(typingTimeouts.current[guest.email]);
     }
+    
+    channel.send({
+      type: 'broadcast',
+      event: 'typing',
+      payload: { email: guest.email, name: `${guest.first_name} ${guest.last_name}`, isTyping: false }
+    });
   };
 
-  // Cleanup timeouts on unmount
+  // Set up separate typing subscription
   useEffect(() => {
-    return () => {
-      if (hoverTimeoutRef.current) {
-        clearTimeout(hoverTimeoutRef.current);
+    if (!channel || !guest) return;
+
+    const handleTypingBroadcast = (payload: any) => {
+      const { email, name, isTyping } = payload;
+      
+      // Don't show our own typing
+      if (email === guest.email) return;
+      
+      if (isTyping) {
+        console.log('[TYPING] User started typing:', email, name);
+        setTypingUsers(prev => [...prev, email]);
+      } else {
+        console.log('[TYPING] User stopped typing:', email, name);
+        setTypingUsers(prev => prev.filter(user => user !== email));
       }
     };
-  }, []); // Empty dependency array - only run on mount/unmount
 
-  // Enhanced Hover Popup component (matches desktop functionality)
-  const HoverPopup = () => {
-    if (!hoverPopupState.activeMessageId || !hoverPopupState.position || !hoverPopupState.message) return null;
+    channel.on('broadcast', { event: 'typing' }, handleTypingBroadcast);
 
-    const emojis = ['👍', '❤️', '😂', '😮', '😢', '😡', '🎉', '👏', '🙏', '🔥', '💯', '✨', '💪', '🤔', '😎', '🥳', '😴', '🤯', '😍', '🤩', '😭', '🤬', '🤮', '🤧', '🤠', '👻', '🤖', '👽', '👾', '🤡', '👹', '👺', '💀', '☠️'];
+    return () => {
+      try {
+        if (channel && typeof channel.off === 'function') {
+          channel.off('broadcast', { event: 'typing' });
+        }
+      } catch (error) {
+        console.log('[TYPING] Error cleaning up typing subscription:', error);
+      }
+    };
+  }, [channel, guest]);
+
+  const renderFlatListData = () => {
+    // Combine messages and announcements
+    const allItems = [
+      ...messages.map(msg => ({ ...msg, type: 'message' as const })),
+      ...announcements.map(ann => ({ ...ann, type: 'announcement' as const }))
+    ];
+
+    // Sort by created_at timestamp
+    const sortedItems = allItems.sort((a, b) => 
+      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    );
+
+    // Group by date
+    const groupedItems: { [key: string]: any[] } = {};
+    sortedItems.forEach(item => {
+      const date = new Date(item.created_at).toDateString();
+      if (!groupedItems[date]) {
+        groupedItems[date] = [];
+      }
+      groupedItems[date].push(item);
+    });
+
+    return Object.entries(groupedItems).map(([date, items]) => ({
+      date,
+      data: items
+    }));
+  };
+
+  const renderMessage = (message: Message) => {
+    // Check if this message is from the current user (guest)
+    const ownMessage = message.sender_email === guest?.email;
+    
+    console.log(`[DEBUG] Message from ${message.sender_email}, guest email: ${guest?.email}, ownMessage: ${ownMessage}, sender_type: ${message.sender_type}`);
 
     return (
-      <>
-        {/* Background overlay to handle tap-to-close */}
-        <TouchableOpacity
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'transparent',
-            zIndex: 999998,
-          }}
-          activeOpacity={1}
-          onPress={() => setHoverPopupState({
-            activeMessageId: null,
-            position: null,
-            message: null
-          })}
-        />
-        
-        {/* X Close Button - Outside the main popup */}
-        <TouchableOpacity
-          onPress={() => setHoverPopupState({
-            activeMessageId: null,
-            position: null,
-            message: null
-          })}
-          style={{
-            position: 'absolute',
-            top: hoverPopupState.position.y - 15,
-            left: hoverPopupState.position.x + 240 - 15,
-            backgroundColor: 'rgba(0,0,0,0.8)',
-            width: 18,
-            height: 18,
-            justifyContent: 'center',
-            alignItems: 'center',
-            borderRadius: 9,
-            zIndex: 999999,
-          }}
-        >
-          <Text style={{ color: '#ffffff', fontSize: 12, fontWeight: 'bold' }}>×</Text>
-        </TouchableOpacity>
-
-        {/* Main Popup Container */}
-        <View
-          style={{
-            position: 'absolute',
-            top: hoverPopupState.position.y,
-            left: hoverPopupState.position.x,
-            borderRadius: 12,
-            padding: 12,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 6 },
-            shadowOpacity: 0.4,
-            shadowRadius: 12,
-            elevation: 12,
-            zIndex: 999999,
-            width: 240,
-            borderWidth: 0,
-          }}
-        >
-          {/* Gradient Background */}
-          <LinearGradient
-            colors={['#2a2a2a', '#1a1a1a', '#0a0a0a']}
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              borderRadius: 16,
-            }}
-          />
-
-          {/* Emoji reaction picker - Single row with scroll */}
-          <View style={{
-            height: 40,
-            marginBottom: 12,
-          }}>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{
-                paddingHorizontal: 6,
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              {emojis.map((emoji, index) => (
-                <TouchableOpacity
-                  key={index}
-                  onPress={() => {
-                    handleReaction(hoverPopupState.message!, emoji);
-                    setHoverPopupState({
-                      activeMessageId: null,
-                      position: null,
-                      message: null
-                    });
-                  }}
-                  style={{
-                    backgroundColor: 'rgba(255,255,255,0.1)',
-                    padding: 6,
-                    borderRadius: 8,
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    marginHorizontal: 3,
-                    minWidth: 32,
-                    minHeight: 32,
-                  }}
-                >
-                  <Text style={{ fontSize: 16 }}>{emoji}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-
-          {/* Action buttons */}
-          <View style={{
-            display: 'flex',
-            flexDirection: 'row',
-            gap: 8,
-            justifyContent: 'space-around',
-            paddingHorizontal: 4
-          }}>
-            <TouchableOpacity
-              onPress={() => {
-                setReplyTo(hoverPopupState.message!);
-                setHoverPopupState({
-                  activeMessageId: null,
-                  position: null,
-                  message: null
-                });
-              }}
-              style={{
-                backgroundColor: 'rgba(0,191,165,0.3)',
-                padding: 8,
-                borderRadius: 8,
-                justifyContent: 'center',
-                alignItems: 'center',
-                flex: 1,
-                marginHorizontal: 2,
-              }}
-            >
-              <Text style={{ color: '#00bfa5', fontSize: 12, fontWeight: '600' }}>Reply</Text>
-            </TouchableOpacity>
-            
-            {/* Only show Edit/Delete for current user's messages */}
-            {hoverPopupState.message.sender_email === guest.email && (
-              <>
-                <TouchableOpacity
-                  onPress={() => {
-                    setEditingMessageId(hoverPopupState.message!.message_id);
-                    setEditText(hoverPopupState.message!.message_text);
-                    setEditText(hoverPopupState.message?.message_text || '');
-                    setHoverPopupState({
-                      activeMessageId: null,
-                      position: null,
-                      message: null
-                    });
-                    setReplyTo(null);
-                  }}
-                  style={{
-                    backgroundColor: 'rgba(255,255,255,0.15)',
-                    padding: 8,
-                    borderRadius: 8,
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    flex: 1,
-                    marginHorizontal: 2,
-                  }}
-                >
-                  <Text style={{ color: '#ffffff', fontSize: 12, fontWeight: '600' }}>Edit</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => {
-                    deleteMessage(hoverPopupState.message!);
-                    setHoverPopupState({
-                      activeMessageId: null,
-                      position: null,
-                      message: null
-                    });
-                  }}
-                  disabled={deleting}
-                  style={{
-                    backgroundColor: 'rgba(255,68,68,0.3)',
-                    padding: 8,
-                    borderRadius: 8,
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    flex: 1,
-                    marginHorizontal: 2,
-                  }}
-                >
-                  <Text style={{ color: deleting ? '#888' : '#ff4444', fontSize: 12, fontWeight: '600' }}>Delete</Text>
-                </TouchableOpacity>
-              </>
+      <TouchableOpacity
+        key={message.message_id}
+        style={[styles.messageContainer, ownMessage ? styles.ownMessage : styles.otherMessage]}
+        onLongPress={() => handleLongPress(message)}
+        activeOpacity={0.8}
+      >
+        {/* Avatar for received messages (left side) */}
+        {!ownMessage && (
+          <View style={styles.avatarLeft}>
+            {message.sender_type === 'admin' && message.avatar_url && message.avatar_url.startsWith('http') ? (
+              <Image 
+                source={{ uri: message.avatar_url }} 
+                style={styles.avatarImage}
+                onError={(error) => {
+                  console.log('[AVATAR ERROR] Failed to load image:', message.avatar_url, error);
+                }}
+              />
+            ) : (
+              <Text style={styles.avatarText}>
+                {message.sender_name?.charAt(0)?.toUpperCase() || '?'}
+              </Text>
             )}
           </View>
+        )}
+
+        {/* Avatar for sent messages (right side) */}
+        {ownMessage && (
+          <View style={styles.avatarRight}>
+            {message.sender_type === 'admin' && message.avatar_url && message.avatar_url.startsWith('http') ? (
+              <Image 
+                source={{ uri: message.avatar_url }} 
+                style={styles.avatarImage}
+                onError={(error) => {
+                  console.log('[AVATAR ERROR] Failed to load image:', message.avatar_url, error);
+                }}
+              />
+            ) : (
+              <Text style={styles.avatarText}>
+                {message.sender_name?.charAt(0)?.toUpperCase() || '?'}
+              </Text>
+            )}
+          </View>
+        )}
+
+        <View style={styles.messageContent}>
+          {/* Reply preview */}
+          {message.reply_to_message_id && (
+            <View style={styles.replyPreview}>
+              <Text style={styles.replyText}>
+                {messages.find(m => m.message_id === message.reply_to_message_id)?.message_text || 'Original message not found'}
+              </Text>
+            </View>
+          )}
+          
+          <View style={[styles.messageBubble, ownMessage ? styles.ownBubble : styles.otherBubble]}>
+            <Text style={[styles.messageText, ownMessage ? styles.ownMessageText : styles.otherMessageText]}>
+              {message.message_text}
+            </Text>
+          </View>
+          
+          <View style={[styles.messageInfo, ownMessage ? styles.ownMessageInfo : styles.otherMessageInfo]}>
+            <Text style={ownMessage ? styles.ownSenderName : styles.senderName}>
+              {message.sender_name}
+            </Text>
+            <Text style={ownMessage ? styles.ownMessageTime : styles.messageTime}>
+              {new Date(message.created_at).getHours().toString().padStart(2, '0')}:{new Date(message.created_at).getMinutes().toString().padStart(2, '0')}
+              {message.is_edited && ' (edited)'}
+            </Text>
+          </View>
         </View>
-      </>
+      </TouchableOpacity>
     );
   };
 
-
-
-  // Now do conditional rendering
-  if (isInitializing || loading) {
+  const renderAnnouncement = (announcement: Announcement) => {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: BG_COLOR }]}>
-        <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#FFFFFF" />
-          <Text style={[styles.loadingText, { color: TEXT_COLOR }]}>
-            Loading chat...
+      <View key={announcement.id} style={styles.announcementContainer}>
+        <View style={styles.announcementBubble}>
+          <Text style={styles.announcementTitle}>{announcement.title}</Text>
+          <Text style={styles.announcementMessage}>{announcement.description}</Text>
+          <Text style={styles.announcementTime}>
+            {new Date(announcement.created_at).getHours().toString().padStart(2, '0')}:{new Date(announcement.created_at).getMinutes().toString().padStart(2, '0')}
           </Text>
         </View>
-      </SafeAreaView>
+      </View>
     );
-  }
+  };
+
+  const renderItem = ({ item }: { item: any }) => {
+    // Safety check for undefined or null items
+    if (!item) {
+      console.log('[DEBUG] renderItem called with null/undefined item');
+      return null;
+    }
+    
+    if (item.type === 'message') {
+      return renderMessage(item);
+    } else if (item.type === 'announcement') {
+      return renderAnnouncement(item);
+    }
+    
+    console.log('[DEBUG] renderItem called with unknown item type:', item);
+    return null;
+  };
+
+  // Action Sheet Modal
+  const ActionSheetModal = () => (
+    <Modal
+      visible={showActionSheet}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setShowActionSheet(false)}
+    >
+      <TouchableWithoutFeedback onPress={() => setShowActionSheet(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.actionSheet}>
+            {/* Emoji reactions */}
+            <Text style={styles.actionSheetTitle}>Add Reaction</Text>
+            <View style={styles.emojiGrid}>
+              {['👍', '❤️', '😂', '😮', '😢', '😡', '🎉', '👏', '🙏', '🔥', '💯', '✨'].map((emoji) => (
+                <TouchableOpacity
+                  key={emoji}
+                  style={styles.emojiButton}
+                  onPress={() => {
+                    if (selectedMessage) {
+                      handleReaction(selectedMessage, emoji);
+                    }
+                    setShowActionSheet(false);
+                  }}
+                >
+                  <Text style={styles.emojiButtonText}>{emoji}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Action buttons */}
+            <View style={styles.actionButtons}>
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={() => {
+                  if (selectedMessage) {
+                    setReplyTo(selectedMessage);
+                  }
+                  setShowActionSheet(false);
+                }}
+              >
+                <Text style={styles.actionButtonText}>Reply</Text>
+              </TouchableOpacity>
+              
+              {/* Only show edit/delete for current user's messages */}
+              {selectedMessage && selectedMessage.sender_email === guest?.email && (
+                <>
+                  <TouchableOpacity
+                    style={styles.actionButton}
+                    onPress={() => {
+                      if (selectedMessage) {
+                        handleEdit(selectedMessage);
+                      }
+                    }}
+                  >
+                    <Text style={styles.actionButtonText}>Edit</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity
+                    style={[styles.actionButton, styles.deleteButton]}
+                    onPress={() => {
+                      if (selectedMessage) {
+                        deleteMessage(selectedMessage);
+                      }
+                      setShowActionSheet(false);
+                    }}
+                  >
+                    <Text style={[styles.actionButtonText, styles.deleteButtonText]}>Delete</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+          </View>
+        </View>
+      </TouchableWithoutFeedback>
+    </Modal>
+  );
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: BG_COLOR }}>
-      {/* Force status bar to light content (white icons) */}
-      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
-      <View style={{ flex: 1, backgroundColor: BG_COLOR, position: 'relative' }}>
-        {/* Messages */}
+    <View style={styles.container}>
+      <GlobalHeader
+        title={eventName || guest?.event_name || "Chat"}
+        onBackPress={() => navigation.goBack()}
+        onMenuPress={() => {}}
+      />
+      
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoidingView}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
         <FlatList
           ref={flatListRef}
           data={renderFlatListData()}
-          keyExtractor={(item) => item.key}
-          renderItem={renderItem}
-          contentContainerStyle={{ padding: 16, paddingBottom: 80 }} // only for input/nav
+          keyExtractor={(item) => item.date}
+          renderItem={({ item }) => (
+            <View>
+              <Text style={styles.dateHeader}>{item.date}</Text>
+              {item.data.map((dataItem) => renderItem({ item: dataItem }))}
+            </View>
+          )}
+          style={styles.messagesContainer}
+          contentContainerStyle={styles.messagesContent}
           showsVerticalScrollIndicator={false}
-          onContentSizeChange={scrollToBottom}
-          ListFooterComponent={
-            typingText ? (
-              <View style={{ paddingTop: 8, paddingBottom: 8 }}>
-                <Text style={{ opacity: 0.7, color: '#aaa', fontSize: 12 }}>{typingText}</Text>
+          ListHeaderComponent={
+            messages.length > 0 && hasMoreMessages ? (
+              <View style={styles.loadOlderContainer}>
+                <TouchableOpacity
+                  style={[styles.loadOlderButton, loadingOlder && styles.loadOlderButtonDisabled]}
+                  onPress={loadOlderMessages}
+                  disabled={loadingOlder}
+                >
+                  {loadingOlder ? (
+                    <>
+                      <ActivityIndicator size="small" color="#00bfa5" />
+                      <Text style={styles.loadOlderText}>Loading...</Text>
+                    </>
+                  ) : (
+                    <>
+                      <Text style={styles.loadOlderIcon}>⬆️</Text>
+                      <Text style={styles.loadOlderText}>Load Older Messages</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
               </View>
             ) : null
           }
         />
-        {/* Input */}
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          keyboardVerticalOffset={80}
-          style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: BG_COLOR, borderTopWidth: 1, borderTopColor: '#23242b' }}
-        >
-          <View style={{ flexDirection: 'row', alignItems: 'center', padding: 12 }}>
-            <TextInput
-              ref={textInputRef}
-              style={{
-                flex: 1,
-                backgroundColor: '#23242b',
-                color: TEXT_COLOR,
-                borderRadius: 16,
-                paddingHorizontal: 16,
-                paddingVertical: 10,
-                fontSize: 15,
-                marginRight: 8,
-              }}
-              placeholder={editingMessageId ? 'Edit message...' : 'Type a message...'}
-              placeholderTextColor={TEXT_SECONDARY}
-              value={editingMessageId ? editText : newMessage}
-              onChangeText={text => {
-                if (editingMessageId) setEditText(text); else setNewMessage(text);
-                broadcastTyping();
-                // Play keyboard tap sound occasionally (not on every keystroke)
-                if (text.length % 3 === 0 && text.length > 0) {
-                  soundEffects.playKeyboardTap();
-                }
-              }}
-              onSubmitEditing={editingMessageId ? () => handleSaveEdit() : sendMessage}
-              returnKeyType="send"
-            />
-            {editingMessageId ? (
-              <>
-                <TouchableOpacity onPress={() => handleSaveEdit()} style={{ marginRight: 8 }}>
-                  <Text style={{ color: '#00bfa5', fontSize: 18 }}>✔️</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => handleCancelEdit()}>
-                  <Text style={{ color: '#aaa', fontSize: 18 }}>✕</Text>
-                </TouchableOpacity>
-              </>
-            ) : (
+        
+        <View style={styles.inputContainer}>
+          {replyTo && (
+            <View style={styles.replyContainer}>
+              <Text style={styles.replyText}>Replying to: {replyTo.sender_name}</Text>
+              <TouchableOpacity onPress={() => setReplyTo(null)}>
+                <MaterialCommunityIcons name="close" size={16} color="#666" />
+              </TouchableOpacity>
+            </View>
+          )}
+          
+          {/* Edit preview */}
+          {editingMessageId && (
+            <View style={styles.editContainer}>
+              <Text style={styles.editLabel}>Editing message</Text>
+              <Text style={styles.editMessage} numberOfLines={1}>
+                {messages.find(m => m.message_id === editingMessageId)?.message_text || 'Original message not found'}
+              </Text>
               <TouchableOpacity
+                style={styles.cancelEdit}
                 onPress={() => {
-                  sendMessage();
-                  soundEffects.playSendMessage();
-                }}
-                disabled={!newMessage.trim() || sending}
-                style={{
-                  backgroundColor: !newMessage.trim() || sending ? '#23242b' : ADMIN_BUBBLE,
-                  borderRadius: 16,
-                  padding: 10,
-                  alignItems: 'center',
-                  justifyContent: 'center',
+                  setEditingMessageId(null);
+                  setEditText('');
                 }}
               >
-                <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>→</Text>
+                <Text style={styles.cancelEditText}>✕</Text>
               </TouchableOpacity>
-            )}
-          </View>
-        </KeyboardAvoidingView>
-        {/* Edit in place UI */}
-      {editingMessageId && selectedMessage && (
-        <Modal visible transparent animationType="fade" onRequestClose={() => setEditingMessageId(null)}>
-          <TouchableOpacity style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.3)' }} activeOpacity={1} onPress={() => setEditingMessageId(null)}>
-            <View style={{ position: 'absolute', bottom: 120, left: 20, right: 20, backgroundColor: '#23242b', borderRadius: 16, padding: 20, alignItems: 'center' }}>
-              <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16, marginBottom: 16 }}>Edit Message</Text>
-              <TextInput
-                value={editText}
-                onChangeText={(text) => {
+            </View>
+          )}
+          
+          <View style={styles.inputRow}>
+            <TextInput
+              style={styles.textInput}
+              value={editingMessageId ? editText : messageText}
+              onChangeText={(text) => {
+                if (editingMessageId) {
                   setEditText(text);
-                  // Play keyboard tap sound occasionally
-                  if (text.length % 3 === 0 && text.length > 0) {
-                    soundEffects.playKeyboardTap();
-                  }
-                }}
-                style={{ color: '#fff', backgroundColor: '#181A20', borderRadius: 8, padding: 12, width: '100%', marginBottom: 16 }}
-                multiline
+                } else {
+                  setMessageText(text);
+                  handleTyping();
+                }
+              }}
+              onBlur={editingMessageId ? undefined : stopTyping}
+              placeholder={editingMessageId ? "Edit your message..." : "Type a message..."}
+              placeholderTextColor="#666"
+              multiline
+            />
+            <TouchableOpacity
+              style={[
+                styles.sendButton, 
+                !(editingMessageId ? editText.trim() : messageText.trim()) && styles.sendButtonDisabled
+              ]}
+              onPress={editingMessageId ? () => editMessage(editingMessageId, editText) : sendMessage}
+              disabled={!(editingMessageId ? editText.trim() : messageText.trim())}
+            >
+              <MaterialCommunityIcons 
+                name={editingMessageId ? "check" : "send"} 
+                size={20} 
+                color={(editingMessageId ? editText.trim() : messageText.trim()) ? "#fff" : "#666"} 
               />
-              <View style={{ flexDirection: 'row', gap: 16 }}>
-                <TouchableOpacity onPress={() => setEditingMessageId(null)} style={{ padding: 10 }}>
-                  <Text style={{ color: '#aaa', fontSize: 15 }}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => editMessage(selectedMessage)} style={{ padding: 10, backgroundColor: '#00bfa5', borderRadius: 8 }}>
-                  <Text style={{ color: '#fff', fontSize: 15 }}>Save</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </TouchableOpacity>
-        </Modal>
-      )}
-      {/* Reply UI */}
-      {replyTo && (
-        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#23242b', borderRadius: 8, margin: 8, marginBottom: 0, padding: 8, position: 'absolute', left: 0, right: 0, bottom: 64, zIndex: 30 }}>
-          <Text style={{ color: '#aaa', fontSize: 12, marginRight: 8 }}>Replying to:</Text>
-          <Text style={{ color: '#fff', fontSize: 13, flex: 1 }} numberOfLines={1} ellipsizeMode="tail">{replyTo.message_text}</Text>
-          <TouchableOpacity onPress={() => setReplyTo(null)} style={{ marginLeft: 8 }}>
-            <Text style={{ color: '#aaa', fontSize: 16 }}>✕</Text>
-          </TouchableOpacity>
+            </TouchableOpacity>
+          </View>
         </View>
-      )}
-      {/* Hover popup */}
-      <HoverPopup />
+      </KeyboardAvoidingView>
       
-      {/* Reaction picker modal */}
-      <Modal visible={showReactionPicker} transparent animationType="fade" onRequestClose={() => setShowReactionPicker(false)}>
-        <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setShowReactionPicker(false)}>
-          {reactionPopupPosition ? (
-            <View style={{
-              position: 'absolute',
-              left: reactionPopupPosition.x,
-              top: reactionPopupPosition.y + 4,
-              width: reactionPopupPosition.width,
-              backgroundColor: '#23242b',
-              borderRadius: 16,
-              padding: 8,
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'center',
-              zIndex: 100,
-            }}>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ alignItems: 'center' }}>
-                {commonEmojis.map((emoji) => (
-                  <TouchableOpacity key={emoji} onPress={() => { if (reactionTarget) handleReaction(reactionTarget, emoji); setShowReactionPicker(false); }} style={{ marginHorizontal: 4 }}>
-                    <Text style={{ fontSize: 22 }}>{emoji}</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-          ) : null}
-        </TouchableOpacity>
-      </Modal>
-      </View>
-    </SafeAreaView>
+      <ActionSheetModal />
+    </View>
   );
-}
-
-// Helper to compare optimistic and real messages
-function isSameMessage(opt: Message, real: Message) {
-  return (
-    opt.sender_email === real.sender_email &&
-    opt.message_text === real.message_text &&
-    Math.abs(new Date(opt.created_at).getTime() - new Date(real.created_at).getTime()) < 10000 // 10s window
-  );
-}
+};
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#1a1a1a',
   },
   keyboardAvoidingView: {
     flex: 1,
   },
-  loadingContainer: {
+  messagesContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 16,
-  },
-  loadingText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  header: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  headerContent: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  statusIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  onlineDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#4CAF50',
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  messagesList: {
-    flex: 1,
+    paddingHorizontal: 16,
   },
   messagesContent: {
-    paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingTop: 8,
+    paddingBottom: 100,
   },
-  messagesContentEmpty: {
-    flexGrow: 1,
-    justifyContent: 'center',
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: 40,
-  },
-  emptyEmoji: {
-    fontSize: 48,
-    marginBottom: 16,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  dateSeparator: {
-    alignItems: 'center',
-    marginVertical: 16,
-  },
-  dateBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  dateText: {
+  dateHeader: {
+    color: '#666',
     fontSize: 12,
+    textAlign: 'center',
+    marginVertical: 8,
     fontWeight: '500',
   },
   messageContainer: {
+    marginVertical: 4,
     flexDirection: 'row',
-    marginBottom: 12,
-    alignItems: 'flex-end',
+    alignItems: 'flex-start',
   },
-  messageContainerLeft: {
-    justifyContent: 'flex-start',
-  },
-  messageContainerRight: {
-    justifyContent: 'flex-end',
+  ownMessage: {
+    alignSelf: 'flex-end',
     flexDirection: 'row-reverse',
   },
+  otherMessage: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+  },
+  messageContent: {
+    flex: 1,
+    alignItems: 'flex-start',
+    maxWidth: '75%',
+  },
   messageBubble: {
-    maxWidth: SCREEN_WIDTH * 0.7,
-    padding: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderRadius: 18,
-    marginHorizontal: 8,
-  },
-  messageBubbleLeft: {
-    borderTopLeftRadius: 4,
-  },
-  messageBubbleRight: {
-    borderTopRightRadius: 4,
-  },
-  senderName: {
-    fontSize: 12,
-    fontWeight: '600',
     marginBottom: 4,
+  },
+  ownBubble: {
+    backgroundColor: '#00bfa5',
+    alignSelf: 'flex-end',
+  },
+  otherBubble: {
+    backgroundColor: '#333',
+    alignSelf: 'flex-start',
   },
   messageText: {
     fontSize: 16,
-    lineHeight: 20,
+    color: '#fff',
+    flexShrink: 1,
   },
-  messageFooter: {
+  ownMessageText: {
+    color: '#fff',
+  },
+  otherMessageText: {
+    color: '#fff',
+  },
+  messageInfo: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
     alignItems: 'center',
+    gap: 8,
+    marginTop: 2,
+  },
+  ownMessageInfo: {
+    justifyContent: 'flex-end',
     marginTop: 4,
-    gap: 4,
+    alignItems: 'flex-end',
+    alignSelf: 'flex-end',
   },
-  timestamp: {
-    fontSize: 11,
+  otherMessageInfo: {
+    justifyContent: 'flex-start',
   },
-  readStatus: {
+  senderName: {
     fontSize: 12,
+    color: '#999',
   },
-  avatar: {
+  ownSenderName: {
+    fontSize: 12,
+    color: '#00bfa5',
+    textAlign: 'right',
+  },
+  messageTime: {
+    fontSize: 12,
+    color: '#999',
+  },
+  ownMessageTime: {
+    fontSize: 12,
+    color: '#00bfa5',
+    textAlign: 'right',
+  },
+  avatarLeft: {
     width: 32,
     height: 32,
     borderRadius: 16,
+    backgroundColor: '#333',
     justifyContent: 'center',
     alignItems: 'center',
+    marginTop: 4,
+    marginRight: 8,
+  },
+  avatarRight: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#00bfa5',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 4,
+    marginLeft: 8,
   },
   avatarText: {
-    color: '#FFFFFF',
+    color: '#fff',
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: 'bold',
+  },
+  avatarImage: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+  },
+  announcementContainer: {
+    marginVertical: 8,
+    alignItems: 'center',
+  },
+  announcementBubble: {
+    backgroundColor: '#2a2a2a',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    maxWidth: '90%',
+    borderWidth: 1,
+    borderColor: '#00bfa5',
+  },
+  announcementTitle: {
+    color: '#00bfa5',
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  announcementMessage: {
+    color: '#fff',
+    fontSize: 14,
+    marginBottom: 4,
+  },
+  announcementTime: {
+    color: '#666',
+    fontSize: 12,
   },
   inputContainer: {
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: '#1a1a1a',
+    borderTopWidth: 1,
+    borderTopColor: '#333',
   },
-  inputWrapper: {
+  replyContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#333',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  replyPreview: {
+    backgroundColor: '#2a2a2a',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginBottom: 4,
+    borderLeftWidth: 3,
+    borderLeftColor: '#00bfa5',
+  },
+  replyText: {
+    color: '#fff',
+    fontSize: 14,
+    flex: 1,
+  },
+  editContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#333',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  editLabel: {
+    color: '#00bfa5',
+    fontSize: 12,
+    fontWeight: '500',
+    marginRight: 8,
+  },
+  editMessage: {
+    color: '#999',
+    fontSize: 12,
+    flex: 1,
+  },
+  cancelEdit: {
+    padding: 4,
+  },
+  cancelEditText: {
+    color: '#666',
+    fontSize: 16,
+  },
+  inputRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    gap: 12,
+    gap: 8,
   },
   textInput: {
     flex: 1,
-    borderRadius: 22,
+    backgroundColor: '#333',
+    borderRadius: 20,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 10,
+    color: '#fff',
     fontSize: 16,
     maxHeight: 100,
-    minHeight: 44,
   },
   sendButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    backgroundColor: '#00bfa5',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    opacity: 1,
+  },
+  sendButtonDisabled: {
+    backgroundColor: '#333',
+    opacity: 0.5,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  actionSheet: {
+    backgroundColor: '#1a1a1a',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    paddingBottom: 40,
+  },
+  actionSheetTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  emojiGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 10,
+    marginBottom: 20,
+  },
+  emojiButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#333',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  sendButtonText: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '600',
+  emojiButtonText: {
+    fontSize: 20,
   },
-}); 
+  actionButtons: {
+    gap: 10,
+  },
+  actionButton: {
+    backgroundColor: '#333',
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  actionButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  deleteButton: {
+    backgroundColor: 'rgba(255, 59, 48, 0.2)',
+  },
+  deleteButtonText: {
+    color: '#ff3b30',
+  },
+  loadOlderContainer: {
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  loadOlderButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 8,
+  },
+  loadOlderButtonDisabled: {
+    opacity: 0.6,
+  },
+  loadOlderText: {
+    color: '#00bfa5',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  loadOlderIcon: {
+    fontSize: 16,
+  },
+});
+
+export default GuestChatScreen; 

@@ -90,7 +90,8 @@ const getUserInitials = (name: string): string => {
 // Helper function to check if a string is a valid avatar URL
 const isAvatarUrl = (url: string | null | undefined): boolean => {
   if (!url) return false;
-  return url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:');
+  // Check if it's a valid URL or data URL
+  return url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:') || url.startsWith('/');
 };
 
 // Modern Chat Header Component
@@ -148,36 +149,47 @@ const ChatHeader = ({ eventId, isDark, guestCount }: {
   );
 };
 
-const Avatar = ({ name, avatarUrl, isDark }: { name: string; avatarUrl?: string | null; isDark: boolean }) => {
+const Avatar = ({ name, avatarUrl, isDark, isCurrentUser }: { name: string; avatarUrl?: string | null; isDark: boolean; isCurrentUser?: boolean }) => {
   const initials = name
     ? name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
     : '?';
   
+  // console.log(`[AVATAR COMPONENT] Rendering avatar for ${name}:`, {
+  //   avatarUrl,
+  //   isAvatarUrl: avatarUrl ? isAvatarUrl(avatarUrl) : false,
+  //   willShowImage: avatarUrl && isAvatarUrl(avatarUrl)
+  // });
+  
   // Only log if avatarUrl exists but we're still showing initials
   if (avatarUrl && !isAvatarUrl(avatarUrl)) {
-    console.log(`[AVATAR ISSUE] Invalid URL for ${name}: ${avatarUrl}`);
+    // console.log(`[AVATAR DEBUG] Invalid URL for ${name}: ${avatarUrl}`);
   }
+  
+  const avatarStyle = {
+    width: 32,
+    height: 32,
+    borderRadius: '50%',
+    marginRight: isCurrentUser ? 0 : 10,
+    marginLeft: isCurrentUser ? 10 : 0,
+    objectFit: 'cover' as const,
+    background: isDark ? '#222' : '#e0e0e0'
+  };
   
   if (avatarUrl && isAvatarUrl(avatarUrl)) {
     return (
       <img
         src={avatarUrl}
         alt={name}
-        style={{ width: 32, height: 32, borderRadius: '50%', marginRight: 10, marginLeft: 0, objectFit: 'cover', background: isDark ? '#222' : '#e0e0e0' }}
+        style={avatarStyle}
       />
     );
   }
   return (
     <div style={{
-      width: 32,
-      height: 32,
-      borderRadius: '50%',
-      background: isDark ? '#222' : '#e0e0e0',
+      ...avatarStyle,
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      marginRight: 10,
-      marginLeft: 0,
       fontWeight: 600,
       fontSize: 14,
       color: isDark ? '#fff' : '#222',
@@ -199,7 +211,9 @@ const MessageBubble = ({ message, isDark, currentUserEmail, onReply, onReact, me
   onShowHover?: (message: Message, event: React.MouseEvent) => void
 }) => {
   const colors = themes[isDark ? 'dark' : 'light'];
-  const sent = message.sender_email === currentUserEmail;
+  const isCurrentUser = currentUserEmail && message.sender_email === currentUserEmail;
+  
+      // console.log(`[AVATAR DEBUG] Message from ${message.sender_email}, current user: ${currentUserEmail}, isCurrentUser: ${isCurrentUser}, avatar_url: ${message.avatar_url}, sender_type: ${message.sender_type}`);
   const [showActions, setShowActions] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const emojiList = ['👍','❤️','😂','😮','😢','😡','🎉','👏','🙏','🔥','💯','✨','💪','🤔','😎','🥳','😴','🤯','😍','🤩','😭','🤬','🤮','🤧','🤠','👻','🤖','👽','👾','🤡','👹','👺','💀','☠️'];
@@ -228,20 +242,21 @@ const MessageBubble = ({ message, isDark, currentUserEmail, onReply, onReact, me
 
     <div style={{
       display: 'flex',
-        justifyContent: sent ? 'flex-end' : 'flex-start',
+      justifyContent: isCurrentUser ? 'flex-end' : 'flex-start',
       marginBottom: '16px',
-      paddingLeft: sent ? '60px' : '0px',
-      paddingRight: sent ? '0px' : '60px',
-        alignItems: 'flex-start',
-        gap: '8px',
-        position: 'relative'
-      }}>
-        {/* Avatar for received messages */}
-        {!sent && <Avatar name={message.sender_name} avatarUrl={message.avatar_url} isDark={isDark} />}
-        <div style={{
+      paddingLeft: isCurrentUser ? '60px' : '0px',
+      paddingRight: isCurrentUser ? '0px' : '60px',
+      alignItems: 'flex-start',
+      gap: '8px',
+      position: 'relative'
+    }}>
+      {/* Avatar for received messages (left side) */}
+      {!isCurrentUser && <Avatar name={message.sender_name} avatarUrl={message.avatar_url} isDark={isDark} isCurrentUser={false} />}
+      
+              <div style={{
           display: 'flex', 
           flexDirection: 'column', 
-          alignItems: sent ? 'flex-end' : 'flex-start', 
+          alignItems: isCurrentUser ? 'flex-end' : 'flex-start', 
           maxWidth: '70%',
           position: 'relative'
         }}>
@@ -249,10 +264,10 @@ const MessageBubble = ({ message, isDark, currentUserEmail, onReply, onReact, me
           {/* Bubble */}
           <div
             style={{
-          background: sent ? colors.messageBubbleSent : colors.messageBubble,
-          color: sent ? (isDark ? colors.bg : '#ffffff') : colors.text,
+          background: isCurrentUser ? '#00bfa5' : colors.messageBubble,
+          color: isCurrentUser ? '#ffffff' : (isDark ? '#ffffff' : '#000000'),
           padding: '12px 16px',
-          borderRadius: sent ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
+          borderRadius: isCurrentUser ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
           wordWrap: 'break-word',
           position: 'relative',
           backdropFilter: 'blur(20px)',
@@ -260,12 +275,12 @@ const MessageBubble = ({ message, isDark, currentUserEmail, onReply, onReact, me
           boxShadow: isDark 
             ? '0 4px 16px rgba(0,0,0,0.3)' 
                 : '0 4px 16px rgba(0,0,0,0.1)',
-              cursor: sent ? 'pointer' : 'default',
+              cursor: isCurrentUser ? 'pointer' : 'default',
             }}
             onMouseEnter={() => setShowActions(true)}
             onMouseLeave={() => setShowActions(false)}
             onClick={(e) => {
-              if (sent) {
+              if (isCurrentUser) {
                 e.stopPropagation();
                 onShowHover?.(message, e);
               }
@@ -332,6 +347,11 @@ const MessageBubble = ({ message, isDark, currentUserEmail, onReply, onReact, me
             {/* Main message text with link detection */}
             <div style={{ fontSize: '14px', lineHeight: '1.4', fontWeight: '400' }}>
               {(() => {
+                // Add null check for message.message_text
+                if (!message.message_text || message.message_text.trim() === '') {
+                  return <span style={{ fontStyle: 'italic', color: isDark ? '#adb5bd' : '#6c757d' }}>Message text unavailable</span>;
+                }
+                
                 // Improved regex to match URLs (http, https, www, etc.)
                 const urlRegex = /((https?:\/\/|www\.)[\w\-._~:/?#[\]@!$&'()*+,;=%]+)(?=\s|$)/gi;
                 const parts = [];
@@ -363,11 +383,32 @@ const MessageBubble = ({ message, isDark, currentUserEmail, onReply, onReact, me
                 });
               })()}
             </div>
+
+          </div>
+
+          {/* Sender name and timestamp outside the bubble */}
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: isCurrentUser ? 'flex-end' : 'flex-start',
+            marginTop: '4px',
+            gap: '2px'
+          }}>
+            {/* Sender name */}
+            {!isCurrentUser && (
+              <div style={{
+                fontSize: '12px',
+                color: isDark ? '#adb5bd' : '#6c757d',
+                fontWeight: '500',
+                marginBottom: '2px'
+              }}>
+                {message.sender_name}
+              </div>
+            )}
             {/* Timestamp and edit indicator */}
-      <div style={{
-        fontSize: '11px',
-        color: isDark ? '#000000' : '#ffffff',
-        marginTop: '4px',
+            <div style={{
+              fontSize: '11px',
+              color: isDark ? '#adb5bd' : '#6c757d',
               display: 'flex',
               alignItems: 'center',
               gap: '4px'
@@ -375,7 +416,7 @@ const MessageBubble = ({ message, isDark, currentUserEmail, onReply, onReact, me
               <span>{new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
               {message.is_edited && (
                 <span style={{ 
-                  color: isDark ? '#000000' : '#ffffff', 
+                  color: isDark ? '#adb5bd' : '#6c757d', 
                   fontStyle: 'italic',
                   fontSize: '10px'
                 }}>
@@ -418,7 +459,7 @@ const MessageBubble = ({ message, isDark, currentUserEmail, onReply, onReact, me
           </div>
 
           {/* Action buttons for received messages (left side) */}
-          {!sent && showActions && (
+          {!isCurrentUser && showActions && (
             <div 
               style={{
                 position: 'absolute',
@@ -498,7 +539,7 @@ const MessageBubble = ({ message, isDark, currentUserEmail, onReply, onReact, me
           )}
 
           {/* Emoji picker for received messages */}
-          {!sent && showEmojiPicker && (
+          {!isCurrentUser && showEmojiPicker && (
             <div 
               style={{
                 position: 'absolute',
@@ -554,8 +595,9 @@ const MessageBubble = ({ message, isDark, currentUserEmail, onReply, onReact, me
             </div>
           )}
         </div>
-        {/* Avatar for sent messages */}
-        {sent && <Avatar name={message.sender_name} avatarUrl={message.avatar_url} isDark={isDark} />}
+
+        {/* Avatar for sent messages (right side) */}
+        {isCurrentUser && <Avatar name={message.sender_name} avatarUrl={message.avatar_url} isDark={isDark} isCurrentUser={true} />}
       </div>
     </div>
   );
@@ -864,6 +906,10 @@ export default function GuestChatInterface({ eventId, isDark, guests }: GuestCha
   const [reactions, setReactions] = useState<{ [messageId: string]: { [emoji: string]: { count: number, reacted: boolean } } }>({});
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   const [eventTitle, setEventTitle] = useState<string>('Guest Chat');
+  const [typingUsers, setTypingUsers] = useState<{ [email: string]: string }>({});
+  const typingTimeouts = useRef<{ [email: string]: number }>({});
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
 
   // 1. Add hover popup state to GuestChatInterface
   const [hoverPopup, setHoverPopup] = useState<{
@@ -909,6 +955,64 @@ export default function GuestChatInterface({ eventId, isDark, guests }: GuestCha
   };
   const hideHoverPopup = () => setHoverPopup({ message: null, position: null, visible: false });
 
+  // Typing functions
+  const broadcastTyping = () => {
+    if (!currentUser || !eventId) return;
+    
+    console.log('[TYPING] broadcastTyping called for:', currentUser.email);
+    
+    // Clear existing timeout
+    if (typingTimeouts.current[currentUser.email]) {
+      clearTimeout(typingTimeouts.current[currentUser.email]);
+    }
+    
+    // Broadcast typing status
+    const channel = supabase.channel(`typing-${eventId}`);
+    console.log('[TYPING] Broadcasting typing event for:', currentUser.email);
+    channel.send({
+      type: 'broadcast',
+      event: 'typing',
+      payload: {
+        email: currentUser.email,
+        name: currentUser.name || currentUser.email,
+        isTyping: true
+      }
+    });
+    
+    // Set timeout to stop typing
+    typingTimeouts.current[currentUser.email] = setTimeout(() => {
+      console.log('[TYPING] Stopping typing for:', currentUser.email);
+      channel.send({
+        type: 'broadcast',
+        event: 'typing',
+        payload: {
+          email: currentUser.email,
+          name: currentUser.name || currentUser.email,
+          isTyping: false
+        }
+      });
+    }, 3000);
+  };
+
+  const stopTyping = () => {
+    if (!currentUser || !eventId) return;
+    
+    if (typingTimeouts.current[currentUser.email]) {
+      clearTimeout(typingTimeouts.current[currentUser.email]);
+    }
+    
+    const channel = supabase.channel(`typing-${eventId}`);
+    channel.send({
+      type: 'broadcast',
+      event: 'typing',
+      payload: {
+        email: currentUser.email,
+        name: currentUser.name || currentUser.email,
+        isTyping: false
+      }
+    });
+  };
+
   // Fetch event title
   const fetchEventTitle = async () => {
     try {
@@ -942,6 +1046,43 @@ export default function GuestChatInterface({ eventId, isDark, guests }: GuestCha
     initializeChat();
   }, [eventId]);
 
+  // Set up typing subscription
+  useEffect(() => {
+    if (!eventId) return;
+
+    console.log('[TYPING] Setting up typing subscription for eventId:', eventId);
+    const channel = supabase.channel(`typing-${eventId}`);
+    
+    channel.on('broadcast', { event: 'typing' }, (payload) => {
+      console.log('[TYPING] Received typing event:', payload);
+      const { email, name, isTyping } = payload.payload;
+      
+      if (isTyping) {
+        console.log('[TYPING] User started typing:', email, name);
+        setTypingUsers(prev => ({ ...prev, [email]: name }));
+      } else {
+        console.log('[TYPING] User stopped typing:', email, name);
+        setTypingUsers(prev => {
+          const newUsers = { ...prev };
+          delete newUsers[email];
+          return newUsers;
+        });
+      }
+    });
+
+    channel.subscribe();
+
+    return () => {
+      console.log('[TYPING] Cleaning up typing subscription');
+      channel.unsubscribe();
+    };
+  }, [eventId]);
+
+  // Log typing users changes
+  useEffect(() => {
+    console.log('[TYPING] Current typing users:', typingUsers);
+  }, [typingUsers]);
+
   // Set up real-time message subscription with enhanced filtering
   useEffect(() => {
     if (!eventId || !currentUser) return;
@@ -959,8 +1100,40 @@ export default function GuestChatInterface({ eventId, isDark, guests }: GuestCha
           filter: `event_id=eq.${eventId}`,
         },
         (payload) => {
+          localStorage.setItem('GUESTS_CHAT_REALTIME_LOG', JSON.stringify({
+            payload,
+            timestamp: new Date().toISOString()
+          }));
           console.log('[GUESTS_CHAT] Enhanced real-time message received:', payload);
-          loadMessages();
+          console.log('[GUESTS_CHAT] New message details:', payload.new);
+          
+          // Add new message to existing state instead of reloading all messages
+          const newMessage = payload.new as Message;
+          
+          // Enrich the new message with avatar data
+          enrichMessagesWithAvatars([newMessage]).then(enrichedMessages => {
+            const enrichedMessage = enrichedMessages[0];
+            console.log('[GUESTS_CHAT] Enriched message:', enrichedMessage);
+            console.log('[GUESTS_CHAT] Enriched message ID:', enrichedMessage.message_id);
+            
+            setMessages(prev => {
+              console.log('[GUESTS_CHAT] Current messages count:', prev.length);
+              // Check if message already exists to avoid duplicates
+              const exists = prev.some(msg => msg.message_id === enrichedMessage.message_id);
+              console.log('[GUESTS_CHAT] Message already exists:', exists);
+              if (exists) {
+                console.log('[GUESTS_CHAT] Skipping duplicate message');
+                return prev;
+              }
+              
+              // Add new message and sort by created_at
+              const updated = [...prev, enrichedMessage];
+              const sorted = updated.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+              console.log('[GUESTS_CHAT] Updated messages count:', sorted.length);
+              console.log('[GUESTS_CHAT] Added new message via real-time');
+              return sorted;
+            });
+          });
         }
       )
       .on(
@@ -973,7 +1146,8 @@ export default function GuestChatInterface({ eventId, isDark, guests }: GuestCha
         },
         (payload) => {
           console.log('[GUESTS_CHAT] Enhanced read receipt updated:', payload);
-          loadMessages();
+          // Don't reload messages for read receipts - this was causing state overwrites
+          // loadMessages();
         }
       )
       .on(
@@ -986,8 +1160,8 @@ export default function GuestChatInterface({ eventId, isDark, guests }: GuestCha
         },
         (payload) => {
           console.log('[GUESTS_CHAT] Enhanced chat participants updated:', payload);
-          // Reinitialize chat to get updated participant list
-          initializeChat();
+          // Don't reinitialize chat - this was causing state overwrites
+          // initializeChat();
         }
       )
       .subscribe();
@@ -1047,7 +1221,6 @@ export default function GuestChatInterface({ eventId, isDark, guests }: GuestCha
       setCurrentUser(user);
 
       if (!user || !eventId) {
-        console.error('[GUESTS_CHAT] Missing user or eventId');
         return;
       }
 
@@ -1057,8 +1230,8 @@ export default function GuestChatInterface({ eventId, isDark, guests }: GuestCha
         console.error('[GUESTS_CHAT] Error initializing chat:', initError);
       }
 
-      // Load initial messages
-      await loadMessages();
+      // Load initial messages with the user we just fetched
+      await loadMessagesWithUser(user);
       
       // Fetch event title
       await fetchEventTitle();
@@ -1070,9 +1243,143 @@ export default function GuestChatInterface({ eventId, isDark, guests }: GuestCha
     }
   };
 
+  // Function to enrich messages with avatar URLs for admin users
+  const enrichMessagesWithAvatars = async (messages: any[]) => {
+    const enrichedMessages = [...messages];
+    
+    // Get unique admin user emails
+    const adminEmails = [...new Set(
+      messages
+        .filter(msg => msg.sender_type === 'admin')
+        .map(msg => msg.sender_email)
+    )];
+    
+    if (adminEmails.length > 0) {
+      // Fetch avatar URLs for admin users
+      const { data: users, error } = await supabase
+        .from('users')
+        .select('email, avatar_url')
+        .in('email', adminEmails);
+      
+      if (!error && users) {
+        // Create a map of email to avatar_url
+        const avatarMap = users.reduce((map: any, user: any) => {
+          map[user.email] = user.avatar_url;
+          return map;
+        }, {});
+        
+        // Enrich messages with avatar URLs
+        enrichedMessages.forEach(msg => {
+          if (msg.sender_type === 'admin' && avatarMap[msg.sender_email]) {
+            msg.avatar_url = avatarMap[msg.sender_email];
+          }
+        });
+      }
+    }
+    
+    return enrichedMessages;
+  };
+
+  // Load messages with a specific user (for initialization)
+  const loadMessagesWithUser = async (user: any) => {
+    if (!eventId || !user) {
+      return;
+    }
+    try {
+      // First, get the total count of messages to calculate the correct offset
+      const { data: countData, error: countError } = await supabase
+        .from('guests_chat_messages')
+        .select('message_id', { count: 'exact' })
+        .eq('event_id', eventId);
+      
+      if (countError) {
+        console.error('[GUESTS_CHAT] Error getting message count:', countError);
+        return;
+      }
+      
+      const totalMessages = countData?.length || 0;
+      const limit = 100;
+      const offset = Math.max(0, totalMessages - limit); // Get the last 100 messages
+      
+      const { data: messagesData, error } = await supabase.rpc('get_guests_chat_messages', {
+        p_event_id: eventId,
+        p_user_email: user.email,
+        p_limit: limit,
+        p_offset: offset,
+      });
+      
+      if (error) {
+        console.error('[GUESTS_CHAT] Error loading messages:', error);
+        return;
+      }
+      
+      // Enrich messages with avatar URLs for admin users
+      const enrichedMessages = await enrichMessagesWithAvatars(messagesData || []);
+      
+      setMessages(enrichedMessages);
+    } catch (error) {
+      console.error('[GUESTS_CHAT] Error in loadMessagesWithUser:', error);
+    }
+  };
+
+  // Load older messages function
+  const loadOlderMessages = async () => {
+    if (!eventId || !currentUser || loadingOlder || !hasMoreMessages) {
+      return;
+    }
+    
+    setLoadingOlder(true);
+    try {
+      // Get the oldest message timestamp to use as offset
+      const oldestMessage = messages[0];
+      if (!oldestMessage) {
+        setHasMoreMessages(false);
+        return;
+      }
+      
+      const { data: messagesData, error } = await supabase.rpc('get_guests_chat_messages', {
+        p_event_id: eventId,
+        p_user_email: currentUser.email,
+        p_limit: 50,
+        p_offset: 0,
+      });
+      
+      if (error) {
+        console.error('[GUESTS_CHAT] Error loading older messages:', error);
+        return;
+      }
+      
+      // Filter out messages we already have
+      const existingMessageIds = new Set(messages.map(m => m.message_id));
+      const newMessages = messagesData?.filter((msg: any) => !existingMessageIds.has(msg.message_id)) || [];
+      
+      if (newMessages.length === 0) {
+        setHasMoreMessages(false);
+        return;
+      }
+      
+      // Enrich messages with avatar URLs for admin users
+      const enrichedMessages = await enrichMessagesWithAvatars(newMessages);
+      
+      // Add older messages to the beginning
+      setMessages(prev => [...enrichedMessages, ...prev]);
+      
+      // Check if we have more messages to load
+      if (newMessages.length < 50) {
+        setHasMoreMessages(false);
+      }
+    } catch (error) {
+      console.error('[GUESTS_CHAT] Error in loadOlderMessages:', error);
+    } finally {
+      setLoadingOlder(false);
+    }
+  };
+
   // Replace old message fetching logic with new function
   const loadMessages = async () => {
-    if (!eventId || !currentUser) return;
+    if (!eventId || !currentUser) {
+      return;
+    }
     try {
       const { data: messagesData, error } = await supabase.rpc('get_guests_chat_messages', {
         p_event_id: eventId,
@@ -1080,26 +1387,16 @@ export default function GuestChatInterface({ eventId, isDark, guests }: GuestCha
         p_limit: 100,
         p_offset: 0,
       });
+      
       if (error) {
         console.error('[GUESTS_CHAT] Error loading messages:', error);
         return;
       }
       
-      // Simple debug: check if any admin messages have avatar_url
-      if (messagesData && messagesData.length > 0) {
-        const adminMessages = messagesData.filter((msg: any) => msg.sender_type === 'admin');
-        if (adminMessages.length > 0) {
-          console.log('[AVATAR DEBUG] Admin messages avatar_url values:', adminMessages.map((msg: any) => ({
-            sender: msg.sender_name,
-            avatar_url: msg.avatar_url,
-            avatar_type: typeof msg.avatar_url,
-            is_null: msg.avatar_url === null,
-            is_undefined: msg.avatar_url === undefined
-          })));
-        }
-      }
+      // Enrich messages with avatar URLs for admin users
+      const enrichedMessages = await enrichMessagesWithAvatars(messagesData || []);
       
-      setMessages(messagesData || []);
+      setMessages(enrichedMessages);
     } catch (error) {
       console.error('[GUESTS_CHAT] Error in loadMessages:', error);
     }
@@ -1108,24 +1405,111 @@ export default function GuestChatInterface({ eventId, isDark, guests }: GuestCha
   // Replace old message sending logic with new function
   const sendMessage = async (messageText: string) => {
     if (!messageText.trim() || !eventId || !currentUser || sending) return;
+    
+    // Create optimistic message
+    const optimisticMessage: Message = {
+      message_id: `temp_${Date.now()}`,
+      event_id: eventId,
+      sender_name: currentUser.name || currentUser.email,
+      sender_type: 'admin',
+      sender_email: currentUser.email,
+      avatar_url: currentUser.avatar_url,
+      message_text: messageText,
+      message_type: 'text',
+      company_id: currentUser.company_id,
+      created_at: new Date().toISOString(),
+      reply_to_message_id: replyingTo ? replyingTo.message_id : null,
+      is_edited: false,
+              edited_at: undefined,
+    };
+
+    // Add optimistic message immediately
+    setMessages(prev => [...prev, optimisticMessage]);
     setSending(true);
+    scrollToBottom();
+
     try {
+      // Use localStorage to persist logs across re-renders
+      const logData = {
+        timestamp: new Date().toISOString(),
+        params: {
+          p_event_id: eventId,
+          p_sender_email: currentUser.email,
+          p_message_text: messageText,
+          p_message_type: 'text',
+          p_reply_to_message_id: replyingTo ? replyingTo.message_id : null
+        }
+      };
+      localStorage.setItem('GUESTS_CHAT_SEND_LOG', JSON.stringify(logData));
+      console.log('[GUESTS_CHAT] Sending message with params:', logData.params);
+      
+      // Debug authentication state
+      const { data: { session } } = await supabase.auth.getSession();
+      localStorage.setItem('GUESTS_CHAT_SESSION_LOG', JSON.stringify({ session, currentUser }));
+      console.log('[GUESTS_CHAT] Current session:', session);
+      console.log('[GUESTS_CHAT] Current user object:', currentUser);
+      
       const { data: result, error } = await supabase.rpc('send_guests_chat_message', {
         p_event_id: eventId,
         p_sender_email: currentUser.email,
         p_message_text: messageText,
         p_message_type: 'text',
-        p_reply_to_message_id: replyingTo ? replyingTo.message_id : null // pass reply id if replying
+        p_reply_to_message_id: replyingTo ? replyingTo.message_id : null
       });
+      
+      localStorage.setItem('GUESTS_CHAT_RESULT_LOG', JSON.stringify({ result, error, timestamp: new Date().toISOString() }));
+      console.log('[GUESTS_CHAT] Send result:', result);
+      console.log('[GUESTS_CHAT] Send error:', error);
+      
       if (error) {
         console.error('[GUESTS_CHAT] Error sending message:', error);
+        // Remove optimistic message on error
+        setMessages(prev => prev.filter(msg => msg.message_id !== optimisticMessage.message_id));
         return;
       }
-      // Reload messages to show the new one
-      await loadMessages();
+
+      // Replace optimistic message with real message (EXACTLY like GuestChatAdminScreen)
+      if (result && result.length > 0) {
+        const realMessage = result[0];
+        localStorage.setItem('GUESTS_CHAT_SUCCESS_LOG', JSON.stringify({
+          result,
+          optimisticMessageId: optimisticMessage.message_id,
+          realMessageId: realMessage.message_id,
+          timestamp: new Date().toISOString()
+        }));
+        console.log('[GUESTS_CHAT] Real message from server:', realMessage);
+        console.log('[GUESTS_CHAT] Optimistic message ID:', optimisticMessage.message_id);
+        console.log('[GUESTS_CHAT] Real message ID:', realMessage.message_id);
+        
+        setMessages(prev => prev.map(msg => 
+          msg.message_id === optimisticMessage.message_id ? {
+            message_id: realMessage.message_id,
+            event_id: realMessage.event_id,
+            sender_email: realMessage.sender_email,
+            sender_name: realMessage.sender_name,
+            sender_type: realMessage.sender_type,
+            avatar_url: realMessage.avatar_url,
+            message_text: realMessage.message_text,
+            message_type: realMessage.message_type,
+            created_at: realMessage.created_at,
+            company_id: realMessage.company_id,
+            is_edited: realMessage.is_edited || false,
+            edited_at: realMessage.edited_at,
+            reply_to_message_id: realMessage.reply_to_message_id,
+            reactions: []
+          } : msg
+        ));
+      } else {
+        console.log('[GUESTS_CHAT] Send failed:', result);
+        // Remove optimistic message on failure
+        setMessages(prev => prev.filter(msg => msg.message_id !== optimisticMessage.message_id));
+      }
+      
       setReplyingTo(null); // clear reply state after sending
     } catch (error) {
       console.error('[GUESTS_CHAT] Error in sendMessage:', error);
+      // Remove optimistic message on error
+      setMessages(prev => prev.filter(msg => msg.message_id !== optimisticMessage.message_id));
     } finally {
       setSending(false);
     }
@@ -1206,10 +1590,15 @@ export default function GuestChatInterface({ eventId, isDark, guests }: GuestCha
       return { name: senderName, avatar: null, isOnline: true };
     }
 
+    // Add null check for senderName
+    if (!senderName) {
+      return { name: 'Unknown User', avatar: null, isOnline: false };
+    }
+
     const guest = guests.find(g => 
       g.email === senderEmail ||
       `${g.first_name} ${g.last_name}` === senderName ||
-      g.first_name === senderName.split(' ')[0]
+      (senderName && g.first_name === senderName.split(' ')[0])
     );
 
     return {
@@ -1225,19 +1614,31 @@ export default function GuestChatInterface({ eventId, isDark, guests }: GuestCha
     }
   }, [eventId, currentUser]);
 
-  const broadcastTyping = useCallback(() => {
-    // Simple typing broadcast without debounce for now
-      if (!eventId || !currentUser) return;
-      const channel = supabase.channel(`mobile-guest-chat-${eventId}`);
-      channel.send({
-        type: 'broadcast',
-        event: 'typing',
-        payload: {
-          sender_email: currentUser.email,
-          sender_name: currentUser.name,
-        },
-      });
-  }, [eventId, currentUser]);
+  // Auto-scroll to bottom when messages change or component is focused
+  useEffect(() => {
+    const handleFocus = () => {
+      setTimeout(() => scrollToBottom(), 100);
+    };
+
+    // Scroll to bottom when messages change
+    if (messages.length > 0) {
+      setTimeout(() => scrollToBottom(), 100);
+    }
+
+    // Add focus event listeners
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) {
+        handleFocus();
+      }
+    });
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [messages]);
+
+
 
   // Handler for reply action
   const handleReply = (message: Message) => {
@@ -1454,6 +1855,20 @@ export default function GuestChatInterface({ eventId, isDark, guests }: GuestCha
       margin: 0,
       padding: 0
     }}>
+      <style>
+        {`
+          @keyframes typing {
+            0%, 60%, 100% {
+              transform: translateY(0);
+              opacity: 0.4;
+            }
+            30% {
+              transform: translateY(-10px);
+              opacity: 1;
+            }
+          }
+        `}
+      </style>
 
 
       {/* Messages Container */}
@@ -1470,6 +1885,63 @@ export default function GuestChatInterface({ eventId, isDark, guests }: GuestCha
           maxWidth: '100%'
         }}
       >
+        {/* Load Older Messages Button */}
+        {messages.length > 0 && hasMoreMessages && (
+          <div style={{
+            display: 'flex',
+            justifyContent: 'center',
+            padding: '8px 0'
+          }}>
+            <button
+              onClick={loadOlderMessages}
+              disabled={loadingOlder}
+              style={{
+                background: isDark ? '#374151' : '#f3f4f6',
+                color: isDark ? '#d1d5db' : '#374151',
+                border: `1px solid ${isDark ? '#4b5563' : '#d1d5db'}`,
+                borderRadius: '8px',
+                padding: '8px 16px',
+                fontSize: '14px',
+                fontWeight: '500',
+                cursor: loadingOlder ? 'not-allowed' : 'pointer',
+                opacity: loadingOlder ? 0.6 : 1,
+                transition: 'all 0.2s ease',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}
+              onMouseEnter={(e) => {
+                if (!loadingOlder) {
+                  e.currentTarget.style.background = isDark ? '#4b5563' : '#e5e7eb';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!loadingOlder) {
+                  e.currentTarget.style.background = isDark ? '#374151' : '#f3f4f6';
+                }
+              }}
+            >
+              {loadingOlder ? (
+                <>
+                  <div style={{
+                    width: '16px',
+                    height: '16px',
+                    border: '2px solid transparent',
+                    borderTop: `2px solid ${isDark ? '#d1d5db' : '#374151'}`,
+                    borderRadius: '50%',
+                    animation: 'spin 1s linear infinite'
+                  }} />
+                  Loading...
+                </>
+              ) : (
+                <>
+                  <span>⬆️</span>
+                  Load Older Messages
+                </>
+              )}
+            </button>
+          </div>
+        )}
         {messages.length === 0 ? (
           <div style={{
             flex: 1,
@@ -1549,6 +2021,52 @@ export default function GuestChatInterface({ eventId, isDark, guests }: GuestCha
           ))
         )}
         <div ref={messagesEndRef} />
+        
+        {/* Typing Indicator */}
+        {Object.keys(typingUsers).length > 0 && (
+          <div style={{
+            padding: '8px 24px',
+            background: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)',
+            borderTop: `1px solid ${isDark ? '#404040' : '#dee2e6'}`,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}>
+            <div style={{
+              display: 'flex',
+              gap: '4px'
+            }}>
+              <div style={{
+                width: '8px',
+                height: '8px',
+                borderRadius: '50%',
+                background: isDark ? '#10b981' : '#22c55e',
+                animation: 'typing 1.4s infinite'
+              }} />
+              <div style={{
+                width: '8px',
+                height: '8px',
+                borderRadius: '50%',
+                background: isDark ? '#10b981' : '#22c55e',
+                animation: 'typing 1.4s infinite 0.2s'
+              }} />
+              <div style={{
+                width: '8px',
+                height: '8px',
+                borderRadius: '50%',
+                background: isDark ? '#10b981' : '#22c55e',
+                animation: 'typing 1.4s infinite 0.4s'
+              }} />
+            </div>
+            <span style={{
+              fontSize: '14px',
+              color: isDark ? '#adb5bd' : '#6c757d',
+              fontStyle: 'italic'
+            }}>
+              {Object.values(typingUsers).join(', ')} {Object.keys(typingUsers).length === 1 ? 'is' : 'are'} typing...
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Message Input */}
