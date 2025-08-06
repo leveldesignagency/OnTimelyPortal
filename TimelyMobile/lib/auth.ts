@@ -4,6 +4,7 @@ export interface AuthUser {
   id: string;
   email: string;
   role: string;
+  company_id?: string;
   created_at: string;
   updated_at: string;
   event_id?: string;
@@ -108,6 +109,7 @@ export async function signOut(): Promise<{ error: Error | null }> {
 
 export async function getCurrentUser(): Promise<AuthResponse> {
   try {
+    console.log('🔍 getCurrentUser: Starting...');
     const { data: { user }, error } = await supabase.auth.getUser();
 
     if (error) {
@@ -116,8 +118,11 @@ export async function getCurrentUser(): Promise<AuthResponse> {
     }
 
     if (!user) {
+      console.log('🔍 getCurrentUser: No auth user found');
       return { user: null, error: null };
     }
+
+    console.log('🔍 getCurrentUser: Auth user found:', user.email);
 
     // Get additional user data from the users table
     const { data: userData, error: userError } = await supabase
@@ -126,6 +131,8 @@ export async function getCurrentUser(): Promise<AuthResponse> {
       .eq('email', user.email)
       .single();
 
+    console.log('🔍 getCurrentUser: User data query result:', { userData, userError });
+
     if (userError && !userError.message.includes('not found')) {
       console.error('Error fetching user data:', userError);
       return { user: null, error: userError };
@@ -133,6 +140,7 @@ export async function getCurrentUser(): Promise<AuthResponse> {
 
     // If not found in users table, check guests table
     if (!userData) {
+      console.log('🔍 getCurrentUser: User not found in users table, checking guests table...');
       const { data: guestData, error: guestError } = await supabase
         .from('guests')
         .select('*')
@@ -144,6 +152,7 @@ export async function getCurrentUser(): Promise<AuthResponse> {
         return { user: null, error: guestError };
       }
 
+      console.log('🔍 getCurrentUser: Returning guest user');
       return {
         user: {
           id: user.id,
@@ -156,11 +165,15 @@ export async function getCurrentUser(): Promise<AuthResponse> {
       };
     }
 
+    console.log('🔍 getCurrentUser: User data found:', userData);
+    console.log('🔍 getCurrentUser: User company_id:', userData.company_id);
+
     return {
       user: {
         id: user.id,
         email: user.email!,
         role: userData.role,
+        company_id: userData.company_id,
         created_at: user.created_at,
         updated_at: user.updated_at!
       },

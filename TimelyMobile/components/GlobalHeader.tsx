@@ -10,7 +10,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface GlobalHeaderProps {
   title: string;
-  onMenuPress: () => void;
+  onMenuPress?: () => void;
   showBackButton?: boolean;
   onBackPress?: () => void;
 }
@@ -28,7 +28,7 @@ export default function GlobalHeader({
       <View style={styles.headerContent}>
         {showBackButton ? (
           <TouchableOpacity onPress={onBackPress} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color="#fff" />
+            <Ionicons name="arrow-back" size={20} color="#fff" />
           </TouchableOpacity>
         ) : (
           <View style={styles.headerSpacer} />
@@ -36,9 +36,11 @@ export default function GlobalHeader({
         
         <Text style={styles.headerTitle}>{title}</Text>
         
-        <TouchableOpacity onPress={onMenuPress} style={styles.menuButton}>
-          <Ionicons name="menu" size={24} color="#fff" />
-        </TouchableOpacity>
+        {onMenuPress && (
+          <TouchableOpacity onPress={onMenuPress} style={styles.menuButton}>
+            <Ionicons name="menu" size={20} color="#fff" />
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -46,7 +48,7 @@ export default function GlobalHeader({
 
 const styles = StyleSheet.create({
   header: {
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    backgroundColor: '#1a1a1a',
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255, 255, 255, 0.1)',
   },
@@ -55,22 +57,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingVertical: 6,
   },
   backButton: {
-    padding: 8,
+    padding: 6,
   },
   headerSpacer: {
-    width: 40,
+    width: 32,
   },
   headerTitle: {
     color: '#fff',
-    fontSize: 18,
+    fontSize: 15,
     fontWeight: '600',
     flex: 1,
     textAlign: 'center',
   },
   menuButton: {
-    padding: 8,
+    padding: 6,
   },
 }); 

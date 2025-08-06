@@ -234,21 +234,21 @@ export const navigationService = {
 
 // Utility functions for pin categories
 export const pinCategories = {
-  custom: { color: '#007AFF', icon: '📍' },
-  restaurant: { color: '#FF6B6B', icon: '🍽️' },
-  hotel: { color: '#4ECDC4', icon: '🏨' },
-  transport: { color: '#45B7D1', icon: '🚇' },
-  attraction: { color: '#96CEB4', icon: '🎭' },
-  emergency: { color: '#FF4757', icon: '🚨' }
+  custom: { color: '#007AFF', icon: 'location' },
+  restaurant: { color: '#FF6B6B', icon: 'restaurant' },
+  hotel: { color: '#4ECDC4', icon: 'bed' },
+  transport: { color: '#45B7D1', icon: 'subway' },
+  attraction: { color: '#96CEB4', icon: 'star' },
+  emergency: { color: '#FF4757', icon: 'warning' }
 };
 
 export const transportModes = {
-  walking: { icon: '🚶‍♂️', color: '#4ECDC4', label: 'Walking' },
-  cycling: { icon: '🚴‍♂️', color: '#45B7D1', label: 'Cycling' },
-  driving: { icon: '🚗', color: '#96CEB4', label: 'Driving' },
-  ferry: { icon: '⛴️', color: '#00BCD4', label: 'Ferry' },
-  train: { icon: '🚆', color: '#795548', label: 'Train' },
-  bus: { icon: '🚌', color: '#FF9800', label: 'Bus' },
-  subway: { icon: '🚇', color: '#9C27B0', label: 'Subway' },
-  tram: { icon: '🚊', color: '#607D8B', label: 'Tram' }
+  walking: { icon: 'footsteps', color: '#4ECDC4', label: 'Walking' },
+  cycling: { icon: 'bicycle', color: '#45B7D1', label: 'Cycling' },
+  driving: { icon: 'car', color: '#96CEB4', label: 'Driving' },
+  ferry: { icon: 'boat', color: '#00BCD4', label: 'Ferry' },
+  train: { icon: 'train', color: '#795548', label: 'Train' },
+  bus: { icon: 'bus', color: '#FF9800', label: 'Bus' },
+  subway: { icon: 'subway', color: '#9C27B0', label: 'Subway' },
+  tram: { icon: 'tram', color: '#607D8B', label: 'Tram' }
 }; 

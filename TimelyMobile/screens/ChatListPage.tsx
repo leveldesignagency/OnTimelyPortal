@@ -698,11 +698,8 @@ export default function ChatListPage({ onNavigate, onMenuPress, onOpenChat }: Ch
 
   return (
     <View style={styles.container}>
-      {/* Header with Back Button */}
+      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => onNavigate('teams')} style={styles.backButton}>
-          <MaterialCommunityIcons name="arrow-left" size={24} color="#fff" />
-        </TouchableOpacity>
         <Text style={styles.headerTitle}>Chats</Text>
         <View style={styles.headerSpacer} />
       </View>
@@ -805,7 +802,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 1,

@@ -397,7 +397,7 @@ export default function CreateEventPage({ onCreate }: CreateEventPageProps) {
     setLoading(true);
     try {
       const currentUser = await getCurrentUser();
-      if (!currentUser) {
+      if (!currentUser || !currentUser.id) {
         alert('No authenticated user found. Please log in again.');
         setLoading(false);
         return;

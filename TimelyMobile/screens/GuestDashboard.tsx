@@ -52,6 +52,23 @@ const PLACEHOLDER_IMAGE = 'https://images.unsplash.com/photo-1506744038136-46273
 
 const { width, height } = Dimensions.get('window');
 
+const getVideoEmbedUrl = (url: string): string => {
+  // Handle different YouTube URL formats
+  if (url.includes('youtube.com/watch?v=')) {
+    const videoId = url.split('v=')[1]?.split('&')[0];
+    return videoId ? `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1&showinfo=0&controls=1&fs=1` : '';
+  } else if (url.includes('youtu.be/')) {
+    const videoId = url.split('youtu.be/')[1]?.split('?')[0];
+    return videoId ? `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1&showinfo=0&controls=1&fs=1` : '';
+  } else if (url.includes('youtube.com/embed/')) {
+    return url;
+  } else if (url.includes('vimeo.com/')) {
+    const videoId = url.split('vimeo.com/')[1]?.split('?')[0];
+    return videoId ? `https://player.vimeo.com/video/${videoId}?h=auto&autoplay=0&title=0&byline=0&portrait=0` : '';
+  }
+  return url;
+};
+
 function GeometricOverlay() {
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
@@ -349,33 +366,16 @@ export default function GuestDashboard({ guest, onLogout }: GuestDashboardProps)
                     ))}
                   </View>
                 );
-              case 'video':
+                            case 'video':
                 // If the URL is a YouTube link, embed the video
                 const url = module.content?.url || '';
                 console.log('[VIDEO] Processing video URL:', url);
                 
                 if (url) {
-                  // Improved YouTube URL parsing
-                  let videoId = null;
-                  let embedUrl = null;
+                  const embedUrl = getVideoEmbedUrl(url);
+                  console.log('[VIDEO] Using embed URL:', embedUrl);
                   
-                  // Handle different YouTube URL formats
-                  if (url.includes('youtube.com/watch?v=')) {
-                    videoId = url.split('v=')[1]?.split('&')[0];
-                  } else if (url.includes('youtu.be/')) {
-                    videoId = url.split('youtu.be/')[1]?.split('?')[0];
-                  } else if (url.includes('youtube.com/embed/')) {
-                    videoId = url.split('embed/')[1]?.split('?')[0];
-                  } else if (url.includes('youtube.com/v/')) {
-                    videoId = url.split('v/')[1]?.split('?')[0];
-                  }
-                  
-                  console.log('[VIDEO] Extracted video ID:', videoId);
-                  
-                  if (videoId && videoId.length === 11) {
-                    embedUrl = `https://www.youtube.com/embed/${videoId}?rel=0&showinfo=0`;
-                    console.log('[VIDEO] Using YouTube embed URL:', embedUrl);
-                    
+                  if (embedUrl) {
                     return (
                       <View key={module.id} style={{ marginBottom: 24, alignItems: 'center', width: '100%' }}>
                         <WebView
@@ -396,61 +396,26 @@ export default function GuestDashboard({ guest, onLogout }: GuestDashboardProps)
                           }}
                           onNavigationStateChange={navState => {
                             console.log('[VIDEO] Navigation state changed:', navState.url);
-                            if (navState.url !== embedUrl && !navState.url.includes('youtube.com')) {
+                            if (navState.url !== embedUrl && !navState.url.includes('youtube.com') && !navState.url.includes('vimeo.com')) {
                               setVideoWebViewKey(k => k + 1);
                             }
                           }}
                         />
                       </View>
                     );
-                  } else if (url.includes('vimeo.com')) {
-                    // Handle Vimeo videos
-                    const vimeoId = url.split('vimeo.com/')[1]?.split('?')[0];
-                    if (vimeoId) {
-                      embedUrl = `https://player.vimeo.com/video/${vimeoId}`;
-                      console.log('[VIDEO] Using Vimeo embed URL:', embedUrl);
-                      
-                      return (
-                        <View key={module.id} style={{ marginBottom: 24, alignItems: 'center', width: '100%' }}>
-                          <WebView
-                            key={videoWebViewKey}
-                            source={{ uri: embedUrl }}
-                            style={{ width: '100%', minHeight: 220, aspectRatio: 16/9, borderRadius: 16 }}
-                            javaScriptEnabled={true}
-                            domStorageEnabled={true}
-                            allowsFullscreenVideo={true}
-                            mediaPlaybackRequiresUserAction={false}
-                            onError={(syntheticEvent) => {
-                              const { nativeEvent } = syntheticEvent;
-                              console.error('[VIDEO] WebView error:', nativeEvent);
-                            }}
-                            onHttpError={(syntheticEvent) => {
-                              const { nativeEvent } = syntheticEvent;
-                              console.error('[VIDEO] WebView HTTP error:', nativeEvent);
-                            }}
-                            onNavigationStateChange={navState => {
-                              console.log('[VIDEO] Navigation state changed:', navState.url);
-                              if (navState.url !== embedUrl && !navState.url.includes('vimeo.com')) {
-                                setVideoWebViewKey(k => k + 1);
-                              }
-                            }}
-                          />
-                        </View>
-                      );
-                    }
+                  } else {
+                    console.log('[VIDEO] Invalid video URL format:', url);
+                    return (
+                      <View key={module.id} style={{ marginBottom: 24, alignItems: 'center' }}>
+                        <Text style={{ color: '#fff', fontSize: 16, fontWeight: '500', marginBottom: 4, paddingTop: 7, paddingBottom: 15 }}>
+                          Invalid video URL
+                        </Text>
+                        <Text style={{ color: '#fff', fontSize: 14, opacity: 0.85, textAlign: 'center', flexWrap: 'wrap', overflow: 'hidden' }}>
+                          {url}
+                        </Text>
+                      </View>
+                    );
                   }
-                  
-                  console.log('[VIDEO] Invalid video URL format:', url);
-                  return (
-                    <View key={module.id} style={{ marginBottom: 24, alignItems: 'center' }}>
-                      <Text style={{ color: '#fff', fontSize: 16, fontWeight: '500', marginBottom: 4, paddingTop: 7, paddingBottom: 15 }}>
-                        Invalid video URL
-                      </Text>
-                      <Text style={{ color: '#fff', fontSize: 14, opacity: 0.85, textAlign: 'center', flexWrap: 'wrap', overflow: 'hidden' }}>
-                        {url}
-                      </Text>
-                    </View>
-                  );
                 } else {
                   console.log('[VIDEO] No video URL provided');
                   return (

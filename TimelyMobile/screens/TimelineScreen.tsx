@@ -233,7 +233,7 @@ async function fetchTimelineModules(eventId: string, selectedDate: Date, guestId
       
       if (fallbackError) {
         console.error('[FALLBACK] Error in direct query:', fallbackError);
-        return [];
+      return [];
       }
       
       console.log('[FALLBACK] Direct query result:', fallbackData);

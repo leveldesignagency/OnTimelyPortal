@@ -48,8 +48,10 @@ export default function AnnouncementModal({ isVisible, onClose, eventId, onSucce
   // Load current user on mount
   React.useEffect(() => {
     const loadUser = async () => {
-      const user = await getCurrentUser();
-      setCurrentUser(user);
+      const response = await getCurrentUser();
+      if (response.user) {
+        setCurrentUser(response.user);
+      }
     };
     loadUser();
   }, []);

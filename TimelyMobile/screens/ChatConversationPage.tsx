@@ -97,6 +97,8 @@ export default function ChatConversationPage({ route, navigation }: ChatConversa
   const [showActionMenu, setShowActionMenu] = useState(false);
   const [actionMenuPosition, setActionMenuPosition] = useState({ x: 0, y: 0 });
   const [showInfoSidebar, setShowInfoSidebar] = useState(false);
+  const [isDeleteMode, setIsDeleteMode] = useState(false);
+  const [selectedMessages, setSelectedMessages] = useState<Set<string>>(new Set());
 
   const flatListRef = useRef<FlatList>(null);
 
@@ -437,6 +439,57 @@ export default function ChatConversationPage({ route, navigation }: ChatConversa
     );
   };
 
+  const toggleMessageSelection = (messageId: string) => {
+    if (!isDeleteMode) return;
+    
+    setSelectedMessages(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(messageId)) {
+        newSet.delete(messageId);
+      } else {
+        newSet.add(messageId);
+      }
+      return newSet;
+    });
+  };
+
+  const handleBulkDelete = async () => {
+    if (!currentUser || selectedMessages.size === 0) return;
+
+    try {
+      const messageIds = Array.from(selectedMessages);
+      
+      // Delete messages from database
+      const { error } = await supabase
+        .from('messages')
+        .delete()
+        .in('id', messageIds);
+
+      if (error) {
+        console.error('Error deleting messages:', error);
+        Alert.alert('Error', 'Failed to delete messages');
+        return;
+      }
+
+      // Remove from local state
+      setMessages(prev => prev.filter(msg => !selectedMessages.has(msg.id)));
+      
+      // Exit delete mode
+      setIsDeleteMode(false);
+      setSelectedMessages(new Set());
+      
+      console.log('[BULK DELETE] Successfully deleted', selectedMessages.size, 'messages');
+    } catch (error) {
+      console.error('Error bulk deleting messages:', error);
+      Alert.alert('Error', 'Failed to delete messages');
+    }
+  };
+
+  const cancelDeleteMode = () => {
+    setIsDeleteMode(false);
+    setSelectedMessages(new Set());
+  };
+
   const handleSaveEdit = async () => {
     if (!editingMessage || !editText.trim()) return;
 
@@ -546,26 +599,37 @@ export default function ChatConversationPage({ route, navigation }: ChatConversa
   };
 
   const handleLongPress = (message: Message, event: any) => {
-    setSelectedMessage(message);
+    // Check if this is the current user's message
+    const isCurrentUserMessage = currentUser && message.sender_id === currentUser.id;
     
-    // Get screen dimensions
-    const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
-    
-    // Calculate popup dimensions
-    const popupWidth = 240;
-    const popupHeight = 120; // Approximate height
-    
-    // Calculate position, ensuring it stays within screen bounds
-    let x = event.nativeEvent.pageX - (popupWidth / 2);
-    let y = event.nativeEvent.pageY - popupHeight - 20; // Position above touch point
-    
-    // Ensure popup doesn't go off-screen
-    if (x < 10) x = 10;
-    if (x + popupWidth > screenWidth - 10) x = screenWidth - popupWidth - 10;
-    if (y < 10) y = event.nativeEvent.pageY + 20; // Show below if not enough space above
-    
-    setActionMenuPosition({ x, y });
-    setShowActionMenu(true);
+    if (isCurrentUserMessage) {
+      // Enable delete mode for user's own messages
+      setIsDeleteMode(true);
+      setSelectedMessages(new Set([message.id]));
+      console.log('[DELETE MODE] Entered delete mode for message:', message.id);
+    } else {
+      // Show action menu for other messages
+      setSelectedMessage(message);
+      
+      // Get screen dimensions
+      const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+      
+      // Calculate popup dimensions
+      const popupWidth = 240;
+      const popupHeight = 120; // Approximate height
+      
+      // Calculate position, ensuring it stays within screen bounds
+      let x = event.nativeEvent.pageX - (popupWidth / 2);
+      let y = event.nativeEvent.pageY - popupHeight - 20; // Position above touch point
+      
+      // Ensure popup doesn't go off-screen
+      if (x < 10) x = 10;
+      if (x + popupWidth > screenWidth - 10) x = screenWidth - popupWidth - 10;
+      if (y < 10) y = event.nativeEvent.pageY + 20; // Show below if not enough space above
+      
+      setActionMenuPosition({ x, y });
+      setShowActionMenu(true);
+    }
   };
 
   const handleEmojiPress = () => {
@@ -639,9 +703,25 @@ export default function ChatConversationPage({ route, navigation }: ChatConversa
   const renderMessage = ({ item }: { item: Message }) => {
     const isOwnMessage = item.sender_id === currentUser?.id;
     const hasReactions = item.reactions && item.reactions.length > 0;
+    const isSelected = selectedMessages.has(item.id);
 
     return (
       <View style={[styles.messageContainer, isOwnMessage ? styles.ownMessage : styles.otherMessage]}>
+        {/* Checkmark for delete mode */}
+        {isDeleteMode && isOwnMessage && (
+          <View style={[
+            styles.checkmarkContainer,
+            isSelected && styles.checkmarkSelected
+          ]}>
+            <Text style={[
+              styles.checkmark,
+              isSelected && styles.checkmarkSelectedText
+            ]}>
+              {isSelected ? '●' : '○'}
+            </Text>
+          </View>
+        )}
+
         {/* Reply preview */}
         {item.reply_to_content && (
           <View style={[styles.replyPreview, isOwnMessage ? styles.ownReplyPreview : styles.otherReplyPreview]}>
@@ -664,6 +744,7 @@ export default function ChatConversationPage({ route, navigation }: ChatConversa
           <TouchableOpacity
             style={[styles.messageBubble, isOwnMessage ? styles.ownBubble : styles.otherBubble]}
             onLongPress={(event) => handleLongPress(item, event)}
+            onPress={() => isDeleteMode && isOwnMessage ? toggleMessageSelection(item.id) : null}
             activeOpacity={0.8}
           >
           {/* Message content */}
@@ -689,14 +770,13 @@ export default function ChatConversationPage({ route, navigation }: ChatConversa
         {hasReactions && (
           <View style={styles.reactionsContainer}>
             {item.reactions?.map((reaction, index) => (
-              <TouchableOpacity
+              <View
                 key={`${reaction.emoji}-${index}`}
                 style={styles.reactionButton}
-                onPress={() => handleReaction(item.id, reaction.emoji)}
               >
                 <Text style={styles.reactionEmoji}>{reaction.emoji}</Text>
                 <Text style={styles.reactionCount}>{reaction.count}</Text>
-              </TouchableOpacity>
+              </View>
             ))}
           </View>
         )}
@@ -717,6 +797,8 @@ export default function ChatConversationPage({ route, navigation }: ChatConversa
 
     return (
     <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+
+
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
@@ -781,6 +863,38 @@ export default function ChatConversationPage({ route, navigation }: ChatConversa
           >
             <MaterialCommunityIcons name="close" size={20} color="#fff" />
           </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Delete Mode Preview */}
+      {isDeleteMode && (
+        <View style={styles.previewContainer}>
+          <View style={styles.previewContent}>
+            <Text style={styles.previewLabel}>
+              Delete Messages: {selectedMessages.size} message{selectedMessages.size !== 1 ? 's' : ''} selected
+            </Text>
+          </View>
+          <View style={styles.previewActions}>
+            <TouchableOpacity
+              onPress={cancelDeleteMode}
+              style={[styles.previewActionButton, styles.cancelButton]}
+            >
+              <Text style={styles.cancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleBulkDelete}
+              disabled={selectedMessages.size === 0}
+              style={[
+                styles.previewActionButton, 
+                styles.deleteButton,
+                selectedMessages.size === 0 && styles.deleteButtonDisabled
+              ]}
+            >
+              <Text style={styles.deleteButtonText}>
+                Delete ({selectedMessages.size})
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
 
@@ -1040,7 +1154,8 @@ export default function ChatConversationPage({ route, navigation }: ChatConversa
                     </TouchableOpacity>
                     <TouchableOpacity
                       onPress={() => {
-                        handleDelete(selectedMessage);
+                        setIsDeleteMode(true);
+                        setSelectedMessages(new Set([selectedMessage.id]));
                         setShowActionMenu(false);
                       }}
                       style={{
@@ -1249,6 +1364,66 @@ const styles = StyleSheet.create({
   menuButton: {
     padding: 8,
   },
+  deleteModeHeader: {
+    backgroundColor: '#2a2a2a',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#404040',
+  },
+  deleteModeInfo: {
+    marginBottom: 12,
+  },
+  deleteModeTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#fff',
+    marginBottom: 4,
+  },
+  deleteModeSubtitle: {
+    fontSize: 14,
+    color: '#999',
+  },
+  deleteModeActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  deleteModeButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  cancelButton: {
+    backgroundColor: '#404040',
+  },
+  cancelButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  deleteButton: {
+    backgroundColor: '#dc2626',
+  },
+  deleteButtonDisabled: {
+    backgroundColor: '#404040',
+    opacity: 0.6,
+  },
+  deleteButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  previewActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  previewActionButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   messagesContainer: {
     flex: 1,
     minHeight: 0, // Important for flex layout
@@ -1260,6 +1435,25 @@ const styles = StyleSheet.create({
   },
   messageContainer: {
     marginVertical: 4,
+  },
+  checkmarkContainer: {
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+    marginTop: 4,
+  },
+  checkmarkSelected: {
+    backgroundColor: '#00bfa5',
+    borderRadius: 12,
+  },
+  checkmark: {
+    fontSize: 16,
+    color: '#666',
+  },
+  checkmarkSelectedText: {
+    color: '#fff',
   },
   ownMessage: {
     alignItems: 'flex-end',

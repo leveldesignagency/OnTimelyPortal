@@ -1,7 +1,10 @@
-import React from 'react';
-import { View, Text, Image, TouchableOpacity, StyleSheet, Linking } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, Image, TouchableOpacity, StyleSheet, Linking, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Announcement } from '../lib/announcementService';
+import { supabase } from '../lib/supabase';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface AnnouncementChatItemProps {
   announcement: Announcement;
@@ -9,6 +12,82 @@ interface AnnouncementChatItemProps {
 }
 
 export default function AnnouncementChatItem({ announcement, onPress }: AnnouncementChatItemProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [imageError, setImageError] = useState(false);
+  const [signedImageUrl, setSignedImageUrl] = useState<string | null>(null);
+
+  // Debug image URL and get signed URL if needed
+  useEffect(() => {
+    if (announcement.image_url) {
+      console.log('[ANNOUNCEMENT] Rendering announcement with image URL:', announcement.image_url);
+      
+                // Use signed URL generation for Supabase storage URLs
+          if (announcement.image_url.includes('supabase.co') && announcement.image_url.includes('/storage/v1/object/public/')) {
+            console.log('[ANNOUNCEMENT] Using signed URL generation');
+            getSignedUrl(announcement.image_url);
+          } else {
+            console.log('[ANNOUNCEMENT] Not a Supabase storage URL, using original');
+            setSignedImageUrl(announcement.image_url);
+          }
+    }
+  }, [announcement.image_url]);
+
+  const getSignedUrl = async (url: string) => {
+    try {
+      console.log('[ANNOUNCEMENT] Processing URL:', url);
+      
+      // Test the URL first to see if it's accessible
+      console.log('[ANNOUNCEMENT] Testing URL accessibility...');
+      const testResponse = await fetch(url);
+      console.log('[ANNOUNCEMENT] URL test - Status:', testResponse.status, 'OK:', testResponse.ok);
+      
+      if (!testResponse.ok) {
+        console.log('[ANNOUNCEMENT] URL not accessible, trying signed URL...');
+        
+        // Parse Supabase storage URL
+        // Format: https://ijsktwmevnqgzwwuggkf.supabase.co/storage/v1/object/public/announcement_media/announcements/...
+        if (url.includes('supabase.co') && url.includes('/storage/v1/object/public/')) {
+          const urlParts = url.split('/storage/v1/object/public/');
+          if (urlParts.length === 2) {
+            const bucketAndPath = urlParts[1];
+            const bucketPathParts = bucketAndPath.split('/');
+            const bucket = bucketPathParts[0]; // announcement_media
+            const path = bucketPathParts.slice(1).join('/'); // announcements/4e19b264-61a1-484f-8619-4f2d515b3796/1754316469493.jpg
+            
+            console.log('[ANNOUNCEMENT] Extracted bucket:', bucket);
+            console.log('[ANNOUNCEMENT] Extracted path:', path);
+            
+            // Get signed URL
+            const { data, error } = await supabase.storage
+              .from(bucket)
+              .createSignedUrl(path, 3600); // 1 hour expiry
+            
+            if (error) {
+              console.error('[ANNOUNCEMENT] Error getting signed URL:', error);
+              console.log('[ANNOUNCEMENT] Falling back to original URL');
+              setSignedImageUrl(url);
+            } else {
+              console.log('[ANNOUNCEMENT] Got signed URL:', data.signedUrl);
+              setSignedImageUrl(data.signedUrl);
+            }
+          } else {
+            console.log('[ANNOUNCEMENT] Could not parse Supabase URL format');
+            setSignedImageUrl(url);
+          }
+        } else {
+          console.log('[ANNOUNCEMENT] Not a Supabase storage URL, using original');
+          setSignedImageUrl(url);
+        }
+      } else {
+        console.log('[ANNOUNCEMENT] URL is accessible, using original');
+        setSignedImageUrl(url);
+      }
+    } catch (error) {
+      console.error('[ANNOUNCEMENT] Exception getting signed URL:', error);
+      setSignedImageUrl(url); // Fallback to original URL
+    }
+  };
+
   const handleLinkPress = async () => {
     if (announcement.link_url) {
       try {
@@ -24,67 +103,140 @@ export default function AnnouncementChatItem({ announcement, onPress }: Announce
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  const handlePress = () => {
+    setIsExpanded(!isExpanded);
+    if (onPress) {
+      onPress();
+    }
+  };
+
   return (
-    <TouchableOpacity 
-      style={styles.container} 
-      onPress={onPress}
-      activeOpacity={0.8}
-    >
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <View style={styles.iconContainer}>
-            <Ionicons name="megaphone" size={16} color="#ffffff" />
+    <View style={styles.wrapper}>
+      <TouchableOpacity 
+        style={styles.container} 
+        onPress={handlePress}
+        activeOpacity={0.8}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <View style={styles.headerLeft}>
+            <View style={styles.iconContainer}>
+              <Ionicons name="checkmark-circle" size={16} color="#ffffff" />
+            </View>
+            <Text style={styles.sender}>{announcement.title}</Text>
           </View>
-          <Text style={styles.sender}>{announcement.title}</Text>
+          <Text style={styles.time}>{formatTime(announcement.created_at)}</Text>
         </View>
-        <Text style={styles.time}>{formatTime(announcement.created_at)}</Text>
-      </View>
 
-      {/* Content */}
-      <View style={styles.content}>
-        <Text style={styles.title}>{announcement.title}</Text>
-        
-        {announcement.description && (
-          <Text style={styles.description}>{announcement.description}</Text>
-        )}
+        {/* Content */}
+        <View style={styles.content}>
+          {announcement.description && (
+            <Text style={styles.description}>{announcement.description}</Text>
+          )}
 
-        {announcement.image_url && (
-          <Image 
-            source={{ uri: announcement.image_url }} 
-            style={styles.image}
-            resizeMode="cover"
-          />
-        )}
+          {/* Expanded Details */}
+          {isExpanded && (
+            <View style={styles.expandedContent}>
+              {/* Image */}
+              {announcement.image_url && (
+                <View style={styles.imageSection}>
+                  <Text style={styles.sectionLabel}>Image:</Text>
+                  {!imageError && signedImageUrl ? (
+                    <Image 
+                      source={{ 
+                        uri: signedImageUrl,
+                        headers: {
+                          'User-Agent': 'TimelyMobile/1.0',
+                          'Accept': 'image/*',
+                          'Cache-Control': 'no-cache'
+                        }
+                      }} 
+                      style={styles.image}
+                      resizeMode="cover"
+                      onError={(error) => {
+                        console.error('[ANNOUNCEMENT] Image loading error:', error.nativeEvent);
+                        console.error('[ANNOUNCEMENT] Image URL:', signedImageUrl);
+                        console.error('[ANNOUNCEMENT] Error details:', JSON.stringify(error.nativeEvent));
+                        setImageError(true);
+                      }}
+                      onLoad={() => {
+                        console.log('[ANNOUNCEMENT] Image loaded successfully:', signedImageUrl);
+                        setImageError(false);
+                      }}
+                      onLoadStart={() => {
+                        console.log('[ANNOUNCEMENT] Image loading started:', signedImageUrl);
+                      }}
+                    />
+                  ) : !signedImageUrl ? (
+                    <View style={styles.imageLoadingContainer}>
+                      <Text style={styles.imageLoadingText}>Loading image...</Text>
+                    </View>
+                  ) : (
+                    <View style={styles.imageErrorContainer}>
+                      <Text style={styles.imageErrorText}>Failed to load image</Text>
+                      <Text style={styles.imageUrlText}>{announcement.image_url}</Text>
+                    </View>
+                  )}
+                </View>
+              )}
 
-        {announcement.link_url && (
-          <TouchableOpacity onPress={handleLinkPress} style={styles.linkButton}>
-            <Ionicons name="link" size={14} color="#4a9eff" />
-            <Text style={styles.linkText}>Open Link</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+              {/* Link URL */}
+              {announcement.link_url && (
+                <View style={styles.linkSection}>
+                  <Text style={styles.sectionLabel}>Link:</Text>
+                  <TouchableOpacity onPress={handleLinkPress} style={styles.linkButton}>
+                    <Ionicons name="link" size={14} color="#22c55e" />
+                    <Text style={styles.linkText}>{announcement.link_url}</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
 
-      {/* Footer */}
-      <View style={styles.footer}>
-        <View style={styles.badge}>
-          <Ionicons name="megaphone" size={12} color="#4a9eff" />
-          <Text style={styles.badgeText}>Announcement</Text>
+              {/* Scheduled For */}
+              {announcement.scheduled_for && (
+                <View style={styles.infoSection}>
+                  <Text style={styles.sectionLabel}>Scheduled:</Text>
+                  <Text style={styles.infoText}>
+                    {new Date(announcement.scheduled_for).toLocaleString()}
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
         </View>
-      </View>
-    </TouchableOpacity>
+
+        {/* Footer */}
+        <View style={styles.footer}>
+          <View style={styles.badge}>
+            <Ionicons name="checkmark-circle" size={12} color="#22c55e" />
+            <Text style={styles.badgeText}>Announcement</Text>
+          </View>
+          <Text style={styles.expandText}>
+            {isExpanded ? 'Tap to collapse' : 'Tap to expand'}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  wrapper: {
+    alignItems: 'center',
+    marginVertical: 8,
+  },
   container: {
     backgroundColor: '#2a2a2a',
     borderRadius: 12,
-    marginVertical: 8,
-    marginHorizontal: 16,
+    maxWidth: 350,
+    width: '100%',
     overflow: 'hidden',
     borderLeftWidth: 4,
-    borderLeftColor: '#4a9eff',
+    borderLeftColor: '#22c55e',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
   },
   header: {
     flexDirection: 'row',
@@ -102,7 +254,7 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: '#4a9eff',
+    backgroundColor: '#22c55e',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 8,
@@ -120,56 +272,123 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingBottom: 12,
   },
-  title: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#ffffff',
-    marginBottom: 6,
-  },
   description: {
     fontSize: 14,
     color: '#cccccc',
     lineHeight: 18,
     marginBottom: 8,
   },
+  expandedContent: {
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#404040',
+  },
+  imageSection: {
+    marginBottom: 12,
+  },
+  linkSection: {
+    marginBottom: 12,
+  },
+  infoSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  sectionLabel: {
+    fontSize: 12,
+    color: '#888888',
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  infoText: {
+    fontSize: 12,
+    color: '#ffffff',
+    marginLeft: 8,
+  },
   image: {
     width: '100%',
-    height: 120,
+    height: 200,
     borderRadius: 8,
-    marginBottom: 8,
+    marginTop: 4,
   },
   linkButton: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 6,
     paddingHorizontal: 10,
-    backgroundColor: 'rgba(74, 158, 255, 0.1)',
+    backgroundColor: 'rgba(34, 197, 94, 0.1)',
     borderRadius: 6,
     alignSelf: 'flex-start',
+    marginTop: 4,
   },
   linkText: {
-    fontSize: 12,
-    color: '#4a9eff',
+    fontSize: 11,
+    color: '#22c55e',
     marginLeft: 4,
     fontWeight: '500',
+    flex: 1,
   },
   footer: {
     paddingHorizontal: 12,
     paddingBottom: 8,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   badge: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 4,
     paddingHorizontal: 8,
-    backgroundColor: 'rgba(74, 158, 255, 0.1)',
+    backgroundColor: 'rgba(34, 197, 94, 0.1)',
     borderRadius: 12,
     alignSelf: 'flex-start',
   },
   badgeText: {
     fontSize: 10,
-    color: '#4a9eff',
+    color: '#22c55e',
     marginLeft: 4,
     fontWeight: '500',
   },
+  expandText: {
+    fontSize: 11,
+    color: '#666666',
+    fontStyle: 'italic',
+  },
+  imageErrorContainer: {
+    padding: 12,
+    backgroundColor: 'rgba(255, 0, 0, 0.1)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ff4444',
+  },
+  imageErrorText: {
+    fontSize: 12,
+    color: '#ff4444',
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+                imageUrlText: {
+                fontSize: 10,
+                color: '#888888',
+                fontFamily: 'monospace',
+              },
+              imageLoadingContainer: {
+                padding: 12,
+                backgroundColor: 'rgba(0, 0, 255, 0.1)',
+                borderRadius: 8,
+                borderWidth: 1,
+                borderColor: '#0066ff',
+                alignItems: 'center',
+                justifyContent: 'center',
+                minHeight: 100,
+              },
+              imageLoadingText: {
+                fontSize: 12,
+                color: '#0066ff',
+                fontWeight: '500',
+              },
 }); 

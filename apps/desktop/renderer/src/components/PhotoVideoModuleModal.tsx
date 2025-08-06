@@ -329,7 +329,7 @@ export default function PhotoVideoModuleModal({ open, onClose, onNext, guests, e
           </div>
           <div style={{ display: 'flex', gap: 16, width: '100%', justifyContent: 'flex-end' }}>
             <button onClick={onClose} style={{ padding: '12px 28px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.18)', background: isDark ? '#222' : '#eee', color: isDark ? '#fff' : '#222', fontWeight: 600, fontSize: 16, cursor: 'pointer', marginRight: 8 }}>Cancel</button>
-            <button onClick={() => setStep(2)} disabled={!prompt} style={{ padding: '12px 28px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.18)', background: isDark ? '#444' : '#f3f4f6', color: isDark ? '#fff' : '#222', fontWeight: 700, fontSize: 16, cursor: !prompt ? 'not-allowed' : 'pointer', opacity: !prompt ? 0.7 : 1 }}>Next</button>
+            <button onClick={() => setStep(2)} disabled={!prompt} style={{ padding: '12px 28px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.18)', background: !prompt ? (isDark ? '#444' : '#f3f4f6') : '#10b981', color: isDark ? '#fff' : '#222', fontWeight: 700, fontSize: 16, cursor: !prompt ? 'not-allowed' : 'pointer', opacity: !prompt ? 0.7 : 1 }}>Next</button>
           </div>
         </>}
         {step === 2 && <div style={{ width: '100%' }}>
@@ -352,6 +352,11 @@ export default function PhotoVideoModuleModal({ open, onClose, onNext, guests, e
           <div style={{ display: 'flex', gap: 16, width: '100%', justifyContent: 'flex-end' }}>
             <button onClick={onClose} style={{ padding: '12px 28px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.18)', background: isDark ? '#222' : '#eee', color: isDark ? '#fff' : '#222', fontWeight: 600, fontSize: 16, cursor: 'pointer', marginRight: 8 }}>Cancel</button>
             <button onClick={async () => {
+              if (!currentUser || !currentUser.id) {
+                console.error('Current user is not available');
+                return;
+              }
+              
               const module = await addTimelineModule({
                 event_id: eventId,
                 module_type: 'photo_video',
@@ -377,7 +382,7 @@ export default function PhotoVideoModuleModal({ open, onClose, onNext, guests, e
               setShowSuccessToast(true);
               setTimeout(() => setShowSuccessToast(false), 3000);
               onNext({ module, selectedGuests });
-            }} style={{ padding: '12px 28px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.18)', background: isDark ? '#444' : '#f3f4f6', color: isDark ? '#fff' : '#222', fontWeight: 700, fontSize: 16, cursor: !prompt ? 'not-allowed' : 'pointer', opacity: !prompt ? 0.7 : 1 }}>Save & Post</button>
+            }} style={{ padding: '12px 28px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.18)', background: '#10b981', color: isDark ? '#fff' : '#222', fontWeight: 700, fontSize: 16, cursor: 'pointer', opacity: 1 }}>Save & Post</button>
           </div>
         </div>}
       </div>

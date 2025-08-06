@@ -185,7 +185,7 @@ const CreateTeamPage: React.FC = () => {
   const handleFinalSubmit = async () => {
     console.log('🚀 Starting team creation process...');
     
-    if (!currentUser) {
+    if (!currentUser || !currentUser.id) {
       const errorMsg = 'No current user found';
       console.error('❌', errorMsg);
       setError(errorMsg);

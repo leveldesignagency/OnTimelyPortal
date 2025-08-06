@@ -6,7 +6,7 @@ export interface User {
   email: string
   name: string
   role: 'masterAdmin' | 'user'
-  avatar: string
+  avatar_url?: string
   status: 'online' | 'offline' | 'away' | 'busy'
   last_seen: string
   created_at: string

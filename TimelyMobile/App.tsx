@@ -45,6 +45,7 @@ import EventDashboardPage from './screens/EventDashboardPage';
 import EventLauncherPage from './screens/EventLauncherPage';
 import AssignOverviewPage from './screens/AssignOverviewPage';
 import EventPortalManagementPage from './screens/EventPortalManagementPage';
+import EventHomepageBuilderPage from './screens/EventHomepageBuilderPage';
 import PreviewTimelinePage from './screens/PreviewTimelinePage';
 import { ThemeProvider } from './ThemeContext';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
@@ -69,6 +70,8 @@ import ViewModulesPage from './screens/ViewModulesPage';
 import SettingsPage from './screens/SettingsPage';
 import CreateItineraryPage from './screens/CreateItineraryPage';
 import CreateGuestsPage from './screens/CreateGuestsPage';
+import GuestChatAdminScreen from './screens/GuestChatAdminScreen';
+
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -82,6 +85,7 @@ export default function App() {
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [events, setEvents] = useState<any[]>([]);
+
   const navigationRef = useRef<any>(null);
 
   // Icon sources
@@ -271,11 +275,21 @@ export default function App() {
     }
   };
 
-  function MessagesScreen() {
-    return <GuestChatScreen guest={guestProfile} onAnnouncementPress={(announcement) => {
-      setGlobalAnnouncement(announcement);
-      setShowGlobalModal(true);
-    }} />;
+  function MessagesScreen({ navigation }: any) {
+    return <GuestChatScreen 
+      route={{
+        params: {
+          eventId: guestProfile?.event_id,
+          eventName: guestProfile?.event_name || 'Guest Chat',
+          guest: guestProfile
+        }
+      }}
+      navigation={navigation}
+      onAnnouncementPress={(announcement) => {
+        setGlobalAnnouncement(announcement);
+        setShowGlobalModal(true);
+      }} 
+    />;
   }
 
   function AdminStack() {
@@ -330,6 +344,13 @@ export default function App() {
           }}
         />
         <Stack.Screen 
+          name="EventHomepageBuilder" 
+          component={EventHomepageBuilderScreen} 
+          options={{
+            headerShown: false,
+          }}
+        />
+        <Stack.Screen 
           name="PreviewTimeline" 
           component={PreviewTimelineScreen} 
           options={{
@@ -354,6 +375,11 @@ export default function App() {
         <Stack.Screen 
           name="CreateGuests" 
           component={CreateGuestsScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen 
+          name="GuestChatAdmin" 
+          component={GuestChatAdminScreenWrapper}
           options={{ headerShown: false }}
         />
       </Stack.Navigator>
@@ -507,6 +533,17 @@ export default function App() {
     );
   }
 
+  function getAddonIcon(addonKey: string): string {
+    const iconMap: { [key: string]: string } = {
+      translator: 'language',
+      currencyConverter: 'calculator',
+      offlineMaps: 'map',
+      safetyBeacon: 'shield-checkmark',
+      default: 'apps'
+    };
+    return iconMap[addonKey] || iconMap.default;
+  }
+
   function AppsListScreen({ navigation }: { navigation: any }) {
     // DEBUG: Log guestProfile and eventId
     console.log('[AppsScreen] guestProfile:', guestProfile);
@@ -577,7 +614,12 @@ export default function App() {
                 }
               }}
             >
-              <Text style={{ fontSize: 38, marginBottom: 10 }}>{addon.addon_icon || '🧩'}</Text>
+              <Ionicons 
+                name={getAddonIcon(addon.addon_key)} 
+                size={48} 
+                color="#007AFF" 
+                style={{ marginBottom: 10 }}
+              />
               <Text style={{ color: '#fff', fontSize: 17, fontWeight: 'bold', textAlign: 'center', marginBottom: 6 }}>{addon.addon_label || addon.addon_key}</Text>
               <Text style={{ color: '#aaa', fontSize: 13, textAlign: 'center' }}>{addon.addon_description}</Text>
             </TouchableOpacity>
@@ -639,12 +681,60 @@ export default function App() {
             props.navigation.navigate('AssignOverview', params);
           } else if (route === 'PreviewTimeline') {
             props.navigation.navigate('PreviewTimeline', params);
+          } else if (route === 'event-homepage-builder') {
+            props.navigation.navigate('EventHomepageBuilder', params);
+          } else if (route === 'guest-chat-admin') {
+            props.navigation.navigate('GuestChatAdmin', params);
           } else {
             console.log('EventPortalManagement navigation:', route, params);
           }
         }}
         onMenuPress={toggleSidebar}
         onGoBack={() => props.navigation.goBack()}
+      />
+    );
+  }
+
+  function EventHomepageBuilderScreen(props: any) {
+    console.log('🔍 EventHomepageBuilderScreen called with props:', props);
+    console.log('🔍 EventHomepageBuilderScreen route params:', props.route.params);
+    
+    return (
+      <EventHomepageBuilderPage
+        eventId={props.route.params?.eventId || ''}
+        navigation={props.navigation}
+        onNavigate={(route: string, params?: any) => {
+          console.log('🔍 EventHomepageBuilder onNavigate called:', route, params);
+          if (route === 'event-portal-management') {
+            props.navigation.navigate('EventPortalManagement', params);
+          } else if (route === 'goBack') {
+            props.navigation.goBack();
+          } else {
+            console.log('EventHomepageBuilder navigation:', route, params);
+          }
+        }}
+        onMenuPress={toggleSidebar}
+      />
+    );
+  }
+
+  function GuestChatAdminScreenWrapper(props: any) {
+    console.log('🔍 GuestChatAdminScreenWrapper called with props:', props);
+    console.log('🔍 GuestChatAdminScreenWrapper route params:', props.route.params);
+    
+    return (
+      <GuestChatAdminScreen
+        route={props.route}
+        navigation={props.navigation}
+        onNavigate={(route: string, params?: any) => {
+          console.log('🔍 GuestChatAdmin onNavigate called:', route, params);
+          if (route === 'event-portal-management') {
+            props.navigation.navigate('EventPortalManagement', params);
+          } else {
+            console.log('GuestChatAdmin navigation:', route, params);
+          }
+        }}
+        onMenuPress={toggleSidebar}
       />
     );
   }
@@ -755,6 +845,11 @@ export default function App() {
           const eventId = params?.eventId;
           console.log('🔍 Navigating to event launcher:', eventId);
           navigationRef.current.navigate('EventLauncher', { eventId });
+        } else if (route === 'guest-chat-admin') {
+          const eventId = params?.eventId;
+          const eventName = params?.eventName || 'Admin Chat';
+          console.log('🔍 Navigating to guest chat admin:', eventId, eventName);
+          navigationRef.current.navigate('GuestChatAdmin', { eventId, eventName });
         }
     }
     
@@ -765,6 +860,8 @@ export default function App() {
   const toggleSidebar = () => {
     setSidebarVisible(!sidebarVisible);
   };
+
+
 
   // Track unread messages
   useEffect(() => {
@@ -812,15 +909,15 @@ export default function App() {
       <GestureHandlerRootView style={{ flex: 1 }}>
         <GlobalAlertProvider>
           <ThemeProvider>
-            <NavigationContainer ref={navigationRef}>
-              <StatusBar style="light" />
-              {user ? (
-                isAdmin ? (
-                  // Admin Dashboard - Full screen without tabs
-                  <AdminStack />
-                ) : (
-                  // Guest Dashboard - With tabs
-                  <Tab.Navigator
+              <NavigationContainer ref={navigationRef}>
+                <StatusBar style="light" />
+                {user ? (
+                  isAdmin ? (
+                    // Admin Dashboard - Full screen without tabs
+                    <AdminStack />
+                  ) : (
+                    // Guest Dashboard - With tabs
+                    <Tab.Navigator
                   initialRouteName="Dashboard"
                   screenOptions={({ route }) => ({
                     headerShown: false,
@@ -893,15 +990,18 @@ export default function App() {
               events={events}
               unreadMessages={unreadMessages}
             />
+            
             </ThemeProvider>
           </GlobalAlertProvider>
-          {globalAnnouncement && showGlobalModal && (
-            <GlobalAnnouncementModal
-              announcement={globalAnnouncement}
-              isVisible={showGlobalModal}
-              onClose={() => setShowGlobalModal(false)}
-            />
-          )}
+                      {globalAnnouncement && showGlobalModal && (
+              <GlobalAnnouncementModal
+                announcement={globalAnnouncement}
+                isVisible={showGlobalModal}
+                onClose={() => setShowGlobalModal(false)}
+              />
+            )}
+            
+
         </GestureHandlerRootView>
       </SafeAreaProvider>
     );

@@ -296,7 +296,7 @@ export default function EventDashboardPage({ eventId, onNavigate }: EventDashboa
   const [isGuestSelectModeActive, setIsGuestSelectModeActive] = useState(false);
   const [selectedGuestIds, setSelectedGuestIds] = useState<string[]>([]);
   const [guestSearchQuery, setGuestSearchQuery] = useState('');
-  const [showGuestFilterModal, setShowGuestFilterModal] = useState(false);
+
   const [showBulkDeleteGuestsConfirm, setShowBulkDeleteGuestsConfirm] = useState(false);
   const [showDeleteGuestModal, setShowDeleteGuestModal] = useState(false);
   const [guestToDelete, setGuestToDelete] = useState<string | null>(null);
@@ -316,56 +316,56 @@ export default function EventDashboardPage({ eventId, onNavigate }: EventDashboa
         label: 'Flight Tracker',
         description: 'Real-time flight status tracking',
         type: 'service',
-        icon: '✈️'
+        icon: 'airplane'
       },
       {
         key: 'safetyBeacon',
         label: 'Safety SOS',
         description: 'Emergency alert system for guests',
         type: 'service',
-        icon: '🆘'
+        icon: 'alert'
       },
       {
         key: 'gpsTracking',
         label: 'GPS Tracking',
         description: 'Track logistics team location',
         type: 'service',
-        icon: '📍'
+        icon: 'crosshairs-gps'
       },
       {
         key: 'eventUpdates',
         label: 'Event Updates',
         description: 'Live event status notifications',
         type: 'service',
-        icon: '🔔'
+        icon: 'bell'
       },
       {
         key: 'hotelBooking',
         label: 'Hotel Manager',
         description: 'Hotel reservation tracking',
         type: 'service',
-        icon: '🏨'
+        icon: 'home'
       },
       {
         key: 'currencyConverter',
         label: 'Currency Converter',
         description: 'Convert currencies for international guests',
         type: 'service',
-        icon: '💱'
+        icon: 'currency-usd'
       },
       {
         key: 'translator',
         label: 'Translator',
         description: 'Translate text and phrases for guests',
         type: 'service',
-        icon: '🌐'
+        icon: 'translate'
       },
       {
         key: 'offlineMaps',
         label: 'Offline Maps',
         description: 'Access maps without internet connection',
         type: 'service',
-        icon: '🗺️'
+        icon: 'map'
       }
     ]
   };
@@ -376,7 +376,15 @@ export default function EventDashboardPage({ eventId, onNavigate }: EventDashboa
 
   // Data loading functions
   const loadItineraries = async () => {
-    if (!eventId || !currentUser?.company_id) return;
+    console.log('🔍 loadItineraries called with eventId:', eventId, 'currentUser:', currentUser);
+    
+    if (!eventId || !currentUser?.company_id) {
+      console.log('❌ loadItineraries returning early - missing eventId or currentUser.company_id');
+      console.log('❌ eventId:', eventId);
+      console.log('❌ currentUser:', currentUser);
+      console.log('❌ currentUser?.company_id:', currentUser?.company_id);
+      return;
+    }
     
     try {
       console.log('🔍 Loading itineraries for event:', eventId);
@@ -398,7 +406,9 @@ export default function EventDashboardPage({ eventId, onNavigate }: EventDashboa
       console.log('📝 Draft itineraries:', draftItins.length);
       console.log('📝 Draft data:', draftItins);
 
+      console.log('🔄 Setting saved itineraries state...');
       setSavedItineraries(savedItins);
+      console.log('🔄 Setting draft itineraries state...');
       setDraftItineraries(draftItins);
 
       // Group itineraries by group_id
@@ -795,6 +805,10 @@ export default function EventDashboardPage({ eventId, onNavigate }: EventDashboa
       setLastBulkAction({ action: 'draft', affected: drafted });
       setSelectedItineraryIds([]);
       setShowBulkActionsModal(false);
+      
+      // Reload itineraries to update UI
+      await loadItineraries();
+      
       setSuccessMessage('All selected itineraries saved as draft');
       setShowSuccessModal(true);
     } catch (error) {
@@ -817,6 +831,12 @@ export default function EventDashboardPage({ eventId, onNavigate }: EventDashboa
       setLastBulkAction({ action: 'delete', affected: deleted });
       setSelectedItineraryIds([]);
       setShowBulkActionsModal(false);
+      
+      // Force reload itineraries and wait for it to complete
+      console.log('🔄 Reloading itineraries after bulk delete...');
+      await loadItineraries();
+      console.log('✅ Itineraries reloaded after bulk delete');
+      
       setSuccessMessage('All selected itineraries deleted successfully');
       setShowSuccessModal(true);
     } catch (error) {
@@ -880,64 +900,129 @@ export default function EventDashboardPage({ eventId, onNavigate }: EventDashboa
   };
 
   const handleDuplicateItinerary = async (itinerary: ItineraryType) => {
+    console.log('🚀 DUPLICATE FUNCTION CALLED!');
+    console.log('🔍 Starting duplicate process for itinerary:', itinerary.id);
+    console.log('🔍 Current user:', currentUser);
+    console.log('🔍 Event ID:', eventId);
+    
+    // Test auth.uid() and user lookup
+    try {
+      // Check auth session
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      console.log('🔍 Auth session:', session);
+      console.log('🔍 Session error:', sessionError);
+      
+      const { data: { user: authUser }, error: userError } = await supabase.auth.getUser();
+      console.log('🔍 Auth user:', authUser);
+      console.log('🔍 Auth user error:', userError);
+      
+      if (authUser) {
+        console.log('🔍 Auth user ID:', authUser.id);
+        console.log('🔍 Auth user email:', authUser.email);
+        
+        // Check if user exists in users table
+        const { data: userInTable, error: userTableError } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', authUser.id)
+          .single();
+        
+        console.log('🔍 User in table:', userInTable);
+        console.log('🔍 User table error:', userTableError);
+        
+        if (userInTable) {
+          console.log('🔍 User company_id in table:', userInTable.company_id);
+        }
+      } else {
+        console.log('❌ No authenticated user found');
+      }
+    } catch (error) {
+      console.log('🔍 Error checking auth:', error);
+    }
+    
     // Ensure user is loaded
     let user = currentUser;
     if (!user) {
-      user = await getCurrentUser();
-      if (!user) {
+      console.log('🔍 No current user, fetching from getCurrentUser...');
+      const userResponse = await getCurrentUser();
+      console.log('🔍 User response:', userResponse);
+      if (!userResponse.user) {
         Alert.alert('Error', 'User not authenticated');
         return;
       }
+      user = userResponse.user;
       setCurrentUser(user);
     }
 
-    if (!eventId || !user?.company_id) {
-      Alert.alert('Error', 'Missing event or user information');
+    console.log('🔍 User object:', user);
+    console.log('🔍 User company_id:', user?.company_id);
+    console.log('🔍 Event ID:', eventId);
+
+    // Extract the actual user data from the AuthResponse
+    const actualUser = user?.user || user;
+    console.log('🔍 Actual user data:', actualUser);
+    console.log('🔍 Actual user company_id:', actualUser?.company_id);
+
+    if (!eventId) {
+      console.log('❌ Missing event information');
+      console.log('❌ eventId:', eventId);
+      Alert.alert('Error', 'Missing event information');
       return;
     }
     
     try {
+      const insertData = {
+        event_id: eventId,
+        company_id: actualUser?.company_id || '',
+        created_by: actualUser?.id || '',
+        title: `${itinerary.title} (Copy)`,
+        description: itinerary.description || '',
+        date: itinerary.date || '',
+        arrival_time: itinerary.arrival_time || '',
+        start_time: itinerary.start_time || '',
+        end_time: itinerary.end_time || '',
+        location: itinerary.location || '',
+        is_draft: false,
+        group_id: itinerary.group_id,
+        group_name: itinerary.group_name,
+        // Duplicate module data
+        document_file_name: itinerary.document_file_name,
+        qrcode_url: itinerary.qrcode_url,
+        qrcode_image: itinerary.qrcode_image,
+        contact_name: itinerary.contact_name,
+        contact_country_code: itinerary.contact_country_code,
+        contact_phone: itinerary.contact_phone,
+        contact_email: itinerary.contact_email,
+        notification_times: itinerary.notification_times || [],
+        modules: itinerary.modules,
+        module_values: itinerary.module_values,
+        content: itinerary.content,
+      };
+      
+      console.log('🔍 Inserting duplicate itinerary with data:', insertData);
+      
       const { data, error } = await supabase
         .from('itineraries')
-        .insert({
-          event_id: eventId,
-          company_id: user.company_id,
-          created_by: user.id,
-          title: `${itinerary.title} (Copy)`,
-          description: itinerary.description,
-          date: itinerary.date,
-          arrival_time: itinerary.arrival_time,
-          start_time: itinerary.start_time,
-          end_time: itinerary.end_time,
-          location: itinerary.location,
-          is_draft: false,
-          group_id: itinerary.group_id,
-          group_name: itinerary.group_name,
-          // Duplicate module data
-          document_file_name: itinerary.document_file_name,
-          qrcode_url: itinerary.qrcode_url,
-          qrcode_image: itinerary.qrcode_image,
-          contact_name: itinerary.contact_name,
-          contact_country_code: itinerary.contact_country_code,
-          contact_phone: itinerary.contact_phone,
-          contact_email: itinerary.contact_email,
-          notification_times: itinerary.notification_times,
-          modules: itinerary.modules,
-          module_values: itinerary.module_values,
-          content: itinerary.content,
-        })
+        .insert(insertData)
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Database error:', error);
+        throw error;
+      }
+      
+      console.log('✅ Itinerary duplicated successfully:', data);
+      
+      // Force reload itineraries and wait for it to complete
+      console.log('🔄 Reloading itineraries...');
+      await loadItineraries();
+      console.log('✅ Itineraries reloaded');
       
       setSuccessMessage('Itinerary duplicated successfully');
       setShowSuccessModal(true);
-      
-      // Reload itineraries
-      loadItineraries();
     } catch (error) {
-      console.error('Error duplicating itinerary:', error);
+      console.error('❌ Error duplicating itinerary:', error);
       setErrorMessage('Failed to duplicate itinerary');
       setShowErrorModal(true);
     }
@@ -965,6 +1050,11 @@ export default function EventDashboardPage({ eventId, onNavigate }: EventDashboa
       setShowDeleteItineraryModal(false);
       setItineraryToDelete(null);
       
+      // Force reload itineraries and wait for it to complete
+      console.log('🔄 Reloading itineraries after delete...');
+      await loadItineraries();
+      console.log('✅ Itineraries reloaded after delete');
+      
       // Small delay to ensure database update is complete
       setTimeout(() => {
         setSuccessMessage('Itinerary deleted successfully');
@@ -991,6 +1081,9 @@ export default function EventDashboardPage({ eventId, onNavigate }: EventDashboa
       if (error) throw error;
       
       console.log('✅ Draft saved successfully');
+      
+      // Reload itineraries to update UI immediately
+      await loadItineraries();
       
       // Small delay to ensure database update is complete
       setTimeout(() => {
@@ -1030,6 +1123,9 @@ export default function EventDashboardPage({ eventId, onNavigate }: EventDashboa
       console.log('✅ Draft deleted successfully');
       setShowDeleteDraftModal(false);
       setDraftToDelete(null);
+      
+      // Reload itineraries to update UI immediately
+      await loadItineraries();
       
       // Small delay to ensure database update is complete
       setTimeout(() => {
@@ -1186,6 +1282,9 @@ export default function EventDashboardPage({ eventId, onNavigate }: EventDashboa
       console.log('✅ Guest deleted successfully');
       setShowDeleteGuestModal(false);
       setGuestToDelete(null);
+
+      // Reload guests to update UI immediately
+      await loadGuests();
 
       // Small delay to ensure database update is complete
       setTimeout(() => {
@@ -1470,7 +1569,12 @@ export default function EventDashboardPage({ eventId, onNavigate }: EventDashboa
                     if (!currentEvent || currentEvent.status === 'launched') {
                       console.log('🔍 Event Portal button pressed');
                       console.log('🔍 Current event status:', currentEvent?.status);
-                      onNavigate('event-portal-management', { eventId });
+                      onNavigate('event-portal-management', { 
+                        eventId, 
+                        activeAddOns,
+                        guests,
+                        itineraries: savedItineraries
+                      });
                     } else {
                       console.log('🔍 Event Portal disabled - event not launched');
                     }
@@ -1974,12 +2078,7 @@ export default function EventDashboardPage({ eventId, onNavigate }: EventDashboa
                 />
               </View>
               
-              <TouchableOpacity
-                style={styles.filtersButton}
-                onPress={() => setShowGuestFilterModal(true)}
-              >
-                <Text style={styles.secondaryButtonText}>Filters</Text>
-              </TouchableOpacity>
+
             </View>
 
             {/* Guest Selection Indicator */}
@@ -2145,7 +2244,7 @@ export default function EventDashboardPage({ eventId, onNavigate }: EventDashboa
                     >
                       <View style={styles.addOnModuleContent}>
                         <View style={styles.addOnModuleHeader}>
-                          <Text style={styles.addOnModuleIcon}>{module.icon}</Text>
+                          <MaterialCommunityIcons name={module.icon as any} size={20} color="#10b981" />
                           <Text style={styles.addOnModuleTitle}>{module.label}</Text>
                         </View>
                         <Text style={styles.addOnModuleDescription}>{module.description}</Text>
@@ -3399,15 +3498,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.2)',
   },
-  filtersButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-    minWidth: 80,
-  },
+
   filterButtons: {
     flexDirection: 'row',
     gap: 8,
@@ -3489,11 +3580,15 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 16,
     alignItems: 'center',
+    width: 150,
+    flexShrink: 0,
   },
   saveAddOnsButtonText: {
     color: '#fff',
     fontSize: 14,
     fontWeight: '600',
+    textAlign: 'center',
+    flexShrink: 0,
   },
   saveMessage: {
     textAlign: 'center',
@@ -3502,7 +3597,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   activeAddOnsList: {
-    gap: 12,
+    gap: 8,
     marginBottom: 24,
   },
   addOnCard: {
@@ -3528,7 +3623,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   deleteAddOnButton: {
-    padding: 4,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
   },
   availableAddOns: {
     marginTop: 16,
@@ -3540,7 +3642,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   addOnsGrid: {
-    gap: 12,
+    gap: 8,
   },
   addOnModule: {
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
@@ -3563,10 +3665,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 6,
-  },
-  addOnModuleIcon: {
-    fontSize: 20,
-    marginRight: 8,
+    gap: 8,
   },
   addOnModuleTitle: {
     color: '#fff',
@@ -3664,8 +3763,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
     borderRadius: 12,
     padding: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   draftContent: {
     gap: 12,
@@ -3686,7 +3786,7 @@ const styles = StyleSheet.create({
   draftActions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 8,
+    gap: 4,
   },
   selectedItineraryCard: {
     backgroundColor: 'rgba(16, 185, 129, 0.1)',

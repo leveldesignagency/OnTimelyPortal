@@ -242,6 +242,7 @@ export default function AnnouncementModal({ isOpen, onClose, eventId, onSuccess 
 
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string>('');
+  const [showSuccessToast, setShowSuccessToast] = useState(false);
 
   // Load current user on mount
   React.useEffect(() => {
@@ -317,7 +318,7 @@ export default function AnnouncementModal({ isOpen, onClose, eventId, onSuccess 
       return;
     }
 
-    if (!currentUser) {
+    if (!currentUser || !currentUser.id) {
       alert('User not authenticated');
       return;
     }
@@ -376,6 +377,8 @@ export default function AnnouncementModal({ isOpen, onClose, eventId, onSuccess 
       setImageFile(null);
       setImagePreview('');
 
+      setShowSuccessToast(true);
+      setTimeout(() => setShowSuccessToast(false), 3000);
       onSuccess?.();
       onClose();
 
@@ -623,7 +626,7 @@ export default function AnnouncementModal({ isOpen, onClose, eventId, onSuccess 
                 type="button"
                 onClick={() => handleInputChange('sendImmediately', true)}
                 style={{
-                  ...getButtonStyles(isDark, formData.sendImmediately ? 'primary' : 'secondary'),
+                  ...getButtonStyles(isDark, formData.sendImmediately ? 'success' : 'secondary'),
                   flex: 1,
                   height: '48px',
                 }}
@@ -635,7 +638,7 @@ export default function AnnouncementModal({ isOpen, onClose, eventId, onSuccess 
                 type="button"
                 onClick={() => handleInputChange('sendImmediately', false)}
                 style={{
-                  ...getButtonStyles(isDark, !formData.sendImmediately ? 'primary' : 'secondary'),
+                  ...getButtonStyles(isDark, !formData.sendImmediately ? 'success' : 'secondary'),
                   flex: 1,
                   height: '48px',
                 }}
@@ -684,7 +687,7 @@ export default function AnnouncementModal({ isOpen, onClose, eventId, onSuccess 
             <button
               type="submit"
               style={{
-                ...getButtonStyles(isDark, 'primary'),
+                ...getButtonStyles(isDark, (!loading && formData.title.trim()) ? 'success' : 'primary'),
                 flex: 1,
                 height: '48px',
                 opacity: loading ? 0.6 : 1
@@ -696,6 +699,25 @@ export default function AnnouncementModal({ isOpen, onClose, eventId, onSuccess 
           </div>
         </form>
       </div>
+      
+      {/* Success Toast */}
+      {showSuccessToast && (
+        <div style={{
+          position: 'fixed',
+          top: 24,
+          right: 24,
+          background: 'rgba(40,200,120,0.95)',
+          color: '#fff',
+          padding: '12px 24px',
+          borderRadius: 8,
+          fontWeight: 600,
+          fontSize: 16,
+          zIndex: 3000,
+          boxShadow: '0 2px 12px rgba(0,0,0,0.15)'
+        }}>
+          Announcement sent successfully!
+        </div>
+      )}
     </div>
   );
 } 

@@ -11,13 +11,13 @@ import {
   TextInput,
   FlatList,
   Animated,
-  PanGestureHandler,
-  State,
+  SafeAreaView,
 } from 'react-native';
 import { MaterialCommunityIcons, Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useRealtimeGuests, useRealtimeItineraries } from '../hooks/useRealtime';
+import GuestSelectionModal from '../components/GuestSelectionModal';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -63,18 +63,34 @@ export default function PreviewTimelinePage({
   itineraries = [], 
   activeAddOns = [] 
 }: PreviewTimelinePageProps) {
+  
+  function getModuleDisplayName(moduleType: string): string {
+    const displayNames: { [key: string]: string } = {
+      question: 'Question',
+      feedback: 'Feedback',
+      multiple_choice: 'Multiple Choice',
+      photo_video: 'Photo/Video'
+    };
+    return displayNames[moduleType] || moduleType;
+  }
   const navigation = useNavigation();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [currentTime, setCurrentTime] = useState(new Date());
   const [selectedEventIndex, setSelectedEventIndex] = useState<number | null>(null);
   const [showEventCard, setShowEventCard] = useState(false);
   const [showModuleModal, setShowModuleModal] = useState(false);
+  const [showModuleDisplayModal, setShowModuleDisplayModal] = useState(false);
+  const [selectedModule, setSelectedModule] = useState<TimelineModule | null>(null);
   const [moduleType, setModuleType] = useState<string>('');
   const [timelineModules, setTimelineModules] = useState<TimelineModule[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModuleManagement, setShowModuleManagement] = useState(false);
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [showGuestSelectionModal, setShowGuestSelectionModal] = useState(false);
+  const [pendingModuleData, setPendingModuleData] = useState<any>(null);
 
   // Real-time data
   const guestsData = useRealtimeGuests(eventId);
@@ -99,6 +115,47 @@ export default function PreviewTimelinePage({
 
     return () => clearInterval(interval);
   }, []);
+
+  // Polling for timeline updates every 30 seconds
+  useEffect(() => {
+    const pollTimelineData = async () => {
+      if (!eventId) return;
+      
+      try {
+        console.log('🔄 Polling for timeline updates...');
+        
+        // Refresh modules
+        const { data, error } = await supabase
+          .from('timeline_modules')
+          .select('*')
+          .eq('event_id', eventId)
+          .order('created_at', { ascending: true });
+
+        if (error) {
+          console.error('Error polling timeline modules:', error);
+        } else {
+          console.log('🔄 Polled timeline modules:', data);
+          setTimelineModules(data || []);
+        }
+        
+        // Refresh itineraries (if not using real-time)
+        if (!itinerariesData.itineraries) {
+          console.log('Polling for itinerary updates...');
+          // The useRealtimeItineraries hook should handle this
+        }
+      } catch (error) {
+        console.error('Error polling timeline data:', error);
+      }
+    };
+
+    // Poll immediately
+    pollTimelineData();
+
+    // Poll every 30 seconds
+    const interval = setInterval(pollTimelineData, 30000);
+
+    return () => clearInterval(interval);
+  }, [eventId, itinerariesData.itineraries]);
 
   // Load timeline modules from database
   useEffect(() => {
@@ -238,7 +295,19 @@ export default function PreviewTimelinePage({
 
     // Add timeline modules for the selected date
     timelineModules.forEach((module) => {
-      const moduleDate = typeof module.date === 'string' ? module.date : module.date?.toISOString()?.split('T')[0];
+      // Normalize the module date to YYYY-MM-DD format
+      let moduleDate = module.date;
+      if (typeof moduleDate === 'string') {
+        // If it's already a string, ensure it's in YYYY-MM-DD format
+        if (moduleDate.includes('T')) {
+          moduleDate = moduleDate.split('T')[0];
+        }
+      } else if (moduleDate instanceof Date) {
+        moduleDate = moduleDate.toISOString().split('T')[0];
+      }
+      
+      console.log(`🔍 Module date: ${moduleDate}, Target date: ${targetDate}`);
+      
       if (moduleDate === targetDate) {
         const [h, m] = module.time.split(':').map(Number);
         const dateTime = new Date(selectedDate);
@@ -281,14 +350,26 @@ export default function PreviewTimelinePage({
   };
 
   const handleEventPress = (index: number) => {
-    setSelectedEventIndex(index);
-    setShowEventCard(true);
+    const event = mergedEvents[index];
     
-    // Animate card appearance
-    Animated.spring(cardAnimation, {
-      toValue: 1,
-      useNativeDriver: true,
-    }).start();
+    if (event.type === 'module') {
+      // Find the module data
+      const module = timelineModules.find(m => `module-${m.id}` === event.id);
+      if (module) {
+        setSelectedModule(module);
+        setShowModuleDisplayModal(true);
+      }
+    } else {
+      // Regular event
+      setSelectedEventIndex(index);
+      setShowEventCard(true);
+      
+      // Animate card appearance
+      Animated.spring(cardAnimation, {
+        toValue: 1,
+        useNativeDriver: true,
+      }).start();
+    }
   };
 
   const closeEventCard = () => {
@@ -308,35 +389,44 @@ export default function PreviewTimelinePage({
 
   // Handle module creation
   const handleSaveModule = async (moduleData: any) => {
+    // Store the module data and show guest selection modal
+    setPendingModuleData(moduleData);
+    setShowModuleModal(false);
+    setShowGuestSelectionModal(true);
+  };
+
+  // Handle guest selection confirmation
+  const handleGuestSelectionConfirm = async (selectedGuestIds: string[]) => {
+    if (!pendingModuleData) return;
+
     try {
-      const modulePayload = {
+      const modulePayload: any = {
         event_id: eventId,
         module_type: moduleType,
-        time: moduleData.time,
-        date: moduleData.date,
-        // Remove created_by for now since we don't have auth context
+        time: pendingModuleData.time,
+        date: pendingModuleData.date,
       };
 
       // Add module-specific fields based on type
       switch (moduleType) {
         case 'question':
-          modulePayload.question = moduleData.title;
-          modulePayload.title = moduleData.title;
+          modulePayload.question = pendingModuleData.title;
+          modulePayload.title = pendingModuleData.title;
           break;
         case 'feedback':
-          modulePayload.title = moduleData.title;
-          modulePayload.question = moduleData.title; // Add question field for feedback too
+          modulePayload.title = pendingModuleData.title;
+          modulePayload.question = pendingModuleData.title;
           modulePayload.feedback_data = { defaultRating: 5 };
           break;
         case 'multiple_choice':
-          modulePayload.question = moduleData.title;
-          modulePayload.title = moduleData.title;
-          modulePayload.survey_data = { options: moduleData.options || [] };
+          modulePayload.question = pendingModuleData.title;
+          modulePayload.title = pendingModuleData.title;
+          modulePayload.survey_data = { options: pendingModuleData.options || [] };
           break;
         case 'photo_video':
-          modulePayload.title = moduleData.title;
-          modulePayload.question = moduleData.title; // Add question field for photo/video
-          modulePayload.label = moduleData.title;
+          modulePayload.title = pendingModuleData.title;
+          modulePayload.question = pendingModuleData.title;
+          modulePayload.label = pendingModuleData.title;
           break;
       }
 
@@ -355,20 +445,19 @@ export default function PreviewTimelinePage({
       } else {
         console.log('Module created successfully:', data);
         
-        // Assign module to all guests for this event
-        console.log('Current guests for assignment:', currentGuests);
-        console.log('Number of guests:', currentGuests.length);
+        // Assign module to selected guests
+        console.log('Selected guests for assignment:', selectedGuestIds);
         
-        if (currentGuests.length === 0) {
-          console.warn('No guests available for module assignment');
-          setErrorMessage('Module created but no guests available for assignment');
+        if (selectedGuestIds.length === 0) {
+          console.warn('No guests selected for module assignment');
+          setErrorMessage('Module created but no guests selected for assignment');
           setShowErrorModal(true);
           return;
         }
         
-        const guestAssignments = currentGuests.map(guest => ({
+        const guestAssignments = selectedGuestIds.map(guestId => ({
           module_id: data.id,
-          guest_id: guest.id,
+          guest_id: guestId,
           event_id: eventId
         }));
         
@@ -397,7 +486,11 @@ export default function PreviewTimelinePage({
             console.log('Verified assignments:', verifyData);
           }
           
-          setShowModuleModal(false);
+          setShowGuestSelectionModal(false);
+          setPendingModuleData(null);
+          // Show success message
+          setSuccessMessage(`${getModuleDisplayName(moduleType)} module created successfully.`);
+          setShowSuccessModal(true);
           // Refresh modules
           await loadTimelineModules();
         }
@@ -583,11 +676,25 @@ export default function PreviewTimelinePage({
                           styles.milestone,
                           status === 'current' && styles.currentMilestone,
                           status === 'past' && styles.pastMilestone,
-                          isSelected && styles.selectedMilestone
+                          isSelected && styles.selectedMilestone,
+                          event.type === 'module' && styles.moduleMilestone
                         ]} />
+                        {event.type === 'module' && (
+                          <View style={styles.moduleIndicator}>
+                            <MaterialCommunityIcons 
+                              name={event.moduleType === 'question' ? 'help-circle' : 
+                                    event.moduleType === 'feedback' ? 'star' : 
+                                    event.moduleType === 'multiple_choice' ? 'format-list-bulleted' : 
+                                    event.moduleType === 'photo_video' ? 'camera' : 'puzzle'} 
+                              size={12} 
+                              color="#fff" 
+                            />
+                          </View>
+                        )}
                         <Text style={[
                           styles.milestoneTitle,
-                          isSelected && styles.selectedMilestoneTitle
+                          isSelected && styles.selectedMilestoneTitle,
+                          event.type === 'module' && styles.moduleMilestoneTitle
                         ]}>
                           {event.title}
                         </Text>
@@ -695,16 +802,16 @@ export default function PreviewTimelinePage({
         onRequestClose={() => setShowModuleModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Add {moduleType} Module</Text>
-              <TouchableOpacity 
-                style={styles.closeButton}
-                onPress={() => setShowModuleModal(false)}
-              >
-                <MaterialCommunityIcons name="close" size={24} color="#fff" />
-              </TouchableOpacity>
-            </View>
+                  <View style={styles.modalContent}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>{getModuleDisplayName(moduleType)} Module</Text>
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setShowModuleModal(false)}
+            >
+              <MaterialCommunityIcons name="close" size={24} color="#fff" />
+            </TouchableOpacity>
+          </View>
             <ModuleForm 
               moduleType={moduleType}
               onSave={handleSaveModule}
@@ -758,6 +865,69 @@ export default function PreviewTimelinePage({
               onPress={() => setShowErrorModal(false)}
             >
               <Text style={styles.errorModalButtonText}>OK</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Module Display Modal */}
+      <Modal
+        visible={showModuleDisplayModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowModuleDisplayModal(false)}
+        statusBarTranslucent={true}
+        hardwareAccelerated={true}
+      >
+        <SafeAreaView style={styles.fullScreenModalOverlay}>
+          <View style={styles.fullScreenModalContent}>
+            {selectedModule && (
+              <ModuleDisplay 
+                module={selectedModule} 
+                onClose={() => setShowModuleDisplayModal(false)}
+              />
+            )}
+          </View>
+        </SafeAreaView>
+      </Modal>
+
+      {/* Guest Selection Modal */}
+      <GuestSelectionModal
+        visible={showGuestSelectionModal}
+        onClose={() => {
+          setShowGuestSelectionModal(false);
+          setPendingModuleData(null);
+        }}
+        onConfirm={handleGuestSelectionConfirm}
+        guests={currentGuests}
+        moduleType={moduleType}
+      />
+
+      {/* Custom Success Modal */}
+      <Modal
+        visible={showSuccessModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowSuccessModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.successModalContent}>
+            <View style={styles.successModalHeader}>
+              <View style={styles.successIconContainer}>
+                <MaterialCommunityIcons name="check-circle" size={32} color="#10b981" />
+              </View>
+              <Text style={styles.successModalTitle}>Success</Text>
+            </View>
+            
+            <Text style={styles.successModalText}>
+              {successMessage}
+            </Text>
+            
+            <TouchableOpacity 
+              style={styles.successModalButton}
+              onPress={() => setShowSuccessModal(false)}
+            >
+              <Text style={styles.successModalButtonText}>OK</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -892,7 +1062,8 @@ function ModuleForm({ moduleType, onSave, onCancel }: any) {
       {moduleType === 'multiple_choice' && (
         <View style={styles.optionsContainer}>
           <Text style={styles.optionsTitle}>Options:</Text>
-          {options.map((option, index) => (
+          <ScrollView style={styles.optionsScrollView} showsVerticalScrollIndicator={false}>
+                      {options.map((option, index) => (
             <View key={index} style={styles.optionRow}>
               <TextInput
                 style={styles.optionInput}
@@ -901,16 +1072,15 @@ function ModuleForm({ moduleType, onSave, onCancel }: any) {
                 value={option}
                 onChangeText={(value) => updateOption(index, value)}
               />
-              {options.length > 2 && (
-                <TouchableOpacity
-                  style={styles.removeOptionButton}
-                  onPress={() => removeOption(index)}
-                >
-                  <MaterialCommunityIcons name="close" size={16} color="#ef4444" />
-                </TouchableOpacity>
-              )}
+              <TouchableOpacity
+                style={styles.removeOptionButton}
+                onPress={() => removeOption(index)}
+              >
+                <MaterialCommunityIcons name="close" size={20} color="#ef4444" />
+              </TouchableOpacity>
             </View>
           ))}
+          </ScrollView>
           <TouchableOpacity style={styles.addOptionButton} onPress={addOption}>
             <MaterialCommunityIcons name="plus" size={16} color="#10b981" />
             <Text style={styles.addOptionText}>Add Option</Text>
@@ -977,6 +1147,192 @@ function ModuleManagement({ modules, onClose, eventId }: any) {
       <TouchableOpacity style={styles.closeButton} onPress={onClose}>
         <Text style={styles.closeButtonText}>Close</Text>
       </TouchableOpacity>
+    </View>
+  );
+}
+
+// Module Display Component
+function ModuleDisplay({ module, onClose }: { module: TimelineModule; onClose: () => void }) {
+  const [userResponse, setUserResponse] = useState('');
+  const [selectedOption, setSelectedOption] = useState<string>('');
+  const [rating, setRating] = useState(5);
+  const [photoVideoResponse, setPhotoVideoResponse] = useState('');
+
+  const getModuleIcon = (type: string) => {
+    switch (type) {
+      case 'question': return 'help-circle';
+      case 'feedback': return 'star';
+      case 'multiple_choice': return 'format-list-bulleted';
+      case 'photo_video': return 'camera';
+      default: return 'puzzle';
+    }
+  };
+
+  const getModuleColor = (type: string) => {
+    switch (type) {
+      case 'question': return '#3b82f6';
+      case 'feedback': return '#f59e0b';
+      case 'multiple_choice': return '#10b981';
+      case 'photo_video': return '#8b5cf6';
+      default: return '#6b7280';
+    }
+  };
+
+  const renderModuleContent = () => {
+    switch (module.module_type) {
+      case 'question':
+        return (
+          <View style={styles.moduleContent}>
+            <Text style={styles.moduleQuestion}>{module.question || module.title}</Text>
+            <TextInput
+              style={styles.responseInput}
+              placeholder="Type your answer..."
+              placeholderTextColor="#666"
+              value={userResponse}
+              onChangeText={setUserResponse}
+              multiline
+            />
+            <TouchableOpacity style={styles.submitButton}>
+              <Text style={styles.submitButtonText}>Submit Answer</Text>
+            </TouchableOpacity>
+          </View>
+        );
+
+      case 'feedback':
+        return (
+          <View style={styles.moduleContent}>
+            <Text style={styles.moduleQuestion}>{module.title}</Text>
+            <View style={styles.ratingContainer}>
+              <Text style={styles.ratingLabel}>Rate your experience:</Text>
+              <View style={styles.starsContainer}>
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <TouchableOpacity
+                    key={star}
+                    onPress={() => setRating(star)}
+                    style={styles.starButton}
+                  >
+                    <MaterialCommunityIcons
+                      name={star <= rating ? 'star' : 'star-outline'}
+                      size={32}
+                      color={star <= rating ? '#f59e0b' : '#666'}
+                    />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+            <TextInput
+              style={styles.responseInput}
+              placeholder="Additional comments (optional)..."
+              placeholderTextColor="#666"
+              value={userResponse}
+              onChangeText={setUserResponse}
+              multiline
+            />
+            <TouchableOpacity style={styles.submitButton}>
+              <Text style={styles.submitButtonText}>Submit Feedback</Text>
+            </TouchableOpacity>
+          </View>
+        );
+
+      case 'multiple_choice':
+        const options = module.survey_data?.options || [];
+        return (
+          <View style={styles.moduleContent}>
+            <Text style={styles.moduleQuestion}>{module.title}</Text>
+            <View style={styles.optionsContainer}>
+              {options.map((option: string, index: number) => (
+                <TouchableOpacity
+                  key={index}
+                  style={[
+                    styles.optionButton,
+                    selectedOption === option && styles.selectedOptionButton
+                  ]}
+                  onPress={() => setSelectedOption(option)}
+                >
+                  <Text style={[
+                    styles.optionText,
+                    selectedOption === option && styles.selectedOptionText
+                  ]}>
+                    {option}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <TouchableOpacity 
+              style={[
+                styles.submitButton,
+                !selectedOption && styles.disabledButton
+              ]}
+              disabled={!selectedOption}
+            >
+              <Text style={styles.submitButtonText}>Submit Answer</Text>
+            </TouchableOpacity>
+          </View>
+        );
+
+      case 'photo_video':
+        return (
+          <View style={styles.moduleContent}>
+            <Text style={styles.moduleQuestion}>{module.title}</Text>
+            <View style={styles.photoVideoContainer}>
+              <TouchableOpacity style={styles.cameraButton}>
+                <MaterialCommunityIcons name="camera" size={32} color="#fff" />
+                <Text style={styles.cameraButtonText}>Take Photo</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.cameraButton}>
+                <MaterialCommunityIcons name="video" size={32} color="#fff" />
+                <Text style={styles.cameraButtonText}>Record Video</Text>
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              style={styles.responseInput}
+              placeholder="Add a caption (optional)..."
+              placeholderTextColor="#666"
+              value={photoVideoResponse}
+              onChangeText={setPhotoVideoResponse}
+              multiline
+            />
+            <TouchableOpacity style={styles.submitButton}>
+              <Text style={styles.submitButtonText}>Submit Media</Text>
+            </TouchableOpacity>
+          </View>
+        );
+
+      default:
+        return (
+          <View style={styles.moduleContent}>
+            <Text style={styles.moduleQuestion}>Module type not supported</Text>
+          </View>
+        );
+    }
+  };
+
+  return (
+    <View style={styles.moduleDisplayContainer}>
+      <View style={styles.moduleDisplayHeader}>
+        <View style={styles.moduleDisplayIconContainer}>
+          <MaterialCommunityIcons
+            name={getModuleIcon(module.module_type)}
+            size={32}
+            color={getModuleColor(module.module_type)}
+          />
+        </View>
+        <View style={styles.moduleDisplayInfo}>
+          <Text style={styles.moduleDisplayTitle}>
+            {module.module_type.replace('_', ' ').toUpperCase()}
+          </Text>
+          <Text style={styles.moduleDisplayTime}>
+            {module.time} • {module.date}
+          </Text>
+        </View>
+        <TouchableOpacity onPress={onClose} style={styles.closeModuleButton}>
+          <MaterialCommunityIcons name="close" size={24} color="#fff" />
+        </TouchableOpacity>
+      </View>
+      
+      <ScrollView style={styles.moduleDisplayScroll} showsVerticalScrollIndicator={false}>
+        {renderModuleContent()}
+      </ScrollView>
     </View>
   );
 }
@@ -1244,7 +1600,8 @@ const styles = StyleSheet.create({
   optionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 12,
+    marginBottom: 16,
   },
   optionInput: {
     flex: 1,
@@ -1403,6 +1760,24 @@ const styles = StyleSheet.create({
     color: '#3b82f6',
     fontWeight: '600',
   },
+  moduleMilestone: {
+    backgroundColor: '#8b5cf6',
+    borderColor: '#8b5cf6',
+  },
+  moduleIndicator: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    backgroundColor: '#8b5cf6',
+    borderRadius: 8,
+    width: 16,
+    height: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  moduleMilestoneTitle: {
+    color: '#8b5cf6',
+  },
   dateTimeContainer: {
     flexDirection: 'row',
     gap: 12,
@@ -1451,6 +1826,212 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   errorModalButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  // Module Display Styles
+  fullScreenModalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#000',
+    zIndex: 9999,
+  },
+  fullScreenModalContent: {
+    flex: 1,
+    backgroundColor: '#000',
+    paddingTop: 0,
+  },
+  moduleDisplayContent: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 20,
+    padding: 0,
+    width: '90%',
+    maxWidth: 400,
+    maxHeight: '80%',
+    overflow: 'hidden',
+  },
+  moduleDisplayContainer: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  moduleDisplayScroll: {
+    flex: 1,
+  },
+  moduleDisplayHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+    backgroundColor: '#000',
+  },
+  moduleDisplayIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#333',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  moduleDisplayInfo: {
+    flex: 1,
+  },
+  moduleDisplayTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  moduleDisplayTime: {
+    color: '#ccc',
+    fontSize: 14,
+  },
+  closeModuleButton: {
+    padding: 8,
+  },
+  moduleContent: {
+    padding: 20,
+  },
+  moduleQuestion: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 20,
+    lineHeight: 24,
+  },
+  responseInput: {
+    backgroundColor: '#23242b',
+    borderRadius: 12,
+    padding: 16,
+    color: '#fff',
+    fontSize: 16,
+    marginBottom: 20,
+    minHeight: 100,
+    textAlignVertical: 'top',
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  submitButton: {
+    backgroundColor: '#3b82f6',
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+  },
+  submitButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  disabledButton: {
+    backgroundColor: '#666',
+    opacity: 0.5,
+  },
+  ratingContainer: {
+    marginBottom: 20,
+  },
+  ratingLabel: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  starsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  starButton: {
+    padding: 4,
+  },
+  optionsContainer: {
+    marginBottom: 20,
+  },
+  optionsScrollView: {
+    maxHeight: 200,
+    marginBottom: 12,
+  },
+  optionButton: {
+    backgroundColor: '#23242b',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  selectedOptionButton: {
+    backgroundColor: '#3b82f6',
+    borderColor: '#3b82f6',
+  },
+  optionText: {
+    color: '#fff',
+    fontSize: 16,
+  },
+  selectedOptionText: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  photoVideoContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 20,
+  },
+  cameraButton: {
+    flex: 1,
+    backgroundColor: '#23242b',
+    borderRadius: 12,
+    padding: 20,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  cameraButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 8,
+  },
+  // Success Modal Styles
+  successModalContent: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 16,
+    padding: 24,
+    width: '90%',
+    maxWidth: 350,
+    alignItems: 'center',
+  },
+  successModalHeader: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  successIconContainer: {
+    marginBottom: 12,
+  },
+  successModalTitle: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  successModalText: {
+    color: '#ccc',
+    fontSize: 16,
+    lineHeight: 24,
+    marginBottom: 24,
+    textAlign: 'center',
+  },
+  successModalButton: {
+    paddingHorizontal: 32,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: '#10b981',
+    alignItems: 'center',
+  },
+  successModalButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',

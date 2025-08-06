@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '../lib/supabase';
 import { useRealtimeGuests, useRealtimeItineraries } from '../hooks/useRealtime';
 import GlobalHeader from '../components/GlobalHeader';
@@ -30,12 +31,22 @@ interface EventPortalManagementPageProps {
   guests?: any[];
   itineraries?: any[];
   activeAddOns?: any[];
+  onMenuPress?: () => void;
+  onNavigate?: (route: string, params?: any) => void;
 }
 
-export default function EventPortalManagementPage() {
+export default function EventPortalManagementPage({ 
+  eventId: propEventId, 
+  guestAssignments, 
+  guests: propGuests, 
+  itineraries: propItineraries, 
+  activeAddOns: propActiveAddOns, 
+  onMenuPress, 
+  onNavigate 
+}: EventPortalManagementPageProps) {
   const navigation = useNavigation();
   const route = useRoute();
-  const eventId = route.params?.eventId || route.params?.eventId;
+  const eventId = propEventId || route.params?.eventId;
   
   const [event, setEvent] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -47,7 +58,6 @@ export default function EventPortalManagementPage() {
   const [customModal, setCustomModal] = useState<{ title: string; message: string } | null>(null);
   const [loginsExpanded, setLoginsExpanded] = useState(true);
   const [expandedGuestCards, setExpandedGuestCards] = useState<{[guestId: string]: boolean}>({});
-  const [showSidebar, setShowSidebar] = useState(false);
 
   // Handle guest card toggle
   const toggleGuestCard = (guestId: string) => {
@@ -60,8 +70,9 @@ export default function EventPortalManagementPage() {
   // Use real-time hooks for data
   const guestsData = useRealtimeGuests(eventId);
   const itinerariesData = useRealtimeItineraries(eventId);
-  const guests = guestsData.guests || [];
-  const itineraries = itinerariesData.itineraries || [];
+  const guests = propGuests || guestsData.guests || [];
+  const itineraries = propItineraries || itinerariesData.itineraries || [];
+  const activeAddOns = propActiveAddOns || [];
 
   // Load event data
   useEffect(() => {
@@ -289,7 +300,7 @@ export default function EventPortalManagementPage() {
       <View style={styles.container}>
         <GlobalHeader
           title="Event Portal"
-          onMenuPress={() => setShowSidebar(true)}
+          onMenuPress={onMenuPress}
           showBackButton={true}
           onBackPress={() => navigation.goBack()}
         />
@@ -307,7 +318,7 @@ export default function EventPortalManagementPage() {
     <View style={styles.container}>
       <GlobalHeader
         title="Event Portal"
-        onMenuPress={() => setShowSidebar(true)}
+        onMenuPress={onMenuPress}
         showBackButton={true}
         onBackPress={() => navigation.goBack()}
       />
@@ -330,7 +341,7 @@ export default function EventPortalManagementPage() {
               <Text style={styles.statLabel}>Itinerary Items</Text>
             </View>
             <View style={styles.statCard}>
-              <Text style={[styles.statNumber, { color: '#db2777' }]}>{route.params?.activeAddOns?.length || 0}</Text>
+              <Text style={[styles.statNumber, { color: '#db2777' }]}>{activeAddOns?.length || 0}</Text>
               <Text style={styles.statLabel}>Active Add-ons</Text>
             </View>
           </View>
@@ -361,7 +372,7 @@ export default function EventPortalManagementPage() {
                 eventId, 
                 guests, 
                 itineraries, 
-                activeAddOns: route.params?.activeAddOns 
+                activeAddOns 
               });
             }}
           >
@@ -375,7 +386,10 @@ export default function EventPortalManagementPage() {
           <Text style={styles.sectionDescription}>
             Create a custom homepage for your guests with all the need to knows about the event.
           </Text>
-          <TouchableOpacity style={styles.actionButton}>
+          <TouchableOpacity 
+            style={styles.actionButton}
+            onPress={() => onNavigate?.('event-homepage-builder', { eventId })}
+          >
             <Text style={styles.actionButtonText}>Create</Text>
           </TouchableOpacity>
         </View>
@@ -386,7 +400,16 @@ export default function EventPortalManagementPage() {
           <Text style={styles.sectionDescription}>
             Chat with your guests in real-time. All messages are delivered instantly with push notifications.
           </Text>
-          <TouchableOpacity style={styles.actionButton}>
+          <TouchableOpacity 
+            style={styles.actionButton}
+            onPress={() => {
+              console.log('🔍 Guest Chat button pressed');
+              console.log('🔍 onNavigate function:', onNavigate);
+              console.log('🔍 eventId:', eventId);
+              console.log('🔍 event name:', event?.name);
+              onNavigate?.('guest-chat-admin', { eventId, eventName: event?.name || 'Admin Chat' });
+            }}
+          >
             <Text style={styles.actionButtonText}>Open Chat</Text>
           </TouchableOpacity>
         </View>
@@ -554,13 +577,13 @@ export default function EventPortalManagementPage() {
                   </View>
                 )}
                 
-                {isExpanded && route.params?.activeAddOns?.length > 0 && (
+                {isExpanded && activeAddOns?.length > 0 && (
                   <View style={styles.addOnsContainer}>
                     <Text style={styles.addOnsTitle}>
-                      Available Add-ons ({route.params.activeAddOns.length})
+                      Available Add-ons ({activeAddOns.length})
                     </Text>
                     <View style={styles.addOnsList}>
-                      {route.params.activeAddOns.map((addon: any, index: number) => (
+                      {activeAddOns.map((addon: any, index: number) => (
                         <View key={addon.id || addon.name || index} style={styles.addOnTag}>
                           <Text style={styles.addOnTagText}>
                             {addon.name || addon.type || addon.key || 'Unknown Add-on'}
@@ -721,84 +744,7 @@ export default function EventPortalManagementPage() {
         </View>
       </Modal>
 
-      {/* Sidebar Modal */}
-      <Modal
-        visible={showSidebar}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowSidebar(false)}
-      >
-        <View style={styles.sidebarOverlay}>
-          <View style={styles.sidebar}>
-            <View style={styles.sidebarHeader}>
-              <Text style={styles.sidebarTitle}>Menu</Text>
-              <TouchableOpacity 
-                style={styles.closeSidebarButton}
-                onPress={() => setShowSidebar(false)}
-              >
-                <Ionicons name="close" size={24} color="#fff" />
-              </TouchableOpacity>
-            </View>
-            
-            <View style={styles.sidebarContent}>
-              <TouchableOpacity 
-                style={styles.sidebarItem}
-                onPress={() => {
-                  setShowSidebar(false);
-                  // Navigate to event settings
-                }}
-              >
-                <Ionicons name="settings" size={20} color="#fff" />
-                <Text style={styles.sidebarItemText}>Event Settings</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={styles.sidebarItem}
-                onPress={() => {
-                  setShowSidebar(false);
-                  // Navigate to guest management
-                }}
-              >
-                <Ionicons name="people" size={20} color="#fff" />
-                <Text style={styles.sidebarItemText}>Guest Management</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={styles.sidebarItem}
-                onPress={() => {
-                  setShowSidebar(false);
-                  // Navigate to itinerary management
-                }}
-              >
-                <Ionicons name="calendar" size={20} color="#fff" />
-                <Text style={styles.sidebarItemText}>Itinerary Management</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={styles.sidebarItem}
-                onPress={() => {
-                  setShowSidebar(false);
-                  // Navigate to module management
-                }}
-              >
-                <Ionicons name="puzzle" size={20} color="#fff" />
-                <Text style={styles.sidebarItemText}>Module Management</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={styles.sidebarItem}
-                onPress={() => {
-                  setShowSidebar(false);
-                  // Navigate to analytics
-                }}
-              >
-                <Ionicons name="analytics" size={20} color="#fff" />
-                <Text style={styles.sidebarItemText}>Analytics</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+
     </View>
   );
 }
@@ -845,10 +791,10 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   sectionDescription: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#ccc',
     marginBottom: 16,
-    lineHeight: 22,
+    lineHeight: 20,
   },
   statsGrid: {
     flexDirection: 'row',
@@ -1409,51 +1355,5 @@ const styles = StyleSheet.create({
     color: '#ccc',
     textAlign: 'center',
   },
-  sidebarOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  sidebar: {
-    backgroundColor: 'rgba(30, 30, 30, 0.95)',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingTop: 20,
-    paddingBottom: 40,
-    maxHeight: '80%',
-  },
-  sidebarHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  sidebarTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#fff',
-  },
-  closeSidebarButton: {
-    padding: 8,
-  },
-  sidebarContent: {
-    paddingTop: 20,
-  },
-  sidebarItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
-  },
-  sidebarItemText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#fff',
-    marginLeft: 16,
-  },
+
 }); 

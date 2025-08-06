@@ -59,11 +59,13 @@ export default function OfflineMapsScreen({ navigation }: OfflineMapsScreenProps
   const [destinationAddress, setDestinationAddress] = useState<string>('');
   const [navigationProgress, setNavigationProgress] = useState(0); // 0-100 percentage
   const [navigationStartTime, setNavigationStartTime] = useState<Date | null>(null);
+  const [locationSubscription, setLocationSubscription] = useState<any>(null);
   
   // UI state
   const [showPinModal, setShowPinModal] = useState(false);
   const [showDownloadModal, setShowDownloadModal] = useState(false);
   const [showNavigationModal, setShowNavigationModal] = useState(false);
+  const [showLocationPermissionModal, setShowLocationPermissionModal] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
   
@@ -513,11 +515,18 @@ export default function OfflineMapsScreen({ navigation }: OfflineMapsScreenProps
   useEffect(() => {
     const initializeApp = async () => {
       try {
+        // Load saved data first
         await Promise.all([
-          initializeLocation(),
           loadPins(),
           loadDownloadedAreas()
         ]);
+        
+        // Set a default location so the map loads immediately
+        setUserLocation([-122.4194, 37.7749]); // San Francisco default
+        
+        // Show location permission modal
+        setShowLocationPermissionModal(true);
+        
       } catch (error) {
         console.error('Error initializing app:', error);
         alertService.error('Initialization Error', 'Failed to initialize the app. Please restart.');
@@ -530,6 +539,12 @@ export default function OfflineMapsScreen({ navigation }: OfflineMapsScreenProps
       // Cleanup search timeout
       if (locationSearchTimeout) {
         clearTimeout(locationSearchTimeout);
+      }
+      
+      // Cleanup location subscription
+      if (locationSubscription) {
+        console.log('🔄 Stopping location updates...');
+        locationSubscription.remove();
       }
     };
   }, []);
@@ -558,14 +573,21 @@ export default function OfflineMapsScreen({ navigation }: OfflineMapsScreenProps
         return;
       }
 
-      console.log('🌍 Getting current position...');
+      console.log('🌍 Getting current position with maximum precision...');
       
-      // Try high accuracy first
+      // Maximum precision location options for real-time tracking
+      const locationOptions = {
+        accuracy: Location.Accuracy.BestForNavigation,
+        timeInterval: 500, // Update every 500ms for real-time
+        distanceInterval: 0.5, // Update every 0.5 meters for precise tracking
+        mayShowUserSettingsDialog: true, // Allow user to improve accuracy
+        maximumAge: 0, // Always get fresh location
+      };
+      
       try {
-        const location = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.BestForNavigation,
-        });
-        console.log('✅ High accuracy location:', location.coords);
+        const location = await Location.getCurrentPositionAsync(locationOptions);
+        console.log('✅ Maximum precision location:', location.coords);
+        console.log('📍 Accuracy:', location.coords.accuracy, 'meters');
         
         // Check if this is the default emulator location (Silicon Valley)
         const isEmulatorDefault = (
@@ -574,24 +596,46 @@ export default function OfflineMapsScreen({ navigation }: OfflineMapsScreenProps
         );
         
         if (isEmulatorDefault) {
-          console.log('🤖 Detected emulator default location - you can change this in emulator settings');
+          console.log('🤖 Detected emulator default location');
           alertService.info(
             'Emulator Location Detected',
-            'This appears to be the default emulator location (Silicon Valley). To use your real location:\n\n1. Click "..." in emulator\n2. Go to "Location" tab\n3. Enter your city or coordinates\n4. Click "Send"\n5. Tap the location button again'
+            'This appears to be the default emulator location (Silicon Valley).\n\nTo use your real location:\n\n1. Click "..." in emulator\n2. Go to "Location" tab\n3. Enter your city or coordinates\n4. Click "Send"\n5. Tap the location button again\n\nOr use the search bar to find your location!\n\n💡 Tip: For better accuracy, try the location button multiple times.'
           );
         }
         
         setUserLocation([location.coords.longitude, location.coords.latitude]);
+        
+        // Start real-time location updates for precise movement tracking
+        startLocationUpdates();
+        
+        // Show accuracy feedback
+        const accuracy = location.coords.accuracy || 0;
+        if (accuracy < 5) {
+          alertService.success('High Precision', `Location accuracy: ${accuracy.toFixed(1)} meters - Real-time tracking active!`);
+        } else if (accuracy < 20) {
+          alertService.info('Good Precision', `Location accuracy: ${accuracy.toFixed(1)} meters - Real-time tracking active!`);
+        } else {
+          alertService.warning('Low Precision', `Location accuracy: ${accuracy.toFixed(1)} meters. Consider moving to an open area for better precision.`);
+        }
+        
         return;
       } catch (highAccuracyError) {
-        console.log('⚠️ High accuracy failed, trying balanced...');
+        console.log('⚠️ Maximum precision failed, trying high accuracy...');
         
-        // Fallback to balanced accuracy
+        // Fallback to high accuracy
         const location = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
+          accuracy: Location.Accuracy.High,
+          timeInterval: 1000,
+          distanceInterval: 1,
+          maximumAge: 0,
         });
-        console.log('✅ Balanced accuracy location:', location.coords);
+        console.log('✅ High accuracy location:', location.coords);
         setUserLocation([location.coords.longitude, location.coords.latitude]);
+        
+        // Start real-time location updates
+        startLocationUpdates();
+        
+        alertService.info('Location Active', 'Real-time location tracking is now active!');
       }
     } catch (error) {
       console.error('❌ Error getting location:', error);
@@ -600,6 +644,92 @@ export default function OfflineMapsScreen({ navigation }: OfflineMapsScreenProps
         'Location Error', 
         'Could not get your current location. Make sure location services are enabled and try the location button.'
       );
+    }
+  };
+
+  // New function to start location updates for movement tracking
+  const startLocationUpdates = async () => {
+    try {
+      console.log('🔄 Starting real-time location updates for precise movement tracking...');
+      
+      const locationSubscription = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.BestForNavigation,
+          timeInterval: 500, // Update every 500ms for real-time
+          distanceInterval: 0.5, // Update every 0.5 meters for precise tracking
+          maximumAge: 0, // Always get fresh location
+        },
+        (location) => {
+          console.log('📍 Real-time location updated:', location.coords);
+          console.log('📍 Accuracy:', location.coords.accuracy, 'meters');
+          setUserLocation([location.coords.longitude, location.coords.latitude]);
+          
+          // Update camera position smoothly if map is loaded
+          if (cameraRef.current) {
+            cameraRef.current.setCamera({
+              centerCoordinate: [location.coords.longitude, location.coords.latitude],
+              animationDuration: 500, // Faster animation for real-time
+            });
+          }
+        }
+      );
+      
+      // Store subscription for cleanup
+      setLocationSubscription(locationSubscription);
+      
+      console.log('✅ Real-time location tracking activated!');
+      
+    } catch (error) {
+      console.error('❌ Error starting location updates:', error);
+    }
+  };
+
+  // Enhanced location refresh function for better accuracy
+  const refreshLocationWithAccuracy = async () => {
+    try {
+      console.log('🎯 Refreshing location with high accuracy...');
+      
+      // Stop existing updates temporarily
+      if (locationSubscription) {
+        locationSubscription.remove();
+      }
+      
+      // Get fresh location with best accuracy
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.BestForNavigation,
+        timeInterval: 500, // Faster response
+        distanceInterval: 0.5, // More sensitive
+        mayShowUserSettingsDialog: true,
+      });
+      
+      console.log('✅ Fresh high-accuracy location:', location.coords);
+      setUserLocation([location.coords.longitude, location.coords.latitude]);
+      
+      // Center map on new location
+      if (cameraRef.current) {
+        cameraRef.current.setCamera({
+          centerCoordinate: [location.coords.longitude, location.coords.latitude],
+          zoomLevel: 16,
+          animationDuration: 1000,
+        });
+      }
+      
+      // Restart location updates
+      startLocationUpdates();
+      
+      // Show accuracy feedback
+      const accuracy = location.coords.accuracy || 0;
+      if (accuracy < 10) {
+        alertService.success('High Accuracy', `Location accuracy: ${accuracy.toFixed(1)} meters`);
+      } else if (accuracy < 50) {
+        alertService.info('Good Accuracy', `Location accuracy: ${accuracy.toFixed(1)} meters`);
+      } else {
+        alertService.warning('Low Accuracy', `Location accuracy: ${accuracy.toFixed(1)} meters. Consider moving to an open area.`);
+      }
+      
+    } catch (error) {
+      console.error('❌ Error refreshing location:', error);
+      alertService.error('Location Error', 'Could not get accurate location. Please try again.');
     }
   };
 
@@ -935,7 +1065,7 @@ export default function OfflineMapsScreen({ navigation }: OfflineMapsScreenProps
       onSelected={() => setSelectedPin(pin)}
     >
       <View style={styles.pinMarker}>
-        <Text style={styles.pinIcon}>{pinCategories[pin.category].icon}</Text>
+        <Ionicons name={pinCategories[pin.category].icon} size={32} color={pinCategories[pin.category].color} />
       </View>
     </Mapbox.PointAnnotation>
   );
@@ -1048,74 +1178,62 @@ export default function OfflineMapsScreen({ navigation }: OfflineMapsScreenProps
           )}
           
           {/* User location */}
-          <Mapbox.UserLocation 
-            visible={true}
-            androidRenderMode="normal"
-            showsUserHeadingIndicator={true}
-          />
+          {userLocation && (
+            <Mapbox.UserLocation 
+              visible={true}
+              androidRenderMode="normal"
+              showsUserHeadingIndicator={true}
+            />
+          )}
           
           {/* Pins */}
           {pins.map(renderMapPin)}
           
           {/* Route rendering - Completely restructured to avoid sourceID errors */}
-          {(() => {
-            if (!currentRoute?.geometry) return null;
-            
-            return (
-              <Mapbox.ShapeSource
-                id="routeSource"
-                shape={{
-                  type: 'Feature',
-                  properties: {},
-                  geometry: currentRoute.geometry
+          {currentRoute?.geometry && (
+            <Mapbox.ShapeSource
+              id="routeSource"
+              shape={{
+                type: 'Feature',
+                properties: {},
+                geometry: currentRoute.geometry
+              }}
+            >
+              <Mapbox.LineLayer
+                id="routeLayer"
+                style={{
+                  lineColor: DARK_BLUE,
+                  lineWidth: 4,
+                  lineOpacity: 1,
+                  lineCap: 'round',
+                  lineJoin: 'round',
+                  lineDasharray: currentRoute.mode === 'walking' ? [2, 2] : undefined
                 }}
-              >
-                <Mapbox.LineLayer
-                  id="routeLayer"
-                  style={{
-                    lineColor: DARK_BLUE,
-                    lineWidth: 4,
-                    lineOpacity: 1,
-                    lineCap: 'round',
-                    lineJoin: 'round',
-                    lineDasharray: currentRoute.mode === 'walking' ? [2, 2] : undefined
-                  }}
-                />
-              </Mapbox.ShapeSource>
-            );
-          })()}
-          
+              />
+            </Mapbox.ShapeSource>
+          )}
           {/* Start marker - Explicit rendering */}
-          {(() => {
-            if (!currentRoute?.start) return null;
-            
-            return (
-              <Mapbox.PointAnnotation
-                id="startPoint"
-                coordinate={[currentRoute.start.longitude, currentRoute.start.latitude]}
-              >
-                <View style={styles.startMarker}>
-                  <Text style={styles.markerText}>A</Text>
-                </View>
-              </Mapbox.PointAnnotation>
-            );
-          })()}
-          
+          {currentRoute?.start && (
+            <Mapbox.PointAnnotation
+              id="startPoint"
+              coordinate={[currentRoute.start.longitude, currentRoute.start.latitude]}
+            >
+              <View style={styles.startMarker}>
+                <Text style={styles.markerText}>A</Text>
+              </View>
+            </Mapbox.PointAnnotation>
+          )}
           {/* End marker - Explicit rendering */}
-          {(() => {
-            if (!currentRoute?.end) return null;
-            
-            return (
-              <Mapbox.PointAnnotation
-                id="endPoint"
-                coordinate={[currentRoute.end.longitude, currentRoute.end.latitude]}
-              >
-                <View style={styles.endMarker}>
-                  <Text style={styles.markerText}>🏁</Text>
-                </View>
-              </Mapbox.PointAnnotation>
-            );
-          })()}
+          {currentRoute?.end && (
+            <Mapbox.PointAnnotation
+              id="endPoint"
+              coordinate={[currentRoute.end.longitude, currentRoute.end.latitude]}
+            >
+              <View style={styles.endMarker}>
+                <Text style={styles.markerText}>🏁</Text>
+              </View>
+            </Mapbox.PointAnnotation>
+          )}
         </Mapbox.MapView>
           </MapErrorBoundary>
         )}
@@ -1149,23 +1267,13 @@ export default function OfflineMapsScreen({ navigation }: OfflineMapsScreenProps
             onPress={async () => {
               setSelectedPin(null);
               try {
-                // Use existing userLocation if available, otherwise get fresh location
-                if (!userLocation) {
-                  await initializeLocation();
-                }
-                
-                // Center map immediately if we have location
-                if (cameraRef.current && userLocation) {
-                  cameraRef.current.setCamera({
-                    centerCoordinate: userLocation,
-                    zoomLevel: 15,
-                    animationDuration: 500 // Faster animation
-                  });
-                }
-                
+                // Use enhanced location refresh for better accuracy
+                await refreshLocationWithAccuracy();
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               } catch (error) {
-                console.error('Error centering map:', error);
+                console.error('Error refreshing location:', error);
+                // Fallback to basic location if enhanced fails
+                await initializeLocation();
               }
             }}
           >
@@ -1317,7 +1425,7 @@ export default function OfflineMapsScreen({ navigation }: OfflineMapsScreenProps
                           style={styles.transportOption}
                           onPress={() => handleStartNavigation(key as keyof typeof transportModes)}
                         >
-                          <Text style={styles.transportEmoji}>{mode.icon}</Text>
+                          <Ionicons name={mode.icon} size={32} color={mode.color} />
                         </TouchableOpacity>
                       ))}
                     </View>
@@ -1329,7 +1437,7 @@ export default function OfflineMapsScreen({ navigation }: OfflineMapsScreenProps
                           style={styles.transportOption}
                           onPress={() => handleStartNavigation(key as keyof typeof transportModes)}
                         >
-                          <Text style={styles.transportEmoji}>{mode.icon}</Text>
+                          <Ionicons name={mode.icon} size={32} color={mode.color} />
                         </TouchableOpacity>
                       ))}
                     </View>
@@ -1401,9 +1509,11 @@ export default function OfflineMapsScreen({ navigation }: OfflineMapsScreenProps
                 <View style={styles.routeSection}>
                   <Text style={styles.sectionTitle}>Route Info</Text>
                   <View style={styles.routeInfo}>
-                    <Text style={styles.transportEmoji}>
-                      {transportModes[currentRoute.mode]?.icon || '🚗'}
-                    </Text>
+                    <Ionicons 
+                      name={transportModes[currentRoute.mode]?.icon || 'car'} 
+                      size={32} 
+                      color={transportModes[currentRoute.mode]?.color || '#96CEB4'} 
+                    />
                     <View style={styles.routeInfoText}>
                       <Text style={styles.routeInfoTitle}>
                         {destinationAddress || 'Destination'}
@@ -1912,6 +2022,98 @@ export default function OfflineMapsScreen({ navigation }: OfflineMapsScreenProps
                   <Text style={styles.actionButtonText}>Download Area</Text>
                 </TouchableOpacity>
               )}
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Location Permission Modal */}
+      <Modal
+        visible={showLocationPermissionModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowLocationPermissionModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.locationPermissionModalContainer}>
+            <View style={styles.locationPermissionIcon}>
+              <Ionicons name="location" size={48} color="#10b981" />
+            </View>
+            <Text style={styles.locationPermissionTitle}>Location Access</Text>
+            <Text style={styles.locationPermissionText}>
+              Offline Maps needs access to your location to provide:
+            </Text>
+            <View style={styles.locationPermissionFeatures}>
+              <View style={styles.locationPermissionFeature}>
+                <Ionicons name="navigate" size={20} color="#10b981" />
+                <Text style={styles.locationPermissionFeatureText}>Real-time navigation</Text>
+              </View>
+              <View style={styles.locationPermissionFeature}>
+                <Ionicons name="locate" size={20} color="#10b981" />
+                <Text style={styles.locationPermissionFeatureText}>Your current position</Text>
+              </View>
+              <View style={styles.locationPermissionFeature}>
+                <Ionicons name="map" size={20} color="#10b981" />
+                <Text style={styles.locationPermissionFeatureText}>Movement tracking</Text>
+              </View>
+            </View>
+            <View style={styles.locationPermissionButtonsColumn}>
+              <TouchableOpacity
+                style={styles.locationPermissionButtonSecondary}
+                onPress={() => {
+                  setShowLocationPermissionModal(false);
+                  navigation?.goBack?.();
+                }}
+              >
+                <Text style={styles.locationPermissionButtonSecondaryText}>Don't Allow</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.locationPermissionButtonPrimary}
+                onPress={async () => {
+                  setShowLocationPermissionModal(false);
+                  try {
+                    await initializeLocation();
+                  } catch (error) {
+                    console.error('Error initializing location:', error);
+                  }
+                }}
+              >
+                <Text style={styles.locationPermissionButtonPrimaryText}>Allow While Using App</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.locationPermissionButtonTertiary}
+                onPress={async () => {
+                  setShowLocationPermissionModal(false);
+                  try {
+                    // Request permission with "just once" option
+                    const { status } = await Location.requestForegroundPermissionsAsync();
+                    if (status === 'granted') {
+                      await initializeLocation();
+                    }
+                  } catch (error) {
+                    console.error('Error initializing location:', error);
+                  }
+                }}
+              >
+                <Text style={styles.locationPermissionButtonTertiaryText}>Use Just This Once</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.locationPermissionButtonTertiary}
+                onPress={async () => {
+                  setShowLocationPermissionModal(false);
+                  try {
+                    // Request permission with "ask every time" option
+                    const { status } = await Location.requestForegroundPermissionsAsync();
+                    if (status === 'granted') {
+                      await initializeLocation();
+                    }
+                  } catch (error) {
+                    console.error('Error initializing location:', error);
+                  }
+                }}
+              >
+                <Text style={styles.locationPermissionButtonTertiaryText}>Ask Every Time</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -2890,5 +3092,114 @@ const styles = StyleSheet.create({
   navigationMode: {
     color: '#ccc',
     fontSize: 14,
+  },
+  // Location Permission Modal Styles
+  locationPermissionModalContainer: {
+    backgroundColor: '#23242b',
+    borderRadius: 20,
+    padding: 32,
+    marginHorizontal: 40,
+    alignItems: 'center',
+    maxWidth: 400,
+    position: 'absolute',
+    top: '50%',
+    left: 20,
+    right: 20,
+    transform: [{ translateY: -200 }],
+  },
+  locationPermissionIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  locationPermissionTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#fff',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  locationPermissionText: {
+    fontSize: 16,
+    color: '#ccc',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 22,
+  },
+  locationPermissionFeatures: {
+    width: '100%',
+    marginBottom: 32,
+  },
+  locationPermissionFeature: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  locationPermissionFeatureText: {
+    fontSize: 16,
+    color: '#fff',
+    marginLeft: 12,
+  },
+  locationPermissionButtonsColumn: {
+    flexDirection: 'column',
+    gap: 12,
+    width: '100%',
+    marginTop: 8,
+    marginBottom: 0,
+  },
+  locationPermissionButtonSecondary: {
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: '#666',
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    height: 56,
+  },
+  locationPermissionButtonSecondaryText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#ccc',
+    textAlign: 'center',
+  },
+  locationPermissionButtonPrimary: {
+    backgroundColor: '#10b981',
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    height: 56,
+  },
+  locationPermissionButtonPrimaryText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+    textAlign: 'center',
+  },
+  locationPermissionAdditionalButtons: {
+    marginTop: 12,
+    width: '100%',
+  },
+  locationPermissionButtonTertiary: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#444',
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginBottom: 8,
+    height: 56,
+  },
+  locationPermissionButtonTertiaryText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#999',
   },
 });

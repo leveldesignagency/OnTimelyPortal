@@ -40,6 +40,7 @@ export default function FeedbackGuestSelectionModal({ open, onClose, guests, onS
   const { theme } = React.useContext(ThemeContext);
   const isDark = theme === 'dark';
   const [selected, setSelected] = useState<string[]>(() => guests.map((g: Guest) => g.id));
+  const [showSuccessToast, setShowSuccessToast] = useState(false);
 
   if (!open) return null;
 
@@ -76,6 +77,11 @@ export default function FeedbackGuestSelectionModal({ open, onClose, guests, onS
         <div style={{ display: 'flex', gap: 16, width: '100%', justifyContent: 'flex-end' }}>
           <button onClick={onClose} style={{ padding: '12px 28px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.18)', background: isDark ? '#222' : '#eee', color: isDark ? '#fff' : '#222', fontWeight: 600, fontSize: 16, cursor: 'pointer', marginRight: 8 }}>Cancel</button>
           <button onClick={async () => {
+            if (!moduleData.currentUser || !moduleData.currentUser.id) {
+              console.error('Current user is not available');
+              return;
+            }
+            
             try {
               const module = await addTimelineModule({
                 event_id: moduleData.eventId,
@@ -97,17 +103,38 @@ export default function FeedbackGuestSelectionModal({ open, onClose, guests, onS
                 );
               }
               setTimeout(() => { window.dispatchEvent(new Event('refreshTimelineModules')); }, 300);
+              setShowSuccessToast(true);
+              setTimeout(() => setShowSuccessToast(false), 3000);
               onSave(selected);
             } catch (error) {
               console.error('Failed to create feedback module:', error);
               alert('Failed to save feedback module. Please try again.');
             }
-          }} disabled={selected.length === 0} style={{ padding: '12px 28px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.18)', background: isDark ? '#444' : '#f3f4f6', color: isDark ? '#fff' : '#222', fontWeight: 700, fontSize: 16, cursor: selected.length ? 'pointer' : 'not-allowed', opacity: selected.length ? 1 : 0.7 }}>Save & Post</button>
+          }} disabled={selected.length === 0} style={{ padding: '12px 28px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.18)', background: selected.length ? '#10b981' : (isDark ? '#444' : '#f3f4f6'), color: isDark ? '#fff' : '#222', fontWeight: 700, fontSize: 16, cursor: selected.length ? 'pointer' : 'not-allowed', opacity: selected.length ? 1 : 0.7 }}>Save & Post</button>
         </div>
         {/* --- SUPABASE: On save, insert feedback module with guest assignments --- */}
         {/* Table: timeline_modules, Fields: event_id, module_type: 'feedback', time, title, default_rating, assigned_guests */}
         {/* Use Supabase function 'add_timeline_module' */}
       </div>
+      
+      {/* Success Toast */}
+      {showSuccessToast && (
+        <div style={{
+          position: 'fixed',
+          top: 24,
+          right: 24,
+          background: 'rgba(40,200,120,0.95)',
+          color: '#fff',
+          padding: '12px 24px',
+          borderRadius: 8,
+          fontWeight: 600,
+          fontSize: 16,
+          zIndex: 3000,
+          boxShadow: '0 2px 12px rgba(0,0,0,0.15)'
+        }}>
+          Feedback module created successfully!
+        </div>
+      )}
     </div>
   );
 } 

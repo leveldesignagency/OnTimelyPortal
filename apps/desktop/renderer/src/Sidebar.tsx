@@ -75,6 +75,33 @@ export default function Sidebar({ events = [], isOverlay, isOpen, setOpen }: Sid
   const [showQuickActionsDrawer, setShowQuickActionsDrawer] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
 
+  // Function to replace emoji icons with flat icons
+  const getFlatIcon = (emoji: string): string => {
+    const iconMap: { [key: string]: string } = {
+      '💬': '💬', // Keep chat bubble as is for now
+      '📱': '📱', // Keep phone as is for now
+      '📧': '📧', // Keep email as is for now
+      '🔔': '🔔', // Keep bell as is for now
+      '📊': '📊', // Keep chart as is for now
+      '⚙️': '⚙️', // Keep settings as is for now
+      '🚨': '🚨', // Keep alert as is for now
+      '🌐': '🌐', // Keep globe as is for now
+      '📋': '📋', // Keep clipboard as is for now
+      '👥': '👥', // Keep people as is for now
+      '📅': '📅', // Keep calendar as is for now
+      '📍': '📍', // Keep location as is for now
+      '💰': '💰', // Keep money as is for now
+      '🎯': '🎯', // Keep target as is for now
+      '📈': '📈', // Keep trending up as is for now
+      '📉': '📉', // Keep trending down as is for now
+      '✅': '✅', // Keep checkmark as is for now
+      '❌': '❌', // Keep x as is for now
+      '⚠️': '⚠️', // Keep warning as is for now
+      'ℹ️': 'ℹ️', // Keep info as is for now
+    };
+    return iconMap[emoji] || emoji;
+  };
+
   // Load quick actions from database on component mount
   useEffect(() => {
     loadQuickActions();
@@ -252,7 +279,15 @@ export default function Sidebar({ events = [], isOverlay, isOpen, setOpen }: Sid
   return (
     <>
       {isOverlay && isOpen && <div className={styles.backdrop} onClick={() => setOpen(false)} />}
-      <aside className={sidebarClasses}>
+      <div style={{
+        position: 'fixed',
+        left: 0,
+        top: 0,
+        height: '100vh',
+        width: '250px',
+        zIndex: 9998
+      }}>
+        <aside className={sidebarClasses} style={{ boxShadow: 'none' }}>
         <div className={styles.logo} onClick={handleLogoClick} style={{ cursor: isOverlay ? 'pointer' : 'default' }}>TIMELY</div>
         <div className={styles.sectionTitle}>EVENT MANAGEMENT</div>
         <nav className={styles.nav}>
@@ -412,9 +447,10 @@ export default function Sidebar({ events = [], isOverlay, isOpen, setOpen }: Sid
             padding: '16px',
             marginBottom: '16px',
             textAlign: 'center',
-            backgroundColor: isDragOver ? 'rgba(0, 191, 165, 0.1)' : 'transparent',
+            backgroundColor: isDragOver ? 'rgba(0, 191, 165, 0.1)' : 'rgba(255, 255, 255, 0.05)',
             transition: 'all 0.2s ease',
-            cursor: 'pointer'
+            cursor: 'pointer',
+            color: '#999'
           }}
         >
           <div style={{ 
@@ -438,8 +474,8 @@ export default function Sidebar({ events = [], isOverlay, isOpen, setOpen }: Sid
               bottom: '80px',
               width: '20px',
               height: '60px',
-              backgroundColor: theme === 'dark' ? '#2a2a2a' : '#f0f0f0',
-              border: `1px solid ${theme === 'dark' ? '#444' : '#ddd'}`,
+              backgroundColor: '#2d2d2d',
+              border: `1px solid #2d2d2d`,
               borderLeft: 'none',
               borderRadius: '0 8px 8px 0',
               display: 'flex',
@@ -450,16 +486,16 @@ export default function Sidebar({ events = [], isOverlay, isOpen, setOpen }: Sid
               transition: 'all 0.2s ease'
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = theme === 'dark' ? '#3a3a3a' : '#e0e0e0';
+              e.currentTarget.style.backgroundColor = '#3a3a3a';
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = theme === 'dark' ? '#2a2a2a' : '#f0f0f0';
+              e.currentTarget.style.backgroundColor = '#2d2d2d';
             }}
           >
             <div style={{ 
               width: '4px',
               height: '16px',
-              backgroundColor: theme === 'dark' ? '#fff' : '#333',
+              backgroundColor: '#fff',
               borderRadius: '2px'
             }} />
           </div>
@@ -488,19 +524,19 @@ export default function Sidebar({ events = [], isOverlay, isOpen, setOpen }: Sid
                 top: '0',
                 width: '200px',
                 height: '100%',
-                backgroundColor: theme === 'dark' ? '#2a2a2a' : '#f0f0f0',
-                border: `1px solid ${theme === 'dark' ? '#444' : '#ddd'}`,
-                borderLeft: '1.5px solid #fff',
+                backgroundColor: '#2d2d2d',
+                border: `1px solid #2d2d2d`,
+                borderLeft: '1.5px solid #2d2d2d',
                 borderRadius: '0 8px 8px 0',
                 padding: '20px',
-                boxShadow: '2px 0 8px rgba(0,0,0,0.1)',
-                zIndex: 1000
+                boxShadow: '8px 0 20px rgba(0,0,0,0.5)',
+                zIndex: 9997
               }}
             >
             <div style={{ 
               fontSize: '16px', 
               fontWeight: '600', 
-              color: theme === 'dark' ? '#fff' : '#333',
+              color: '#fff',
               marginBottom: '20px',
               textAlign: 'center'
             }}>
@@ -517,24 +553,24 @@ export default function Sidebar({ events = [], isOverlay, isOpen, setOpen }: Sid
                     alignItems: 'center',
                     padding: '16px',
                     borderRadius: '12px',
-                    backgroundColor: theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
+                    backgroundColor: 'rgba(255,255,255,0.08)',
                     cursor: 'pointer',
                     transition: 'all 0.2s ease',
                     position: 'relative',
-                    border: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
+                    border: '1px solid rgba(255,255,255,0.1)',
                     backdropFilter: 'blur(10px)'
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = theme === 'dark' ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)';
+                    e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.12)';
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)';
+                    e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.08)';
                   }}
                 >
-                  <div style={{ fontSize: '28px', marginBottom: '12px' }}>{action.icon}</div>
+                  <div style={{ fontSize: '28px', marginBottom: '12px' }}>{getFlatIcon(action.icon)}</div>
                   <div style={{ 
                     fontSize: '13px', 
-                    color: theme === 'dark' ? '#fff' : '#333',
+                    color: '#fff',
                     textAlign: 'center',
                     fontWeight: '600',
                     lineHeight: '1.3'
@@ -551,11 +587,11 @@ export default function Sidebar({ events = [], isOverlay, isOpen, setOpen }: Sid
                       top: '8px',
                       right: '8px',
                       background: 'transparent',
-                      border: `1px solid ${theme === 'dark' ? '#fff' : '#000'}`,
+                      border: '1px solid #fff',
                       borderRadius: '50%',
                       width: '20px',
                       height: '20px',
-                      color: theme === 'dark' ? '#fff' : '#000',
+                      color: '#fff',
                       fontSize: '12px',
                       cursor: 'pointer',
                       display: 'flex',
@@ -566,12 +602,12 @@ export default function Sidebar({ events = [], isOverlay, isOpen, setOpen }: Sid
                       padding: 0
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.background = theme === 'dark' ? '#fff' : '#000';
-                      e.currentTarget.style.color = theme === 'dark' ? '#000' : '#fff';
+                      e.currentTarget.style.background = '#fff';
+                      e.currentTarget.style.color = '#000';
                     }}
                     onMouseLeave={(e) => {
                       e.currentTarget.style.background = 'transparent';
-                      e.currentTarget.style.color = theme === 'dark' ? '#fff' : '#000';
+                      e.currentTarget.style.color = '#fff';
                     }}
                   >
                     ×
@@ -614,7 +650,7 @@ export default function Sidebar({ events = [], isOverlay, isOpen, setOpen }: Sid
         )}
 
         <div className={styles.footer}>
-          <div className={styles.footerItem}>Settings</div>
+          <div className={styles.footerItem} onClick={() => navigate('/settings')} style={{ cursor: 'pointer' }}>Settings</div>
           <div className={styles.footerItem} onClick={() => setShowLogoutModal(true)} style={{ cursor: 'pointer', whiteSpace: 'nowrap', minWidth: 140 }}>
             Sign Out/Switch User
           </div>
@@ -670,6 +706,7 @@ export default function Sidebar({ events = [], isOverlay, isOpen, setOpen }: Sid
           </div>
         </div>
       </aside>
+      </div>
       {showLogoutModal && (
         <div style={{
           position: 'fixed',

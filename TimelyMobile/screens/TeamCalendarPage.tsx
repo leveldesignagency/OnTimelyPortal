@@ -222,9 +222,6 @@ export default function TeamCalendarPage({ onNavigate }: TeamCalendarPageProps) 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => onNavigate('teams')} style={styles.backButton}>
-          <MaterialCommunityIcons name="arrow-left" size={24} color="#fff" />
-        </TouchableOpacity>
         <Text style={styles.headerTitle}>Team Calendar</Text>
         <TouchableOpacity style={styles.addButton} onPress={addNewEvent}>
           <MaterialCommunityIcons name="plus" size={24} color="#fff" />

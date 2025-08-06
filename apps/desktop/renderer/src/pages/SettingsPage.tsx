@@ -11,12 +11,14 @@ interface UserSettings {
   avatar: string;
   role: string;
   status: string;
+  company: string;
   
   // Theme & Appearance
   theme: 'light' | 'dark' | 'auto';
   fontSize: 'small' | 'medium' | 'large';
   compactMode: boolean;
   showAnimations: boolean;
+  sidebarCollapsed: boolean;
   
   // Notification Settings
   emailNotifications: boolean;
@@ -26,6 +28,9 @@ interface UserSettings {
   quietHoursEnabled: boolean;
   quietHoursStart: string;
   quietHoursEnd: string;
+  announcementNotifications: boolean;
+  chatNotifications: boolean;
+  emergencyAlerts: boolean;
   
   // Privacy & Security
   twoFactorEnabled: boolean;
@@ -33,40 +38,58 @@ interface UserSettings {
   dataRetentionDays: number;
   allowAnalytics: boolean;
   allowMarketing: boolean;
+  locationSharing: boolean;
+  autoLogout: boolean;
   
   // Calendar & Sync
   autoSyncCalendar: boolean;
   syncInterval: number;
   defaultCalendarProvider: 'google' | 'outlook' | 'none';
+  googleCalendarEnabled: boolean;
+  outlookCalendarEnabled: boolean;
   
   // Data & Export
   autoBackupEnabled: boolean;
   backupFrequency: 'daily' | 'weekly' | 'monthly';
   exportFormat: 'csv' | 'json' | 'xlsx';
   includeModuleResponses: boolean;
+  dataExportEnabled: boolean;
   
   // Team & Collaboration
   teamNotifications: boolean;
   showOnlineStatus: boolean;
   allowTeamInvites: boolean;
   defaultTeamRole: string;
+  teamChatEnabled: boolean;
   
   // Event Settings
   defaultEventDuration: number;
   autoPublishEvents: boolean;
   guestApprovalRequired: boolean;
   emergencyAlertsEnabled: boolean;
+  guestChatEnabled: boolean;
+  itineraryAutoSave: boolean;
+  guestTimelineEnabled: boolean;
+  
+  // Guest Management
+  guestRegistrationEnabled: boolean;
+  guestApprovalWorkflow: boolean;
+  guestDataRetention: number;
+  guestPrivacySettings: boolean;
   
   // Mobile Settings
   mobilePushEnabled: boolean;
-  locationSharing: boolean;
   offlineModeEnabled: boolean;
+  hapticFeedback: boolean;
+  autoLockEnabled: boolean;
   
   // Advanced Settings
   debugMode: boolean;
   performanceMode: boolean;
   customCSS: string;
   apiEndpoint: string;
+  realtimeEnabled: boolean;
+  cacheEnabled: boolean;
 }
 
 export default function SettingsPage() {
@@ -82,12 +105,14 @@ export default function SettingsPage() {
     avatar: '',
     role: '',
     status: 'online',
+    company: '',
     
     // Theme & Appearance
     theme: 'auto',
     fontSize: 'medium',
     compactMode: false,
     showAnimations: true,
+    sidebarCollapsed: false,
     
     // Notification Settings
     emailNotifications: true,
@@ -97,6 +122,9 @@ export default function SettingsPage() {
     quietHoursEnabled: false,
     quietHoursStart: '22:00',
     quietHoursEnd: '08:00',
+    announcementNotifications: true,
+    chatNotifications: true,
+    emergencyAlerts: true,
     
     // Privacy & Security
     twoFactorEnabled: false,
@@ -104,45 +132,170 @@ export default function SettingsPage() {
     dataRetentionDays: 365,
     allowAnalytics: true,
     allowMarketing: false,
+    locationSharing: false,
+    autoLogout: false,
     
     // Calendar & Sync
     autoSyncCalendar: true,
     syncInterval: 15,
     defaultCalendarProvider: 'google',
+    googleCalendarEnabled: false,
+    outlookCalendarEnabled: false,
     
     // Data & Export
     autoBackupEnabled: false,
     backupFrequency: 'weekly',
     exportFormat: 'csv',
     includeModuleResponses: true,
+    dataExportEnabled: true,
     
     // Team & Collaboration
     teamNotifications: true,
     showOnlineStatus: true,
     allowTeamInvites: true,
     defaultTeamRole: 'member',
+    teamChatEnabled: true,
     
     // Event Settings
     defaultEventDuration: 60,
     autoPublishEvents: false,
     guestApprovalRequired: true,
     emergencyAlertsEnabled: true,
+    guestChatEnabled: true,
+    itineraryAutoSave: true,
+    guestTimelineEnabled: true,
+    
+    // Guest Management
+    guestRegistrationEnabled: true,
+    guestApprovalWorkflow: true,
+    guestDataRetention: 365,
+    guestPrivacySettings: true,
     
     // Mobile Settings
     mobilePushEnabled: true,
-    locationSharing: false,
     offlineModeEnabled: true,
+    hapticFeedback: true,
+    autoLockEnabled: true,
     
     // Advanced Settings
     debugMode: false,
     performanceMode: false,
     customCSS: '',
     apiEndpoint: '',
+    realtimeEnabled: true,
+    cacheEnabled: true,
   });
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('profile');
+  const [startMinutes, setStartMinutes] = useState(22 * 60); // 22:00 in minutes
+  const [endMinutes, setEndMinutes] = useState(8 * 60); // 8:00 in minutes
+  
+  const tabs = [
+    { 
+      id: 'profile', 
+      label: 'Profile', 
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+          <circle cx="12" cy="7" r="4"/>
+        </svg>
+      )
+    },
+    { 
+      id: 'appearance', 
+      label: 'Appearance', 
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M12 1v6m0 6v6"/>
+          <path d="M1 12h6m6 0h6"/>
+        </svg>
+      )
+    },
+    { 
+      id: 'notifications', 
+      label: 'Notifications', 
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/>
+          <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>
+        </svg>
+      )
+    },
+    { 
+      id: 'security', 
+      label: 'Security', 
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+          <circle cx="12" cy="16" r="1"/>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        </svg>
+      )
+    },
+    { 
+      id: 'calendar', 
+      label: 'Calendar', 
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+          <line x1="16" y1="2" x2="16" y2="6"/>
+          <line x1="8" y1="2" x2="8" y2="6"/>
+          <line x1="3" y1="10" x2="21" y2="10"/>
+        </svg>
+      )
+    },
+    { 
+      id: 'data', 
+      label: 'Data & Export', 
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14,2 14,8 20,8"/>
+          <line x1="16" y1="13" x2="8" y2="13"/>
+          <line x1="16" y1="17" x2="8" y2="17"/>
+          <polyline points="10,9 9,9 8,9"/>
+        </svg>
+      )
+    },
+    { 
+      id: 'team', 
+      label: 'Team & Chat', 
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+          <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+        </svg>
+      )
+    },
+    { 
+      id: 'events', 
+      label: 'Event Settings', 
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+        </svg>
+      )
+    },
+    { 
+      id: 'guests', 
+      label: 'Guest Management', 
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+          <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+        </svg>
+      )
+    },
+  ];
 
   useEffect(() => {
     const loadUserAndSettings = async () => {
@@ -242,918 +395,678 @@ export default function SettingsPage() {
     setTimeout(() => document.body.removeChild(toast), 3000);
   };
 
-  const ToggleButton = ({ 
-    enabled, 
-    onToggle, 
-    label, 
-    description 
-  }: { 
-    enabled: boolean; 
-    onToggle: () => void; 
-    label: string; 
-    description?: string;
-  }) => (
+  const renderQuietHoursSlider = () => {
+    const formatMinutes = (minutes: number) => {
+      const hours = Math.floor(minutes / 60);
+      const mins = minutes % 60;
+      const period = hours >= 12 ? 'PM' : 'AM';
+      const displayHour = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
+      return `${displayHour}:${mins.toString().padStart(2, '0')} ${period}`;
+    };
+
+    const handleSliderClick = (e: React.MouseEvent<HTMLDivElement>, isStartSlider: boolean) => {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const percentage = Math.max(0, Math.min(1, clickX / rect.width));
+      // Use precise calculation for click positioning
+      const newMinutes = Math.max(0, Math.min(1439, Math.round(percentage * 1440)));
+      
+      if (isStartSlider) {
+        setStartMinutes(newMinutes);
+      } else {
+        setEndMinutes(newMinutes);
+      }
+    };
+
+    const handleDrag = (e: React.MouseEvent, isStartSlider: boolean) => {
+      e.stopPropagation();
+      e.preventDefault();
+      
+      const sliderContainer = e.currentTarget.closest('.slider-container') as HTMLElement;
+      if (!sliderContainer) return;
+      
+      const handleMouseMove = (e: MouseEvent) => {
+        const rect = sliderContainer.getBoundingClientRect();
+        const clickX = e.clientX - rect.left;
+        const percentage = Math.max(0, Math.min(1, clickX / rect.width));
+        // Use floating-point precision for smoother movement, then round to nearest minute
+        const newMinutes = Math.max(0, Math.min(1439, Math.round(percentage * 1440)));
+        
+        // Only update if the change is significant enough to avoid micro-jumps
+        if (isStartSlider) {
+          setStartMinutes(prev => Math.abs(prev - newMinutes) >= 1 ? newMinutes : prev);
+        } else {
+          setEndMinutes(prev => Math.abs(prev - newMinutes) >= 1 ? newMinutes : prev);
+        }
+      };
+      
+      const handleMouseUp = () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
+      
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    };
+
+    return (
+      <div style={{ padding: '10px 0', borderBottom: `1px solid ${isDark ? '#333' : '#e5e7eb'}` }}>
     <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      padding: '16px 20px',
-      background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
-      border: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(0,0,0,0.1)',
-      borderRadius: 12,
-      marginBottom: 12,
-      transition: 'all 0.2s ease'
-    }}>
+          fontWeight: '500', 
+          marginBottom: '6px',
+          fontSize: '13px',
+          color: isDark ? '#fff' : '#000'
+        }}>
+          Quiet Hours
+        </div>
       <div style={{ flex: 1 }}>
         <div style={{
-          fontSize: 16,
-          fontWeight: 600,
-          color: isDark ? '#fff' : '#1a1a1a',
-          marginBottom: description ? 4 : 0
+            display: 'flex',
+            alignItems: 'center',
+            gap: '20px',
+            marginBottom: '10px'
+          }}>
+            <span style={{ fontSize: '12px', color: isDark ? '#ccc' : '#666' }}>
+              {formatMinutes(startMinutes)} - {formatMinutes(endMinutes)}
+            </span>
+        </div>
+          <div style={{
+            display: 'flex',
+            gap: '20px',
+            marginBottom: '10px'
+          }}>
+            {/* Start Time Slider */}
+            <div style={{ width: '240px' }}>
+              <div style={{ fontSize: '11px', color: isDark ? '#ccc' : '#666', marginBottom: '5px' }}>
+                Start Time: {formatMinutes(startMinutes)}
+          </div>
+              <div 
+                className="slider-container"
+        style={{
+          position: 'relative',
+                  height: '6px',
+                  width: '240px',
+                  background: isDark ? '#444' : '#e5e7eb',
+                  borderRadius: '3px',
+                  cursor: 'pointer'
+                }}
+                onClick={(e) => handleSliderClick(e, true)}
+              >
+                <div 
+                  style={{
+          position: 'absolute',
+                    left: `${(startMinutes / 1440) * 100}%`,
+                    top: '-3px',
+                    width: '12px',
+                    height: '12px',
+                    background: '#fff',
+                    borderRadius: '50%',
+                    border: '2px solid #00bfa5',
+                    cursor: 'grab',
+                    transform: 'translateX(-50%)',
+                    zIndex: 2
+                  }}
+                  onMouseDown={(e) => handleDrag(e, true)}
+                />
+    </div>
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                fontSize: '9px',
+                color: isDark ? '#999' : '#666',
+                marginTop: '5px'
+              }}>
+                <span>12 AM</span>
+                <span>6 AM</span>
+                <span>12 PM</span>
+                <span>6 PM</span>
+                <span>12 AM</span>
+    </div>
+            </div>
+
+            {/* End Time Slider */}
+            <div style={{ width: '240px' }}>
+              <div style={{ fontSize: '11px', color: isDark ? '#ccc' : '#666', marginBottom: '5px' }}>
+                End Time: {formatMinutes(endMinutes)}
+              </div>
+              <div 
+                className="slider-container"
+      style={{
+                  position: 'relative',
+                  height: '6px',
+                  width: '240px',
+                  background: isDark ? '#444' : '#e5e7eb',
+                  borderRadius: '3px',
+                  cursor: 'pointer'
+                }}
+                onClick={(e) => handleSliderClick(e, false)}
+              >
+                <div 
+                  style={{
+                    position: 'absolute',
+                    left: `${(endMinutes / 1440) * 100}%`,
+                    top: '-3px',
+                    width: '12px',
+                    height: '12px',
+                    background: '#fff',
+                    borderRadius: '50%',
+                    border: '2px solid #00bfa5',
+                    cursor: 'grab',
+                    transform: 'translateX(-50%)',
+                    zIndex: 2
+                  }}
+                  onMouseDown={(e) => handleDrag(e, false)}
+                />
+              </div>
+      <div style={{ 
+        display: 'flex', 
+                justifyContent: 'space-between',
+                fontSize: '9px',
+                color: isDark ? '#999' : '#666',
+                marginTop: '5px'
+              }}>
+                <span>12 AM</span>
+                <span>6 AM</span>
+                <span>12 PM</span>
+                <span>6 PM</span>
+                <span>12 AM</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderSettingItem = (
+    label: string,
+    key: keyof UserSettings,
+    type: 'toggle' | 'select' | 'input' | 'number' = 'toggle',
+    options?: { value: string; label: string }[]
+  ) => (
+    <div style={{ 
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: '10px 0',
+      borderBottom: `1px solid ${isDark ? '#333' : '#e5e7eb'}`
+    }}>
+      <div style={{ flex: 1 }}>
+        <div style={{ 
+          fontWeight: '500', 
+          marginBottom: '6px',
+          fontSize: '13px',
+          color: isDark ? '#fff' : '#000'
         }}>
           {label}
         </div>
-        {description && (
-          <div style={{
-            fontSize: 14,
-            color: isDark ? '#a0a0a0' : '#6b7280'
-          }}>
-            {description}
-          </div>
-        )}
+        {type === 'select' && (
+          <div style={{ position: 'relative' }}>
+            <select
+              value={settings[key] as string}
+              onChange={(e) => setSettings(prev => ({ ...prev, [key]: e.target.value }))}
+          style={{ 
+                padding: '8px 10px',
+                borderRadius: '8px',
+                border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)'}`,
+                background: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.8)',
+                backdropFilter: 'blur(10px)',
+                color: isDark ? '#ffffff' : '#000000',
+                fontSize: '13px',
+                width: '200px',
+                appearance: 'none',
+            cursor: 'pointer', 
+                boxShadow: isDark ? '0 4px 6px rgba(0, 0, 0, 0.3)' : '0 4px 6px rgba(0, 0, 0, 0.1)'
+              }}
+            >
+              {options?.map(option => (
+                <option 
+                  key={option.value} 
+                  value={option.value}
+          style={{
+                    background: isDark ? '#2d2d2d' : '#ffffff',
+                    color: isDark ? '#ffffff' : '#000000',
+                    padding: '8px 10px'
+                  }}
+                >
+                  {option.label}
+                </option>
+              ))}
+            </select>
       </div>
-      <button
-        onClick={onToggle}
-        style={{
-          width: 52,
-          height: 28,
-          borderRadius: 14,
-          border: 'none',
-          cursor: 'pointer',
-          position: 'relative',
-          transition: 'all 0.3s ease',
-          background: enabled 
-            ? (isDark ? '#10b981' : '#059669') 
-            : (isDark ? '#ef4444' : '#dc2626'),
-          boxShadow: enabled 
-            ? '0 2px 8px rgba(16, 185, 129, 0.4)' 
-            : '0 2px 8px rgba(239, 68, 68, 0.4)'
-        }}
-      >
-        <div style={{
-          width: 20,
-          height: 20,
-          borderRadius: '50%',
-          background: '#ffffff',
-          position: 'absolute',
-          top: 4,
-          left: enabled ? 28 : 4,
-          transition: 'all 0.3s ease',
-          boxShadow: '0 2px 6px rgba(0, 0, 0, 0.3)'
-        }} />
-      </button>
+        )}
+        {type === 'input' && (
+                  <input
+                    type="text"
+            value={settings[key] as string}
+            onChange={(e) => setSettings(prev => ({ ...prev, [key]: e.target.value }))}
+                    style={{
+              padding: '8px 10px',
+              borderRadius: '4px',
+              border: `1px solid ${isDark ? '#444' : '#d1d5db'}`,
+              background: isDark ? '#333' : '#ffffff',
+              color: isDark ? '#ffffff' : '#000000',
+              fontSize: '13px',
+              width: '200px'
+            }}
+          />
+        )}
+        {type === 'number' && (
+                  <input
+            type="number"
+            value={settings[key] as number}
+            onChange={(e) => setSettings(prev => ({ ...prev, [key]: parseInt(e.target.value) }))}
+                    style={{
+              padding: '8px 10px',
+              borderRadius: '4px',
+              border: `1px solid ${isDark ? '#444' : '#d1d5db'}`,
+              background: isDark ? '#333' : '#ffffff',
+              color: isDark ? '#ffffff' : '#000000',
+              fontSize: '13px',
+              width: '80px'
+            }}
+          />
+        )}
+                </div>
+              {type === 'toggle' && (
+          <button
+            onClick={() => handleToggle(key)}
+                    style={{
+              width: '56px',
+              height: '28px',
+              borderRadius: '14px',
+              background: settings[key] ? '#00bfa5' : '#e5e7eb',
+              border: 'none',
+              cursor: 'pointer',
+              position: 'relative',
+              transition: 'all 0.2s ease',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+            }}
+          >
+            <div style={{
+              width: '20px',
+              height: '20px',
+              borderRadius: '50%',
+              background: '#ffffff',
+              position: 'absolute',
+              top: '4px',
+              left: settings[key] ? '32px' : '4px',
+              transition: 'all 0.2s ease',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+            }} />
+          </button>
+        )}
     </div>
   );
 
-  const SectionHeader = ({ title, description }: { title: string; description?: string }) => (
-    <div style={{ marginBottom: 20 }}>
-      <h3 style={{
-        fontSize: 20,
-        fontWeight: 600,
-        color: isDark ? '#fff' : '#1a1a1a',
-        marginBottom: description ? 8 : 0
-      }}>
-        {title}
-      </h3>
-      {description && (
-        <p style={{
-          fontSize: 14,
-          color: isDark ? '#a0a0a0' : '#6b7280',
-          margin: 0
-        }}>
-          {description}
-        </p>
-      )}
-    </div>
-  );
+  const renderTabContent = () => {
+    switch (activeTab) {
+      case 'profile':
+        return (
+          <div>
+            <h3 style={{ marginBottom: '20px', fontSize: '18px', fontWeight: '600', color: isDark ? '#fff' : '#000' }}>Profile Information</h3>
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px',
+              maxWidth: '400px'
+            }}>
+                <div>
+                <label style={{ 
+                  display: 'block', 
+                  fontSize: '13px', 
+                  fontWeight: '500', 
+                  marginBottom: '6px',
+                  color: isDark ? '#ccc' : '#666'
+                }}>
+                  Name
+                  </label>
+                <div style={{
+                  padding: '10px 12px',
+                  background: isDark ? '#333' : '#f5f5f5',
+                  border: `1px solid ${isDark ? '#444' : '#ddd'}`,
+                  borderRadius: '6px',
+                  color: isDark ? '#ccc' : '#666',
+                  fontSize: '14px'
+                }}>
+                  {currentUser?.name || 'Not set'}
+                </div>
+                </div>
 
-  const TabButton = ({ id, label, icon }: { id: string; label: string; icon: string }) => (
-    <button
-      onClick={() => setActiveTab(id)}
-      style={{
-        padding: '12px 20px',
-        background: activeTab === id 
-          ? (isDark ? '#10b981' : '#059669') 
-          : 'transparent',
-        color: activeTab === id ? '#fff' : (isDark ? '#a0a0a0' : '#6b7280'),
-        border: 'none',
-        borderRadius: 8,
-        cursor: 'pointer',
-        fontSize: 14,
-        fontWeight: 500,
-        transition: 'all 0.2s ease',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8
-      }}
-    >
-      <span>{icon}</span>
-      {label}
-    </button>
-  );
+                <div>
+                <label style={{ 
+                  display: 'block', 
+                  fontSize: '13px', 
+                  fontWeight: '500', 
+                  marginBottom: '6px',
+                  color: isDark ? '#ccc' : '#666'
+                }}>
+                  Email
+                  </label>
+                <div style={{
+                  padding: '10px 12px',
+                  background: isDark ? '#333' : '#f5f5f5',
+                  border: `1px solid ${isDark ? '#444' : '#ddd'}`,
+                  borderRadius: '6px',
+                  color: isDark ? '#ccc' : '#666',
+                  fontSize: '14px'
+                }}>
+                  {currentUser?.email || 'Not set'}
+                </div>
+              </div>
+              
+              <div>
+                <label style={{ 
+                  display: 'block', 
+                  fontSize: '13px', 
+                  fontWeight: '500', 
+                  marginBottom: '6px',
+                  color: isDark ? '#ccc' : '#666'
+                }}>
+                  Company
+                </label>
+            <div style={{
+                  padding: '10px 12px',
+                  background: isDark ? '#333' : '#f5f5f5',
+                  border: `1px solid ${isDark ? '#444' : '#ddd'}`,
+                  borderRadius: '6px',
+                  color: isDark ? '#ccc' : '#666',
+                  fontSize: '14px'
+                }}>
+                  {currentUser?.company_name || 'Not set'}
+                </div>
+              </div>
+              
+              <div>
+                <label style={{ 
+                  display: 'block', 
+                  fontSize: '13px', 
+                  fontWeight: '500', 
+                  marginBottom: '6px',
+                  color: isDark ? '#ccc' : '#666'
+                }}>
+                  Role
+                      </label>
+                <div style={{
+                  padding: '10px 12px',
+                  background: isDark ? '#333' : '#f5f5f5',
+                  border: `1px solid ${isDark ? '#444' : '#ddd'}`,
+                  borderRadius: '6px',
+                  color: isDark ? '#ccc' : '#666',
+                  fontSize: '14px'
+                }}>
+                  {currentUser?.role || 'Not set'}
+                    </div>
+                    </div>
+                  </div>
+              </div>
+        );
+
+      case 'appearance':
+        return (
+                <div>
+            <h3 style={{ marginBottom: '20px', fontSize: '18px', fontWeight: '600', color: isDark ? '#fff' : '#000' }}>Appearance Settings</h3>
+            {renderSettingItem('Theme', 'theme', 'select', [
+              { value: 'light', label: 'Light' },
+              { value: 'dark', label: 'Dark' },
+              { value: 'auto', label: 'Auto' }
+            ])}
+            {renderSettingItem('Font Size', 'fontSize', 'select', [
+              { value: 'small', label: 'Small' },
+              { value: 'medium', label: 'Medium' },
+              { value: 'large', label: 'Large' }
+            ])}
+            {renderSettingItem('Custom Styling', 'customCSS', 'select', [
+              { value: 'default', label: 'Default' },
+              { value: 'compact', label: 'Compact' },
+              { value: 'spacious', label: 'Spacious' },
+              { value: 'minimal', label: 'Minimal' },
+              { value: 'professional', label: 'Professional' }
+            ])}
+                </div>
+        );
+
+      case 'notifications':
+        return (
+                <div>
+            <h3 style={{ marginBottom: '20px', fontSize: '18px', fontWeight: '600' }}>Notification Settings</h3>
+            {renderSettingItem('Email Notifications', 'emailNotifications')}
+            {renderSettingItem('Push Notifications', 'pushNotifications')}
+            {renderSettingItem('In-App Notifications', 'inAppNotifications')}
+            {renderSettingItem('Sound Enabled', 'soundEnabled')}
+            {renderSettingItem('Announcement Notifications', 'announcementNotifications')}
+            {renderSettingItem('Chat Notifications', 'chatNotifications')}
+            {renderSettingItem('Emergency Alerts', 'emergencyAlerts')}
+            {renderSettingItem('Quiet Hours Enabled', 'quietHoursEnabled')}
+            {renderQuietHoursSlider()}
+            {renderSettingItem('Session Timeout (minutes)', 'sessionTimeout', 'number')}
+                </div>
+        );
+
+      case 'security':
+        return (
+          <div>
+            <h3 style={{ marginBottom: '20px', fontSize: '18px', fontWeight: '600' }}>Security Settings</h3>
+            {renderSettingItem('Two-Factor Authentication', 'twoFactorEnabled')}
+            {renderSettingItem('Auto Logout', 'autoLogout')}
+            {renderSettingItem('Location Sharing', 'locationSharing')}
+            {renderSettingItem('Allow Analytics', 'allowAnalytics')}
+            {renderSettingItem('Allow Marketing', 'allowMarketing')}
+              </div>
+        );
+
+      case 'calendar':
+        return (
+                <div>
+            <h3 style={{ marginBottom: '20px', fontSize: '18px', fontWeight: '600' }}>Calendar Settings</h3>
+            {renderSettingItem('Auto Sync Calendar', 'autoSyncCalendar')}
+            {renderSettingItem('Google Calendar', 'googleCalendarEnabled')}
+            {renderSettingItem('Outlook Calendar', 'outlookCalendarEnabled')}
+                </div>
+        );
+
+      case 'data':
+        return (
+                <div>
+            <h3 style={{ marginBottom: '20px', fontSize: '18px', fontWeight: '600' }}>Data & Export Settings</h3>
+            {renderSettingItem('Auto Backup', 'autoBackupEnabled')}
+            {renderSettingItem('Data Export Enabled', 'dataExportEnabled')}
+            {renderSettingItem('Include Module Responses', 'includeModuleResponses')}
+            {renderSettingItem('Backup Frequency', 'backupFrequency', 'select', [
+              { value: 'daily', label: 'Daily' },
+              { value: 'weekly', label: 'Weekly' },
+              { value: 'monthly', label: 'Monthly' }
+            ])}
+            {renderSettingItem('Export Format', 'exportFormat', 'select', [
+              { value: 'csv', label: 'CSV' },
+              { value: 'json', label: 'JSON' },
+              { value: 'xlsx', label: 'Excel' }
+            ])}
+                </div>
+        );
+
+      case 'team':
+        return (
+                <div>
+            <h3 style={{ marginBottom: '20px', fontSize: '18px', fontWeight: '600' }}>Team & Collaboration</h3>
+            {renderSettingItem('Team Notifications', 'teamNotifications')}
+            {renderSettingItem('Show Online Status', 'showOnlineStatus')}
+            {renderSettingItem('Allow Team Invites', 'allowTeamInvites')}
+            {renderSettingItem('Team Chat Enabled', 'teamChatEnabled')}
+            {renderSettingItem('Default Team Role', 'defaultTeamRole', 'select', [
+              { value: 'admin', label: 'Administrator' },
+              { value: 'manager', label: 'Manager' },
+              { value: 'member', label: 'Member' },
+              { value: 'viewer', label: 'Viewer' }
+            ])}
+                </div>
+        );
+
+      case 'events':
+        return (
+                <div>
+            <h3 style={{ marginBottom: '20px', fontSize: '18px', fontWeight: '600' }}>Event Settings</h3>
+            {renderSettingItem('Default Event Duration (minutes)', 'defaultEventDuration', 'number')}
+            {renderSettingItem('Auto Publish Events', 'autoPublishEvents')}
+            {renderSettingItem('Guest Approval Required', 'guestApprovalRequired')}
+            {renderSettingItem('Emergency Alerts Enabled', 'emergencyAlertsEnabled')}
+            {renderSettingItem('Guest Chat Enabled', 'guestChatEnabled')}
+            {renderSettingItem('Itinerary Auto Save', 'itineraryAutoSave')}
+            {renderSettingItem('Guest Timeline Enabled', 'guestTimelineEnabled')}
+                </div>
+        );
+
+      case 'guests':
+        return (
+          <div>
+            <h3 style={{ marginBottom: '20px', fontSize: '18px', fontWeight: '600' }}>Guest Management</h3>
+            {renderSettingItem('Guest Registration Enabled', 'guestRegistrationEnabled')}
+            {renderSettingItem('Guest Approval Workflow', 'guestApprovalWorkflow')}
+            {renderSettingItem('Guest Privacy Settings', 'guestPrivacySettings')}
+            {renderSettingItem('Guest Data Retention (days)', 'guestDataRetention', 'number')}
+              </div>
+        );
+
+      default:
+        return <div>Select a tab to view settings</div>;
+    }
+  };
 
   if (loading) {
     return (
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
+            <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
         height: '100vh',
-        background: isDark ? '#121212' : '#f8f9fa',
-        color: isDark ? '#fff' : '#1a1a1a'
+        background: isDark ? '#1f2937' : '#ffffff',
+        color: isDark ? '#ffffff' : '#000000'
       }}>
         Loading settings...
-      </div>
+                </div>
     );
   }
 
-  return (
-    <div style={{ 
-      minHeight: '100vh', 
-      padding: 48, 
-      background: isDark ? '#121212' : '#f8f9fa', 
-      color: isDark ? '#fff' : '#1a1a1a' 
-    }}>
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
-        <button 
-          onClick={() => navigate(-1)}
-          style={{ 
-            width: 140, 
-            fontSize: 16, 
-            background: 'none', 
-            color: '#fff', 
-            border: '1.5px solid #bbb', 
-            borderRadius: 8, 
-            cursor: 'pointer', 
-            fontWeight: 600, 
-            padding: '10px 0' 
-          }}
-        >
-          Back
-        </button>
-        <h1 style={{ fontSize: 36, fontWeight: 800, margin: 0, letterSpacing: 1 }}>
-          Settings
-        </h1>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          style={{
-            width: 140,
-            fontSize: 16,
-            background: saving ? '#666' : '#10b981',
-            color: '#fff',
-            border: 'none',
-            borderRadius: 8,
-            cursor: saving ? 'not-allowed' : 'pointer',
-            fontWeight: 600,
-            padding: '10px 0'
-          }}
-        >
-          {saving ? 'Saving...' : 'Save Changes'}
-        </button>
-      </div>
-
-      <div style={{ display: 'flex', gap: 32 }}>
-        {/* Sidebar Navigation */}
-        <div style={{ 
-          width: 280,
-          background: isDark ? '#1e1e1e' : '#fff',
-          borderRadius: 16,
-          padding: 24,
-          height: 'fit-content',
-          border: isDark ? '1px solid #333' : '1px solid #e5e7eb'
+      return (
+            <div style={{
+        minHeight: '100vh',
+        background: isDark ? '#1a1a1a' : '#f5f5f5',
+        color: isDark ? '#ffffff' : '#000000',
+        padding: '5% 2%',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}>
+        <div style={{
+          display: 'flex',
+          height: '90vh',
+          width: '95%',
+          maxWidth: '1400px',
+          background: isDark ? '#2d2d2d' : '#ffffff',
+          borderRadius: '12px',
+          boxShadow: isDark ? '0 8px 32px rgba(0, 0, 0, 0.4)' : '0 8px 32px rgba(0, 0, 0, 0.1)',
+          border: isDark ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid rgba(0, 0, 0, 0.1)',
+          overflow: 'hidden'
         }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <TabButton id="profile" label="Profile" icon="👤" />
-            <TabButton id="appearance" label="Appearance" icon="🎨" />
-            <TabButton id="notifications" label="Notifications" icon="🔔" />
-            <TabButton id="privacy" label="Privacy & Security" icon="🔒" />
-            <TabButton id="calendar" label="Calendar & Sync" icon="📅" />
-            <TabButton id="data" label="Data & Export" icon="📊" />
-            <TabButton id="team" label="Team & Collaboration" icon="👥" />
-            <TabButton id="events" label="Event Settings" icon="🎪" />
-            <TabButton id="mobile" label="Mobile Settings" icon="📱" />
-            <TabButton id="advanced" label="Advanced" icon="⚙️" />
+          {/* Sidebar */}
+          <div style={{
+            width: '250px',
+            background: isDark ? '#2d2d2d' : '#f8f9fa',
+            borderRight: isDark ? '1px solid #444' : '1px solid #e5e7eb',
+            padding: '20px'
+          }}>
+          <h2 style={{ marginBottom: '20px', fontSize: '18px', fontWeight: '600', color: isDark ? '#fff' : '#000' }}>Settings</h2>
+          <div style={{ 
+            display: 'flex', 
+            flexDirection: 'column',
+            overflow: 'hidden',
+            margin: '0 -20px'
+          }}>
+            {tabs.map((tab, index) => (
+                              <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                    style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    padding: '8px 16px',
+                      width: '100%',
+                    border: 'none',
+                    borderRadius: '0',
+                    borderTop: index > 0 ? `0.5px solid ${isDark ? '#fff' : '#000'}` : 'none',
+                    borderBottom: index < tabs.length - 1 ? `0.5px solid ${isDark ? '#fff' : '#000'}` : 'none',
+                    background: activeTab === tab.id 
+                      ? (isDark ? '#fff' : '#000') 
+                      : 'transparent',
+                    color: activeTab === tab.id 
+                      ? (isDark ? '#000' : '#fff') 
+                      : (isDark ? '#fff' : '#000'),
+                    cursor: 'pointer',
+                    fontSize: '13px',
+                    fontWeight: activeTab === tab.id ? '500' : '400',
+                    textAlign: 'left'
+                  }}
+                >
+                  <span style={{ 
+                    display: 'flex', 
+                    alignItems: 'center',
+                    color: activeTab === tab.id 
+                      ? (isDark ? '#000' : '#fff') 
+                      : (isDark ? '#fff' : '#000')
+                  }}>
+                    {tab.icon}
+                  </span>
+                  {tab.label}
+                </button>
+            ))}
+                </div>
+              </div>
+
+                  {/* Main Content */}
+            <div style={{
+            flex: 1,
+            background: isDark ? '#2d2d2d' : '#ffffff',
+            padding: '20px 40px',
+            overflowY: 'auto',
+            marginLeft: '20px',
+            position: 'relative'
+          }}>
+            <div style={{
+            marginBottom: '20px'
+          }}>
+            <h1 style={{ fontSize: '20px', fontWeight: '600', color: isDark ? '#fff' : '#000' }}>
+              {tabs.find(tab => tab.id === activeTab)?.label} Settings
+            </h1>
           </div>
-        </div>
 
-        {/* Main Content */}
-        <div style={{ flex: 1 }}>
-          {activeTab === 'profile' && (
-            <div style={{
-              background: isDark ? '#1e1e1e' : '#fff',
-              borderRadius: 16,
-              padding: 32,
-              border: isDark ? '1px solid #333' : '1px solid #e5e7eb'
-            }}>
-              <SectionHeader 
-                title="Profile Settings" 
-                description="Manage your account information and preferences"
-              />
-              
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                <div>
-                  <label style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, display: 'block' }}>
-                    Full Name
-                  </label>
-                  <input
-                    type="text"
-                    value={settings.name}
-                    onChange={(e) => setSettings(prev => ({ ...prev, name: e.target.value }))}
+          {renderTabContent()}
+
+          <div style={{
+            position: 'absolute',
+            bottom: '20px',
+            right: '40px'
+          }}>
+            <button
+              onClick={handleSave}
+              disabled={saving}
                     style={{
-                      width: '100%',
-                      padding: '12px 16px',
-                      borderRadius: 8,
-                      border: isDark ? '1px solid #333' : '1px solid #d1d5db',
-                      background: isDark ? '#2a2a2a' : '#fff',
-                      color: isDark ? '#fff' : '#1a1a1a',
-                      fontSize: 16
-                    }}
-                  />
+                padding: '8px 16px',
+                background: '#00bfa5',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '6px',
+                fontSize: '13px',
+                fontWeight: '500',
+                cursor: saving ? 'not-allowed' : 'pointer',
+                opacity: saving ? 0.6 : 1,
+                maxWidth: '140px',
+                width: '100%'
+              }}
+            >
+              {saving ? 'Saving...' : 'Save'}
+            </button>
                 </div>
-
-                <div>
-                  <label style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, display: 'block' }}>
-                    Email Address
-                  </label>
-                  <input
-                    type="email"
-                    value={settings.email}
-                    disabled
-                    style={{
-                      width: '100%',
-                      padding: '12px 16px',
-                      borderRadius: 8,
-                      border: isDark ? '1px solid #333' : '1px solid #d1d5db',
-                      background: isDark ? '#1a1a1a' : '#f3f4f6',
-                      color: isDark ? '#666' : '#9ca3af',
-                      fontSize: 16
-                    }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, display: 'block' }}>
-                    Status
-                  </label>
-                  <select
-                    value={settings.status}
-                    onChange={(e) => setSettings(prev => ({ ...prev, status: e.target.value }))}
-                    style={{
-                      width: '100%',
-                      padding: '12px 16px',
-                      borderRadius: 8,
-                      border: isDark ? '1px solid #333' : '1px solid #d1d5db',
-                      background: isDark ? '#2a2a2a' : '#fff',
-                      color: isDark ? '#fff' : '#1a1a1a',
-                      fontSize: 16
-                    }}
-                  >
-                    <option value="online">Online</option>
-                    <option value="away">Away</option>
-                    <option value="busy">Busy</option>
-                    <option value="offline">Offline</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'appearance' && (
-            <div style={{
-              background: isDark ? '#1e1e1e' : '#fff',
-              borderRadius: 16,
-              padding: 32,
-              border: isDark ? '1px solid #333' : '1px solid #e5e7eb'
-            }}>
-              <SectionHeader 
-                title="Appearance Settings" 
-                description="Customize the look and feel of the application"
-              />
-              
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                <div>
-                  <label style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, display: 'block' }}>
-                    Theme
-                  </label>
-                  <select
-                    value={settings.theme}
-                    onChange={(e) => setSettings(prev => ({ ...prev, theme: e.target.value as any }))}
-                    style={{
-                      width: '100%',
-                      padding: '12px 16px',
-                      borderRadius: 8,
-                      border: isDark ? '1px solid #333' : '1px solid #d1d5db',
-                      background: isDark ? '#2a2a2a' : '#fff',
-                      color: isDark ? '#fff' : '#1a1a1a',
-                      fontSize: 16
-                    }}
-                  >
-                    <option value="light">Light</option>
-                    <option value="dark">Dark</option>
-                    <option value="auto">Auto (System)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, display: 'block' }}>
-                    Font Size
-                  </label>
-                  <select
-                    value={settings.fontSize}
-                    onChange={(e) => setSettings(prev => ({ ...prev, fontSize: e.target.value as any }))}
-                    style={{
-                      width: '100%',
-                      padding: '12px 16px',
-                      borderRadius: 8,
-                      border: isDark ? '1px solid #333' : '1px solid #d1d5db',
-                      background: isDark ? '#2a2a2a' : '#fff',
-                      color: isDark ? '#fff' : '#1a1a1a',
-                      fontSize: 16
-                    }}
-                  >
-                    <option value="small">Small</option>
-                    <option value="medium">Medium</option>
-                    <option value="large">Large</option>
-                  </select>
-                </div>
-
-                <ToggleButton
-                  enabled={settings.compactMode}
-                  onToggle={() => handleToggle('compactMode')}
-                  label="Compact Mode"
-                  description="Reduce spacing and padding for a more compact layout"
-                />
-
-                <ToggleButton
-                  enabled={settings.showAnimations}
-                  onToggle={() => handleToggle('showAnimations')}
-                  label="Show Animations"
-                  description="Enable smooth transitions and animations"
-                />
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'notifications' && (
-            <div style={{
-              background: isDark ? '#1e1e1e' : '#fff',
-              borderRadius: 16,
-              padding: 32,
-              border: isDark ? '1px solid #333' : '1px solid #e5e7eb'
-            }}>
-              <SectionHeader 
-                title="Notification Settings" 
-                description="Configure how and when you receive notifications"
-              />
-              
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                <ToggleButton
-                  enabled={settings.emailNotifications}
-                  onToggle={() => handleToggle('emailNotifications')}
-                  label="Email Notifications"
-                  description="Receive notifications via email"
-                />
-
-                <ToggleButton
-                  enabled={settings.pushNotifications}
-                  onToggle={() => handleToggle('pushNotifications')}
-                  label="Push Notifications"
-                  description="Receive browser push notifications"
-                />
-
-                <ToggleButton
-                  enabled={settings.inAppNotifications}
-                  onToggle={() => handleToggle('inAppNotifications')}
-                  label="In-App Notifications"
-                  description="Show notifications within the application"
-                />
-
-                <ToggleButton
-                  enabled={settings.soundEnabled}
-                  onToggle={() => handleToggle('soundEnabled')}
-                  label="Sound Notifications"
-                  description="Play sounds for notifications"
-                />
-
-                <ToggleButton
-                  enabled={settings.quietHoursEnabled}
-                  onToggle={() => handleToggle('quietHoursEnabled')}
-                  label="Quiet Hours"
-                  description="Silence notifications during specified hours"
-                />
-
-                {settings.quietHoursEnabled && (
-                  <div style={{ display: 'flex', gap: 16 }}>
-                    <div style={{ flex: 1 }}>
-                      <label style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, display: 'block' }}>
-                        Start Time
-                      </label>
-                      <input
-                        type="time"
-                        value={settings.quietHoursStart}
-                        onChange={(e) => setSettings(prev => ({ ...prev, quietHoursStart: e.target.value }))}
-                        style={{
-                          width: '100%',
-                          padding: '12px 16px',
-                          borderRadius: 8,
-                          border: isDark ? '1px solid #333' : '1px solid #d1d5db',
-                          background: isDark ? '#2a2a2a' : '#fff',
-                          color: isDark ? '#fff' : '#1a1a1a',
-                          fontSize: 16
-                        }}
-                      />
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <label style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, display: 'block' }}>
-                        End Time
-                      </label>
-                      <input
-                        type="time"
-                        value={settings.quietHoursEnd}
-                        onChange={(e) => setSettings(prev => ({ ...prev, quietHoursEnd: e.target.value }))}
-                        style={{
-                          width: '100%',
-                          padding: '12px 16px',
-                          borderRadius: 8,
-                          border: isDark ? '1px solid #333' : '1px solid #d1d5db',
-                          background: isDark ? '#2a2a2a' : '#fff',
-                          color: isDark ? '#fff' : '#1a1a1a',
-                          fontSize: 16
-                        }}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'privacy' && (
-            <div style={{
-              background: isDark ? '#1e1e1e' : '#fff',
-              borderRadius: 16,
-              padding: 32,
-              border: isDark ? '1px solid #333' : '1px solid #e5e7eb'
-            }}>
-              <SectionHeader 
-                title="Privacy & Security" 
-                description="Manage your privacy and security preferences"
-              />
-              
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                <ToggleButton
-                  enabled={settings.twoFactorEnabled}
-                  onToggle={() => handleToggle('twoFactorEnabled')}
-                  label="Two-Factor Authentication"
-                  description="Add an extra layer of security to your account"
-                />
-
-                <div>
-                  <label style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, display: 'block' }}>
-                    Session Timeout (minutes)
-                  </label>
-                  <input
-                    type="number"
-                    value={settings.sessionTimeout}
-                    onChange={(e) => setSettings(prev => ({ ...prev, sessionTimeout: parseInt(e.target.value) }))}
-                    min="5"
-                    max="480"
-                    style={{
-                      width: '100%',
-                      padding: '12px 16px',
-                      borderRadius: 8,
-                      border: isDark ? '1px solid #333' : '1px solid #d1d5db',
-                      background: isDark ? '#2a2a2a' : '#fff',
-                      color: isDark ? '#fff' : '#1a1a1a',
-                      fontSize: 16
-                    }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, display: 'block' }}>
-                    Data Retention (days)
-                  </label>
-                  <input
-                    type="number"
-                    value={settings.dataRetentionDays}
-                    onChange={(e) => setSettings(prev => ({ ...prev, dataRetentionDays: parseInt(e.target.value) }))}
-                    min="30"
-                    max="2555"
-                    style={{
-                      width: '100%',
-                      padding: '12px 16px',
-                      borderRadius: 8,
-                      border: isDark ? '1px solid #333' : '1px solid #d1d5db',
-                      background: isDark ? '#2a2a2a' : '#fff',
-                      color: isDark ? '#fff' : '#1a1a1a',
-                      fontSize: 16
-                    }}
-                  />
-                </div>
-
-                <ToggleButton
-                  enabled={settings.allowAnalytics}
-                  onToggle={() => handleToggle('allowAnalytics')}
-                  label="Allow Analytics"
-                  description="Help improve the app by sharing usage data"
-                />
-
-                <ToggleButton
-                  enabled={settings.allowMarketing}
-                  onToggle={() => handleToggle('allowMarketing')}
-                  label="Marketing Communications"
-                  description="Receive promotional emails and updates"
-                />
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'calendar' && (
-            <div style={{
-              background: isDark ? '#1e1e1e' : '#fff',
-              borderRadius: 16,
-              padding: 32,
-              border: isDark ? '1px solid #333' : '1px solid #e5e7eb'
-            }}>
-              <SectionHeader 
-                title="Calendar & Sync Settings" 
-                description="Configure calendar integrations and synchronization"
-              />
-              
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                <ToggleButton
-                  enabled={settings.autoSyncCalendar}
-                  onToggle={() => handleToggle('autoSyncCalendar')}
-                  label="Auto Sync Calendar"
-                  description="Automatically sync events with external calendars"
-                />
-
-                <div>
-                  <label style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, display: 'block' }}>
-                    Sync Interval (minutes)
-                  </label>
-                  <input
-                    type="number"
-                    value={settings.syncInterval}
-                    onChange={(e) => setSettings(prev => ({ ...prev, syncInterval: parseInt(e.target.value) }))}
-                    min="5"
-                    max="1440"
-                    style={{
-                      width: '100%',
-                      padding: '12px 16px',
-                      borderRadius: 8,
-                      border: isDark ? '1px solid #333' : '1px solid #d1d5db',
-                      background: isDark ? '#2a2a2a' : '#fff',
-                      color: isDark ? '#fff' : '#1a1a1a',
-                      fontSize: 16
-                    }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, display: 'block' }}>
-                    Default Calendar Provider
-                  </label>
-                  <select
-                    value={settings.defaultCalendarProvider}
-                    onChange={(e) => setSettings(prev => ({ ...prev, defaultCalendarProvider: e.target.value as any }))}
-                    style={{
-                      width: '100%',
-                      padding: '12px 16px',
-                      borderRadius: 8,
-                      border: isDark ? '1px solid #333' : '1px solid #d1d5db',
-                      background: isDark ? '#2a2a2a' : '#fff',
-                      color: isDark ? '#fff' : '#1a1a1a',
-                      fontSize: 16
-                    }}
-                  >
-                    <option value="google">Google Calendar</option>
-                    <option value="outlook">Outlook Calendar</option>
-                    <option value="none">No Default</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'data' && (
-            <div style={{
-              background: isDark ? '#1e1e1e' : '#fff',
-              borderRadius: 16,
-              padding: 32,
-              border: isDark ? '1px solid #333' : '1px solid #e5e7eb'
-            }}>
-              <SectionHeader 
-                title="Data & Export Settings" 
-                description="Configure data backup and export preferences"
-              />
-              
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                <ToggleButton
-                  enabled={settings.autoBackupEnabled}
-                  onToggle={() => handleToggle('autoBackupEnabled')}
-                  label="Auto Backup"
-                  description="Automatically backup your data"
-                />
-
-                <div>
-                  <label style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, display: 'block' }}>
-                    Backup Frequency
-                  </label>
-                  <select
-                    value={settings.backupFrequency}
-                    onChange={(e) => setSettings(prev => ({ ...prev, backupFrequency: e.target.value as any }))}
-                    style={{
-                      width: '100%',
-                      padding: '12px 16px',
-                      borderRadius: 8,
-                      border: isDark ? '1px solid #333' : '1px solid #d1d5db',
-                      background: isDark ? '#2a2a2a' : '#fff',
-                      color: isDark ? '#fff' : '#1a1a1a',
-                      fontSize: 16
-                    }}
-                  >
-                    <option value="daily">Daily</option>
-                    <option value="weekly">Weekly</option>
-                    <option value="monthly">Monthly</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, display: 'block' }}>
-                    Export Format
-                  </label>
-                  <select
-                    value={settings.exportFormat}
-                    onChange={(e) => setSettings(prev => ({ ...prev, exportFormat: e.target.value as any }))}
-                    style={{
-                      width: '100%',
-                      padding: '12px 16px',
-                      borderRadius: 8,
-                      border: isDark ? '1px solid #333' : '1px solid #d1d5db',
-                      background: isDark ? '#2a2a2a' : '#fff',
-                      color: isDark ? '#fff' : '#1a1a1a',
-                      fontSize: 16
-                    }}
-                  >
-                    <option value="csv">CSV</option>
-                    <option value="json">JSON</option>
-                    <option value="xlsx">Excel (XLSX)</option>
-                  </select>
-                </div>
-
-                <ToggleButton
-                  enabled={settings.includeModuleResponses}
-                  onToggle={() => handleToggle('includeModuleResponses')}
-                  label="Include Module Responses"
-                  description="Include guest responses in data exports"
-                />
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'team' && (
-            <div style={{
-              background: isDark ? '#1e1e1e' : '#fff',
-              borderRadius: 16,
-              padding: 32,
-              border: isDark ? '1px solid #333' : '1px solid #e5e7eb'
-            }}>
-              <SectionHeader 
-                title="Team & Collaboration Settings" 
-                description="Configure team collaboration preferences"
-              />
-              
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                <ToggleButton
-                  enabled={settings.teamNotifications}
-                  onToggle={() => handleToggle('teamNotifications')}
-                  label="Team Notifications"
-                  description="Receive notifications about team activities"
-                />
-
-                <ToggleButton
-                  enabled={settings.showOnlineStatus}
-                  onToggle={() => handleToggle('showOnlineStatus')}
-                  label="Show Online Status"
-                  description="Display your online status to team members"
-                />
-
-                <ToggleButton
-                  enabled={settings.allowTeamInvites}
-                  onToggle={() => handleToggle('allowTeamInvites')}
-                  label="Allow Team Invites"
-                  description="Allow team members to invite you to new teams"
-                />
-
-                <div>
-                  <label style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, display: 'block' }}>
-                    Default Team Role
-                  </label>
-                  <select
-                    value={settings.defaultTeamRole}
-                    onChange={(e) => setSettings(prev => ({ ...prev, defaultTeamRole: e.target.value }))}
-                    style={{
-                      width: '100%',
-                      padding: '12px 16px',
-                      borderRadius: 8,
-                      border: isDark ? '1px solid #333' : '1px solid #d1d5db',
-                      background: isDark ? '#2a2a2a' : '#fff',
-                      color: isDark ? '#fff' : '#1a1a1a',
-                      fontSize: 16
-                    }}
-                  >
-                    <option value="member">Member</option>
-                    <option value="admin">Admin</option>
-                    <option value="viewer">Viewer</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'events' && (
-            <div style={{
-              background: isDark ? '#1e1e1e' : '#fff',
-              borderRadius: 16,
-              padding: 32,
-              border: isDark ? '1px solid #333' : '1px solid #e5e7eb'
-            }}>
-              <SectionHeader 
-                title="Event Settings" 
-                description="Configure default event preferences"
-              />
-              
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                <div>
-                  <label style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, display: 'block' }}>
-                    Default Event Duration (minutes)
-                  </label>
-                  <input
-                    type="number"
-                    value={settings.defaultEventDuration}
-                    onChange={(e) => setSettings(prev => ({ ...prev, defaultEventDuration: parseInt(e.target.value) }))}
-                    min="15"
-                    max="480"
-                    style={{
-                      width: '100%',
-                      padding: '12px 16px',
-                      borderRadius: 8,
-                      border: isDark ? '1px solid #333' : '1px solid #d1d5db',
-                      background: isDark ? '#2a2a2a' : '#fff',
-                      color: isDark ? '#fff' : '#1a1a1a',
-                      fontSize: 16
-                    }}
-                  />
-                </div>
-
-                <ToggleButton
-                  enabled={settings.autoPublishEvents}
-                  onToggle={() => handleToggle('autoPublishEvents')}
-                  label="Auto Publish Events"
-                  description="Automatically publish events when created"
-                />
-
-                <ToggleButton
-                  enabled={settings.guestApprovalRequired}
-                  onToggle={() => handleToggle('guestApprovalRequired')}
-                  label="Guest Approval Required"
-                  description="Require approval for guest registrations"
-                />
-
-                <ToggleButton
-                  enabled={settings.emergencyAlertsEnabled}
-                  onToggle={() => handleToggle('emergencyAlertsEnabled')}
-                  label="Emergency Alerts"
-                  description="Enable emergency alert system for events"
-                />
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'mobile' && (
-            <div style={{
-              background: isDark ? '#1e1e1e' : '#fff',
-              borderRadius: 16,
-              padding: 32,
-              border: isDark ? '1px solid #333' : '1px solid #e5e7eb'
-            }}>
-              <SectionHeader 
-                title="Mobile Settings" 
-                description="Configure mobile app preferences"
-              />
-              
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                <ToggleButton
-                  enabled={settings.mobilePushEnabled}
-                  onToggle={() => handleToggle('mobilePushEnabled')}
-                  label="Mobile Push Notifications"
-                  description="Receive push notifications on mobile devices"
-                />
-
-                <ToggleButton
-                  enabled={settings.locationSharing}
-                  onToggle={() => handleToggle('locationSharing')}
-                  label="Location Sharing"
-                  description="Share your location with event organizers"
-                />
-
-                <ToggleButton
-                  enabled={settings.offlineModeEnabled}
-                  onToggle={() => handleToggle('offlineModeEnabled')}
-                  label="Offline Mode"
-                  description="Allow the app to work without internet connection"
-                />
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'advanced' && (
-            <div style={{
-              background: isDark ? '#1e1e1e' : '#fff',
-              borderRadius: 16,
-              padding: 32,
-              border: isDark ? '1px solid #333' : '1px solid #e5e7eb'
-            }}>
-              <SectionHeader 
-                title="Advanced Settings" 
-                description="Advanced configuration options for power users"
-              />
-              
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                <ToggleButton
-                  enabled={settings.debugMode}
-                  onToggle={() => handleToggle('debugMode')}
-                  label="Debug Mode"
-                  description="Enable debug logging and developer tools"
-                />
-
-                <ToggleButton
-                  enabled={settings.performanceMode}
-                  onToggle={() => handleToggle('performanceMode')}
-                  label="Performance Mode"
-                  description="Optimize for performance over visual effects"
-                />
-
-                <div>
-                  <label style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, display: 'block' }}>
-                    Custom CSS
-                  </label>
-                  <textarea
-                    value={settings.customCSS}
-                    onChange={(e) => setSettings(prev => ({ ...prev, customCSS: e.target.value }))}
-                    placeholder="Enter custom CSS styles..."
-                    rows={6}
-                    style={{
-                      width: '100%',
-                      padding: '12px 16px',
-                      borderRadius: 8,
-                      border: isDark ? '1px solid #333' : '1px solid #d1d5db',
-                      background: isDark ? '#2a2a2a' : '#fff',
-                      color: isDark ? '#fff' : '#1a1a1a',
-                      fontSize: 14,
-                      fontFamily: 'monospace',
-                      resize: 'vertical'
-                    }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, display: 'block' }}>
-                    API Endpoint
-                  </label>
-                  <input
-                    type="text"
-                    value={settings.apiEndpoint}
-                    onChange={(e) => setSettings(prev => ({ ...prev, apiEndpoint: e.target.value }))}
-                    placeholder="https://api.example.com"
-                    style={{
-                      width: '100%',
-                      padding: '12px 16px',
-                      borderRadius: 8,
-                      border: isDark ? '1px solid #333' : '1px solid #d1d5db',
-                      background: isDark ? '#2a2a2a' : '#fff',
-                      color: isDark ? '#fff' : '#1a1a1a',
-                      fontSize: 16
-                    }}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>

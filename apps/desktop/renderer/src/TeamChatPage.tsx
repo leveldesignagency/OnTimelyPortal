@@ -62,7 +62,6 @@ type HoverPopupState = {
   activeMessageId: string | null;
   position: { x: number; y: number } | null;
   message: Message | null;
-  hideTimeoutId: number | null;
 };
 
 type UserStatus = 'online' | 'offline' | 'away' | 'busy';
@@ -1035,7 +1034,7 @@ const FilePreview = ({ message, isDark }: { message: Message, isDark: boolean })
   return null;
 };
 
-const MessageBubble = ({ message, sent, isDark, onReact, onReply, onEdit, onDelete, isSelected, onSelect, deleting, editingMessageId, onShowHover, onHideHover }: { 
+const MessageBubble = ({ message, sent, isDark, onReact, onReply, onEdit, onDelete, isSelected, onSelect, deleting, editingMessageId, onShowHover, allMessages }: { 
   message: Message, 
   sent: boolean, 
   isDark: boolean, 
@@ -1048,10 +1047,9 @@ const MessageBubble = ({ message, sent, isDark, onReact, onReply, onEdit, onDele
   deleting?: boolean,
   editingMessageId?: string | null,
   onShowHover?: (message: Message, event: React.MouseEvent) => void,
-  onHideHover?: () => void
+  allMessages?: Message[]
 }) => {
   const colors = themes[isDark ? 'dark' : 'light'];
-  const [showActions, setShowActions] = useState(false);
 
   // Get sender initials for avatar
   const getSenderInitials = (senderName: string) => {
@@ -1178,24 +1176,12 @@ const MessageBubble = ({ message, sent, isDark, onReact, onReply, onEdit, onDele
         alignItems: sent ? 'flex-end' : 'flex-start', 
         maxWidth: '70%' 
       }}>
-        {message.replyTo && (
-          <div style={{
-            background: sent ? 'rgba(255,255,255,0.1)' : colors.hoverBg,
-            padding: '8px 12px',
-            borderRadius: '8px 8px 0 0',
-            fontSize: '12px',
-            color: colors.textSecondary,
-            borderLeft: `3px solid ${colors.accent}`,
-            marginBottom: '2px'
-          }}>
-            Replying to: {message.replyTo}
-          </div>
-        )}
+
         
         <div
           style={{
-            background: sent ? colors.messageBubbleSent : colors.messageBubble,
-            color: sent ? (isDark ? colors.bg : '#ffffff') : colors.text,
+            background: sent ? '#00bfa5' : colors.messageBubble,
+            color: sent ? '#ffffff' : colors.text,
             padding: '12px 16px',
             borderRadius: sent ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
             wordWrap: 'break-word',
@@ -1204,46 +1190,80 @@ const MessageBubble = ({ message, sent, isDark, onReact, onReply, onEdit, onDele
             border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
             boxShadow: isDark 
               ? '0 4px 16px rgba(0,0,0,0.3)' 
-              : '0 4px 16px rgba(0,0,0,0.1)'
+              : '0 4px 16px rgba(0,0,0,0.1)',
+            cursor: sent ? 'pointer' : 'default'
           }}
-          onMouseEnter={() => setShowActions(true)}
-          onMouseLeave={() => setShowActions(false)}
+          onClick={(e) => {
+            if (sent) {
+              e.stopPropagation();
+              onShowHover?.(message, e);
+            }
+          }}
         >
-          {/* Three dots menu - top left */}
-          {showActions && sent && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onShowHover?.(message, e);
-              }}
+
+          {/* Reply preview if this is a reply */}
+          {message.replyTo && (
+            <div
               style={{
-                position: 'absolute',
-                top: '8px',
-                left: '8px',
-                background: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
-                border: 'none',
-                borderRadius: '50%',
-                width: '24px',
-                height: '24px',
                 display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
+                alignItems: 'flex-start',
+                marginBottom: 8,
+                marginLeft: 0,
+                alignSelf: 'flex-start',
                 cursor: 'pointer',
-                fontSize: '14px',
-                color: isDark ? '#ffffff' : '#000000',
-                transition: 'all 0.2s ease',
-                zIndex: 10
+                opacity: 0.8,
+                borderLeft: `3px solid ${sent ? (isDark ? '#ffffff' : '#000000') : (isDark ? '#ffffff' : '#000000')}`,
+                paddingLeft: 8,
+                transition: 'opacity 0.2s ease',
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)';
+                e.currentTarget.style.opacity = '1';
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
+                e.currentTarget.style.opacity = '0.8';
               }}
+              title="Jump to replied message"
             >
-              ⋮
-            </button>
+              <div
+                style={{
+                  borderRadius: sent
+                    ? '12px 12px 4px 12px'
+                    : '12px 12px 12px 4px',
+                  padding: '8px 12px',
+                  maxWidth: 250,
+                  fontSize: 12,
+                  color: isDark ? '#ffffff' : '#000000',
+                  fontStyle: 'normal',
+                  boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.1)',
+                  fontWeight: 400,
+                  letterSpacing: 0.1,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  border: `1px solid ${isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)'}`,
+                  background: isDark ? 'rgba(64,64,64,0.9)' : 'rgba(240,240,240,0.9)',
+                  transition: 'all 0.2s ease',
+                  backdropFilter: 'blur(10px)',
+                }}
+              >
+                <div style={{ 
+                  fontSize: 11, 
+                  color: isDark ? '#ffffff' : '#000000', 
+                  marginBottom: 3,
+                  fontWeight: 600 
+                }}>
+                  Replying to message
+                </div>
+                {(() => {
+                  // Find the replied-to message content
+                  const repliedToMessage = allMessages?.find(m => m.id === message.replyTo);
+                  const replyText = repliedToMessage?.text || message.replyTo;
+                  return replyText.length > 50 ? replyText.slice(0, 50) + '…' : replyText;
+                })()}
+              </div>
+            </div>
           )}
+
           {/* Message content */}
           {message.type === 'text' && (
             <div style={{ 
@@ -1273,8 +1293,8 @@ const MessageBubble = ({ message, sent, isDark, onReact, onReply, onEdit, onDele
                 key={`${reaction.emoji}-${index}`}
                 onClick={() => onReact(message.id, reaction.emoji)}
                 style={{
-                  background: colors.hoverBg,
-                  border: `1px solid ${colors.border}`,
+                  background: 'rgba(34, 197, 94, 0.1)',
+                  border: '1px solid #22c55e',
                   borderRadius: '12px',
                   padding: '4px 8px',
                   fontSize: '12px',
@@ -1282,17 +1302,17 @@ const MessageBubble = ({ message, sent, isDark, onReact, onReply, onEdit, onDele
                   display: 'flex',
                   alignItems: 'center',
                   gap: '4px',
-                  color: colors.text,
+                  color: '#22c55e',
                   transition: 'all 0.2s ease',
                   backdropFilter: 'blur(10px)'
                 }}
                 onMouseEnter={e => {
-                  e.currentTarget.style.background = colors.accent;
-                  e.currentTarget.style.color = isDark ? colors.bg : '#ffffff';
+                  e.currentTarget.style.background = '#22c55e';
+                  e.currentTarget.style.color = '#ffffff';
                 }}
                 onMouseLeave={e => {
-                  e.currentTarget.style.background = colors.hoverBg;
-                  e.currentTarget.style.color = colors.text;
+                  e.currentTarget.style.background = 'rgba(34, 197, 94, 0.1)';
+                  e.currentTarget.style.color = '#22c55e';
                 }}
               >
                 <span>{reaction.emoji}</span>
@@ -2953,8 +2973,7 @@ const GlobalHoverPopup = ({
   onReply, 
   onEdit, 
   onDelete, 
-  isDark,
-  onClearTimeout
+  isDark
 }: { 
   state: HoverPopupState;
   onClose: () => void;
@@ -2963,11 +2982,10 @@ const GlobalHoverPopup = ({
   onEdit: (message: Message) => void;
   onDelete: (message: Message) => void;
   isDark: boolean;
-  onClearTimeout: () => void;
 }) => {
   const emojis = ['👍', '❤️', '😂', '😮', '😢', '😡', '🎉', '👏', '🙏', '🔥', '💯', '✨', '💪', '🤔', '😎', '🥳', '😴', '🤯', '😍', '🤩', '😭', '🤬', '🤮', '🤧', '🤠', '👻', '🤖', '👽', '👾', '🤡', '👹', '👺', '💀', '☠️'];
   
-  // SINGLE CLICK-OFF HANDLER
+  // CLICK-OFF HANDLER
   React.useEffect(() => {
     if (!state.activeMessageId) return;
     
@@ -3003,14 +3021,6 @@ const GlobalHoverPopup = ({
         width: '280px',
         backdropFilter: 'blur(10px)',
         WebkitBackdropFilter: 'blur(10px)'
-      }}
-      onMouseEnter={() => {
-        // Clear any existing timeout when hovering over popup
-        onClearTimeout();
-      }}
-      onMouseLeave={() => {
-        // Start the 3-second delay when mouse leaves popup
-        onClose();
       }}
     >
       {/* X Close Button */}
@@ -3492,8 +3502,7 @@ export default function TeamChatPage() {
   const [hoverPopupState, setHoverPopupState] = useState<HoverPopupState>({
     activeMessageId: null,
     position: null,
-    message: null,
-    hideTimeoutId: null
+    message: null
   });
   
   const messagesEndRef = useRef<null | HTMLDivElement>(null);
@@ -4244,10 +4253,53 @@ export default function TeamChatPage() {
     setReplyTo(null);
   };
 
-  const handleDelete = () => {
-    setDeleting(true);
-    setShowReactionPicker(false);
-    setReactionTarget(null);
+  const handleDelete = async (message?: Message) => {
+    if (!message) return;
+    
+    try {
+      console.log('🗑️ Deleting message:', message.id);
+      
+      // First delete message reactions
+      const { error: reactionsError } = await supabase
+        .from('message_reactions')
+        .delete()
+        .eq('message_id', message.id);
+      
+      if (reactionsError) {
+        console.error('Error deleting message reactions:', reactionsError);
+      }
+      
+      // Delete any replies to this message
+      const { error: repliesError } = await supabase
+        .from('messages')
+        .delete()
+        .eq('reply_to', message.id);
+      
+      if (repliesError) {
+        console.error('Error deleting replies:', repliesError);
+      }
+      
+      // Then delete the message itself
+      const { error: messageError } = await supabase
+        .from('messages')
+        .delete()
+        .eq('id', message.id)
+        .eq('sender_id', CURRENT_USER?.id); // Only allow deleting your own messages
+      
+      if (messageError) {
+        console.error('Error deleting message:', messageError);
+        addNotification('Failed to delete message', 'error');
+      } else {
+        console.log('✅ Message deleted successfully:', message.id);
+        addNotification('Message deleted', 'success');
+        
+        // Close the popup
+        closeHoverPopup();
+      }
+    } catch (error) {
+      console.error('Error deleting message:', error);
+      addNotification('Failed to delete message', 'error');
+    }
   };
 
   const handleSaveEdit = async (text: string) => {
@@ -4356,7 +4408,10 @@ export default function TeamChatPage() {
     if (!activeChatId || !CURRENT_USER) return;
 
     try {
-      const message = await sendMessage(activeChatId, CURRENT_USER.id, text, type);
+      // Get the replyToId if we're replying to a message
+      const replyToId = replyTo?.id;
+      
+      const message = await sendMessage(activeChatId, CURRENT_USER.id, text, type, replyToId);
       if (message) {
         // Immediately add the message to local state so sender sees it right away
         const convertedMessage = convertSupabaseMessage(message);
@@ -4374,6 +4429,8 @@ export default function TeamChatPage() {
           )
         );
         
+        // Clear the reply state after sending
+        setReplyTo(null);
         scrollToBottom();
       }
     } catch (error) {
@@ -4745,46 +4802,13 @@ export default function TeamChatPage() {
     });
   };
 
-  const hideHoverPopup = () => {
-    // Clear any existing timeout first
-    if (hoverPopupState.hideTimeoutId) {
-      clearTimeout(hoverPopupState.hideTimeoutId);
-    }
-    
-    // Set a 3-second delay before hiding
-    const timeoutId = window.setTimeout(() => {
-      setHoverPopupState({
-        activeMessageId: null,
-        position: null,
-        message: null,
-        hideTimeoutId: null
-      });
-    }, 3000);
-    
-    setHoverPopupState(prev => ({
-      ...prev,
-      hideTimeoutId: timeoutId
-    }));
+  const closeHoverPopup = () => {
+    setHoverPopupState({
+      activeMessageId: null,
+      position: null,
+      message: null
+    });
   };
-
-  const clearHoverTimeout = () => {
-    if (hoverPopupState.hideTimeoutId) {
-      clearTimeout(hoverPopupState.hideTimeoutId);
-      setHoverPopupState(prev => ({
-        ...prev,
-        hideTimeoutId: null
-      }));
-    }
-  };
-
-  // Cleanup timeouts on unmount
-  useEffect(() => {
-    return () => {
-      if (hoverPopupState.hideTimeoutId) {
-        clearTimeout(hoverPopupState.hideTimeoutId);
-      }
-    };
-  }, [hoverPopupState.hideTimeoutId]);
 
   // Debug logging
   console.log('🔍 Rendering TeamChatPage with CURRENT_USER:', CURRENT_USER);
@@ -5576,7 +5600,7 @@ export default function TeamChatPage() {
                         deleting={deleting}
                         editingMessageId={editingMessageId}
                         onShowHover={showHoverPopup}
-                        onHideHover={hideHoverPopup}
+                        allMessages={activeChat?.messages}
                       />
                       {/* Timestamp and edited indicator outside bubble */}
                       <div style={{
@@ -5596,7 +5620,7 @@ export default function TeamChatPage() {
                           </span>
                         )}
                         <span>
-                          {formatTimestamp(message.timestamp)}
+                          {message.sender} • {formatTimestamp(message.timestamp)}
                         </span>
                       </div>
                     </div>
@@ -5904,13 +5928,12 @@ export default function TeamChatPage() {
       {/* Global Hover Popup */}
       <GlobalHoverPopup
         state={hoverPopupState}
-        onClose={hideHoverPopup}
+        onClose={closeHoverPopup}
         onReact={handleReaction}
         onReply={handleReply}
         onEdit={handleEdit}
         onDelete={handleDelete}
         isDark={isDark}
-        onClearTimeout={clearHoverTimeout}
       />
 
       {/* Backdrop for modals */}

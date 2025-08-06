@@ -331,7 +331,7 @@ export default function QuestionModal({ open, onClose, onNext, guests, eventId, 
           </div>
           <div style={{ display: 'flex', gap: 16, width: '100%', justifyContent: 'flex-end' }}>
             <button onClick={onClose} style={{ padding: '12px 28px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.18)', background: isDark ? '#222' : '#eee', color: isDark ? '#fff' : '#222', fontWeight: 600, fontSize: 16, cursor: 'pointer', marginRight: 8 }}>Cancel</button>
-            <button onClick={() => setStep(2)} disabled={!question} style={{ padding: '12px 28px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.18)', background: isDark ? '#444' : '#f3f4f6', color: isDark ? '#fff' : '#222', fontWeight: 700, fontSize: 16, cursor: !question ? 'not-allowed' : 'pointer', opacity: !question ? 0.7 : 1 }}>Next</button>
+            <button onClick={() => setStep(2)} disabled={!question} style={{ padding: '12px 28px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.18)', background: !question ? (isDark ? '#444' : '#f3f4f6') : '#10b981', color: isDark ? '#fff' : '#222', fontWeight: 700, fontSize: 16, cursor: !question ? 'not-allowed' : 'pointer', opacity: !question ? 0.7 : 1 }}>Next</button>
           </div>
         </>}
         {step === 2 && <div style={{ width: '100%' }}>
@@ -354,6 +354,11 @@ export default function QuestionModal({ open, onClose, onNext, guests, eventId, 
           <div style={{ display: 'flex', gap: 16, width: '100%', justifyContent: 'flex-end' }}>
             <button onClick={onClose} style={{ padding: '12px 28px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.18)', background: isDark ? '#222' : '#eee', color: isDark ? '#fff' : '#222', fontWeight: 600, fontSize: 16, cursor: 'pointer', marginRight: 8 }}>Cancel</button>
             <button onClick={async () => {
+              if (!currentUser || !currentUser.id) {
+                console.error('Current user is not available');
+                return;
+              }
+              
               try {
                 const module = await addTimelineModule({
                   event_id: eventId,
@@ -383,7 +388,7 @@ export default function QuestionModal({ open, onClose, onNext, guests, eventId, 
                 console.error('Failed to create question module:', error);
                 alert('Failed to save question module. Please try again.');
               }
-            }} disabled={selectedGuests.length === 0} style={{ padding: '12px 28px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.18)', background: isDark ? '#444' : '#f3f4f6', color: isDark ? '#fff' : '#222', fontWeight: 700, fontSize: 16, cursor: selectedGuests.length ? 'pointer' : 'not-allowed', opacity: selectedGuests.length ? 1 : 0.7 }}>Save & Post</button>
+            }} disabled={selectedGuests.length === 0} style={{ padding: '12px 28px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.18)', background: selectedGuests.length ? '#10b981' : (isDark ? '#444' : '#f3f4f6'), color: isDark ? '#fff' : '#222', fontWeight: 700, fontSize: 16, cursor: selectedGuests.length ? 'pointer' : 'not-allowed', opacity: selectedGuests.length ? 1 : 0.7 }}>Save & Post</button>
           </div>
         </div>}
       </div>

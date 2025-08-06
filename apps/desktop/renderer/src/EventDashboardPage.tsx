@@ -144,15 +144,15 @@ const DASHBOARD_MODULES: DashboardModules = {
     { key: 'guestExport', label: 'Guest Export', type: 'tool', description: 'Export guest lists' }
   ],
   addons: [
-    { key: 'flightTracker', label: 'Flight Tracker', type: 'service', description: 'Real-time flight status tracking', icon: '✈️' },
-    { key: 'safetyBeacon', label: 'Safety SOS', type: 'service', description: 'Emergency alert system for guests', icon: '🆘' },
-    { key: 'gpsTracking', label: 'GPS Tracking', type: 'service', description: 'Track logistics team location', icon: '📍' },
-    { key: 'eventUpdates', label: 'Event Updates', type: 'service', description: 'Live event status notifications', icon: '🔔' },
-    { key: 'hotelBooking', label: 'Hotel Manager', type: 'service', description: 'Hotel reservation tracking', icon: '🏨' },
+    { key: 'flightTracker', label: 'Flight Tracker', type: 'service', description: 'Real-time flight status tracking', icon: 'airplane' },
+    { key: 'safetyBeacon', label: 'Safety SOS', type: 'service', description: 'Emergency alert system for guests', icon: 'alert' },
+    { key: 'gpsTracking', label: 'GPS Tracking', type: 'service', description: 'Track logistics team location', icon: 'crosshairs-gps' },
+    { key: 'eventUpdates', label: 'Event Updates', type: 'service', description: 'Live event status notifications', icon: 'bell' },
+    { key: 'hotelBooking', label: 'Hotel Manager', type: 'service', description: 'Hotel reservation tracking', icon: 'home' },
     // New Add Ons
-    { key: 'currencyConverter', label: 'Currency Converter', type: 'service', description: 'Convert currencies for international guests', icon: '💱' },
-    { key: 'translator', label: 'Translator', type: 'service', description: 'Translate text and phrases for guests', icon: '🌐' },
-    { key: 'offlineMaps', label: 'Offline Maps', type: 'service', description: 'Access maps without internet connection', icon: '🗺️' }
+    { key: 'currencyConverter', label: 'Currency Converter', type: 'service', description: 'Convert currencies for international guests', icon: 'currency-usd' },
+    { key: 'translator', label: 'Translator', type: 'service', description: 'Translate text and phrases for guests', icon: 'translate' },
+    { key: 'offlineMaps', label: 'Offline Maps', type: 'service', description: 'Access maps without internet connection', icon: 'map' }
   ]
 };
 
@@ -3844,7 +3844,7 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                   borderColor: isDark ? '#444' : '#bbb',
                   cursor: isSavingAddOns ? 'not-allowed' : 'pointer',
                   opacity: isSavingAddOns ? 0.7 : 1,
-                  maxWidth: '140px',
+                  width: '150px',
                   transition: 'all 0.2s',
                 }}
               >
@@ -3863,7 +3863,7 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                         key={module.id}
                         title={moduleInfo.label}
                         description={moduleInfo.description}
-                        emoji={moduleInfo.icon}
+                        icon={moduleInfo.icon}
                         onDelete={() => handleDeleteAddOn(module.name || module.id)}
                       />
                     );
