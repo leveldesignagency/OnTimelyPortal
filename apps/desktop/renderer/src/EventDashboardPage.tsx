@@ -378,8 +378,6 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
   
   // State for Send Form modal
   const [showSendFormModal, setShowSendFormModal] = useState(false);
-  const [sendFormRecipients, setSendFormRecipients] = useState<string[]>([]);
-  const [currentEmailInput, setCurrentEmailInput] = useState('');
   
   // Ref to track shift key status
   const shiftKeyRef = useRef(false);
@@ -395,41 +393,10 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
     idType: 'all',
     ageRange: { min: '', max: '' },
   });
-  const [modalView, setModalView] = useState('recipients');
-  const [formFields, setFormFields] = useState([
-    { key: 'prefix', label: 'Prefix', enabled: true },
-    { key: 'gender', label: 'Gender', enabled: true },
-    { key: 'firstName', label: 'First Name', enabled: true, required: true },
-    { key: 'middleName', label: 'Middle Name', enabled: true },
-    { key: 'lastName', label: 'Last Name', enabled: true, required: true },
-    { key: 'dob', label: 'Date of Birth', enabled: true },
-    { key: 'countryCode', label: 'Contact Number', enabled: true, required: true },
-    { key: 'email', label: 'Email', enabled: true, required: true },
-    { key: 'idType', label: 'ID Type', enabled: true, required: true },
-    { key: 'idNumber', label: 'ID Number', enabled: true, required: true },
-    { key: 'idCountry', label: 'Country of Origin', enabled: true },
-    { key: 'nextOfKinName', label: 'Next of Kin Name', enabled: true },
-    { key: 'nextOfKinEmail', label: 'Next of Kin Email', enabled: true },
-    { key: 'nextOfKinPhone', label: 'Next of Kin Phone', enabled: true },
-    { key: 'dietary', label: 'Dietary Requirements', enabled: true },
-    { key: 'medical', label: 'Medical/Accessibility', enabled: true },
-    { key: 'nextOfKin', label: 'Next of Kin Details', enabled: true },
-  ]);
-
-  const [formModules, setFormModules] = useState([
-    { key: 'flightNumber', label: 'Flight Tracker', enabled: false },
-    { key: 'seatNumber', label: 'Seat Number', enabled: false },
-    { key: 'eventReference', label: 'Event Reference', enabled: false },
-    { key: 'hotelReservation', label: 'Hotel Reservation', enabled: false },
-    { key: 'trainBookingNumber', label: 'Train Booking Number', enabled: false },
-    { key: 'coachBookingNumber', label: 'Coach Booking Number', enabled: false },
-    { key: 'idUpload', label: 'ID Upload', enabled: false },
-  ]);
+  // modalView state removed - not used
+  
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [generatedLink, setGeneratedLink] = useState('');
-
-  const [sendState, setSendState] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
-  const [sendError, setSendError] = useState('');
 
   const { id: eventId } = useParams();
 
@@ -494,95 +461,9 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
     setShowSendFormModal(false);
   };
 
-  const handleSendForm = async () => {
-    setSendState('sending');
-    setSendError('');
+  // handleSendForm function removed - now handled by SendFormModal component
 
-    const enabledFields = formFields.filter(f => f.enabled).map(f => f.key);
-    const enabledModules = formModules.filter(m => m.enabled).map(m => m.key);
-
-    const queryParams = new URLSearchParams({
-      fields: enabledFields.join(','),
-      modules: enabledModules.join(','),
-    }).toString();
-    
-    // Use the production URL or localhost for development
-    const baseUrl = window.location.origin;
-    const generatedLink = `${baseUrl}/form/fill/${eventId}?${queryParams}`;
-
-    try {
-      const response = await fetch('/api/send-email', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          emails: sendFormRecipients,
-          link: generatedLink,
-          eventName: currentEvent?.name || 'Your Event',
-        }),
-      });
-
-      if (!response.ok) {
-        let errorDetails = `The server returned an error (Status: ${response.status}).`;
-        try {
-          // Attempt to parse a JSON error response from the server
-          const errorData = await response.json();
-          errorDetails = errorData.error || JSON.stringify(errorData);
-        } catch (e) {
-          // If the response isn't JSON, it's almost certainly a server config issue.
-          errorDetails = "The backend API did not respond correctly. This is likely a local development server configuration issue where API routes are not being handled. Make sure the backend server is running and properly configured.";
-        }
-        throw new Error(errorDetails);
-      }
-
-      setSendState('success');
-
-    } catch (error) {
-      setSendState('error');
-      setSendError(error instanceof Error ? error.message : String(error));
-      console.error("Failed to send emails:", error);
-    }
-  };
-
-  const handleCheckboxChange = (index: number, type: 'fields' | 'modules') => {
-    if (type === 'fields') {
-      const newFields = [...formFields];
-      newFields[index].enabled = !newFields[index].enabled;
-      setFormFields(newFields);
-    } else {
-      const newModules = [...formModules];
-      newModules[index].enabled = !newModules[index].enabled;
-      setFormModules(newModules);
-    }
-  };
-
-  const handleAddEmailOnKey = (e: React.KeyboardEvent) => {
-    if ((e.key === 'Enter' || e.key === ',') && currentEmailInput) {
-      e.preventDefault();
-      const newEmail = currentEmailInput.trim().replace(/,/g, '');
-      if (newEmail && /^\S+@\S+\.\S+$/.test(newEmail) && !sendFormRecipients.includes(newEmail)) {
-        setSendFormRecipients([...sendFormRecipients, newEmail]);
-      }
-      setCurrentEmailInput('');
-    } else if (e.key === 'Backspace' && !currentEmailInput && sendFormRecipients.length > 0) {
-      setSendFormRecipients(current => current.slice(0, -1));
-    }
-  };
-
-  const handleCsvUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const text = event.target?.result as string;
-        const emails = text.split(/[\n,]+/).map(e => e.trim()).filter(e => e && /^\S+@\S+\.\S+$/.test(e));
-        const newEmails = [...new Set([...sendFormRecipients, ...emails])];
-        setSendFormRecipients(newEmails);
-      };
-      reader.readAsText(file);
-    }
-  };
+  // Old form handler functions removed - now handled by SendFormModal component
 
   // New CSV Guest Upload Handler
   const handleGuestCsvUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1303,20 +1184,9 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
     }
   };
 
-  const handleAddEmailRecipient = () => {
-    if (currentEmailInput && currentEmailInput.includes('@')) {
-      setSendFormRecipients(prev => [...prev, currentEmailInput]);
-      setCurrentEmailInput('');
-    }
-  };
+  // Old email handling functions removed - now handled by SendFormModal component
 
-  const handleRemoveEmailRecipient = (index: number) => {
-    setSendFormRecipients(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const handleNextToPreview = () => {
-    setModalView('preview');
-  };
+  // handleNextToPreview function removed - not used
 
   const isEventLive = (event: EventType): boolean => {
     const now = new Date();
