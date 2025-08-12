@@ -6,39 +6,6 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "resend": "^3.4.0"
+    "resend": "^3.5.0"
   }
-} 
-  "name": "timely-api",
-  "version": "1.0.0",
-  "description": "Backend functions for Timely app",
-  "main": "index.js",
-  "author": "",
-  "license": "ISC",
-  "dependencies": {
-    "resend": "^3.4.0"
-  }
-} 
- 
- 
-  "name": "timely-api",
-  "version": "1.0.0",
-  "description": "Backend functions for Timely app",
-  "main": "index.js",
-  "author": "",
-  "license": "ISC",
-  "dependencies": {
-    "resend": "^3.4.0"
-  }
-} 
-  "name": "timely-api",
-  "version": "1.0.0",
-  "description": "Backend functions for Timely app",
-  "main": "index.js",
-  "author": "",
-  "license": "ISC",
-  "dependencies": {
-    "resend": "^3.4.0"
-  }
-} 
- 
+}
