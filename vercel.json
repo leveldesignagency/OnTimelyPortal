@@ -1,7 +1,7 @@
 {
-  "buildCommand": "npm install && npm run build",
+  "buildCommand": "node build-vercel.js",
   "outputDirectory": "desktop/renderer/dist",
-  "installCommand": "npm install",
+  "installCommand": "echo 'Installation handled by custom build script'",
   "framework": "vite",
   "functions": {
     "api/send-email.js": {
