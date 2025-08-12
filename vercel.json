@@ -1,7 +1,7 @@
 {
-  "buildCommand": "npm install && npm run build --workspace=apps/desktop/renderer",
-  "outputDirectory": "apps/desktop/renderer/dist",
+  "buildCommand": "cd apps/desktop/renderer && npm install && npm run build",
+  "outputDirectory": "dist",
   "framework": null,
-  "installCommand": "npm install"
+  "installCommand": "echo 'Skipping root install'"
 }
 
