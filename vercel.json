@@ -1,5 +1,5 @@
 {
-  "buildCommand": "cd apps/desktop/renderer && npm ci --no-audit --no-fund --workspaces=false && npm run build",
+  "buildCommand": "npm run build:renderer",
   "outputDirectory": "apps/desktop/renderer/dist",
   "framework": null,
   "installCommand": "npm ci --no-audit --no-fund --workspaces=false"
