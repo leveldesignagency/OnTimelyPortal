@@ -1,6 +1,6 @@
 {
-  "buildCommand": "cd apps/desktop && npm install && npm run build",
-  "outputDirectory": "apps/desktop/dist",
+  "buildCommand": "npm run build",
+  "outputDirectory": "apps/desktop/renderer/dist",
   "installCommand": "npm install",
   "framework": "vite",
   "functions": {
