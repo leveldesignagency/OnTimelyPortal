@@ -8,7 +8,6 @@
   "scripts": {
     "dev": "turbo run dev",
     "build": "turbo run build",
-    "build:renderer": "npm run build --workspace=apps/desktop/renderer",
     "test": "turbo run test",
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
@@ -30,6 +29,7 @@
     "@react-native/virtualized-lists": "^0.80.1",
     "@react-navigation/bottom-tabs": "^7.4.2",
     "expo": "~50.0.17",
+    "jspdf": "^3.0.1",
     "papaparse": "^5.5.3",
     "react": "18.2.0",
     "react-native": "0.73.6",
