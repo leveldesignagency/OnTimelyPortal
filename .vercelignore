@@ -1,0 +1,14 @@
+packages/
+apps/desktop/tsconfig*.json
+apps/desktop/package.json
+apps/desktop/node_modules/
+apps/desktop/dist-electron/
+apps/desktop/public/
+apps/desktop/.turbo/
+apps/desktop/.vercel/
+apps/desktop/.gitignore
+apps/desktop/README.md
+apps/desktop/eslint.config.js
+apps/desktop/.DS_Store
+node_modules/
+.turbo/ 
