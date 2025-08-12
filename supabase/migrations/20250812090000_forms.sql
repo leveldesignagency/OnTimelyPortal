@@ -1,196 +1,174 @@
--- Forms data model and RPCs
--- Tables: forms, form_recipients, form_submissions
-
--- Enable required extensions (usually enabled in Supabase)
--- create extension if not exists pgcrypto;
-
-create table if not exists public.forms (
-  id uuid primary key default gen_random_uuid(),
-  event_id uuid not null,
-  company_id uuid not null,
-  title text not null,
-  description text,
-  schema_json jsonb not null,
-  created_by uuid not null,
-  created_at timestamptz not null default now()
+-- Create forms table
+CREATE TABLE IF NOT EXISTS forms (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  event_id UUID REFERENCES events(id) ON DELETE CASCADE,
+  company_id UUID REFERENCES companies(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  description TEXT,
+  fields JSONB NOT NULL DEFAULT '[]',
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
-create table if not exists public.form_recipients (
-  id uuid primary key default gen_random_uuid(),
-  form_id uuid not null references public.forms(id) on delete cascade,
-  email text not null,
-  name text,
-  token text not null unique,
-  expires_at timestamptz,
-  status text not null default 'sent' check (status in ('sent','opened','submitted')),
-  submitted_at timestamptz,
-  created_at timestamptz not null default now()
+-- Create form_recipients table
+CREATE TABLE IF NOT EXISTS form_recipients (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  form_id UUID REFERENCES forms(id) ON DELETE CASCADE,
+  email TEXT NOT NULL,
+  token TEXT UNIQUE NOT NULL DEFAULT gen_random_uuid()::text,
+  is_sent BOOLEAN DEFAULT false,
+  sent_at TIMESTAMP WITH TIME ZONE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
-create index if not exists idx_form_recipients_form on public.form_recipients(form_id);
-create index if not exists idx_form_recipients_token on public.form_recipients(token);
-
-create table if not exists public.form_submissions (
-  id uuid primary key default gen_random_uuid(),
-  form_id uuid not null references public.forms(id) on delete cascade,
-  recipient_id uuid not null references public.form_recipients(id) on delete cascade,
-  submission_json jsonb not null,
-  created_at timestamptz not null default now()
+-- Create form_submissions table
+CREATE TABLE IF NOT EXISTS form_submissions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  form_id UUID REFERENCES forms(id) ON DELETE CASCADE,
+  recipient_id UUID REFERENCES form_recipients(id) ON DELETE SET NULL,
+  email TEXT NOT NULL,
+  responses JSONB NOT NULL DEFAULT '{}',
+  submitted_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
-create index if not exists idx_form_submissions_form on public.form_submissions(form_id);
-create index if not exists idx_form_submissions_recipient on public.form_submissions(recipient_id);
+-- Add RLS policies
+ALTER TABLE forms ENABLE ROW LEVEL SECURITY;
+ALTER TABLE form_recipients ENABLE ROW LEVEL SECURITY;
+ALTER TABLE form_submissions ENABLE ROW LEVEL SECURITY;
 
--- RLS
-alter table public.forms enable row level security;
-alter table public.form_recipients enable row level security;
-alter table public.form_submissions enable row level security;
+-- Forms policies
+CREATE POLICY "Users can view forms for their company events" ON forms
+  FOR SELECT USING (
+    company_id IN (
+      SELECT company_id FROM users WHERE id = auth.uid()
+    )
+  );
 
--- Policies: company-scoped access for authenticated users
-drop policy if exists forms_select on public.forms;
-create policy forms_select on public.forms
-  for select to authenticated
-  using (true); -- app-side filters by company_id/event_id
+CREATE POLICY "Users can create forms for their company events" ON forms
+  FOR INSERT WITH CHECK (
+    company_id IN (
+      SELECT company_id FROM users WHERE id = auth.uid()
+    )
+  );
 
-drop policy if exists forms_insert on public.forms;
-create policy forms_insert on public.forms
-  for insert to authenticated
-  with check (true);
+CREATE POLICY "Users can update forms for their company events" ON forms
+  FOR UPDATE USING (
+    company_id IN (
+      SELECT company_id FROM users WHERE id = auth.uid()
+    )
+  );
 
-drop policy if exists forms_update on public.forms;
-create policy forms_update on public.forms
-  for update to authenticated
-  using (true) with check (true);
+-- Form recipients policies
+CREATE POLICY "Users can view recipients for their company forms" ON form_recipients
+  FOR SELECT USING (
+    form_id IN (
+      SELECT id FROM forms WHERE company_id IN (
+        SELECT company_id FROM users WHERE id = auth.uid()
+      )
+    )
+  );
 
-drop policy if exists fr_select on public.form_recipients;
-create policy fr_select on public.form_recipients
-  for select to authenticated
-  using (true);
+CREATE POLICY "Users can create recipients for their company forms" ON form_recipients
+  FOR INSERT WITH CHECK (
+    form_id IN (
+      SELECT id FROM forms WHERE company_id IN (
+        SELECT company_id FROM users WHERE id = auth.uid()
+      )
+    )
+  );
 
-drop policy if exists fr_insert on public.form_recipients;
-create policy fr_insert on public.form_recipients
-  for insert to authenticated
-  with check (true);
+-- Form submissions policies (public access for form submission)
+CREATE POLICY "Anyone can submit forms" ON form_submissions
+  FOR INSERT WITH CHECK (true);
 
-drop policy if exists fs_select on public.form_submissions;
-create policy fs_select on public.form_submissions
-  for select to authenticated
-  using (true);
+CREATE POLICY "Users can view submissions for their company forms" ON form_submissions
+  FOR SELECT USING (
+    form_id IN (
+      SELECT id FROM forms WHERE company_id IN (
+        SELECT company_id FROM users WHERE id = auth.uid()
+      )
+    )
+  );
 
-drop policy if exists fs_insert on public.form_submissions;
-create policy fs_insert on public.form_submissions
-  for insert to authenticated
-  with check (true);
+-- Helper function to generate form token
+CREATE OR REPLACE FUNCTION generate_form_token()
+RETURNS TEXT AS $$
+BEGIN
+  RETURN 'form_' || gen_random_uuid()::text;
+END;
+$$ LANGUAGE plpgsql;
 
--- Anonymous access happens only through SECURITY DEFINER RPCs below
+-- RPC functions for form management
+CREATE OR REPLACE FUNCTION create_form_recipients(
+  p_form_id UUID,
+  p_emails TEXT[]
+)
+RETURNS TABLE(links TEXT[]) AS $$
+DECLARE
+  email TEXT;
+  token TEXT;
+  links TEXT[] := '{}';
+BEGIN
+  FOR email IN SELECT unnest(p_emails)
+  LOOP
+    token := generate_form_token();
+    
+    INSERT INTO form_recipients (form_id, email, token)
+    VALUES (p_form_id, email, token);
+    
+    -- Generate the form link
+    links := array_append(links, 'https://ontimely.co.uk/forms/' || token);
+  END LOOP;
+  
+  RETURN QUERY SELECT unnest(links);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Helper: secure random token
-create or replace function public.generate_form_token()
-returns text language sql as $$
-  select encode(gen_random_bytes(24), 'hex');
-$$;
+-- Function to get form by token
+CREATE OR REPLACE FUNCTION get_form_by_token(p_token TEXT)
+RETURNS TABLE(
+  form_id UUID,
+  title TEXT,
+  description TEXT,
+  fields JSONB
+) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT f.id, f.title, f.description, f.fields
+  FROM forms f
+  JOIN form_recipients fr ON f.id = fr.form_id
+  WHERE fr.token = p_token AND f.is_active = true;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- RPC: create recipients with tokens (authenticated)
-drop function if exists public.create_form_recipients(uuid, text[], text[], timestamptz);
-create or replace function public.create_form_recipients(
-  p_form_id uuid,
-  p_emails text[],
-  p_names text[] default array[]::text[],
-  p_expires_at timestamptz default null
-) returns setof public.form_recipients
-language plpgsql
-security definer
-as $$
-declare
-  i int;
-  v_email text;
-  v_name text;
-  v_token text;
-  v_rec public.form_recipients%rowtype;
-begin
-  if p_emails is null or array_length(p_emails,1) is null then
-    raise exception 'No emails provided';
-  end if;
-
-  for i in 1..array_length(p_emails,1) loop
-    v_email := trim(p_emails[i]);
-    v_name := case when p_names is not null and array_length(p_names,1) >= i then p_names[i] else null end;
-    v_token := public.generate_form_token();
-
-    insert into public.form_recipients(form_id,email,name,token,expires_at,status)
-    values (p_form_id, v_email, v_name, v_token, p_expires_at, 'sent')
-    returning * into v_rec;
-
-    return next v_rec;
-  end loop;
-  return;
-end;
-$$;
-
-grant execute on function public.create_form_recipients(uuid, text[], text[], timestamptz) to authenticated;
-
--- RPC: get form by token (anonymous)
-drop function if exists public.get_form_by_token(text);
-create or replace function public.get_form_by_token(p_token text)
-returns table (
-  form_id uuid,
-  title text,
-  description text,
-  schema_json jsonb,
-  recipient_id uuid,
-  recipient_name text
-) language plpgsql security definer as $$
-declare
-  v_rec public.form_recipients;
-  v_form public.forms;
-begin
-  select * into v_rec from public.form_recipients where token = p_token limit 1;
-  if not found then
-    raise exception 'Invalid token' using errcode = '22023';
-  end if;
-  if v_rec.expires_at is not null and now() > v_rec.expires_at then
-    raise exception 'Token expired' using errcode = '22023';
-  end if;
-
-  select * into v_form from public.forms where id = v_rec.form_id;
-  return query select v_form.id, v_form.title, v_form.description, v_form.schema_json, v_rec.id, v_rec.name;
-end;
-$$;
-
-grant execute on function public.get_form_by_token(text) to anon, authenticated;
-
--- RPC: submit form response by token (anonymous)
-drop function if exists public.submit_form_response(text, jsonb);
-create or replace function public.submit_form_response(p_token text, p_submission jsonb)
-returns jsonb language plpgsql security definer as $$
-declare
-  v_rec public.form_recipients;
-  v_form_id uuid;
-  v_submission_id uuid;
-begin
-  select * into v_rec from public.form_recipients where token = p_token limit 1;
-  if not found then
-    raise exception 'Invalid token' using errcode = '22023';
-  end if;
-  if v_rec.status = 'submitted' then
-    return jsonb_build_object('success', false, 'message', 'Already submitted');
-  end if;
-  if v_rec.expires_at is not null and now() > v_rec.expires_at then
-    return jsonb_build_object('success', false, 'message', 'Token expired');
-  end if;
-
-  v_form_id := v_rec.form_id;
-  insert into public.form_submissions(form_id, recipient_id, submission_json)
-  values (v_form_id, v_rec.id, coalesce(p_submission,'{}'::jsonb))
-  returning id into v_submission_id;
-
-  update public.form_recipients
-  set status = 'submitted', submitted_at = now()
-  where id = v_rec.id;
-
-  return jsonb_build_object('success', true, 'submission_id', v_submission_id);
-end;
-$$;
-
-grant execute on function public.submit_form_response(text, jsonb) to anon, authenticated;
+-- Function to submit form response
+CREATE OR REPLACE FUNCTION submit_form_response(
+  p_token TEXT,
+  p_email TEXT,
+  p_responses JSONB
+)
+RETURNS BOOLEAN AS $$
+DECLARE
+  v_form_id UUID;
+BEGIN
+  -- Get form ID from token
+  SELECT form_id INTO v_form_id
+  FROM form_recipients
+  WHERE token = p_token;
+  
+  IF v_form_id IS NULL THEN
+    RETURN false;
+  END IF;
+  
+  -- Insert submission
+  INSERT INTO form_submissions (form_id, recipient_id, email, responses)
+  SELECT v_form_id, id, p_email, p_responses
+  FROM form_recipients
+  WHERE token = p_token;
+  
+  RETURN true;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
