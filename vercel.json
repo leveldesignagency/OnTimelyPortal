@@ -2,10 +2,5 @@
   "buildCommand": "node build-vercel.js",
   "outputDirectory": "desktop/renderer/dist",
   "installCommand": "echo 'Installation handled by custom build script'",
-  "framework": "vite",
-  "functions": {
-    "api/send-email.js": {
-      "runtime": "nodejs18"
-    }
-  }
+  "framework": "vite"
 } 
