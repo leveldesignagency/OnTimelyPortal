@@ -1,0 +1,11 @@
+{
+  "buildCommand": "cd apps/desktop && npm install && npm run build",
+  "outputDirectory": "apps/desktop/dist",
+  "installCommand": "npm install",
+  "framework": "vite",
+  "functions": {
+    "api/send-email.js": {
+      "runtime": "nodejs18.x"
+    }
+  }
+} 
