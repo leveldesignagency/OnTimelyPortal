@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { insertActivityLog } from '../lib/supabase';
 
 // ============================================
 // TYPE DEFINITIONS
@@ -319,11 +320,45 @@ export class Stage1TravelService {
     checkpointId: string, 
     completionMethod: 'auto_detected' | 'guest_confirmed' | 'manual_override' = 'guest_confirmed'
   ): Promise<JourneyCheckpoint> {
-    return this.updateCheckpoint(checkpointId, {
+    const result = await this.updateCheckpoint(checkpointId, {
       status: 'completed',
       actual_time: new Date().toISOString(),
       completion_method: completionMethod
     });
+
+    // Log activity for timeline checkpoint reached
+    try {
+      // fetch profile/event/company for context
+      const { data: checkpoint } = await supabase
+        .from('journey_checkpoints')
+        .select('id, checkpoint_name, checkpoint_type, travel_profile_id')
+        .eq('id', checkpointId)
+        .single();
+
+      if (checkpoint) {
+        const { data: profile } = await supabase
+          .from('guest_travel_profiles')
+          .select('id, event_id, company_id, guest_id')
+          .eq('id', checkpoint.travel_profile_id)
+          .single();
+
+        await insertActivityLog({
+          company_id: profile?.company_id || '',
+          user_id: (await supabase.auth.getUser()).data.user?.id || 'unknown',
+          action_type: 'timeline_checkpoint_reached',
+          details: {
+            summary: `${checkpoint.checkpoint_name} reached`,
+            checkpoint_type: checkpoint.checkpoint_type,
+            completion_method: completionMethod,
+          },
+          event_id: profile?.event_id,
+        });
+      }
+    } catch (e) {
+      console.warn('[activity_log] checkpoint activity failed:', e);
+    }
+
+    return result;
   }
 
   // ============================================

@@ -138,20 +138,72 @@ export const updateEvent = async (id: string, updates: Partial<Event>) => {
     .update(updates)
     .eq('id', id)
     .select()
+    .single();
   
-  if (error) throw error
-  return data[0]
-}
+  if (error) throw error;
+  
+  // Log activity for event updates
+  try {
+    const event = await supabase
+      .from('events')
+      .select('company_id, name, created_by')
+      .eq('id', id)
+      .single();
+    
+    if (event.data) {
+      await insertActivityLog({
+        company_id: event.data.company_id,
+        user_id: event.data.created_by || 'unknown',
+        action_type: 'event_updated',
+        details: {
+          event_id: id,
+          event_title: event.data.name,
+          changes: Object.keys(updates)
+        },
+        event_id: id
+      });
+    }
+  } catch (e) {
+    console.warn('Failed to log event update activity:', e);
+  }
+  
+  return data;
+};
 
-// Delete an event
 export const deleteEvent = async (id: string) => {
+  // Get event details before deletion for activity logging
+  const { data: event } = await supabase
+    .from('events')
+    .select('company_id, name, created_by')
+    .eq('id', id)
+    .single();
+  
   const { error } = await supabase
     .from('events')
     .delete()
-    .eq('id', id)
+    .eq('id', id);
   
-  if (error) throw error
-}
+  if (error) throw error;
+  
+  // Log activity for event deletion
+  if (event) {
+    try {
+      await insertActivityLog({
+        company_id: event.company_id,
+        user_id: event.created_by || 'unknown',
+        action_type: 'event_deleted',
+        details: {
+          event_title: event.name
+        }
+        // No event_id since event is deleted
+      });
+    } catch (e) {
+      console.warn('Failed to log event deletion activity:', e);
+    }
+  }
+  
+  return { success: true };
+};
 
 // Get single event by ID
 export const getEvent = async (id: string) => {
@@ -354,8 +406,26 @@ export const addItinerary = async (itinerary: Omit<Itinerary, 'id' | 'created_at
     throw error;
   }
   console.log('[addItinerary] Supabase insert result:', data);
+  
+  // Log activity for new itineraries
+  try {
+    await insertActivityLog({
+      company_id: itinerary.company_id,
+      user_id: itinerary.created_by || 'unknown',
+      action_type: 'itinerary_created',
+      details: {
+        event_id: itinerary.event_id,
+        title: itinerary.title,
+        is_draft: itinerary.is_draft
+      },
+      event_id: itinerary.event_id
+    });
+  } catch (e) {
+    console.warn('Failed to log itinerary creation activity:', e);
+  }
+  
   return data;
-}
+};
 
 export const updateItinerary = async (id: number, updates: Partial<Itinerary>) => {
   console.log('[updateItinerary] Called with id:', id, 'updates:', updates);
@@ -371,17 +441,70 @@ export const updateItinerary = async (id: number, updates: Partial<Itinerary>) =
     throw error;
   }
   console.log('[updateItinerary] Supabase update result:', data);
+  
+  // Log activity for itinerary updates
+  try {
+    const itinerary = await supabase
+      .from('itineraries')
+      .select('company_id, event_id, title, created_by')
+      .eq('id', id)
+      .single();
+    
+    if (itinerary.data) {
+      await insertActivityLog({
+        company_id: itinerary.data.company_id,
+        user_id: itinerary.data.created_by || 'unknown',
+        action_type: 'itinerary_updated',
+        details: {
+          event_id: itinerary.data.event_id,
+          title: itinerary.data.title,
+          changes: Object.keys(updates)
+        },
+        event_id: itinerary.data.event_id
+      });
+    }
+  } catch (e) {
+    console.warn('Failed to log itinerary update activity:', e);
+  }
+  
   return data;
-}
+};
 
 export const deleteItinerary = async (id: string) => {
+  // Get itinerary details before deletion for activity logging
+  const { data: itinerary } = await supabase
+    .from('itineraries')
+    .select('company_id, event_id, title, created_by')
+    .eq('id', id)
+    .single();
+  
   const { error } = await supabase
     .from('itineraries')
     .delete()
-    .eq('id', id)
-
-  if (error) throw error
-}
+    .eq('id', id);
+  
+  if (error) throw error;
+  
+  // Log activity for itinerary deletion
+  if (itinerary) {
+    try {
+      await insertActivityLog({
+        company_id: itinerary.company_id,
+        user_id: itinerary.created_by || 'unknown',
+        action_type: 'itinerary_deleted',
+        details: {
+          event_id: itinerary.event_id,
+          title: itinerary.title
+        },
+        event_id: itinerary.event_id
+      });
+    } catch (e) {
+      console.warn('Failed to log itinerary deletion activity:', e);
+    }
+  }
+  
+  return { success: true };
+};
 
 // Bulk delete multiple itineraries
 export const deleteMultipleItineraries = async (ids: string[]) => {
@@ -773,6 +896,79 @@ export const subscribeToActivityLog = (_companyId: string, callback: (payload: a
     .subscribe();
 }; 
 
+export const getEventActivityFeed = async (eventId: string, companyId: string, limit = 50, offset = 0) => {
+  const { data, error } = await supabase.rpc('get_event_activity_feed', {
+    p_event_id: eventId,
+    p_company_id: companyId,
+    p_limit: limit,
+    p_offset: offset,
+  });
+  if (error) throw error;
+  return data as Array<{
+    item_type: string;
+    title: string | null;
+    description: string | null;
+    created_at: string;
+    actor_name: string | null;
+    actor_email: string | null;
+    source_id: string;
+  }>;
+};
+
+export const exportEventData = async (eventId: string) => {
+  const [messages, guests, itineraries, modules, answers, announcements, activity] = await Promise.all([
+    supabase.from('guests_chat_messages').select('*').eq('event_id', eventId),
+    supabase.from('guests').select('*').eq('event_id', eventId),
+    supabase.from('itineraries').select('*').eq('event_id', eventId),
+    supabase.from('timeline_modules').select('*').eq('event_id', eventId),
+    supabase.from('guest_module_answers').select('*').eq('event_id', eventId),
+    supabase.from('announcements').select('*').eq('event_id', eventId),
+    supabase.from('activity_log').select('*').eq('event_id', eventId),
+  ]);
+  return {
+    messages: messages.data || [],
+    guests: guests.data || [],
+    itineraries: itineraries.data || [],
+    modules: modules.data || [],
+    module_answers: answers.data || [],
+    announcements: announcements.data || [],
+    activity_log: activity.data || [],
+  };
+};
+
+export const purgeEvent = async (eventId: string) => {
+  // Delete DB rows in dependency-safe order
+  const tasks = [
+    supabase.from('guest_module_answers').delete().eq('event_id', eventId),
+    supabase.from('timeline_modules').delete().eq('event_id', eventId),
+    supabase.from('guests_chat_reactions').delete().in('message_id', (await supabase.from('guests_chat_messages').select('message_id').eq('event_id', eventId)).data?.map((m:any)=>m.message_id) || []),
+    supabase.from('guests_chat_messages').delete().eq('event_id', eventId),
+    supabase.from('announcements').delete().eq('event_id', eventId),
+    supabase.from('itineraries').delete().eq('event_id', eventId),
+    supabase.from('draft_itineraries').delete().eq('event_id', eventId),
+    supabase.from('team_events').delete().eq('event_id', eventId),
+  ];
+  for (const t of tasks) { const { error } = await t; if (error) console.warn('Purge warning:', error.message); }
+
+  // Storage buckets cleanup (best-effort)
+  const buckets = ['event-images','itinerary-documents','guest-files','chat-attachments','guest_event_module_responses'];
+  for (const bucket of buckets) {
+    try {
+      const { data: list } = await supabase.storage.from(bucket).list(undefined, { limit: 1000, search: eventId });
+      const paths = (list || []).map((f:any) => f.name).filter(Boolean);
+      if (paths.length > 0) {
+        await supabase.storage.from(bucket).remove(paths);
+      }
+    } catch (e) {
+      console.warn('Storage purge warning for bucket', bucket, e);
+    }
+  }
+
+  // Finally delete the event
+  const { error: delErr } = await supabase.from('events').delete().eq('id', eventId);
+  if (delErr) throw delErr;
+};
+
 export const getEventsCreatedByUser = async (userId: string, companyId: string) => {
   const { data, error } = await supabase
     .from('events')
@@ -843,4 +1039,71 @@ export const upsertEventAddon = async (addon: Omit<EventAddon, 'id' | 'created_a
     .single();
   if (error) throw error;
   return data as EventAddon;
+}; 
+
+export const sendGuestsChatMessage = async (messageData: {
+  event_id: string;
+  sender_email: string;
+  sender_name: string;
+  sender_type: 'guest' | 'admin';
+  message_text: string;
+  message_type?: string;
+  attachment_url?: string;
+  attachment_filename?: string;
+  reply_to_message_id?: string;
+  company_id: string;
+}) => {
+  const { data, error } = await supabase.rpc('send_guests_chat_message', messageData);
+  if (error) throw error;
+  
+  // Log activity for chat messages
+  try {
+    await insertActivityLog({
+      company_id: messageData.company_id,
+      user_id: messageData.sender_type === 'admin' ? 
+        (await supabase.auth.getUser()).data.user?.id || 'unknown' : 'guest',
+      action_type: 'chat_message_sent',
+      details: {
+        event_id: messageData.event_id,
+        message_text: messageData.message_text.substring(0, 100),
+        sender_type: messageData.sender_type,
+        has_attachment: !!messageData.attachment_url
+      },
+      event_id: messageData.event_id
+    });
+  } catch (e) {
+    console.warn('Failed to log chat message activity:', e);
+  }
+  
+  return data;
+};
+
+export const addGuestsChatReaction = async (reactionData: {
+  message_id: string;
+  user_email: string;
+  emoji: string;
+  company_id: string;
+  event_id: string;
+}) => {
+  const { data, error } = await supabase.rpc('add_guests_chat_reaction_unified', reactionData);
+  if (error) throw error;
+  
+  // Log activity for reactions
+  try {
+    await insertActivityLog({
+      company_id: reactionData.company_id,
+      user_id: 'guest', // Reactions are usually from guests
+      action_type: 'chat_reaction_added',
+      details: {
+        event_id: reactionData.event_id,
+        emoji: reactionData.emoji,
+        message_id: reactionData.message_id
+      },
+      event_id: reactionData.event_id
+    });
+  } catch (e) {
+    console.warn('Failed to log reaction activity:', e);
+  }
+  
+  return data;
 }; 

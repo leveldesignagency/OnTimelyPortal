@@ -28,11 +28,12 @@ import NotificationsPage from './pages/NotificationsPage';
 import ExportReportPage from './pages/ExportReportPage';
 import NotificationSettingsPage from './pages/NotificationSettingsPage';
 import SettingsPage from './pages/SettingsPage';
-
 import { getEventsCreatedByUser } from './lib/supabase';
 
 // Update EventType to match Supabase Event type
 export type EventType = Event;
+
+const PublicFormPage = React.lazy(() => import('./pages/PublicFormPage'));
 
 const AppContent = () => {
   const { theme } = useContext(ThemeContext);
@@ -329,7 +330,8 @@ const AppContent = () => {
           <Route path="/export-report/:eventId" element={<ProtectedRoute><ExportReportPage /></ProtectedRoute>} />
           <Route path="/event/:id/notification-settings" element={<ProtectedRoute><NotificationSettingsPage /></ProtectedRoute>} />
           <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
-    
+          {/* Public form preview route (dev only; prod served on separate host) */}
+          <Route path="/forms/:token" element={<React.Suspense fallback={<div/>}><PublicFormPage /></React.Suspense>} />
         </Routes>
       </main>
     </div>

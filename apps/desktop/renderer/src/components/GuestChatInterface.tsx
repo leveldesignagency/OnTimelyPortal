@@ -33,6 +33,10 @@ interface Message {
   reply_to_message_id?: string | null; // Added for replies
   is_edited?: boolean; // Added for edited status
   edited_at?: string; // Added for edited timestamp
+  attachment_url?: string | null;
+  attachment_filename?: string | null;
+  attachment_type?: string | null;
+  attachment_size?: number | null;
 }
 
 interface Guest {
@@ -494,6 +498,85 @@ const MessageBubble = ({ message, isDark, currentUserEmail, onReply, onReact, me
               })()}
             </div>
 
+            {/* Attachment Display */}
+            {message.attachment_url && (
+              <div style={{
+                marginTop: '8px',
+                borderRadius: '8px',
+                overflow: 'hidden',
+                border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
+                background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'
+              }}>
+                {message.attachment_type?.startsWith('image/') ? (
+                  <img 
+                    src={message.attachment_url}
+                    alt={message.attachment_filename || 'Image attachment'}
+                    style={{
+                      maxWidth: '300px',
+                      maxHeight: '200px',
+                      width: '100%',
+                      height: 'auto',
+                      display: 'block',
+                      cursor: 'pointer'
+                    }}
+                    onClick={() => window.open(message.attachment_url, '_blank')}
+                  />
+                ) : message.attachment_type?.startsWith('video/') ? (
+                  <video 
+                    src={message.attachment_url}
+                    controls
+                    style={{
+                      maxWidth: '300px',
+                      maxHeight: '200px',
+                      width: '100%',
+                      height: 'auto',
+                      display: 'block'
+                    }}
+                  />
+                ) : (
+                  <div style={{
+                    padding: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    cursor: 'pointer'
+                  }}
+                  onClick={() => window.open(message.attachment_url, '_blank')}
+                  >
+                    <div style={{
+                      width: '40px',
+                      height: '40px',
+                      borderRadius: '8px',
+                      background: isDark ? '#404040' : '#dee2e6',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '18px'
+                    }}>
+                      📎
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ 
+                        fontSize: '14px',
+                        fontWeight: '500',
+                        color: isCurrentUser ? '#ffffff' : (isDark ? '#ffffff' : '#000000')
+                      }}>
+                        {message.attachment_filename}
+                      </div>
+                      {message.attachment_size && (
+                        <div style={{ 
+                          fontSize: '12px',
+                          color: isCurrentUser ? 'rgba(255,255,255,0.8)' : (isDark ? '#adb5bd' : '#6c757d')
+                        }}>
+                          {(message.attachment_size / 1024 / 1024).toFixed(2)} MB
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
           </div>
 
           {/* Sender name and timestamp outside the bubble */}
@@ -742,7 +825,7 @@ const MessageBubble = ({ message, isDark, currentUserEmail, onReply, onReact, me
 
 // Modern Message Input Component
 const MessageInput = ({ onSendMessage, isDark, sending, broadcastTyping, editingMessageId, editText, onSaveEdit, onCancelEdit }: { 
-  onSendMessage: (text: string) => void, 
+  onSendMessage: (text: string, attachment?: any) => void,
   isDark: boolean,
   sending: boolean,
   broadcastTyping: () => void,
@@ -753,6 +836,8 @@ const MessageInput = ({ onSendMessage, isDark, sending, broadcastTyping, editing
 }) => {
   const [text, setText] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   const commonIcons = [
     { id: 'smile', icon: '😀', name: 'Smile' },
@@ -776,16 +861,80 @@ const MessageInput = ({ onSendMessage, isDark, sending, broadcastTyping, editing
     }
   }, [editingMessageId, editText]);
 
-  const handleSend = () => {
-    if (text.trim() && !sending) {
+  const handleSend = async () => {
+    if ((text.trim() || selectedFile) && !sending && !uploading) {
       if (editingMessageId && onSaveEdit) {
         onSaveEdit(text);
         setText('');
       } else {
-      onSendMessage(text.trim());
-      setText('');
+        let attachment = null;
+        
+        // Upload file if selected
+        if (selectedFile) {
+          setUploading(true);
+          try {
+            const fileExt = selectedFile.name.split('.').pop();
+            const fileName = `${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExt}`;
+            const filePath = `${fileName}`;
+            
+            const { data: uploadData, error: uploadError } = await supabase.storage
+              .from('chat-attachments')
+              .upload(filePath, selectedFile, {
+                cacheControl: '3600',
+                upsert: false
+              });
+              
+            if (uploadError) {
+              console.error('Upload error:', uploadError);
+              alert('Failed to upload file. Please try again.');
+              setUploading(false);
+              return;
+            }
+            
+            // Get public URL
+            const { data: urlData } = supabase.storage
+              .from('chat-attachments')
+              .getPublicUrl(filePath);
+              
+            attachment = {
+              url: urlData.publicUrl,
+              filename: selectedFile.name,
+              type: selectedFile.type,
+              size: selectedFile.size
+            };
+            
+          } catch (error) {
+            console.error('File upload failed:', error);
+            alert('Failed to upload file. Please try again.');
+            setUploading(false);
+            return;
+          }
+          setUploading(false);
+        }
+        
+        onSendMessage(text.trim() || 'Attachment', attachment);
+        setText('');
+        setSelectedFile(null);
       }
     }
+  };
+  
+  const handleFileSelect = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*,video/*,audio/*,.pdf,.doc,.docx,.txt';
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file) {
+        // Check file size (10MB limit)
+        if (file.size > 10 * 1024 * 1024) {
+          alert('File size must be less than 10MB');
+          return;
+        }
+        setSelectedFile(file);
+      }
+    };
+    input.click();
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -923,6 +1072,59 @@ const MessageInput = ({ onSendMessage, isDark, sending, broadcastTyping, editing
         </div>
       )}
 
+      {/* File Preview */}
+      {selectedFile && (
+        <div style={{
+          padding: '12px 24px',
+          background: isDark ? '#2a2a2a' : '#f1f3f4',
+          borderBottom: `1px solid ${isDark ? '#404040' : '#dee2e6'}`,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px'
+        }}>
+          <div style={{
+            width: '40px',
+            height: '40px',
+            borderRadius: '8px',
+            background: isDark ? '#404040' : '#dee2e6',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '18px'
+          }}>
+            📎
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ 
+              color: isDark ? '#ffffff' : '#000000',
+              fontSize: '14px',
+              fontWeight: '500'
+            }}>
+              {selectedFile.name}
+            </div>
+            <div style={{ 
+              color: isDark ? '#888888' : '#666666',
+              fontSize: '12px'
+            }}>
+              {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+            </div>
+          </div>
+          <button
+            onClick={() => setSelectedFile(null)}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: isDark ? '#888888' : '#666666',
+              cursor: 'pointer',
+              fontSize: '18px',
+              padding: '4px'
+            }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Main Input Area */}
       <div style={{
         padding: '20px 24px',
@@ -931,11 +1133,11 @@ const MessageInput = ({ onSendMessage, isDark, sending, broadcastTyping, editing
         {/* Single Input Field */}
         <input
           type="text"
-          placeholder={editingMessageId ? "Edit your message..." : "Type a message..."}
+          placeholder={editingMessageId ? "Edit your message..." : selectedFile ? "Add a caption (optional)..." : "Type a message..."}
           value={text}
           onChange={(e) => { setText(e.target.value); broadcastTyping(); }}
           onKeyPress={handleKeyPress}
-          disabled={sending}
+          disabled={sending || uploading}
           style={{
             width: '100%',
             border: `1px solid ${isDark ? '#404040' : '#dee2e6'}`,
@@ -943,13 +1145,13 @@ const MessageInput = ({ onSendMessage, isDark, sending, broadcastTyping, editing
             color: isDark ? '#ffffff' : '#000000',
             outline: 'none',
             fontSize: '15px',
-            padding: '14px 120px 14px 20px',
+            padding: '14px 150px 14px 20px',
             borderRadius: '12px',
             boxShadow: isDark ? 'inset 0 2px 4px rgba(0,0,0,0.3)' : 'inset 0 2px 4px rgba(0,0,0,0.1)',
             position: 'relative',
             backdropFilter: 'blur(10px)',
             transition: 'all 0.2s ease',
-            opacity: sending ? 0.7 : 1
+            opacity: (sending || uploading) ? 0.7 : 1
           }}
           onFocus={e => {
             e.currentTarget.style.borderColor = isDark ? '#ffffff' : '#007bff';
@@ -974,6 +1176,34 @@ const MessageInput = ({ onSendMessage, isDark, sending, broadcastTyping, editing
           gap: '12px',
           pointerEvents: 'none'
         }}>
+          {/* Attachment Button */}
+          <button
+            onClick={handleFileSelect}
+            disabled={sending || uploading}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: (sending || uploading) ? 'not-allowed' : 'pointer',
+              padding: '0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              pointerEvents: 'auto',
+              opacity: (sending || uploading) ? 0.5 : 1
+            }}
+            title="Attach file"
+          >
+            <img 
+              src="/icons/__attach.svg" 
+              alt="attach"
+              width={30}
+              height={30}
+              style={{ 
+                filter: isDark ? 'invert(1)' : 'brightness(0) invert(1)'
+              }}
+            />
+          </button>
+
           {/* Emoji Button */}
           <button
             onClick={() => setShowEmojiPicker(!showEmojiPicker)}
@@ -1004,28 +1234,39 @@ const MessageInput = ({ onSendMessage, isDark, sending, broadcastTyping, editing
           {/* Send Button */}
           <button 
             onClick={handleSend} 
-            disabled={!text.trim() || sending}
+            disabled={(!text.trim() && !selectedFile) || sending || uploading}
             style={{
               background: 'none',
               border: 'none', 
-              cursor: (text.trim() && !sending) ? 'pointer' : 'not-allowed',
+              cursor: ((text.trim() || selectedFile) && !sending && !uploading) ? 'pointer' : 'not-allowed',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               padding: '0',
-              opacity: (text.trim() && !sending) ? 1 : 0.5,
+              opacity: ((text.trim() || selectedFile) && !sending && !uploading) ? 1 : 0.5,
               pointerEvents: 'auto'
             }}
           >
-            <img 
-              src="/icons/__send.svg" 
-              alt="send"
-              width={30}
-              height={30}
-              style={{ 
-                filter: isDark ? 'invert(1)' : 'brightness(0) invert(1)'
-              }}
-            />
+            {uploading ? (
+              <div style={{
+                width: '20px',
+                height: '20px',
+                border: `2px solid ${isDark ? '#666' : '#ccc'}`,
+                borderTop: `2px solid ${isDark ? '#fff' : '#000'}`,
+                borderRadius: '50%',
+                animation: 'spin 1s linear infinite'
+              }} />
+            ) : (
+              <img 
+                src="/icons/__send.svg" 
+                alt="send"
+                width={30}
+                height={30}
+                style={{ 
+                  filter: isDark ? 'invert(1)' : 'brightness(0) invert(1)'
+                }}
+              />
+            )}
           </button>
         </div>
       </div>
@@ -1065,6 +1306,12 @@ export default function GuestChatInterface({ eventId, isDark, guests }: GuestCha
   const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false);
   const [expandedAnnouncements, setExpandedAnnouncements] = useState<Set<string>>(new Set());
   const [modules, setModules] = useState<any[]>([]);
+  const [selectedModule, setSelectedModule] = useState<any>(null);
+  const [showModuleResponse, setShowModuleResponse] = useState(false);
+  const [hasSubmittedMap, setHasSubmittedMap] = useState<Record<string, boolean>>({});
+  const [moduleAnswerState, setModuleAnswerState] = useState<{ rating?: number; text?: string; option?: string; mediaUrl?: string; submitting?: boolean; comment?: string; file?: File | null }>({});
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const starBarRef = useRef<HTMLDivElement | null>(null);
   const [isDeleteMode, setIsDeleteMode] = useState(false);
   const [selectedMessages, setSelectedMessages] = useState<Set<string>>(new Set());
 
@@ -1486,7 +1733,12 @@ export default function GuestChatInterface({ eventId, isDark, guests }: GuestCha
     if (!messages.length || !currentUser || !eventId) return;
     
     const fetchReactions = async () => {
-      const messageIds = messages.map(m => m.message_id);
+      // Filter out temp message IDs to avoid UUID errors
+      const messageIds = messages
+        .map(m => m.message_id)
+        .filter(id => !id.startsWith('temp-'));
+      
+      if (messageIds.length === 0) return;
       
       // Direct table access with JWT authentication (this was working before)
       const { data, error } = await supabase
@@ -1822,24 +2074,24 @@ export default function GuestChatInterface({ eventId, isDark, guests }: GuestCha
   };
 
   // Replace old message sending logic with new function
-  const sendMessage = async (messageText: string) => {
-    if (!messageText.trim() || !eventId || !currentUser || sending) return;
+  const sendMessage = async (messageText: string, attachment?: any) => {
+    if ((!messageText.trim() && !attachment) || !eventId || !currentUser || sending) return;
     
     // Create optimistic message
     const optimisticMessage: Message = {
-      message_id: `temp_${Date.now()}`,
+      message_id: `temp-${Date.now()}`,
       event_id: eventId,
       sender_name: currentUser.name || currentUser.email,
       sender_type: 'admin',
       sender_email: currentUser.email,
       avatar_url: currentUser.avatar_url,
-      message_text: messageText,
-      message_type: 'text',
+      message_text: messageText || (attachment ? '📎 Attachment' : ''),
+      message_type: attachment ? 'attachment' : 'text',
       company_id: currentUser.company_id,
       created_at: new Date().toISOString(),
       reply_to_message_id: replyingTo ? replyingTo.message_id : null,
       is_edited: false,
-              edited_at: undefined,
+      edited_at: undefined,
     };
 
     // Add optimistic message immediately
@@ -1866,8 +2118,8 @@ export default function GuestChatInterface({ eventId, isDark, guests }: GuestCha
       const { data: result, error } = await supabase.rpc('send_guests_chat_message', {
         p_event_id: eventId,
         p_sender_email: currentUser.email,
-        p_message_text: messageText,
-        p_message_type: 'text',
+        p_message_text: messageText || (attachment ? '📎 Attachment' : ''),
+        p_message_type: attachment ? 'attachment' : 'text',
         p_reply_to_message_id: replyingTo ? replyingTo.message_id : null
       });
       
@@ -1887,7 +2139,22 @@ export default function GuestChatInterface({ eventId, isDark, guests }: GuestCha
       // Replace optimistic message with real message (EXACTLY like GuestChatAdminScreen)
       if (result && result.length > 0) {
         const realMessage = result[0];
-
+        
+        // Add attachment to the separate table if we have one
+        if (attachment) {
+          try {
+            await supabase.rpc('add_message_attachment', {
+              p_message_id: realMessage.message_id,
+              p_file_url: attachment.url,
+              p_filename: attachment.filename,
+              p_file_type: attachment.type,
+              p_file_size: attachment.size
+            });
+          } catch (attachmentError) {
+            console.error('Error adding attachment:', attachmentError);
+            // Don't fail the message send if attachment fails
+          }
+        }
         
         setMessages(prev => prev.map(msg => 
           msg.message_id === optimisticMessage.message_id ? {
@@ -2497,7 +2764,7 @@ export default function GuestChatInterface({ eventId, isDark, guests }: GuestCha
                   const isExpanded = expandedAnnouncements.has(announcement.id);
                   
                   return (
-                    <div
+                        <div
                       key={announcement.id}
                       style={{
                         display: 'flex',
@@ -2508,7 +2775,7 @@ export default function GuestChatInterface({ eventId, isDark, guests }: GuestCha
                       <div
                         onClick={() => toggleAnnouncementExpansion(announcement.id)}
                         style={{
-                          maxWidth: '350px',
+                          maxWidth: '520px',
                           width: '100%',
                           padding: '16px',
                           background: isDark ? 'rgba(64, 64, 64, 0.8)' : 'rgba(255, 255, 255, 0.9)',
@@ -2709,8 +2976,20 @@ export default function GuestChatInterface({ eventId, isDark, guests }: GuestCha
                     <TimelineModuleChatItem
                       module={module}
                       isDark={isDark}
-                      onPress={() => {
-                        console.log('[TIMELINE MODULE] Pressed:', module.question || module.title);
+                      onPress={async () => {
+                        setSelectedModule(module);
+                        setShowModuleResponse(true);
+                        try {
+                          const user = await getCurrentUser();
+                          if (!user) return;
+                          const { data: answered } = await supabase.rpc('user_or_guest_has_module_answer', {
+                            p_guest_id: null,
+                            p_user_id: user.id,
+                            p_module_id: module.id,
+                            p_event_id: eventId,
+                          });
+                          setHasSubmittedMap(prev => ({ ...prev, [module.id]: !!answered }));
+                        } catch {}
                       }}
                     />
                   </div>
@@ -2721,6 +3000,181 @@ export default function GuestChatInterface({ eventId, isDark, guests }: GuestCha
         )}
         <div ref={messagesEndRef} />
         
+        {/* Module Response Modal (Desktop) */}
+        {showModuleResponse && selectedModule && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ maxWidth: 560, width: '92vw', borderRadius: 16, background: isDark ? '#1f1f1f' : '#fff', padding: 20 }}>
+              <div style={{ textAlign: 'center', marginBottom: 12 }}>
+                <div style={{ fontSize: 20, fontWeight: 800, color: isDark ? '#fff' : '#111' }}>
+                  {selectedModule.title || selectedModule.question || selectedModule.label || 'Module'}
+                </div>
+                <div style={{ fontSize: 12, color: isDark ? '#aaa' : '#666', marginTop: 6 }}>
+                  {selectedModule.date} • {selectedModule.time}
+                </div>
+              </div>
+              {/* Question */}
+              {selectedModule.module_type === 'question' && (
+                <textarea
+                  placeholder="Type your answer"
+                  value={moduleAnswerState.text || ''}
+                  onChange={e => setModuleAnswerState(s => ({ ...s, text: e.target.value }))}
+                  style={{ width: '100%', minHeight: 100, borderRadius: 10, border: `1px solid ${isDark ? '#333' : '#ddd'}`, background: isDark ? 'rgba(255,255,255,0.05)' : '#f7f7f7', color: isDark ? '#fff' : '#111', padding: 12 }}
+                />
+              )}
+              {/* Multiple Choice */}
+              {selectedModule.module_type === 'multiple_choice' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {(selectedModule.survey_data?.options || []).map((opt: string, i: number) => (
+                    <button key={i} onClick={() => setModuleAnswerState(s => ({ ...s, option: opt }))} style={{ padding: '10px 14px', borderRadius: 10, border: `1px solid ${isDark ? '#333' : '#ddd'}`, background: (moduleAnswerState.option === opt) ? '#00bfa5' : (isDark ? 'rgba(255,255,255,0.05)' : '#f7f7f7'), color: (moduleAnswerState.option === opt) ? '#001b14' : (isDark ? '#fff' : '#111'), textAlign: 'left' }}>{opt}</button>
+                  ))}
+                </div>
+              )}
+              {/* Feedback with 0.1 precision stars */}
+              {selectedModule.module_type === 'feedback' && (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+                  <div
+                    ref={starBarRef}
+                    onMouseDown={(e) => {
+                      const rect = starBarRef.current!.getBoundingClientRect();
+                      const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+                      const pct = x / rect.width;
+                      const rating = Math.round(pct * 50) / 10;
+                      setModuleAnswerState(s => ({ ...s, rating }));
+                    }}
+                    onMouseMove={(e) => {
+                      if (e.buttons !== 1) return;
+                      const rect = starBarRef.current!.getBoundingClientRect();
+                      const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+                      const pct = x / rect.width;
+                      const rating = Math.round(pct * 50) / 10;
+                      setModuleAnswerState(s => ({ ...s, rating }));
+                    }}
+                    style={{ width: 260, maxWidth: '80%', padding: '6px 0', cursor: 'pointer', userSelect: 'none' }}
+                  >
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'center' }}>
+                      {[1,2,3,4,5].map(star => {
+                        const isFilled = (moduleAnswerState.rating || 0) >= star;
+                        const partial = (moduleAnswerState.rating || 0) > star - 1 && (moduleAnswerState.rating || 0) < star ? (moduleAnswerState.rating || 0) - (star - 1) : 0;
+                        return (
+                          <div key={star} style={{ position: 'relative', width: 28, height: 28 }}>
+                            {/* Hollow star */}
+                            <svg width="28" height="28" viewBox="0 0 24 24" style={{ display: 'block' }}>
+                              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
+                                fill="none" stroke={isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)'} strokeWidth="1" />
+                            </svg>
+                            {/* Filled overlay */}
+                            {(isFilled || partial > 0) && (
+                              <div style={{ position: 'absolute', top: 0, left: 0, overflow: 'hidden', width: isFilled ? '100%' : `${partial * 100}%` }}>
+                                <svg width="28" height="28" viewBox="0 0 24 24">
+                                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" fill="#fbbf24" />
+                                </svg>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div style={{ fontWeight: 700, color: isDark ? '#fbbf24' : '#d97706' }}>{(moduleAnswerState.rating || 0).toFixed(1)} / 5.0</div>
+                  <textarea
+                    placeholder="Add a comment (optional)"
+                    value={moduleAnswerState.comment || ''}
+                    onChange={e => setModuleAnswerState(s => ({ ...s, comment: e.target.value }))}
+                    style={{ width: '100%', minHeight: 80, borderRadius: 10, border: `1px solid ${isDark ? '#333' : '#ddd'}`, background: isDark ? 'rgba(255,255,255,0.05)' : '#f7f7f7', color: isDark ? '#fff' : '#111', padding: 12 }}
+                  />
+                </div>
+              )}
+              {/* Photo / Video uploader */}
+              {selectedModule.module_type === 'photo_video' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <input ref={fileInputRef} type="file" accept="image/*,video/*" style={{ display: 'none' }} onChange={async (e) => {
+                    const file = e.target.files?.[0] || null;
+                    let filePreviewUrl: string | null = null;
+                    if (file) { try { filePreviewUrl = URL.createObjectURL(file); } catch {} }
+                    setModuleAnswerState(s => ({ ...s, file, filePreviewUrl }));
+                  }} />
+                  <button onClick={() => fileInputRef.current?.click()} style={{ padding: '10px 14px', borderRadius: 10, border: `1px solid ${isDark ? '#333' : '#ddd'}`, background: isDark ? 'rgba(255,255,255,0.05)' : '#f7f7f7', color: isDark ? '#fff' : '#111', textAlign: 'left' }}>{moduleAnswerState.file ? 'Change Photo/Video' : 'Pick Photo/Video'}</button>
+                  {moduleAnswerState.file && (
+                    <div style={{ position: 'relative', width: '100%', maxWidth: 420, margin: '0 auto' }}>
+                      {moduleAnswerState.file.type.startsWith('image/') ? (
+                        <img src={moduleAnswerState.filePreviewUrl || ''} alt="Selected" style={{ width: '100%', aspectRatio: '1 / 1', borderRadius: 10, objectFit: 'cover', display: 'block' }} />
+                      ) : (
+                        <video src={moduleAnswerState.filePreviewUrl || ''} controls style={{ width: '100%', borderRadius: 10, display: 'block', background: '#000' }} />
+                      )}
+                      <button
+                        onClick={() => {
+                          try { if (moduleAnswerState.filePreviewUrl) URL.revokeObjectURL(moduleAnswerState.filePreviewUrl); } catch {}
+                          setModuleAnswerState(s => ({ ...s, file: null, filePreviewUrl: null }));
+                        }}
+                        aria-label="Clear media"
+                        style={{ position: 'absolute', top: 8, right: 8, width: 28, height: 28, minWidth: 28, minHeight: 28, padding: 0, borderRadius: '50%', background: 'rgba(0,0,0,0.6)', color: '#fff', border: '1px solid rgba(255,255,255,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', lineHeight: 0 }}
+                      >
+                        ×
+                      </button>
+                      <div style={{ marginTop: 8, color: isDark ? '#adb5bd' : '#6c757d', fontSize: 12, textAlign: 'center' }}>{moduleAnswerState.file.name}</div>
+                    </div>
+                  )}
+                </div>
+              )}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
+                <button onClick={() => setShowModuleResponse(false)} style={{ padding: '10px 16px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.18)', background: isDark ? '#333' : '#eee', color: isDark ? '#fff' : '#111', fontWeight: 700 }}>Close</button>
+                <button disabled={!!hasSubmittedMap[selectedModule.id] || !!moduleAnswerState.submitting} onClick={async () => {
+                  try {
+                    const user = await getCurrentUser();
+                    if (!user) return;
+                    setModuleAnswerState(s => ({ ...s, submitting: true }));
+                    let answer = '';
+                    if (selectedModule.module_type === 'question') {
+                      if (!moduleAnswerState.text?.trim()) return;
+                      answer = moduleAnswerState.text.trim();
+                    } else if (selectedModule.module_type === 'multiple_choice') {
+                      if (!moduleAnswerState.option) return;
+                      answer = moduleAnswerState.option;
+                    } else if (selectedModule.module_type === 'feedback') {
+                      const rating = moduleAnswerState.rating || 0;
+                      if (rating <= 0) return;
+                      answer = JSON.stringify({ rating, comment: (moduleAnswerState.comment || '').trim() });
+                    } else if (selectedModule.module_type === 'photo_video') {
+                      const file = moduleAnswerState.file;
+                      if (!file) return;
+                      const base64 = await new Promise<string>((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
+                        reader.onerror = reject;
+                        reader.readAsDataURL(file);
+                      });
+                      const response = await fetch('https://ijsktwmevnqgzwwuggkf.functions.supabase.co/guest-upload-image', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          guest_id: 'desktop-user',
+                          module_id: selectedModule.id,
+                          event_id: eventId,
+                          file_base64: base64,
+                          file_type: file.type,
+                        })
+                      });
+                      const result = await response.json();
+                      if (!response.ok || !result?.url) throw new Error(result?.error || 'Upload failed');
+                      answer = JSON.stringify({ url: result.url, type: file.type, filename: file.name });
+                    }
+                    await supabase.rpc('insert_module_answer_unified', {
+                      p_guest_id: null,
+                      p_user_id: user.id,
+                      p_module_id: selectedModule.id,
+                      p_answer_text: answer,
+                      p_event_id: eventId,
+                    });
+                    setHasSubmittedMap(prev => ({ ...prev, [selectedModule.id]: true }));
+                    setShowModuleResponse(false);
+                  } catch (e) { console.error('Desktop submit error', e); }
+                  finally { setModuleAnswerState(s => ({ ...s, submitting: false })); }
+                }} style={{ padding: '10px 16px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.18)', background: hasSubmittedMap[selectedModule.id] ? (isDark ? '#444' : '#ddd') : '#00bfa5', color: '#001b14', fontWeight: 800, opacity: hasSubmittedMap[selectedModule.id] ? 0.6 : 1 }}>Submit</button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Typing Indicator */}
         {Object.keys(typingUsers).length > 0 && (
           <div style={{

@@ -18,6 +18,7 @@ export default function GlobalAnnouncementModal({
   onClose 
 }: GlobalAnnouncementModalProps) {
   const [imageExpanded, setImageExpanded] = useState(false);
+  const [imageError, setImageError] = useState(false);
 
   if (!announcement) return null;
 
@@ -70,14 +71,24 @@ export default function GlobalAnnouncementModal({
                 onPress={() => setImageExpanded(true)}
                 style={styles.imageContainer}
               >
-                <Image 
-                  source={{ uri: announcement.image_url }} 
-                  style={styles.image}
-                  resizeMode="cover"
-                />
-                <View style={styles.imageOverlay}>
-                  <Ionicons name="expand" size={24} color="#ffffff" />
-                </View>
+                {!imageError ? (
+                  <Image 
+                    source={{ uri: announcement.image_url }} 
+                    style={styles.image}
+                    resizeMode="cover"
+                    onError={() => setImageError(true)}
+                  />
+                ) : (
+                  <View style={styles.imageFallback}>
+                    <Ionicons name="image-off" size={40} color="#888888" />
+                    <Text style={styles.imageFallbackText}>Image not available</Text>
+                  </View>
+                )}
+                {!imageError && (
+                  <View style={styles.imageOverlay}>
+                    <Ionicons name="expand" size={24} color="#ffffff" />
+                  </View>
+                )}
               </TouchableOpacity>
             )}
 
@@ -111,11 +122,19 @@ export default function GlobalAnnouncementModal({
                   <Ionicons name="close" size={32} color="#ffffff" />
                 </TouchableOpacity>
                 
-                <Image 
-                  source={{ uri: announcement.image_url }} 
-                  style={styles.expandedImage}
-                  resizeMode="contain"
-                />
+                {!imageError ? (
+                  <Image 
+                    source={{ uri: announcement.image_url }} 
+                    style={styles.expandedImage}
+                    resizeMode="contain"
+                    onError={() => setImageError(true)}
+                  />
+                ) : (
+                  <View style={styles.expandedImageFallback}>
+                    <Ionicons name="image-off" size={80} color="#888888" />
+                    <Text style={styles.expandedImageFallbackText}>Image not available</Text>
+                  </View>
+                )}
               </View>
             </View>
           </Modal>
@@ -202,6 +221,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  imageFallback: {
+    width: width * 0.7,
+    height: 200,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f0f0f0', // Fallback background
+  },
+  imageFallbackText: {
+    marginTop: 10,
+    fontSize: 14,
+    color: '#888888',
+  },
   linkButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -252,5 +284,18 @@ const styles = StyleSheet.create({
   expandedImage: {
     width: width,
     height: height * 0.8,
+  },
+  expandedImageFallback: {
+    width: width * 0.7,
+    height: 200,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f0f0f0', // Fallback background
+  },
+  expandedImageFallbackText: {
+    marginTop: 10,
+    fontSize: 14,
+    color: '#888888',
   },
 }); 

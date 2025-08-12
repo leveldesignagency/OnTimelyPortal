@@ -97,34 +97,7 @@ export default function TimelineModuleChatItem({ module, onPress }: TimelineModu
             {module.question || module.title || module.label || `New ${getModuleDisplayName(module.module_type)} module available`}
           </Text>
 
-          {isExpanded && (
-            <View style={styles.expandedContent}>
-              <View style={styles.infoSection}>
-                <Text style={styles.sectionLabel}>Scheduled for:</Text>
-                <Text style={styles.infoText}>
-                  {module.date} at {module.time}
-                </Text>
-              </View>
-
-              {module.module_type === 'multiple_choice' && module.survey_data && (
-                <View style={styles.infoSection}>
-                  <Text style={styles.sectionLabel}>Options:</Text>
-                  {module.survey_data.options?.map((option: string, index: number) => (
-                    <Text key={index} style={styles.optionText}>• {option}</Text>
-                  ))}
-                </View>
-              )}
-
-              {module.module_type === 'feedback' && module.feedback_data && (
-                <View style={styles.infoSection}>
-                  <Text style={styles.sectionLabel}>Feedback Type:</Text>
-                  <Text style={styles.infoText}>
-                    {module.feedback_data.type || 'General Feedback'}
-                  </Text>
-                </View>
-              )}
-            </View>
-          )}
+          {/* Expanded content removed; handled by modal in chat screens */}
         </View>
 
         {/* Footer */}

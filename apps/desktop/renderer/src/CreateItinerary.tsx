@@ -509,11 +509,10 @@ export default function CreateItinerary() {
     console.log('📅 Event details:', eventDetails);
     try {
       // --- PUBLISHED ITINERARY SAVE LOGIC ---
-      // If editing from EventDashboard > itineraries tab > edit, always treat as published
-      // Only process the items array (published itineraries)
-      console.log('🔄 Starting save process for published itineraries...');
-      console.log('📝 Items to save:', items);
-      for (const item of items) {
+      // We must publish BOTH existing items and new drafts.
+      const toPublish = [...items, ...drafts];
+      console.log('🔄 Starting save process. Items:', items.length, 'Drafts:', drafts.length, 'Total:', toPublish.length);
+      for (const item of toPublish) {
         // Validate required fields
         if (!eventDetails.id || !currentUser.company_id || !currentUser.id || !item.title) {
           alert('Missing required fields for itinerary.');
@@ -578,6 +577,7 @@ export default function CreateItinerary() {
       }
       showSuccessToast('Itinerary saved successfully!');
       setItems([]);
+      setDrafts([]);
       navigate(`/event/${eventId}?tab=itineraries`);
     } catch (error) {
       console.error('❌ Error saving itinerary:', error);

@@ -319,7 +319,7 @@ export default function MultipleChoiceModuleModal({ open, onClose, onNext, guest
             <label style={{ color: isDark ? '#aaa' : '#444', fontWeight: 600, fontSize: 15, marginBottom: 8 }}>Question</label>
             <input
               value={question}
-              onChange={e => setQuestion(e.target.value)}
+              onChange={e => setQuestion(e.target.value.slice(0, 35))}
               placeholder="Enter your question..."
               style={{ width: '100%', padding: '14px 18px', borderRadius: 10, border: `2px solid ${isDark ? '#333' : '#ddd'}`, background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', color: isDark ? '#fff' : '#111', fontSize: 18, outline: 'none', marginTop: 4, transition: 'all 0.2s', backdropFilter: 'blur(10px)' }}
             />
@@ -330,7 +330,7 @@ export default function MultipleChoiceModuleModal({ open, onClose, onNext, guest
               <div key={idx} style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
                 <input
                   value={opt}
-                  onChange={e => handleOptionChange(idx, e.target.value)}
+                  onChange={e => handleOptionChange(idx, e.target.value.slice(0, 35))}
                   placeholder={`Option ${idx + 1}`}
                   style={{ flex: 1, padding: '10px 14px', borderRadius: 8, border: `1.5px solid ${isDark ? '#333' : '#ddd'}`, background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', color: isDark ? '#fff' : '#111', fontSize: 16, outline: 'none', marginRight: 8 }}
                 />

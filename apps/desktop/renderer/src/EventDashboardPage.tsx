@@ -28,6 +28,7 @@ import {
   type Itinerary,
   deleteEvent as supabaseDeleteEvent
 } from './lib/supabase';
+import { getEventActivityFeed } from './lib/supabase';
 import { Itinerary as SupabaseItinerary } from './lib/supabase';
 import AddOnCard from './components/AddOnCard';
 import { User } from './lib/auth';
@@ -35,6 +36,7 @@ import EventForm from './components/EventForm';
 import { getEventTeams } from './lib/supabase';
 import { getEventAddOns, upsertEventAddon } from './lib/supabase';
 import AnnouncementModal from './components/AnnouncementModal';
+import { exportEventData, purgeEvent } from './lib/supabase';
 
 function EventMetaInfo({ event, colors, isDark }: { event: any, colors: any, isDark: boolean }) {
   const [teamNames, setTeamNames] = useState<string[]>([]);
@@ -43,7 +45,9 @@ function EventMetaInfo({ event, colors, isDark }: { event: any, colors: any, isD
       if (!event?.id) return;
       try {
         const links = await getEventTeams(event.id);
-        setTeamNames((links || []).map((t: any) => t.teams?.name || '').filter(Boolean));
+        const names = (links || []).map((t: any) => t.teams?.name || '').filter(Boolean);
+        // Deduplicate to avoid repeated team names in header
+        setTeamNames(Array.from(new Set(names)));
       } catch {
         setTeamNames([]);
       }
@@ -246,6 +250,8 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
   const { itineraries: realtimeItineraries, loading: itinerariesLoading, error: itinerariesError, refetch: refetchItineraries } = useRealtimeItineraries(id || null);
 
   const [currentEvent, setCurrentEvent] = useState(events.find(e => e.id === id));
+  const [activityFeed, setActivityFeed] = useState<any[]>([]);
+  const [activityLoading, setActivityLoading] = useState(false);
   
   // Refresh event data when component mounts or when events prop changes
   useEffect(() => {
@@ -259,6 +265,14 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
       try {
         const updatedEvent = await getEvent(id!);
         setCurrentEvent(updatedEvent);
+        if (currentUser && id) {
+          try {
+            const data = await getEventActivityFeed(id, currentUser.company_id, 30, 0);
+            setActivityFeed(data || []);
+          } catch (e) {
+            console.error('Error loading event activity feed:', e);
+          }
+        }
       } catch (error) {
         console.error('Error refreshing event data:', error);
       }
@@ -1900,6 +1914,22 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
     return dateStr;
   }
 
+  useEffect(() => {
+    const fetchActivity = async () => {
+      if (!currentUser || !id) return;
+      try {
+        setActivityLoading(true);
+        const data = await getEventActivityFeed(id, currentUser.company_id, 30, 0);
+        setActivityFeed(data || []);
+      } catch (e) {
+        console.error('Error loading event activity feed:', e);
+      } finally {
+        setActivityLoading(false);
+      }
+    };
+    fetchActivity();
+  }, [currentUser, id]);
+
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: isDark ? '#121212' : '#f8f9fa' }}>
       <div style={{ position: 'fixed', top: 0, left: 0, width: 260, height: '100vh', background: isDark ? '#1a1a1a' : '#222', color: '#fff', zIndex: 100, display: 'flex', flexDirection: 'column' }}>
@@ -2051,7 +2081,7 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
           {activeTab === 'settings' && (
             <div style={{ marginBottom: 64, paddingBottom: 48 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                <h2 style={mainTitleStyle}>Event Dashboard</h2>
+                {/* Remove duplicate section title to avoid header repetition */}
                 <div style={{ display: 'flex', gap: 12 }}>
                   <DraggableAction
                     action={{
@@ -2533,56 +2563,60 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
 
               {/* 4. Live Activity Feed (now below Guest Journey Checkpoints) */}
               <div style={{ ...getGlassStyles(isDark), marginBottom: 32, padding: 32 }}>
-                <h3 style={{ fontSize: 30, fontWeight: 700, marginBottom: 20, color: isDark ? '#fff' : '#222', letterSpacing: 0 }}>Live Activity Feed</h3>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                  <h3 style={{ fontSize: 30, fontWeight: 700, margin: 0, color: isDark ? '#fff' : '#222', letterSpacing: 0 }}>Live Activity Feed</h3>
+                  <button
+                    onClick={() => navigate('/notifications')}
+                    title="View all activity"
+                    aria-label="View all activity"
+                    style={{ width: 36, height: 36, borderRadius: '50%', border: 'none', background: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.06)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  >
+                    <Icon name="bell" style={{ fontSize: 18, color: isDark ? '#fff' : '#000' }} />
+                  </button>
+                </div>
                 <div>
-                  <div style={activityCardStyle}>
-                    <div style={{ width: 12, height: 12, borderRadius: '50%', background: isDark ? '#fff' : '#000', flexShrink: 0 }}></div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 600, fontSize: 15, color: isDark ? '#ffffff' : '#000' }}>John Smith confirmed arrival</div>
-                      <div style={{ color: isDark ? '#aaa' : '#666', fontSize: 13 }}>Through security checkpoint • 2 minutes ago</div>
-                    </div>
-                    <div style={{ fontSize: 20 }}>
-                      <Icon name="clipboard" style={{ fontSize: 30, color: '#22c55e' }} />
-                    </div>
-                  </div>
-                  <div style={activityCardStyle}>
-                    <div style={{ width: 12, height: 12, borderRadius: '50%', background: isDark ? '#ccc' : '#333', flexShrink: 0 }}></div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 600, fontSize: 15, color: isDark ? '#ffffff' : '#000' }}>Flight BA123 landed</div>
-                      <div style={{ color: isDark ? '#aaa' : '#666', fontSize: 13 }}>5 guests on board • 15 minutes ago</div>
-                    </div>
-                    <div style={{ fontSize: 20 }}>
-                      <Icon name="flight" style={{ fontSize: 18, color: '#fff' }} />
-                    </div>
-                  </div>
-                  <div style={activityCardStyle}>
-                    <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#666', flexShrink: 0 }}></div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 600, fontSize: 15 }}>Driver assigned to Group Alpha</div>
-                      <div style={{ color: '#666', fontSize: 13 }}>Vehicle: Mercedes Sprinter • 18 minutes ago</div>
-                    </div>
-                    <div style={{ fontSize: 20 }}>
-                      <Icon name="pin" style={{ fontSize: 18, color: '#fff' }} />
-                    </div>
-                  </div>
-                  <div style={activityCardStyle}>
-                    <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#888', flexShrink: 0 }}></div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 600, fontSize: 15 }}>Sarah Johnson checked into hotel</div>
-                      <div style={{ color: '#666', fontSize: 13 }}>Grand Palace Hotel, Room 503 • 25 minutes ago</div>
-                    </div>
-                    <div style={{ fontSize: 20 }}>
-                      <Icon name="hotel" style={{ fontSize: 18, color: '#fff' }} />
-                    </div>
-                  </div>
-                  <div style={activityCardStyle}>
-                    <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#aaa', flexShrink: 0 }}></div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 600, fontSize: 15 }}>Emergency contact updated</div>
-                      <div style={{ color: '#666', fontSize: 13 }}>Guest: Mike Davis • 32 minutes ago</div>
-                    </div>
-                    <div style={{ fontSize: 20 }}>📞</div>
-                  </div>
+                  {activityLoading && (
+                    <div style={{ color: isDark ? '#aaa' : '#666' }}>Loading activity…</div>
+                  )}
+                  {!activityLoading && activityFeed.length === 0 && (
+                    <div style={{ color: isDark ? '#aaa' : '#666' }}>No recent activity.</div>
+                  )}
+                  {activityFeed.slice(0, 15).map((item, idx) => {
+                    const ts = new Date(item.created_at).toLocaleString();
+                    const friendly = (() => {
+                      if (item.item_type === 'message') {
+                        return `${item.actor_name || 'Someone'} sent a message…`;
+                      }
+                      if (item.item_type === 'module_answer') {
+                        return `${item.actor_name || 'Participant'} submitted a module response`;
+                      }
+                      if (item.item_type === 'announcement') {
+                        return `Announcement: ${item.title || 'New announcement'}`;
+                      }
+                      if (item.item_type === 'itinerary') {
+                        return `${item.title || 'Itinerary'} updated`;
+                      }
+                      return item.title || item.item_type;
+                    })();
+                    return (
+                      <div key={`${item.item_type}-${item.source_id}-${idx}`} style={{ ...activityCardStyle, position: 'relative' }}
+                        onClick={() => {
+                          const t = item.item_type;
+                          if (t === 'message' || t === 'module_answer') navigate('/guest-chat', { state: { eventId: id } });
+                          // No navigation for itinerary items as requested
+                        }}
+                      >
+                        <div style={{ width: 12, height: 12, borderRadius: '50%', background: isDark ? '#ccc' : '#333', flexShrink: 0 }}></div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 600, fontSize: 15, color: isDark ? '#ffffff' : '#000' }}>{friendly}</div>
+                        </div>
+                        <div style={{ position: 'absolute', top: 10, right: 14, color: isDark ? '#aaa' : '#666', fontSize: 12 }}>{ts}</div>
+                        <div style={{ fontSize: 20 }}>
+                          <Icon name={item.item_type === 'announcement' ? 'announcement' : item.item_type === 'message' ? 'chat' : item.item_type === 'module_answer' ? 'clipboard' : 'pin'} style={{ fontSize: 18, color: '#fff' }} />
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -4208,8 +4242,8 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
             background: isDark ? '#232323' : '#fff',
             borderRadius: 12,
             padding: 32,
-            minWidth: 400,
-            maxWidth: 500,
+            minWidth: 640,
+            maxWidth: 720,
             textAlign: 'center',
             color: isDark ? '#fff' : '#222',
             border: isDark ? '1px solid #444' : 'none'
@@ -4248,8 +4282,9 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                   fontSize: 18,
                   border: isDark ? '2px solid #444' : '2px solid #e5e7eb',
                   borderRadius: 8,
-                  padding: '12px 36px',
-                  minWidth: 120,
+                  padding: '12px 40px',
+                  minWidth: 160,
+                  whiteSpace: 'nowrap',
                   cursor: 'pointer',
                   transition: 'all 0.2s'
                 }}
@@ -4263,7 +4298,36 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                 Cancel
               </button>
               <button
-                onClick={handleConfirmDeleteEvent}
+                onClick={() => navigate(`/export-report/${id}`)}
+                style={{
+                  background: isDark ? '#0b3b2e' : '#e6fffa',
+                  color: isDark ? '#a7f3d0' : '#065f46',
+                  fontWeight: 500,
+                  fontSize: 18,
+                  border: isDark ? '2px solid #065f46' : '2px solid #99f6e4',
+                  borderRadius: 8,
+                  padding: '12px 40px',
+                  minWidth: 160,
+                  whiteSpace: 'nowrap',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+              >
+                Export Data
+              </button>
+              <button
+                onClick={async () => {
+                  if (deleteEventText !== 'delete') return;
+                  try {
+                    await purgeEvent(id!);
+                    setShowDeleteEventModal(false);
+                    setDeleteEventText('');
+                    navigate('/');
+                  } catch (e) {
+                    console.error('Purge failed', e);
+                    alert('Failed to delete event completely. Check console for details.');
+                  }
+                }}
                 disabled={deleteEventText !== 'delete'}
                 style={{
                   background: deleteEventText === 'delete' ? '#ef4444' : (isDark ? '#3a3a3a' : '#fca5a5'),
@@ -4272,8 +4336,9 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                   fontSize: 18,
                   border: 'none',
                   borderRadius: 8,
-                  padding: '13px 37px',
-                  minWidth: 120,
+                  padding: '13px 44px',
+                  minWidth: 160,
+                  whiteSpace: 'nowrap',
                   cursor: deleteEventText === 'delete' ? 'pointer' : 'not-allowed',
                   transition: 'all 0.2s'
                 }}

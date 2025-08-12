@@ -721,6 +721,8 @@ export default function CreateGuests() {
   const [expandedDraftIndex, setExpandedDraftIndex] = useState<number | null>(null);
   const [countryDropdownOpen, setCountryDropdownOpen] = useState<number | null>(null);
   const countryDropdownRef = useRef<HTMLDivElement>(null);
+  // Generic dropdown identifier for custom selects (prefix/gender/idtype)
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
 
   // Success message state
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
@@ -2147,17 +2149,45 @@ export default function CreateGuests() {
                     <div style={{ display: 'flex', gap: 10 }}>
                       <div style={{ flex: 1 }}>
                         <label style={labelStyle(isDark)}>Prefix</label>
-                        <select value={draft.prefix} onChange={e => handleDraftChange(idx, 'prefix', e.target.value)} style={{...inputStyle(isDark), height: 40, fontSize: 15, padding: '8px 12px'}}>
-                          <option value="">Prefix</option>
-                          {PREFIXES.map(p => <option key={p} value={p}>{p}</option>)}
-                        </select>
+                        <div style={{ position: 'relative' }}>
+                          <div
+                            tabIndex={0}
+                            style={{ ...inputStyle(isDark), height: 40, fontSize: 15, padding: '8px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', color: draft.prefix ? (isDark ? '#fff' : '#000') : '#888' }}
+                            onClick={() => setOpenDropdown(openDropdown === `prefix-${idx}` ? null : `prefix-${idx}`)}
+                            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setOpenDropdown(openDropdown === `prefix-${idx}` ? null : `prefix-${idx}`); if (e.key === 'Escape') setOpenDropdown(null); }}
+                          >
+                            {draft.prefix || 'Prefix'}
+                            <span style={{ marginLeft: 8, fontSize: 18, color: isDark ? '#fff' : '#000' }}>▼</span>
+                          </div>
+                          {openDropdown === `prefix-${idx}` && (
+                            <div style={{ position: 'absolute', top: 44, left: 0, width: '100%', maxHeight: 220, overflowY: 'auto', background: isDark ? 'rgba(30,30,30,0.7)' : 'rgba(255,255,255,0.7)', border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.13)' : '#d1d5db'}`, borderRadius: 12, zIndex: 100, boxShadow: isDark ? '0 4px 24px #000a' : '0 2px 8px #0002', padding: 4, backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}>
+                              {PREFIXES.map(p => (
+                                <div key={p} tabIndex={0} style={{ padding: '8px 14px', color: isDark ? '#fff' : '#000', background: draft.prefix === p ? (isDark ? 'rgba(255,255,255,0.08)' : '#e0e7ff') : 'transparent', borderRadius: 8, cursor: 'pointer', fontWeight: draft.prefix === p ? 700 : 400, fontSize: 15, outline: 'none', marginBottom: 2 }} onClick={() => { handleDraftChange(idx, 'prefix', p); setOpenDropdown(null); }} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { handleDraftChange(idx, 'prefix', p); setOpenDropdown(null); } }}>{p}</div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
                       <div style={{ flex: 1 }}>
                         <label style={labelStyle(isDark)}>Gender</label>
-                        <select value={draft.gender} onChange={e => handleDraftChange(idx, 'gender', e.target.value)} style={{...inputStyle(isDark), height: 40, fontSize: 15, padding: '8px 12px'}}>
-                          <option value="">Gender</option>
-                          {GENDERS.map(g => <option key={g} value={g}>{g}</option>)}
-                        </select>
+                        <div style={{ position: 'relative' }}>
+                          <div
+                            tabIndex={0}
+                            style={{ ...inputStyle(isDark), height: 40, fontSize: 15, padding: '8px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', color: draft.gender ? (isDark ? '#fff' : '#000') : '#888' }}
+                            onClick={() => setOpenDropdown(openDropdown === `gender-${idx}` ? null : `gender-${idx}`)}
+                            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setOpenDropdown(openDropdown === `gender-${idx}` ? null : `gender-${idx}`); if (e.key === 'Escape') setOpenDropdown(null); }}
+                          >
+                            {draft.gender || 'Gender'}
+                            <span style={{ marginLeft: 8, fontSize: 18, color: isDark ? '#fff' : '#000' }}>▼</span>
+                          </div>
+                          {openDropdown === `gender-${idx}` && (
+                            <div style={{ position: 'absolute', top: 44, left: 0, width: '100%', maxHeight: 220, overflowY: 'auto', background: isDark ? 'rgba(30,30,30,0.7)' : 'rgba(255,255,255,0.7)', border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.13)' : '#d1d5db'}`, borderRadius: 12, zIndex: 100, boxShadow: isDark ? '0 4px 24px #000a' : '0 2px 8px #0002', padding: 4, backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}>
+                              {GENDERS.map(g => (
+                                <div key={g} tabIndex={0} style={{ padding: '8px 14px', color: isDark ? '#fff' : '#000', background: draft.gender === g ? (isDark ? 'rgba(255,255,255,0.08)' : '#e0e7ff') : 'transparent', borderRadius: 8, cursor: 'pointer', fontWeight: draft.gender === g ? 700 : 400, fontSize: 15, outline: 'none', marginBottom: 2 }} onClick={() => { handleDraftChange(idx, 'gender', g); setOpenDropdown(null); }} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { handleDraftChange(idx, 'gender', g); setOpenDropdown(null); } }}>{g}</div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
                       <div style={{ flex: 2 }}>
                         <label style={labelStyle(isDark)}>First Name</label>
@@ -2195,12 +2225,24 @@ export default function CreateGuests() {
                     <div style={{ display: 'flex', gap: 10 }}>
                       <div style={{ flex: 2 }}>
                         <label style={labelStyle(isDark)}>ID Type</label>
-                        <select value={draft.idType} onChange={e => handleDraftChange(idx, 'idType', e.target.value)} style={{...inputStyle(isDark), height: 40, fontSize: 15, padding: '8px 12px'}}>
-                          <option value="">ID Type</option>
-                          <option value="Passport">Passport</option>
-                          <option value="Identity Card">Identity Card</option>
-                          <option value="Drivers License">Drivers License</option>
-                        </select>
+                        <div style={{ position: 'relative' }}>
+                          <div
+                            tabIndex={0}
+                            style={{ ...inputStyle(isDark), height: 40, fontSize: 15, padding: '8px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', color: draft.idType ? (isDark ? '#fff' : '#000') : '#888' }}
+                            onClick={() => setOpenDropdown(openDropdown === `idtype-${idx}` ? null : `idtype-${idx}`)}
+                            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setOpenDropdown(openDropdown === `idtype-${idx}` ? null : `idtype-${idx}`); if (e.key === 'Escape') setOpenDropdown(null); }}
+                          >
+                            {draft.idType || 'ID Type'}
+                            <span style={{ marginLeft: 8, fontSize: 18, color: isDark ? '#fff' : '#000' }}>▼</span>
+                          </div>
+                          {openDropdown === `idtype-${idx}` && (
+                            <div style={{ position: 'absolute', top: 44, left: 0, width: '100%', maxHeight: 220, overflowY: 'auto', background: isDark ? 'rgba(30,30,30,0.7)' : 'rgba(255,255,255,0.7)', border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.13)' : '#d1d5db'}`, borderRadius: 12, zIndex: 100, boxShadow: isDark ? '0 4px 24px #000a' : '0 2px 8px #0002', padding: 4, backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}>
+                              {['Passport','Identity Card','Drivers License'].map(opt => (
+                                <div key={opt} tabIndex={0} style={{ padding: '8px 14px', color: isDark ? '#fff' : '#000', background: draft.idType === opt ? (isDark ? 'rgba(255,255,255,0.08)' : '#e0e7ff') : 'transparent', borderRadius: 8, cursor: 'pointer', fontWeight: draft.idType === opt ? 700 : 400, fontSize: 15, outline: 'none', marginBottom: 2 }} onClick={() => { handleDraftChange(idx, 'idType', opt); setOpenDropdown(null); }} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { handleDraftChange(idx, 'idType', opt); setOpenDropdown(null); } }}>{opt}</div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
                       <div style={{ flex: 2 }}>
                         <label style={labelStyle(isDark)}>ID Number</label>

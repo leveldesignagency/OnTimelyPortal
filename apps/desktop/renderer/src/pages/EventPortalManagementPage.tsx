@@ -796,7 +796,9 @@ export default function EventPortalManagementPage() {
         >
           Back
         </button>
-        <h1 style={{ fontSize: 36, fontWeight: 800, marginTop: 32, marginBottom: 40, letterSpacing: 1 }}>Event Portal Management</h1>
+        <h1 style={{ fontSize: 36, fontWeight: 800, marginTop: 32, marginBottom: 40, letterSpacing: 1 }}>
+          Event Portal Management{event?.name ? ` • ${event.name}` : ''}
+        </h1>
         <div style={{ textAlign: 'center', marginTop: 100 }}>
           <p style={{ fontSize: 18, color: isDark ? '#aaa' : '#666' }}>
             No guest data available. Please go back and select guests first.
@@ -821,7 +823,9 @@ export default function EventPortalManagementPage() {
         >
           Back
         </button>
-        <h1 style={{ fontSize: 36, fontWeight: 800, marginBottom: 40, letterSpacing: 1 }}>Event Portal Management</h1>
+        <h1 style={{ fontSize: 36, fontWeight: 800, marginBottom: 40, letterSpacing: 1 }}>
+          Event Portal Management{event?.name ? ` • ${event.name}` : ''}
+        </h1>
 
         {/* Overview Stats */}
         <div style={getSectionStyles(isDark)}>

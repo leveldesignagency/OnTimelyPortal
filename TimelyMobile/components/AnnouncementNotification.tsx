@@ -26,6 +26,7 @@ export default function AnnouncementNotification({
   onViewInChat 
 }: AnnouncementNotificationProps) {
   const [isVisible, setIsVisible] = useState(true);
+  const [imageError, setImageError] = useState(false);
 
   useEffect(() => {
     // Auto-hide after 10 seconds
@@ -97,7 +98,15 @@ export default function AnnouncementNotification({
               source={{ uri: announcement.image_url }} 
               style={styles.image}
               resizeMode="cover"
+              onError={() => setImageError(true)}
             />
+          )}
+
+          {imageError && (
+            <View style={styles.imagePlaceholder}>
+              <Ionicons name="image-off" size={40} color="#888888" />
+              <Text style={styles.imagePlaceholderText}>Image not available</Text>
+            </View>
           )}
 
           {announcement.link_url && (
@@ -207,6 +216,20 @@ const styles = StyleSheet.create({
     height: 150,
     borderRadius: 8,
     marginBottom: 12,
+  },
+  imagePlaceholder: {
+    width: '100%',
+    height: 150,
+    borderRadius: 8,
+    marginBottom: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#2a2a2a',
+  },
+  imagePlaceholderText: {
+    fontSize: 14,
+    color: '#888888',
+    marginTop: 8,
   },
   linkButton: {
     flexDirection: 'row',

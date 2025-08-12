@@ -11,6 +11,7 @@
     "@types/tesseract.js": "^0.0.2",
     "country-calling-code": "^0.0.3",
     "country-list": "^2.3.0",
+    "jspdf": "^2.5.2",
     "jszip": "^3.10.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

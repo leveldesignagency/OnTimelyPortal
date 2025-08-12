@@ -21,14 +21,14 @@ export default function AnnouncementChatItem({ announcement, onPress }: Announce
     if (announcement.image_url) {
       console.log('[ANNOUNCEMENT] Rendering announcement with image URL:', announcement.image_url);
       
-                // Use signed URL generation for Supabase storage URLs
-          if (announcement.image_url.includes('supabase.co') && announcement.image_url.includes('/storage/v1/object/public/')) {
-            console.log('[ANNOUNCEMENT] Using signed URL generation');
-            getSignedUrl(announcement.image_url);
-          } else {
-            console.log('[ANNOUNCEMENT] Not a Supabase storage URL, using original');
-            setSignedImageUrl(announcement.image_url);
-          }
+      // Use signed URL generation for Supabase storage URLs
+      if (announcement.image_url.includes('supabase.co') && announcement.image_url.includes('/storage/v1/object/public/')) {
+        console.log('[ANNOUNCEMENT] Using signed URL generation');
+        getSignedUrl(announcement.image_url);
+      } else {
+        console.log('[ANNOUNCEMENT] Not a Supabase storage URL, using original');
+        setSignedImageUrl(announcement.image_url);
+      }
     }
   }, [announcement.image_url]);
 
@@ -36,55 +36,45 @@ export default function AnnouncementChatItem({ announcement, onPress }: Announce
     try {
       console.log('[ANNOUNCEMENT] Processing URL:', url);
       
-      // Test the URL first to see if it's accessible
-      console.log('[ANNOUNCEMENT] Testing URL accessibility...');
-      const testResponse = await fetch(url);
-      console.log('[ANNOUNCEMENT] URL test - Status:', testResponse.status, 'OK:', testResponse.ok);
-      
-      if (!testResponse.ok) {
-        console.log('[ANNOUNCEMENT] URL not accessible, trying signed URL...');
-        
-        // Parse Supabase storage URL
-        // Format: https://ijsktwmevnqgzwwuggkf.supabase.co/storage/v1/object/public/announcement_media/announcements/...
-        if (url.includes('supabase.co') && url.includes('/storage/v1/object/public/')) {
-          const urlParts = url.split('/storage/v1/object/public/');
-          if (urlParts.length === 2) {
-            const bucketAndPath = urlParts[1];
-            const bucketPathParts = bucketAndPath.split('/');
-            const bucket = bucketPathParts[0]; // announcement_media
-            const path = bucketPathParts.slice(1).join('/'); // announcements/4e19b264-61a1-484f-8619-4f2d515b3796/1754316469493.jpg
-            
-            console.log('[ANNOUNCEMENT] Extracted bucket:', bucket);
-            console.log('[ANNOUNCEMENT] Extracted path:', path);
-            
-            // Get signed URL
-            const { data, error } = await supabase.storage
-              .from(bucket)
-              .createSignedUrl(path, 3600); // 1 hour expiry
-            
-            if (error) {
-              console.error('[ANNOUNCEMENT] Error getting signed URL:', error);
-              console.log('[ANNOUNCEMENT] Falling back to original URL');
-              setSignedImageUrl(url);
-            } else {
-              console.log('[ANNOUNCEMENT] Got signed URL:', data.signedUrl);
-              setSignedImageUrl(data.signedUrl);
-            }
+      // Parse Supabase storage URL first
+      // Format: https://ijsktwmevnqgzwwuggkf.supabase.co/storage/v1/object/public/announcement_media/announcements/...
+      if (url.includes('supabase.co') && url.includes('/storage/v1/object/public/')) {
+        const urlParts = url.split('/storage/v1/object/public/');
+        if (urlParts.length === 2) {
+          const bucketAndPath = urlParts[1];
+          const bucketPathParts = bucketAndPath.split('/');
+          const bucket = bucketPathParts[0]; // announcement_media
+          const path = bucketPathParts.slice(1).join('/'); // announcements/4e19b264-61a1-484f-8619-4f2d515b3796/1754316469493.jpg
+          
+          console.log('[ANNOUNCEMENT] Extracted bucket:', bucket);
+          console.log('[ANNOUNCEMENT] Extracted path:', path);
+          
+          // Try to get signed URL first
+          const { data, error } = await supabase.storage
+            .from(bucket)
+            .createSignedUrl(path, 3600); // 1 hour expiry
+          
+          if (error) {
+            console.log('[ANNOUNCEMENT] Error getting signed URL:', error);
+            console.log('[ANNOUNCEMENT] Image likely deleted from storage, setting error state');
+            setImageError(true); // Set error state to show fallback
+            return; // Don't set signedImageUrl, let error state handle display
           } else {
-            console.log('[ANNOUNCEMENT] Could not parse Supabase URL format');
-            setSignedImageUrl(url);
+            console.log('[ANNOUNCEMENT] Got signed URL successfully');
+            setSignedImageUrl(data.signedUrl);
+            setImageError(false); // Clear any previous errors
           }
         } else {
-          console.log('[ANNOUNCEMENT] Not a Supabase storage URL, using original');
+          console.log('[ANNOUNCEMENT] Could not parse Supabase URL format');
           setSignedImageUrl(url);
         }
       } else {
-        console.log('[ANNOUNCEMENT] URL is accessible, using original');
+        console.log('[ANNOUNCEMENT] Not a Supabase storage URL, using original');
         setSignedImageUrl(url);
       }
     } catch (error) {
-      console.error('[ANNOUNCEMENT] Exception getting signed URL:', error);
-      setSignedImageUrl(url); // Fallback to original URL
+      console.log('[ANNOUNCEMENT] Exception getting signed URL:', error);
+      setImageError(true); // Set error state to show fallback
     }
   };
 
@@ -154,27 +144,21 @@ export default function AnnouncementChatItem({ announcement, onPress }: Announce
                       style={styles.image}
                       resizeMode="cover"
                       onError={(error) => {
-                        console.error('[ANNOUNCEMENT] Image loading error:', error.nativeEvent);
-                        console.error('[ANNOUNCEMENT] Image URL:', signedImageUrl);
-                        console.error('[ANNOUNCEMENT] Error details:', JSON.stringify(error.nativeEvent));
+                        console.log('[ANNOUNCEMENT] Image loading error, showing fallback');
                         setImageError(true);
                       }}
                       onLoad={() => {
-                        console.log('[ANNOUNCEMENT] Image loaded successfully:', signedImageUrl);
+                        console.log('[ANNOUNCEMENT] Image loaded successfully');
                         setImageError(false);
                       }}
-                      onLoadStart={() => {
-                        console.log('[ANNOUNCEMENT] Image loading started:', signedImageUrl);
-                      }}
                     />
-                  ) : !signedImageUrl ? (
+                  ) : !signedImageUrl && !imageError ? (
                     <View style={styles.imageLoadingContainer}>
                       <Text style={styles.imageLoadingText}>Loading image...</Text>
                     </View>
                   ) : (
-                    <View style={styles.imageErrorContainer}>
-                      <Text style={styles.imageErrorText}>Failed to load image</Text>
-                      <Text style={styles.imageUrlText}>{announcement.image_url}</Text>
+                    <View style={styles.imageFallbackContainer}>
+                      <Text style={styles.imageFallbackText}>Image Not Available</Text>
                     </View>
                   )}
                 </View>
@@ -390,5 +374,20 @@ const styles = StyleSheet.create({
                 fontSize: 12,
                 color: '#0066ff',
                 fontWeight: '500',
+              },
+              imageFallbackContainer: {
+                padding: 12,
+                backgroundColor: 'rgba(128, 128, 128, 0.1)',
+                borderRadius: 8,
+                borderWidth: 1,
+                borderColor: '#808080',
+                alignItems: 'center',
+                justifyContent: 'center',
+                minHeight: 100,
+              },
+              imageFallbackText: {
+                fontSize: 12,
+                color: '#808080',
+                fontStyle: 'italic',
               },
 }); 

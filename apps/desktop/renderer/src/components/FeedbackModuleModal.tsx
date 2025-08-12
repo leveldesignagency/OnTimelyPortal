@@ -332,7 +332,7 @@ export default function FeedbackModuleModal({ open, onClose, onNext, guests, eve
           <label style={{ color: isDark ? '#aaa' : '#444', fontWeight: 600, fontSize: 15, marginBottom: 8, alignSelf: 'flex-start' }}>Title</label>
           <input
             value={title}
-            onChange={e => setTitle(e.target.value)}
+            onChange={e => setTitle(e.target.value.slice(0, 35))}
             placeholder="Feedback title..."
             style={{ width: '100%', padding: '14px 18px', borderRadius: 10, border: `2px solid ${isDark ? '#333' : '#ddd'}`, background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', color: isDark ? '#fff' : '#111', fontSize: 18, marginBottom: 0, outline: 'none', boxSizing: 'border-box', marginTop: 4, transition: 'all 0.2s', backdropFilter: 'blur(10px)' }}
           />

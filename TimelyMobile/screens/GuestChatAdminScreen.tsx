@@ -17,8 +17,14 @@ import {
   Image,
   RefreshControl,
 } from 'react-native';
+import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
+// import { Video } from 'expo-av'; // Removed deprecated import
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { supabase } from '../lib/supabase';
+import { supabase, supabaseAnonKey } from '../lib/supabase';
+import Constants from 'expo-constants';
+import Base64 from 'react-native-base64';
 import { getCurrentUser } from '../lib/auth';
 import GlobalHeader from '../components/GlobalHeader';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -26,7 +32,9 @@ import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AnnouncementChatItem from '../components/AnnouncementChatItem';
 import TimelineModuleChatItem from '../components/TimelineModuleChatItem';
+import ModuleResponseModal from '../components/ModuleResponseModal';
 import announcementService, { Announcement as AnnouncementType } from '../lib/announcementService';
+import { insertActivityLogMobile } from '../lib/supabase';
 
 // ModuleDisplay component for chat screens
 const ModuleDisplay = ({ module, onClose }: { module: any; onClose: () => void }) => {
@@ -105,7 +113,7 @@ interface Message {
   sender_name: string;
   sender_type: 'admin' | 'guest';
   avatar_url?: string;
-  message_text: string;
+  message_text: string | null;
   message_type: string;
   created_at: string;
   company_id: string;
@@ -113,6 +121,10 @@ interface Message {
   edited_at?: string;
   reply_to_message_id?: string;
   reactions?: any[];
+  attachment_url?: string | null;
+  attachment_filename?: string | null;
+  attachment_type?: string | null;
+  attachment_size?: number | null;
 }
 
 interface GuestChatAdminScreenProps {
@@ -166,18 +178,43 @@ const GuestChatAdminScreen: React.FC<GuestChatAdminScreenProps> = ({ route, navi
   const [reactions, setReactions] = useState<{[messageId: string]: {[emoji: string]: {count: number, reacted: boolean}}}>();
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
+  const [selectedFile, setSelectedFile] = useState<any>(null);
+  const [uploading, setUploading] = useState(false);
+  const [showUploadErrorModal, setShowUploadErrorModal] = useState(false);
+  const [showAttachmentPickerModal, setShowAttachmentPickerModal] = useState(false);
+  const [showDownloadModal, setShowDownloadModal] = useState(false);
+  const [downloadAttachment, setDownloadAttachment] = useState<any>(null);
+  const [showDownloadSuccessModal, setShowDownloadSuccessModal] = useState(false);
+  const [showDownloadFailureModal, setShowDownloadFailureModal] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false);
   
   // Module notification states
   const [showModuleDisplayModal, setShowModuleDisplayModal] = useState(false);
+  const [showModuleResponse, setShowModuleResponse] = useState(false);
   const [selectedModule, setSelectedModule] = useState<any>(null);
   const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
   
   // Handle module notification click
   const handleModuleNotificationClick = (module: any) => {
     setSelectedModule(module);
-    setShowModuleDisplayModal(true);
+    setShowModuleResponse(true);
+  };
+
+  const scrollToMessage = (messageId: string) => {
+    if (scrollViewRef.current) {
+      // Find the message index
+      const messageIndex = messages.findIndex(m => m.message_id === messageId);
+      if (messageIndex !== -1) {
+        // Calculate approximate position (rough estimate)
+        const estimatedPosition = messageIndex * 120; // Approximate message height
+        scrollViewRef.current.scrollTo({ y: estimatedPosition, animated: true });
+        
+        // Add visual feedback - highlight the message briefly
+        setHighlightedMessageId(messageId);
+        setTimeout(() => setHighlightedMessageId(null), 2000); // Remove highlight after 2 seconds
+      }
+    }
   };
   
   // Action sheet state for mobile long-press
@@ -189,6 +226,14 @@ const GuestChatAdminScreen: React.FC<GuestChatAdminScreenProps> = ({ route, navi
   const scrollViewRef = useRef<ScrollView>(null);
   const typingTimeouts = useRef<{ [key: string]: NodeJS.Timeout }>({});
   const reactionsFetched = useRef<boolean>(false);
+  
+  // Performance optimizations to prevent glitching
+  const attachmentCache = useRef<Map<string, any>>(new Map());
+  const lastRenderTime = useRef<number>(0);
+  const RENDER_DEBOUNCE_MS = 1000; // Minimum 1 second between re-renders
+  const [visibleMessageIds, setVisibleMessageIds] = useState<Set<string>>(new Set());
+  const visibilityUpdateTimeout = useRef<NodeJS.Timeout | null>(null);
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
 
   useEffect(() => {
     loadCurrentUser();
@@ -219,6 +264,12 @@ const GuestChatAdminScreen: React.FC<GuestChatAdminScreenProps> = ({ route, navi
       if (pollingInterval) {
         clearInterval(pollingInterval);
         console.log('[MODULES] Polling interval cleared');
+      }
+      
+      // Cleanup performance optimization variables
+      attachmentCache.current.clear();
+      if (visibilityUpdateTimeout.current) {
+        clearTimeout(visibilityUpdateTimeout.current);
       }
     };
   }, [currentUser, eventId]);
@@ -262,39 +313,31 @@ const GuestChatAdminScreen: React.FC<GuestChatAdminScreenProps> = ({ route, navi
 
   const loadCurrentUser = async () => {
     try {
-  
       const authResponse = await getCurrentUser();
 
-      
-              if (authResponse.user) {
-          // Fetch user data from database to get the name
-          const { data: userData, error } = await supabase
-            .from('users')
-            .select('email, name, avatar_url, company_id')
-            .eq('email', authResponse.user.email)
-            .single();
-          
-          if (error) {
-            console.error('[DEBUG] Error fetching user data:', error);
-            setCurrentUser(authResponse.user);
-          } else if (userData) {
-    
-            // Create user object with name from database
-            const userWithName = {
-              ...authResponse.user,
-              name: userData.name || authResponse.user.email,
-              avatar_url: userData.avatar_url,
-              company_id: userData.company_id
-            };
-            setCurrentUser(userWithName);
-    
-          } else {
-            setCurrentUser(authResponse.user);
-    
-          }
+      if (authResponse.user) {
+        // Fetch user data from database to get the name
+        const { data: userData, error } = await supabase
+          .from('users')
+          .select('email, name, avatar_url, company_id')
+          .eq('email', authResponse.user.email)
+          .single();
+        
+        if (error) {
+          console.error('[DEBUG] Error fetching user data:', error);
+          setCurrentUser(authResponse.user);
+        } else if (userData) {
+          // Create user object with name from database
+          const userWithName = {
+            ...authResponse.user,
+            name: userData.name || authResponse.user.email,
+            avatar_url: userData.avatar_url,
+            company_id: userData.company_id
+          };
+          setCurrentUser(userWithName);
         } else {
-  
-  
+          setCurrentUser(authResponse.user);
+        }
       }
     } catch (error) {
       console.error('Error loading current user:', error);
@@ -502,7 +545,7 @@ const GuestChatAdminScreen: React.FC<GuestChatAdminScreenProps> = ({ route, navi
       return;
     }
     
-    // Poll every 2 seconds for new modules
+    // Poll every 15 seconds for new modules (reduced frequency to prevent glitching)
     const pollInterval = setInterval(async () => {
       try {
         // Poll for new modules
@@ -520,6 +563,15 @@ const GuestChatAdminScreen: React.FC<GuestChatAdminScreenProps> = ({ route, navi
             
             if (trulyNewModules.length > 0) {
               console.log('[MODULES] Polling found new modules:', trulyNewModules.length);
+              
+              // Debounce rapid re-renders
+              const now = Date.now();
+              if (now - lastRenderTime.current < RENDER_DEBOUNCE_MS) {
+                console.log('[MODULES] Debouncing render, too soon since last update');
+                return prev; // Return same reference to prevent re-render
+              }
+              lastRenderTime.current = now;
+              
               const updated = [...prev, ...trulyNewModules];
               return updated.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
             }
@@ -628,10 +680,203 @@ const GuestChatAdminScreen: React.FC<GuestChatAdminScreenProps> = ({ route, navi
   };
 
   const sendMessage = async () => {
-    if (!messageText.trim() || !currentUser || !eventId) return;
+    if ((!messageText.trim() && !selectedFile) || !currentUser || !eventId) return;
 
     const textToSend = messageText.trim();
     setMessageText(''); // Clear input immediately
+    
+    let attachment = null;
+    
+    // Upload file if selected
+    if (selectedFile) {
+      setUploading(true);
+      try {
+        const fileExt = selectedFile.name.split('.').pop()?.toLowerCase();
+        const fileName = `${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExt}`;
+        
+        // Determine proper MIME type from file extension
+        let mimeType = selectedFile.type;
+        
+        // Handle image files
+        if (fileExt === 'jpg' || fileExt === 'jpeg') {
+          mimeType = 'image/jpeg';
+        } else if (fileExt === 'png') {
+          mimeType = 'image/png';
+        } else if (fileExt === 'gif') {
+          mimeType = 'image/gif';
+        } else if (fileExt === 'webp') {
+          mimeType = 'image/webp';
+        } else if (fileExt === 'svg') {
+          mimeType = 'image/svg+xml';
+        } else if (fileExt === 'bmp') {
+          mimeType = 'image/bmp';
+        } else if (fileExt === 'tiff' || fileExt === 'tif') {
+          mimeType = 'image/tiff';
+        }
+        // Handle video files
+        else if (fileExt === 'mp4') {
+          mimeType = 'video/mp4';
+        } else if (fileExt === 'mpeg' || fileExt === 'mpg') {
+          mimeType = 'video/mpeg';
+        } else if (fileExt === 'mov') {
+          mimeType = 'video/quicktime';
+        } else if (fileExt === 'avi') {
+          mimeType = 'video/x-msvideo';
+        } else if (fileExt === 'wmv') {
+          mimeType = 'video/x-ms-wmv';
+        } else if (fileExt === 'webm') {
+          mimeType = 'video/webm';
+        } else if (fileExt === 'ogv') {
+          mimeType = 'video/ogg';
+        }
+        // Handle audio files
+        else if (fileExt === 'mp3') {
+          mimeType = 'audio/mpeg';
+        } else if (fileExt === 'wav') {
+          mimeType = 'audio/wav';
+        } else if (fileExt === 'ogg') {
+          mimeType = 'audio/ogg';
+        } else if (fileExt === 'm4a') {
+          mimeType = 'audio/m4a';
+        } else if (fileExt === 'aac') {
+          mimeType = 'audio/aac';
+        } else if (fileExt === 'flac') {
+          mimeType = 'audio/flac';
+        }
+        // Handle document files
+        else if (fileExt === 'pdf') {
+          mimeType = 'application/pdf';
+        } else if (fileExt === 'doc') {
+          mimeType = 'application/msword';
+        } else if (fileExt === 'docx') {
+          mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+        } else if (fileExt === 'xls') {
+          mimeType = 'application/vnd.ms-excel';
+        } else if (fileExt === 'xlsx') {
+          mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+        } else if (fileExt === 'ppt') {
+          mimeType = 'application/vnd.ms-powerpoint';
+        } else if (fileExt === 'pptx') {
+          mimeType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+        } else if (fileExt === 'csv') {
+          mimeType = 'text/csv';
+        } else if (fileExt === 'txt') {
+          mimeType = 'text/plain';
+        } else if (fileExt === 'html' || fileExt === 'htm') {
+          mimeType = 'text/html';
+        } else if (fileExt === 'css') {
+          mimeType = 'text/css';
+        } else if (fileExt === 'js') {
+          mimeType = 'text/javascript';
+        } else if (fileExt === 'json') {
+          mimeType = 'application/json';
+        } else if (fileExt === 'xml') {
+          mimeType = 'application/xml';
+        } else if (fileExt === 'rtf') {
+          mimeType = 'application/rtf';
+        } else if (fileExt === 'tex') {
+          mimeType = 'application/x-tex';
+        } else if (fileExt === 'md' || fileExt === 'markdown') {
+          mimeType = 'text/markdown';
+        } else if (fileExt === 'yaml' || fileExt === 'yml') {
+          mimeType = 'application/x-yaml';
+        }
+        // Handle archive files
+        else if (fileExt === 'zip') {
+          mimeType = 'application/zip';
+        } else if (fileExt === 'rar') {
+          mimeType = 'application/x-rar-compressed';
+        } else if (fileExt === '7z') {
+          mimeType = 'application/x-7z-compressed';
+        } else if (fileExt === 'gz') {
+          mimeType = 'application/gzip';
+        } else if (fileExt === 'tar') {
+          mimeType = 'application/x-tar';
+        }
+        // Fallback for other file types
+        else if (mimeType === 'image') {
+          mimeType = 'image/jpeg'; // default for generic image type
+        } else if (mimeType === 'video') {
+          mimeType = 'video/mp4'; // default for generic video type
+        } else if (mimeType === 'audio') {
+          mimeType = 'audio/mpeg'; // default for generic audio type
+        }
+        
+        console.log('[UPLOAD DEBUG] Starting upload for file:', selectedFile.name);
+        console.log('[UPLOAD DEBUG] File URI:', selectedFile.uri);
+        console.log('[UPLOAD DEBUG] File type:', selectedFile.type);
+        console.log('[UPLOAD DEBUG] File size:', selectedFile.size);
+        
+        // Use the PROVEN working approach from TimelineScreen
+        console.log('[UPLOAD DEBUG] Using TimelineScreen upload method...');
+        
+        // Read file as base64
+        const base64 = await FileSystem.readAsStringAsync(selectedFile.uri, {
+          encoding: FileSystem.EncodingType.Base64
+        });
+        
+        console.log('[UPLOAD DEBUG] Calling guest-upload-image Edge Function...');
+        console.log('[UPLOAD DEBUG] Edge Function URL: https://ijsktwmevnqgzwwuggkf.functions.supabase.co/guest-upload-image');
+        
+        // Create AbortController for timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+        
+        try {
+          const response = await fetch('https://ijsktwmevnqgzwwuggkf.functions.supabase.co/guest-upload-image', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${supabaseAnonKey}`,
+              'apikey': supabaseAnonKey
+            },
+            body: JSON.stringify({
+              guest_id: 'chat-upload',
+              module_id: 'chat-media',
+              event_id: eventId,
+              file_base64: base64,
+              file_type: mimeType,
+              upload_type: 'chat' // This tells the Edge Function to upload to chat-attachments bucket
+            }),
+            signal: controller.signal
+          });
+          
+          clearTimeout(timeoutId);
+          
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error('[UPLOAD DEBUG] Edge Function error:', response.status, errorText);
+            throw new Error(`Edge Function failed: ${response.status} - ${errorText}`);
+          }
+          
+          const result = await response.json();
+          console.log('[UPLOAD DEBUG] Edge Function success:', result);
+          
+          // Create attachment object with the correct URL
+          attachment = {
+            url: result.url,
+            filename: selectedFile.name,
+            type: mimeType,
+            size: selectedFile.size
+          };
+          
+          console.log('[ATTACHMENT DEBUG] Created attachment object:', attachment);
+        } catch (fetchError: any) {
+          clearTimeout(timeoutId);
+          if (fetchError.name === 'AbortError') {
+            throw new Error('Upload timeout - request took too long');
+          }
+          throw fetchError;
+        }
+        
+      } catch (error) {
+        console.error('File upload failed:', error);
+        setShowUploadErrorModal(true);
+        setUploading(false);
+        return;
+      }
+      setUploading(false);
+    }
 
     // Create optimistic message
     console.log('[SEND DEBUG] Current user data:', {
@@ -645,9 +890,9 @@ const GuestChatAdminScreen: React.FC<GuestChatAdminScreenProps> = ({ route, navi
       sender_email: currentUser.email,
       sender_name: currentUser.name || currentUser.email,
       sender_type: 'admin',
-              avatar_url: currentUser.avatar_url,
-      message_text: textToSend,
-      message_type: 'text',
+      avatar_url: currentUser.avatar_url,
+      message_text: textToSend, // Only send the actual text, not the attachment URL
+      message_type: attachment ? 'file' : 'text',
       created_at: new Date().toISOString(),
       company_id: currentUser.company_id,
       is_edited: false,
@@ -658,13 +903,23 @@ const GuestChatAdminScreen: React.FC<GuestChatAdminScreenProps> = ({ route, navi
     setMessages(prev => [...prev, optimisticMessage]);
 
     try {
+      console.log('[SEND DEBUG] Calling send_guests_chat_message with params:', {
+        p_event_id: eventId,
+        p_sender_email: currentUser.email,
+        p_message_text: textToSend, // Always send the text, even with attachments
+        p_message_type: attachment ? 'file' : 'text',
+        p_reply_to_message_id: replyTo?.message_id || null
+      });
+      
       const { data, error } = await supabase.rpc('send_guests_chat_message', {
         p_event_id: eventId,
         p_sender_email: currentUser.email,
-        p_message_text: textToSend,
-        p_message_type: 'text',
+        p_message_text: textToSend, // Always send the text, even with attachments
+        p_message_type: attachment ? 'file' : 'text',
         p_reply_to_message_id: replyTo?.message_id || null
       });
+
+      console.log('[SEND DEBUG] send_guests_chat_message response:', { data, error });
 
       if (error) {
         console.error('[GUESTS_CHAT] Error sending message:', error);
@@ -674,32 +929,80 @@ const GuestChatAdminScreen: React.FC<GuestChatAdminScreenProps> = ({ route, navi
         return;
       }
 
-      // Replace optimistic message with real message
-      if (data && data.length > 0) {
-        const realMessage = data[0];
-        setMessages(prev => prev.map(msg => 
-          msg.message_id === optimisticMessage.message_id ? {
-            message_id: realMessage.message_id,
-            event_id: realMessage.event_id,
-            sender_email: realMessage.sender_email,
-            sender_name: realMessage.sender_name,
-            sender_type: realMessage.sender_type,
-            avatar_url: realMessage.avatar_url,
-            message_text: realMessage.message_text,
-            message_type: realMessage.message_type,
-            created_at: realMessage.created_at,
-            company_id: realMessage.company_id,
-            is_edited: realMessage.is_edited || false,
-            edited_at: realMessage.edited_at,
-            reply_to_message_id: realMessage.reply_to_message_id,
-            reactions: []
-          } : msg
-        ));
+            // Replace optimistic message with real message
+      console.log('[SEND DEBUG] Data structure:', data);
+      
+      // Handle both array and object responses
+      const realMessage = Array.isArray(data) ? data[0] : data;
+      
+      if (realMessage) {
+        console.log('[SEND DEBUG] Real message received:', realMessage);
+        
+        // The RPC response doesn't have all fields, so we need to add them
+        const completeMessage = {
+          ...realMessage,
+          sender_email: currentUser.email,
+          message_text: textToSend, // Only send the actual text, not the attachment URL
+          message_type: attachment ? 'file' : 'text',
+          company_id: currentUser.company_id,
+          is_edited: false,
+          edited_at: null,
+          reply_to_message_id: replyTo?.message_id || null,
+          reactions: []
+        };
+        
+        // Store attachment in the proper attachments table
+        if (attachment) {
+          console.log('[SEND DEBUG] Storing attachment in database');
+          try {
+            const { error: insertError } = await supabase.rpc('add_message_attachment', {
+              p_message_id: realMessage.message_id,
+              p_file_url: attachment.url,
+              p_filename: attachment.filename,
+              p_file_type: attachment.type,
+              p_file_size: attachment.size || 0
+            });
+            if (insertError) throw insertError;
+
+            // Immediately attach to local message for instant render
+            setMessages(prev => prev.map(msg =>
+              msg.message_id === realMessage.message_id
+                ? { ...msg, attachment_url: attachment.url, attachment_filename: attachment.filename, attachment_type: attachment.type }
+                : msg
+            ));
+
+            // activity: admin shared attachment
+            insertActivityLogMobile({
+              company_id: currentUser.company_id,
+              user_id: currentUser.id,
+              event_id: eventId,
+              action: 'chat_attachment',
+              summary: `${currentUser.name || 'Admin'} shared a ${attachment.type.startsWith('image/') ? 'photo' : attachment.type.startsWith('video/') ? 'video' : 'file'}`,
+              meta: { filename: attachment.filename }
+            });
+          } catch (insertError) {
+            console.error('[SEND DEBUG] Error storing attachment:', insertError);
+          }
+        }
+
+        // Replace optimistic message
+        setMessages(prev => prev.map(msg => msg.message_id === optimisticMessage.message_id ? completeMessage : msg));
+
+        // activity: admin sent message
+        insertActivityLogMobile({
+          company_id: currentUser.company_id,
+          user_id: currentUser.id,
+          event_id: eventId,
+          action: 'chat_message',
+          summary: `${currentUser.name || 'Admin'} sent a message`,
+          meta: { preview: textToSend.slice(0, 80) }
+        });
       }
 
       console.log('[REPLY DEBUG] Clearing replyTo after sending message');
       setReplyTo(null);
       replyToRef.current = null;
+      setSelectedFile(null); // Clear selected file
     } catch (error) {
       console.error('[GUESTS_CHAT] Error sending message:', error);
       // Remove optimistic message on error
@@ -743,10 +1046,30 @@ const GuestChatAdminScreen: React.FC<GuestChatAdminScreenProps> = ({ route, navi
           console.log('📨 New message received:', payload.new);
           // Add new message to existing state instead of reloading all messages
           const newMessage = payload.new as Message;
+          
+          console.log('[SUBSCRIPTION DEBUG] Message sender_email:', newMessage.sender_email);
+          console.log('[SUBSCRIPTION DEBUG] Current user email:', currentUser?.email);
+          console.log('[SUBSCRIPTION DEBUG] Emails match:', newMessage.sender_email === currentUser?.email);
+          
+          // Skip messages from current user to avoid duplicates with optimistic updates
+          if (newMessage.sender_email === currentUser?.email) {
+            console.log('[SUBSCRIPTION DEBUG] Skipping message from current user:', newMessage.message_id.substring(0, 8));
+            return;
+          }
+          
           setMessages(prev => {
             // Check if message already exists to avoid duplicates
             const exists = prev.some(msg => msg.message_id === newMessage.message_id);
+            console.log('[SUBSCRIPTION DEBUG] Message exists check:', exists, 'for message:', newMessage.message_id.substring(0, 8));
             if (exists) return prev;
+            
+            // Debounce rapid re-renders
+            const now = Date.now();
+            if (now - lastRenderTime.current < RENDER_DEBOUNCE_MS) {
+              console.log('[SUBSCRIPTION] Debouncing render, too soon since last update');
+              return prev; // Return same reference to prevent re-render
+            }
+            lastRenderTime.current = now;
             
             // Add new message and sort by created_at
             const updated = [...prev, newMessage];
@@ -944,6 +1267,263 @@ const GuestChatAdminScreen: React.FC<GuestChatAdminScreenProps> = ({ route, navi
     }
   };
 
+  const handleAttachmentPress = async () => {
+    console.log('[ATTACHMENT PICKER DEBUG] Opening custom attachment picker modal');
+    setShowAttachmentPickerModal(true);
+  };
+
+  const pickImage = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission needed', 'Camera roll permissions are required to select images.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+        allowsMultipleSelection: false,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        
+        // Check file size (10MB limit)
+        if (asset.fileSize && asset.fileSize > 10 * 1024 * 1024) {
+          Alert.alert('File too large', 'File size must be less than 10MB');
+          return;
+        }
+        
+        // Determine proper MIME type from file extension
+        let mimeType = asset.type || 'image/jpeg';
+        const fileName = asset.fileName || `image_${Date.now()}.jpg`;
+        const fileExt = fileName.split('.').pop()?.toLowerCase();
+        
+        // Handle image files
+        if (fileExt === 'jpg' || fileExt === 'jpeg') {
+          mimeType = 'image/jpeg';
+        } else if (fileExt === 'png') {
+          mimeType = 'image/png';
+        } else if (fileExt === 'gif') {
+          mimeType = 'image/gif';
+        } else if (fileExt === 'webp') {
+          mimeType = 'image/webp';
+        } else if (fileExt === 'svg') {
+          mimeType = 'image/svg+xml';
+        } else if (fileExt === 'bmp') {
+          mimeType = 'image/bmp';
+        } else if (fileExt === 'tiff' || fileExt === 'tif') {
+          mimeType = 'image/tiff';
+        }
+        // Fallback for other file types
+        else if (mimeType === 'image') {
+          mimeType = 'image/jpeg'; // default for generic image type
+        }
+        
+        console.log('[PICK IMAGE DEBUG] Asset:', {
+          uri: asset.uri,
+          fileName: fileName,
+          originalType: asset.type,
+          fileExt: fileExt,
+          finalMimeType: mimeType,
+          fileSize: asset.fileSize
+        });
+        
+        setSelectedFile({
+          uri: asset.uri,
+          name: fileName,
+          type: mimeType,
+          size: asset.fileSize || 0
+        });
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to select image');
+    }
+  };
+
+  const pickDocument = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: '*/*',
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        
+        // Check file size (10MB limit)
+        if (asset.size && asset.size > 10 * 1024 * 1024) {
+          Alert.alert('File too large', 'File size must be less than 10MB');
+          return;
+        }
+        
+        setSelectedFile({
+          uri: asset.uri,
+          name: asset.name,
+          type: asset.mimeType || 'application/octet-stream',
+          size: asset.size
+        });
+      }
+    } catch (error) {
+      console.error('Error picking document:', error);
+      Alert.alert('Error', 'Failed to select document');
+    }
+  };
+
+  // Android-specific function for Google Photos
+  const pickImageFromGooglePhotos = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission needed', 'Camera roll permissions are required to select images.');
+        return;
+      }
+
+      // For Android, this will show the app chooser including Google Photos
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+        allowsMultipleSelection: false,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        
+        // Check file size (10MB limit)
+        if (asset.fileSize && asset.fileSize > 10 * 1024 * 1024) {
+          Alert.alert('File too large', 'File size must be less than 10MB');
+          return;
+        }
+        
+        // Determine proper MIME type from file extension
+        let mimeType = asset.type || 'image/jpeg';
+        const fileName = asset.fileName || `image_${Date.now()}.jpg`;
+        const fileExt = fileName.split('.').pop()?.toLowerCase();
+        
+        // Handle image files
+        if (fileExt === 'jpg' || fileExt === 'jpeg') {
+          mimeType = 'image/jpeg';
+        } else if (fileExt === 'png') {
+          mimeType = 'image/png';
+        } else if (fileExt === 'gif') {
+          mimeType = 'image/gif';
+        } else if (fileExt === 'webp') {
+          mimeType = 'image/webp';
+        } else if (fileExt === 'svg') {
+          mimeType = 'image/svg+xml';
+        } else if (fileExt === 'bmp') {
+          mimeType = 'image/bmp';
+        } else if (fileExt === 'tiff' || fileExt === 'tif') {
+          mimeType = 'image/tiff';
+        }
+        // Fallback for other file types
+        else if (mimeType === 'image') {
+          mimeType = 'image/jpeg'; // default for generic image type
+        }
+        
+        console.log('[PICK IMAGE FROM GOOGLE PHOTOS DEBUG] Asset:', {
+          uri: asset.uri,
+          fileName: fileName,
+          originalType: asset.type,
+          fileExt: fileExt,
+          finalMimeType: mimeType,
+          fileSize: asset.fileSize
+        });
+        
+        setSelectedFile({
+          uri: asset.uri,
+          name: fileName,
+          type: mimeType,
+          size: asset.fileSize || 0
+        });
+      }
+    } catch (error) {
+      console.error('Error picking image from Google Photos:', error);
+      Alert.alert('Error', 'Failed to select image');
+    }
+  };
+
+  // Android-specific function for taking photos
+  const takePhoto = async () => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission needed', 'Camera permissions are required to take photos.');
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+        allowsMultipleSelection: false,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        
+        // Check file size (10MB limit)
+        if (asset.fileSize && asset.fileSize > 10 * 1024 * 1024) {
+          Alert.alert('File too large', 'File size must be less than 10MB');
+          return;
+        }
+        
+        // Determine proper MIME type from file extension
+        let mimeType = asset.type || 'image/jpeg';
+        const fileName = asset.fileName || `photo_${Date.now()}.jpg`;
+        const fileExt = fileName.split('.').pop()?.toLowerCase();
+        
+        // Handle image files
+        if (fileExt === 'jpg' || fileExt === 'jpeg') {
+          mimeType = 'image/jpeg';
+        } else if (fileExt === 'png') {
+          mimeType = 'image/png';
+        } else if (fileExt === 'gif') {
+          mimeType = 'image/gif';
+        } else if (fileExt === 'webp') {
+          mimeType = 'image/webp';
+        } else if (fileExt === 'svg') {
+          mimeType = 'image/svg+xml';
+        } else if (fileExt === 'bmp') {
+          mimeType = 'image/bmp';
+        } else if (fileExt === 'tiff' || fileExt === 'tif') {
+          mimeType = 'image/tiff';
+        }
+        // Fallback for other file types
+        else if (mimeType === 'image') {
+          mimeType = 'image/jpeg'; // default for generic image type
+        }
+        
+        console.log('[TAKE PHOTO DEBUG] Asset:', {
+          uri: asset.uri,
+          fileName: fileName,
+          originalType: asset.type,
+          fileExt: fileExt,
+          finalMimeType: mimeType,
+          fileSize: asset.fileSize
+        });
+        
+        setSelectedFile({
+          uri: asset.uri,
+          name: fileName,
+          type: mimeType,
+          size: asset.fileSize || 0
+        });
+      }
+    } catch (error) {
+      console.error('Error taking photo:', error);
+      Alert.alert('Error', 'Failed to take photo');
+    }
+  };
+
   const handleReply = (message: Message) => {
     setReplyTo(message);
     replyToRef.current = message;
@@ -1015,6 +1595,247 @@ const GuestChatAdminScreen: React.FC<GuestChatAdminScreenProps> = ({ route, navi
   const cancelDeleteMode = () => {
     setIsDeleteMode(false);
     setSelectedMessages(new Set());
+  };
+
+  // Attachment Display Component
+        const AttachmentDisplay = ({ messageId }: { messageId: string }) => {
+      const [attachment, setAttachment] = useState<any>(null);
+      const [loading, setLoading] = useState(false); // Changed initial state
+      const [showPreview, setShowPreview] = useState(false);
+      const [imageLoadError, setImageLoadError] = useState(false);
+      const [isVisible, setIsVisible] = useState(false);
+
+      useEffect(() => {
+        // Skip fetching for temporary message IDs
+        if (messageId.startsWith('temp-')) {
+          setLoading(false);
+          return;
+        }
+
+        // Check cache first
+        if (attachmentCache.current.has(messageId)) {
+          setAttachment(attachmentCache.current.get(messageId));
+          return;
+        }
+
+        // Only fetch if visible
+        if (!isVisible) {
+          return;
+        }
+
+        const fetchAttachment = async () => {
+        try {
+          // First check if there's a data URL in the message text (for backward compatibility)
+          const message = messages.find(m => m.message_id === messageId);
+          const isDataUrl = message?.message_text?.startsWith('data:');
+          
+          if (isDataUrl) {
+            // Extract file type from data URL
+            const dataUrlMatch = message.message_text.match(/^data:([^;]+);base64,/);
+            const mimeType = dataUrlMatch ? dataUrlMatch[1] : 'image/jpeg';
+            const filename = `attachment_${messageId.substring(0, 8)}.${mimeType.split('/')[1] || 'jpg'}`;
+            
+            setAttachment({
+              file_url: message.message_text,
+              file_type: mimeType,
+              filename: filename
+            });
+            setLoading(false);
+            return;
+          }
+
+          // Check if message has attachment properties directly
+          if (message?.attachment_url || message?.attachment_filename) {
+            setAttachment({
+              file_url: message.attachment_url || message.message_text,
+              file_type: message.attachment_type || 'image/jpeg',
+              filename: message.attachment_filename || `attachment_${messageId.substring(0, 8)}.jpg`
+            });
+            setLoading(false);
+            return;
+          }
+
+          // Otherwise, try to fetch from the proper attachments table
+          try {
+            const { data, error } = await supabase
+              .from('guests_chat_attachments')
+              .select('*')
+              .eq('message_id', messageId)
+              .single();
+            
+            if (error) {
+              // Don't log error if table doesn't exist or no rows found
+              if (error.code !== 'PGRST116') {
+                console.error('Error fetching attachment:', error);
+              }
+              return;
+            }
+            
+            if (data) {
+              const attachmentData = {
+                file_url: data.file_url,
+                file_type: data.file_type,
+                filename: data.filename
+              };
+              // Cache the attachment
+              attachmentCache.current.set(messageId, attachmentData);
+              setAttachment(attachmentData);
+            }
+          } catch (tableError) {
+            // Table might not exist, which is fine
+            console.log('Attachments table not accessible, skipping database fetch');
+          }
+        } catch (error) {
+          console.error('Exception fetching data URL:', error);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      fetchAttachment();
+    }, [messageId, messages, isVisible]);
+
+    // Check if this message is currently visible
+    useEffect(() => {
+      setIsVisible(visibleMessageIds.has(messageId));
+    }, [messageId, visibleMessageIds]);
+
+    // Don't render anything if loading or no attachment
+    if (loading || !attachment) {
+      console.log('[ATTACHMENT DISPLAY DEBUG] Not rendering - loading:', loading, 'attachment:', !!attachment);
+      return null;
+    }
+
+    console.log('[ATTACHMENT DISPLAY DEBUG] Rendering attachment:', {
+      file_type: attachment.file_type,
+      file_url: attachment.file_url.substring(0, 50) + '...',
+      filename: attachment.filename
+    });
+
+    const isImage = attachment.file_type?.startsWith('image/');
+    const isVideo = attachment.file_type?.startsWith('video/');
+    const isAudio = attachment.file_type?.startsWith('audio/');
+
+    console.log('[ATTACHMENT DISPLAY DEBUG] File type checks:', {
+      isImage,
+      isVideo,
+      isAudio,
+      file_type: attachment.file_type
+    });
+
+    return (
+      <>
+        <TouchableOpacity 
+          style={styles.attachmentContainer}
+          onPress={() => setShowPreview(true)}
+        >
+          {isImage ? (
+            <View style={styles.attachmentImageContainer}>
+              {!imageLoadError ? (
+                <Image 
+                  source={{ uri: attachment.file_url }} 
+                  style={styles.attachmentImage}
+                  resizeMode="cover"
+                  onLoad={() => console.log('[IMAGE DEBUG] Image loaded successfully from data URL')}
+                  onError={(error) => {
+                    console.log('[IMAGE DEBUG] Image failed to load from data URL:', error);
+                    setImageLoadError(true);
+                  }}
+                />
+              ) : (
+                <View style={styles.attachmentImageFallback}>
+                  <Text style={styles.attachmentImageFallbackText}>Image Not Available</Text>
+                </View>
+              )}
+            </View>
+          ) : isVideo ? (
+            <View style={styles.attachmentVideo}>
+              <Text style={styles.attachmentIcon}>🎥</Text>
+              <Text style={styles.attachmentText}>{attachment.filename}</Text>
+            </View>
+          ) : isAudio ? (
+            <View style={styles.attachmentAudio}>
+              <Text style={styles.attachmentIcon}>🎵</Text>
+              <Text style={styles.attachmentText}>{attachment.filename}</Text>
+            </View>
+          ) : (
+            <View style={styles.attachmentFile}>
+              <Text style={styles.attachmentIcon}>📄</Text>
+              <Text style={styles.attachmentText}>{attachment.filename}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+
+        {/* Full Preview Modal */}
+        <Modal
+          visible={showPreview}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowPreview(false)}
+        >
+          <View style={styles.previewModalOverlay}>
+            <View style={styles.previewModalContent}>
+              <TouchableOpacity 
+                style={styles.previewCloseButton}
+                onPress={() => setShowPreview(false)}
+              >
+                <Text style={styles.previewCloseText}>✕</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={styles.previewDownloadButton}
+                onPress={() => {
+                  console.log('[DOWNLOAD DEBUG] Download button pressed');
+                  setDownloadAttachment(attachment);
+                  setShowDownloadModal(true);
+                }}
+              >
+                <Text style={styles.previewDownloadText}>⋮</Text>
+              </TouchableOpacity>
+              
+              {isImage ? (
+                <View style={styles.previewImageContainer}>
+                  {!imageLoadError ? (
+                    <Image 
+                      source={{ uri: attachment.file_url }} 
+                      style={styles.previewImage}
+                      resizeMode="contain"
+                      onError={(error) => {
+                        console.log('[PREVIEW DEBUG] Image failed to load in preview:', error);
+                        setImageLoadError(true);
+                      }}
+                    />
+                  ) : (
+                    <View style={styles.previewImageFallback}>
+                      <Text style={styles.previewImageFallbackText}>Image Not Available</Text>
+                    </View>
+                  )}
+                </View>
+              ) : isVideo ? (
+                <View style={styles.previewVideo}>
+                  <Text style={styles.previewVideoText}>🎥 Video Preview</Text>
+                  <Text style={styles.previewVideoSubtext}>{attachment.filename}</Text>
+                </View>
+              ) : isAudio ? (
+                <View style={styles.previewAudio}>
+                  <Text style={styles.previewAudioIcon}>🎵</Text>
+                  <Text style={styles.previewAudioText}>{attachment.filename}</Text>
+                  <Text style={styles.previewAudioSubtext}>Audio preview not available</Text>
+                </View>
+              ) : (
+                <View style={styles.previewFile}>
+                  <Text style={styles.previewFileIcon}>📄</Text>
+                  <Text style={styles.previewFileText}>{attachment.filename}</Text>
+                  <Text style={styles.previewFileSubtext}>File preview not available</Text>
+                </View>
+              )}
+            </View>
+          </View>
+        </Modal>
+
+
+      </>
+    );
   };
 
   const renderReactions = (messageReactions: {[emoji: string]: {count: number, reacted: boolean}}) => {
@@ -1097,25 +1918,43 @@ const GuestChatAdminScreen: React.FC<GuestChatAdminScreenProps> = ({ route, navi
         ]}>
           {/* Reply preview if this is a reply */}
           {message.reply_to_message_id && (
-            <View style={styles.replyPreview}>
+            <TouchableOpacity 
+              style={styles.replyPreview}
+              onPress={() => scrollToMessage(message.reply_to_message_id!)}
+              activeOpacity={0.7}
+            >
               <Text style={styles.replyText}>
                 {messages.find(m => m.message_id === message.reply_to_message_id)?.message_text || 'Original message not found'}
               </Text>
-            </View>
+            </TouchableOpacity>
           )}
 
           {/* Message bubble */}
           <View style={[
             styles.messageBubble, 
             isCurrentUser ? styles.sentBubble : styles.receivedBubble,
-            isDeleteMode && isCurrentUser && isSelected && styles.selectedMessageBorder
+            isDeleteMode && isCurrentUser && isSelected && styles.selectedMessageBorder,
+            highlightedMessageId === message.message_id && styles.highlightedMessage
           ]}>
-            <Text style={[
-              styles.messageText, 
-              isCurrentUser ? styles.sentMessageText : styles.receivedMessageText
-            ]}>
-              {message.message_text || 'Message text unavailable'}
-            </Text>
+            {/* Attachment display - for file, image, and other attachment messages */}
+            {(message.message_type === 'file' || 
+              message.message_type === 'image' || 
+              message.message_type === 'video' || 
+              message.message_type === 'audio' ||
+              message.attachment_url ||
+              message.attachment_filename) && (
+              <AttachmentDisplay messageId={message.message_id} />
+            )}
+            
+            {/* Only show text if there actually is text content - now below attachments */}
+            {message.message_text && message.message_text.trim() && (
+              <Text style={[
+                styles.messageText, 
+                isCurrentUser ? styles.sentMessageText : styles.receivedMessageText
+              ]}>
+                {message.message_text}
+              </Text>
+            )}
           </View>
 
           {/* Reactions */}
@@ -1306,6 +2145,31 @@ const GuestChatAdminScreen: React.FC<GuestChatAdminScreenProps> = ({ route, navi
             style={styles.messagesContainer}
             contentContainerStyle={styles.messagesContent}
             showsVerticalScrollIndicator={false}
+            onScroll={(event) => {
+              // Track visible items for lazy loading attachments
+              const { contentOffset, layoutMeasurement } = event.nativeEvent;
+              const visibleY = contentOffset.y;
+              const screenHeight = layoutMeasurement.height;
+              
+              // Simple visibility check - if item is within viewport
+              const visibleMessageIds = new Set<string>();
+              messages.forEach((message, index) => {
+                // Estimate position based on index (rough calculation)
+                const estimatedPosition = index * 100; // Approximate message height
+                if (estimatedPosition >= visibleY - 200 && estimatedPosition <= visibleY + screenHeight + 200) {
+                  visibleMessageIds.add(message.message_id);
+                }
+              });
+              
+              // Debounce visibility updates
+              if (visibilityUpdateTimeout.current) {
+                clearTimeout(visibilityUpdateTimeout.current);
+              }
+              visibilityUpdateTimeout.current = setTimeout(() => {
+                setVisibleMessageIds(visibleMessageIds);
+              }, 100);
+            }}
+            scrollEventThrottle={16}
             refreshControl={
               <RefreshControl
                 refreshing={refreshing}
@@ -1381,13 +2245,13 @@ const GuestChatAdminScreen: React.FC<GuestChatAdminScreenProps> = ({ route, navi
                     />
                   );
                 } else if (item.type === 'module') {
-          
                   return (
                     <TimelineModuleChatItem 
                       key={item.id}
                       module={item} 
                       onPress={() => {
-                        console.log('[TIMELINE MODULE] Pressed:', item.question || item.title);
+                        setSelectedModule(item);
+                        setShowModuleResponse(true);
                       }}
                     />
                   );
@@ -1397,6 +2261,16 @@ const GuestChatAdminScreen: React.FC<GuestChatAdminScreenProps> = ({ route, navi
             })()}
             <TypingIndicator />
           </ScrollView>
+          {showModuleResponse && selectedModule && (
+            <ModuleResponseModal
+              visible={showModuleResponse}
+              module={selectedModule}
+              guestId={null as any}
+              userId={currentUser?.id}
+              eventId={eventId}
+              onClose={() => setShowModuleResponse(false)}
+            />
+          )}
 
           {/* Reply preview */}
           {replyTo && (
@@ -1469,6 +2343,42 @@ const GuestChatAdminScreen: React.FC<GuestChatAdminScreenProps> = ({ route, navi
             </View>
           )}
 
+          {/* File Preview */}
+          {selectedFile && (
+            <View style={styles.filePreview}>
+              <View style={styles.filePreviewContent}>
+
+                {selectedFile.type?.startsWith('image/') ? (
+                  <Image 
+                    source={{ uri: selectedFile.uri }} 
+                    style={styles.filePreviewImage}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View style={styles.fileIcon}>
+                    <MaterialCommunityIcons 
+                      name="file" 
+                      size={24} 
+                      color="#00bfa5" 
+                    />
+                  </View>
+                )}
+                <View style={styles.fileInfo}>
+                  <Text style={styles.fileName}>{selectedFile.name}</Text>
+                  <Text style={styles.fileSize}>
+                    {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.removeFileButton}
+                  onPress={() => setSelectedFile(null)}
+                >
+                  <MaterialCommunityIcons name="close" size={20} color="#666" />
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
           {/* Message input */}
                      <KeyboardAvoidingView
              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -1479,15 +2389,30 @@ const GuestChatAdminScreen: React.FC<GuestChatAdminScreenProps> = ({ route, navi
                 style={styles.textInput}
                 value={editingMessageId ? editText : messageText}
                 onChangeText={editingMessageId ? setEditText : setMessageText}
-                placeholder={editingMessageId ? "Edit your message..." : "Type a message..."}
+                placeholder={editingMessageId ? "Edit your message..." : selectedFile ? "Add a caption (optional)..." : "Type a message..."}
                 placeholderTextColor="#666"
                 multiline
                 maxLength={1000}
+                editable={!uploading}
               />
+              
+              {/* Attachment Button */}
               <TouchableOpacity
-                style={[styles.sendButton, (editingMessageId ? editText.trim() : messageText.trim()) && styles.sendButtonActive]}
+                style={[styles.attachButton, uploading && styles.attachButtonDisabled]}
+                onPress={handleAttachmentPress}
+                disabled={uploading}
+              >
+                <MaterialCommunityIcons 
+                  name="attachment" 
+                  size={20} 
+                  color={uploading ? "#333" : "#666"} 
+                />
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.sendButton, ((editingMessageId ? editText.trim() : messageText.trim()) || selectedFile) && !uploading && styles.sendButtonActive]}
                 onPress={editingMessageId ? () => editMessage(editingMessageId, editText) : sendMessage}
-                disabled={!(editingMessageId ? editText.trim() : messageText.trim())}
+                disabled={(!((editingMessageId ? editText.trim() : messageText.trim()) || selectedFile)) || uploading}
               >
                 <MaterialCommunityIcons 
                   name={editingMessageId ? "check" : "send"} 
@@ -1520,7 +2445,242 @@ const GuestChatAdminScreen: React.FC<GuestChatAdminScreenProps> = ({ route, navi
           </View>
         </View>
       </Modal>
-      
+
+      {/* Custom Attachment Picker Modal */}
+      <Modal
+        visible={showAttachmentPickerModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowAttachmentPickerModal(false)}
+      >
+        <View style={styles.attachmentPickerModalOverlay}>
+          <View style={styles.attachmentPickerModalContent}>
+            <View style={styles.attachmentPickerModalHeader}>
+              <Text style={styles.attachmentPickerModalTitle}>Select Attachment</Text>
+              <TouchableOpacity 
+                onPress={() => setShowAttachmentPickerModal(false)}
+                style={styles.attachmentPickerModalCloseButton}
+              >
+                <Text style={styles.attachmentPickerModalCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.attachmentPickerModalBody}>
+              <Text style={styles.attachmentPickerModalText}>
+                Choose how you want to add an attachment
+              </Text>
+            </View>
+            
+            <View style={styles.attachmentPickerModalActions}>
+              {Platform.OS === 'android' ? (
+                // Android: Show separate options for different gallery apps
+                <>
+                  <TouchableOpacity 
+                    style={styles.attachmentPickerModalButton}
+                    onPress={async () => {
+                      console.log('[ATTACHMENT PICKER DEBUG] Gallery button pressed (Android)');
+                      setShowAttachmentPickerModal(false);
+                      setTimeout(() => {
+                        pickImage();
+                      }, 100);
+                    }}
+                  >
+                    <Text style={styles.attachmentPickerModalButtonText}>Gallery</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={styles.attachmentPickerModalButton}
+                    onPress={async () => {
+                      console.log('[ATTACHMENT PICKER DEBUG] Google Photos button pressed (Android)');
+                      setShowAttachmentPickerModal(false);
+                      setTimeout(() => {
+                        pickImageFromGooglePhotos();
+                      }, 100);
+                    }}
+                  >
+                    <Text style={styles.attachmentPickerModalButtonText}>Google Photos</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={styles.attachmentPickerModalButton}
+                    onPress={async () => {
+                      console.log('[ATTACHMENT PICKER DEBUG] Camera button pressed (Android)');
+                      setShowAttachmentPickerModal(false);
+                      setTimeout(() => {
+                        takePhoto();
+                      }, 100);
+                    }}
+                  >
+                    <Text style={styles.attachmentPickerModalButtonText}>Camera</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                // iOS: Show combined option (iOS handles app selection automatically)
+                <TouchableOpacity 
+                  style={styles.attachmentPickerModalButton}
+                  onPress={async () => {
+                    console.log('[ATTACHMENT PICKER DEBUG] Camera/Gallery button pressed (iOS)');
+                    setShowAttachmentPickerModal(false);
+                    setTimeout(() => {
+                      pickImage();
+                    }, 100);
+                  }}
+                >
+                  <Text style={styles.attachmentPickerModalButtonText}>Camera/Gallery</Text>
+                </TouchableOpacity>
+              )}
+                
+                <TouchableOpacity 
+                  style={styles.attachmentPickerModalButton}
+                  onPress={async () => {
+                    console.log('[ATTACHMENT PICKER DEBUG] Document button pressed');
+                    setShowAttachmentPickerModal(false);
+                    // Add a small delay to ensure modal is closed before opening native picker
+                    setTimeout(() => {
+                      pickDocument();
+                    }, 100);
+                  }}
+                >
+                  <Text style={styles.attachmentPickerModalButtonText}>Document</Text>
+                </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={styles.attachmentPickerModalCancelButton}
+                onPress={() => setShowAttachmentPickerModal(false)}
+              >
+                <Text style={styles.attachmentPickerModalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Custom Download Modal */}
+      <Modal
+        visible={showDownloadModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowDownloadModal(false)}
+        statusBarTranslucent={true}
+      >
+        <View style={styles.downloadModalOverlay}>
+          <View style={styles.downloadModalContent}>
+            <View style={styles.downloadModalHeader}>
+              <Text style={styles.downloadModalTitle}>Download File</Text>
+              <TouchableOpacity 
+                onPress={() => setShowDownloadModal(false)}
+                style={styles.downloadModalCloseButton}
+              >
+                <Text style={styles.downloadModalCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.downloadModalBody}>
+              <Text style={styles.downloadModalText}>
+                Download {downloadAttachment?.filename} to your device?
+              </Text>
+            </View>
+            
+            <View style={styles.downloadModalActions}>
+              <TouchableOpacity 
+                style={styles.downloadModalCancelButton}
+                onPress={() => setShowDownloadModal(false)}
+              >
+                <Text style={styles.downloadModalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={styles.downloadModalDownloadButton}
+                onPress={() => {
+                  // Download function - simulate success for now
+                  setShowDownloadModal(false);
+                  setTimeout(() => {
+                    setShowDownloadSuccessModal(true);
+                  }, 100);
+                }}
+              >
+                <Text style={styles.downloadModalDownloadText}>Download</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Custom Download Success Modal */}
+      <Modal
+        visible={showDownloadSuccessModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowDownloadSuccessModal(false)}
+        statusBarTranslucent={true}
+      >
+        <View style={styles.downloadModalOverlay}>
+          <View style={styles.downloadModalContent}>
+            <View style={styles.downloadModalHeader}>
+              <Text style={styles.downloadModalTitle}>Success</Text>
+              <TouchableOpacity 
+                onPress={() => setShowDownloadSuccessModal(false)}
+                style={styles.downloadModalCloseButton}
+              >
+                <Text style={styles.downloadModalCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.downloadModalBody}>
+              <Text style={styles.downloadModalText}>
+                File downloaded successfully!
+              </Text>
+            </View>
+            
+            <View style={styles.downloadModalActions}>
+              <TouchableOpacity 
+                style={styles.downloadModalDownloadButton}
+                onPress={() => setShowDownloadSuccessModal(false)}
+              >
+                <Text style={styles.downloadModalDownloadText}>OK</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Custom Download Failure Modal */}
+      <Modal
+        visible={showDownloadFailureModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowDownloadFailureModal(false)}
+        statusBarTranslucent={true}
+      >
+        <View style={styles.downloadModalOverlay}>
+          <View style={styles.downloadModalContent}>
+            <View style={styles.downloadModalHeader}>
+              <Text style={styles.downloadModalTitle}>Download Failed</Text>
+              <TouchableOpacity 
+                onPress={() => setShowDownloadFailureModal(false)}
+                style={styles.downloadModalCloseButton}
+              >
+                <Text style={styles.downloadModalCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.downloadModalBody}>
+              <Text style={styles.downloadModalText}>
+                Failed to download file. Please try again.
+              </Text>
+            </View>
+            
+            <View style={styles.downloadModalActions}>
+              <TouchableOpacity 
+                style={styles.downloadModalDownloadButton}
+                onPress={() => setShowDownloadFailureModal(false)}
+              >
+                <Text style={styles.downloadModalDownloadText}>OK</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
     </View>
   );
@@ -1722,11 +2882,17 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     borderLeftWidth: 3,
     borderLeftColor: '#00bfa5',
+    // Make it look more interactive
+    borderWidth: 1,
+    borderColor: 'rgba(0,191,165,0.3)',
   },
   replyText: {
     color: '#999',
     fontSize: 12,
     fontStyle: 'italic',
+    // Make it clear it's clickable
+    textDecorationLine: 'underline',
+    textDecorationColor: '#00bfa5',
   },
   messageBubble: {
     padding: 12,
@@ -1740,6 +2906,15 @@ const styles = StyleSheet.create({
   receivedBubble: {
     backgroundColor: '#2a2a2a',
     borderBottomLeftRadius: 4,
+  },
+  highlightedMessage: {
+    borderWidth: 2,
+    borderColor: '#00bfa5',
+    shadowColor: '#00bfa5',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    elevation: 5,
   },
   messageText: {
     fontSize: 16,
@@ -1890,6 +3065,63 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
     minHeight: 40,
   },
+  attachButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#333',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  attachButtonDisabled: {
+    opacity: 0.5,
+  },
+  filePreview: {
+    backgroundColor: '#2a2a2a',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.1)',
+  },
+  filePreviewImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    marginRight: 12,
+  },
+  filePreviewContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#333',
+    borderRadius: 8,
+    padding: 12,
+  },
+  fileIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    backgroundColor: '#404040',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  fileInfo: {
+    flex: 1,
+  },
+  fileName: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  fileSize: {
+    color: '#999',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  removeFileButton: {
+    padding: 4,
+  },
   sendButton: {
     width: 40,
     height: 40,
@@ -2009,6 +3241,85 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 20,
     borderBottomWidth: 1,
+  },
+  // Attachment styles
+  attachmentLoading: {
+    padding: 8,
+    alignItems: 'center',
+  },
+  attachmentLoadingText: {
+    color: '#999',
+    fontSize: 12,
+  },
+  attachmentContainer: {
+    marginTop: 8,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  attachmentImage: {
+    width: 200,
+    height: 150,
+    borderRadius: 8,
+  },
+  attachmentImageContainer: {
+    position: 'relative',
+    width: 200,
+    height: 150,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  attachmentImageFallback: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  attachmentImageFallbackText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  attachmentVideo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    padding: 12,
+    borderRadius: 8,
+  },
+  attachmentAudio: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    padding: 12,
+    borderRadius: 8,
+  },
+  attachmentFile: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    padding: 12,
+    borderRadius: 8,
+  },
+  attachmentIcon: {
+    fontSize: 24,
+    marginRight: 8,
+  },
+  attachmentText: {
+    color: '#fff',
+    fontSize: 14,
+    flex: 1,
+  },
+  moduleDisplayHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+    borderBottomWidth: 1,
     borderBottomColor: 'rgba(255, 255, 255, 0.1)',
     paddingBottom: 16,
   },
@@ -2090,6 +3401,270 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 14,
     lineHeight: 20,
+  },
+  // Preview Modal Styles
+  previewModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  previewModalContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  previewCloseButton: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 1000,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  previewCloseText: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  previewDownloadButton: {
+    position: 'absolute',
+    top: 50,
+    left: 20,
+    zIndex: 1000,
+    width: 50,
+    height: 50,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  previewDownloadText: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  previewImage: {
+    width: Dimensions.get('window').width,
+    height: Dimensions.get('window').height,
+    flex: 1,
+  },
+  previewImageContainer: {
+    position: 'relative',
+    width: Dimensions.get('window').width,
+    height: Dimensions.get('window').height,
+    flex: 1,
+  },
+  previewImageFallback: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  previewImageFallbackText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  previewVideo: {
+    width: '100%',
+    height: 300,
+    maxWidth: 400,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  previewVideoText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 10,
+  },
+  previewVideoSubtext: {
+    color: '#ccc',
+    fontSize: 14,
+  },
+  previewAudio: {
+    alignItems: 'center',
+    padding: 40,
+  },
+  previewAudioIcon: {
+    fontSize: 60,
+    marginBottom: 20,
+  },
+  previewAudioText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 10,
+  },
+  previewAudioSubtext: {
+    color: '#ccc',
+    fontSize: 14,
+  },
+  previewFile: {
+    alignItems: 'center',
+    padding: 40,
+  },
+  previewFileIcon: {
+    fontSize: 60,
+    marginBottom: 20,
+  },
+  previewFileText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 10,
+  },
+  previewFileSubtext: {
+    color: '#ccc',
+    fontSize: 14,
+  },
+  // Custom Download Modal Styles
+  downloadModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 99999,
+    elevation: 99999,
+  },
+  downloadModalContent: {
+    backgroundColor: '#2a2a2a',
+    borderRadius: 12,
+    padding: 20,
+    margin: 20,
+    minWidth: 300,
+  },
+  downloadModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  downloadModalTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  downloadModalCloseButton: {
+    padding: 5,
+  },
+  downloadModalCloseText: {
+    color: '#ccc',
+    fontSize: 20,
+  },
+  downloadModalBody: {
+    marginBottom: 20,
+  },
+  downloadModalText: {
+    color: '#fff',
+    fontSize: 16,
+    lineHeight: 22,
+  },
+  downloadModalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+  },
+  downloadModalCancelButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  downloadModalCancelText: {
+    color: '#ccc',
+    fontSize: 16,
+  },
+  downloadModalDownloadButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: '#00bfa5',
+  },
+  downloadModalDownloadText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  // Custom Attachment Picker Modal Styles
+  attachmentPickerModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 9999,
+  },
+  attachmentPickerModalContent: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 12,
+    padding: 20,
+    margin: 20,
+    minWidth: 300,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  attachmentPickerModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  attachmentPickerModalTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  attachmentPickerModalCloseButton: {
+    padding: 5,
+  },
+  attachmentPickerModalCloseText: {
+    color: '#ccc',
+    fontSize: 20,
+  },
+  attachmentPickerModalBody: {
+    marginBottom: 20,
+  },
+  attachmentPickerModalText: {
+    color: '#fff',
+    fontSize: 16,
+    lineHeight: 22,
+  },
+  attachmentPickerModalActions: {
+    gap: 10,
+  },
+  attachmentPickerModalButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    borderRadius: 8,
+    backgroundColor: '#00bfa5',
+    marginBottom: 10,
+  },
+  attachmentPickerModalButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  attachmentPickerModalCancelButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    marginTop: 10,
+  },
+  attachmentPickerModalCancelText: {
+    color: '#ccc',
+    fontSize: 16,
+    textAlign: 'center',
   },
 });
 

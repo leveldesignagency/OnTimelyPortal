@@ -10,6 +10,7 @@ import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import * as MediaLibrary from 'expo-media-library';
 import * as FileSystem from 'expo-file-system';
+import { insertActivityLogMobile } from '../lib/supabase';
 
 import { useTheme } from '../ThemeContext';
 import NotificationBadge from '../components/NotificationBadge';
@@ -669,14 +670,24 @@ export default function TimelineScreen({ guest }: { guest: any }) {
 
     const countdownInterval = setInterval(() => {
       setCountdownSeconds(prev => {
-        // console.log('[CountdownTimer] Current seconds:', prev);
         if (prev <= 1) {
-          // console.log('[CountdownTimer] 🚀 Countdown finished, starting animations!');
           setAnimationPhase('title');
           setTimeout(() => setAnimationPhase('info'), 1500);
           setTimeout(() => setAnimationPhase('description'), 3000);
           setTimeout(() => setAnimationPhase('attachments'), 4500);
           setTimeout(() => setAnimationPhase('complete'), 6000);
+          
+          // Log: upcoming item reached (countdown done)
+          if (upcomingItem && fullGuest) {
+            insertActivityLogMobile({
+              company_id: fullGuest.company_id,
+              user_id: null,
+              event_id: fullGuest.event_id,
+              action: 'timeline_checkpoint',
+              summary: `${fullGuest.first_name} ${fullGuest.last_name} reached "${String(upcomingItem.title || 'Itinerary item')}"`,
+              meta: { start_time: upcomingItem.start_time }
+            });
+          }
           return 0;
         }
         return prev - 1;
@@ -684,7 +695,7 @@ export default function TimelineScreen({ guest }: { guest: any }) {
     }, 1000);
 
     return () => clearInterval(countdownInterval);
-  }, [countdownModalVisible, animationPhase]);
+  }, [countdownModalVisible, animationPhase, upcomingItem, fullGuest]);
 
   // Remove the useEffect with [] dependency (initial scroll)
   // Add a handler for ScrollView layout to scroll to current time
@@ -1437,11 +1448,22 @@ export default function TimelineScreen({ guest }: { guest: any }) {
                       onPress={() => {
                         setSelectedMilestone(item);
                         setMilestoneModalVisible(true);
+                        // Log: user opened itinerary item (treat as reached)
+                        if (fullGuest) {
+                          insertActivityLogMobile({
+                            company_id: fullGuest.company_id,
+                            user_id: null,
+                            event_id: fullGuest.event_id,
+                            action: 'timeline_checkpoint',
+                            summary: `${fullGuest.first_name} ${fullGuest.last_name} opened "${String(item.title || 'Itinerary item')}"`,
+                            meta: { start_time: item.start_time }
+                          });
+                        }
                       }}
                       activeOpacity={0.7}
                     >
                       <View style={styles.milestone} />
-                      <Text style={styles.milestoneTitle}>{String(item.title || 'Untitled')}</Text>
+                      <Text style={styles.milestoneTitle}>{String(item.title || 'Event Details')}</Text>
                     </TouchableOpacity>
                   </View>
                 );

@@ -19,6 +19,7 @@ import { supabase } from '../lib/supabase';
 import { useFonts, Poppins_400Regular } from '@expo-google-fonts/poppins';
 import { WebView } from 'react-native-webview';
 import { LinearGradient } from 'expo-linear-gradient';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 interface GuestDashboardProps {
   guest: any;
@@ -183,6 +184,8 @@ export default function GuestDashboard({ guest, onLogout }: GuestDashboardProps)
     { id: 4, message: 'You have 4 unread chat messages...' },
   ];
 
+
+
   const handleLogout = async () => {
     console.log('[GuestDashboard] Logout button pressed');
     Alert.alert(
@@ -260,10 +263,11 @@ export default function GuestDashboard({ guest, onLogout }: GuestDashboardProps)
                 {guestObj?.event_title || guestObj?.event_name}
               </Text>
             </View>
-          )}
-        </View>
-        {/* Main Welcome Title */}
-        <Text style={{
+                      )}
+          </View>
+
+                    {/* Main Welcome Title */}
+          <Text style={{
           fontSize: 30, // increased by ~6px
           fontWeight: 'bold',
           color: '#fff',

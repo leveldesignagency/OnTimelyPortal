@@ -7,15 +7,17 @@ import {
   getEventAddOns, 
   getEventModules,
   getEvent,
-  supabase
+  supabase,
+  exportEventData
 } from '../lib/supabase';
 import { getCurrentUser } from '../lib/auth';
+import { getEventActivityFeed } from '../lib/supabase';
 
 interface DataBundle {
   id: string;
   name: string;
   description: string;
-  type: 'csv' | 'media' | 'combined' | 'txt';
+  type: 'csv' | 'media' | 'combined' | 'txt' | 'pdf';
   category: string;
   estimatedSize: string;
   includes: string[];
@@ -122,12 +124,21 @@ export default function ExportReportPage() {
     },
     {
       id: 'guest-chat',
-      name: 'Guest Chat History',
+      name: 'Guest Chat (CSV)',
       description: 'Complete chat conversations between guests and hosts',
-      type: 'txt',
+      type: 'csv',
       category: 'Communication',
       estimatedSize: '~200KB',
-      includes: ['Message History', 'Timestamps', 'User IDs', 'Chat Sessions']
+      includes: ['Message History', 'Timestamps', 'Sender Info']
+    },
+    {
+      id: 'chat-media',
+      name: 'Guest Chat Media (ZIP)',
+      description: 'All images and videos shared in guest chat',
+      type: 'media',
+      category: 'Communication',
+      estimatedSize: '~varies',
+      includes: ['Images', 'Videos']
     },
     {
       id: 'addon-usage',
@@ -140,12 +151,84 @@ export default function ExportReportPage() {
     },
     {
       id: 'module-responses',
-      name: 'Module Responses',
+      name: 'Module Responses (CSV)',
       description: 'All guest responses to timeline modules and interactive content',
       type: 'csv',
       category: 'Guest Data',
       estimatedSize: '~150KB',
-      includes: ['Guest Responses', 'Module Interactions', 'Response Timestamps', 'Answer Content']
+      includes: ['Question', 'Feedback', 'Multiple Choice', 'Photo/Video metadata']
+    },
+    {
+      id: 'module-media',
+      name: 'Module Media (ZIP)',
+      description: 'All photos and videos uploaded in Module responses',
+      type: 'media',
+      category: 'Guest Data',
+      estimatedSize: '~varies',
+      includes: ['Photos', 'Videos']
+    },
+    {
+      id: 'module-responses-typed',
+      name: 'Module Responses (Typed CSV)',
+      description: 'Structured responses with per-type fields (rating, option, media)',
+      type: 'csv',
+      category: 'Guest Data',
+      estimatedSize: '~180KB',
+      includes: ['Module Type', 'Title/Question', 'Rating', 'Comment', 'Selected Option', 'Media URL/Type']
+    },
+    {
+      id: 'activity-log',
+      name: 'Activity Log (CSV)',
+      description: 'Event-specific activity feed for audit trail',
+      type: 'csv',
+      category: 'Core Data',
+      estimatedSize: '~50KB',
+      includes: ['Action type', 'Actor', 'Timestamp']
+    },
+    {
+      id: 'announcements',
+      name: 'Announcements (CSV)',
+      description: 'All announcements created for the event',
+      type: 'csv',
+      category: 'Communication',
+      estimatedSize: '~30KB',
+      includes: ['Title', 'Description', 'Scheduled/ Sent']
+    },
+    {
+      id: 'announcements-media',
+      name: 'Announcements Media (ZIP)',
+      description: 'All media used within announcements',
+      type: 'media',
+      category: 'Communication',
+      estimatedSize: '~varies',
+      includes: ['Images', 'Videos']
+    },
+    {
+      id: 'itinerary-documents',
+      name: 'Itinerary Documents (ZIP)',
+      description: 'All documents uploaded to itineraries',
+      type: 'media',
+      category: 'Core Data',
+      estimatedSize: '~varies',
+      includes: ['PDF', 'Images', 'Docs']
+    },
+    {
+      id: 'event-activity-feed',
+      name: 'Event Activity Feed (CSV)',
+      description: 'Event Dashboard activity with friendly labels (what users see)',
+      type: 'csv',
+      category: 'Analytics',
+      estimatedSize: '~40KB',
+      includes: ['Actor', 'Action', 'Timestamp']
+    },
+    {
+      id: 'full-data-pdf',
+      name: 'Full Data Export (PDF)',
+      description: 'Beautiful, multi-page analytics PDF summarising all event data',
+      type: 'pdf',
+      category: 'Analytics',
+      estimatedSize: '~0.5-2MB',
+      includes: ['Cover page', 'Key metrics', 'Messages per day', 'Module breakdown', 'Feedback insights', 'Top participants']
     }
   ];
 
@@ -307,14 +390,66 @@ export default function ExportReportPage() {
           case 'guest-chat':
             data = await exportGuestChatHistory();
             break;
+          case 'chat-media': {
+            const url = await exportChatMediaZip();
+            if (!url) throw new Error('No chat media found');
+            setExportJobs(prev => prev.map(j => j.id === job.id ? { ...j, status: 'completed', progress: 100, downloadUrl: url } : j));
+            return;
+          }
+          case 'activity-log':
+            data = await exportActivityLog();
+            break;
+          case 'announcements':
+            data = await exportAnnouncements();
+            break;
+          case 'announcements-media': {
+            const url = await exportAnnouncementsMediaZip();
+            if (!url) throw new Error('No announcement media found');
+            setExportJobs(prev => prev.map(j => j.id === job.id ? { ...j, status: 'completed', progress: 100, downloadUrl: url } : j));
+            return;
+          }
+          case 'itinerary-documents': {
+            const url = await exportItineraryDocsZip();
+            if (!url) throw new Error('No itinerary documents found');
+            setExportJobs(prev => prev.map(j => j.id === job.id ? { ...j, status: 'completed', progress: 100, downloadUrl: url } : j));
+            return;
+          }
           case 'addon-usage':
             data = await exportAddonUsage();
             break;
           case 'module-responses':
             data = await exportModuleResponses();
             break;
+          case 'module-media': {
+            const url = await exportModuleMediaZip();
+            if (!url) throw new Error('No module media found');
+            setExportJobs(prev => prev.map(j => j.id === job.id ? { ...j, status: 'completed', progress: 100, downloadUrl: url } : j));
+            return;
+          }
+          case 'module-responses-typed':
+            data = await exportModuleResponsesTyped();
+            break;
+          case 'module-responses-pdf': {
+            const url = await exportModuleResponsesPDF();
+            setExportJobs(prev => prev.map(j => j.id === job.id ? { ...j, status: 'completed', progress: 100, downloadUrl: url } : j));
+            return;
+          }
+          case 'event-activity-feed': {
+            const user = await getCurrentUser();
+            const companyId = user?.company_id || '';
+            const feed = resolvedEventId ? await getEventActivityFeed(resolvedEventId, companyId, 500, 0) : [];
+            const url = createDownloadUrl(feed, `${job.bundleId}_export`, job.bundleId);
+            setExportJobs(prev => prev.map(j => j.id === job.id ? { ...j, status: 'completed', progress: 100, downloadUrl: url } : j));
+            return;
+          }
+          case 'full-data-pdf': {
+            const url = await exportFullAnalyticsPDF();
+            setExportJobs(prev => prev.map(j => j.id === job.id ? { ...j, status: 'completed', progress: 100, downloadUrl: url } : j));
+            return;
+          }
           default:
-            throw new Error(`Unknown bundle type: ${job.bundleId}`);
+            console.warn(`⚠️ Unknown bundle id: ${job.bundleId}`);
+            data = [];
         }
       } catch (error: any) {
         console.error(`❌ Error in data export for ${job.bundleId}:`, error);
@@ -521,44 +656,22 @@ export default function ExportReportPage() {
         console.error('❌ No eventId provided for guest chat history export');
         return [];
       }
-      
-      console.log('🔍 Starting exportGuestChatHistory for eventId:', resolvedEventId);
-      
-      // Get current authenticated user
-      const currentUser = await getCurrentUser();
-      console.log('🔍 Current authenticated user:', currentUser);
-      
-      if (!currentUser) {
-        console.error('❌ No authenticated user found');
-        return [];
-      }
-      
-      // Use authenticated Supabase client
-      const { data: chatHistory, error } = await supabase
-        .from('guest_chat_history')
+      const { data, error } = await supabase
+        .from('guests_chat_messages')
         .select('*')
         .eq('event_id', resolvedEventId)
-        .eq('company_id', currentUser.company_id)
-        .order('created_at', { ascending: false });
-      
-      if (error) {
-        console.error('❌ Error fetching guest chat history:', error);
-        return [];
-      }
-      
-      console.log('🔍 Direct guest chat history query result:', chatHistory);
-      console.log('🔍 Number of chat history records found:', chatHistory?.length || 0);
-      
-      if (!chatHistory || chatHistory.length === 0) {
-        console.log('📝 No guest chat history found, returning empty array with headers');
-        return [];
-      }
-      
-      return chatHistory;
-    } catch (error: any) {
-      console.warn('❌ Error fetching guest chat history:', error);
-      return [];
-    }
+        .order('created_at', { ascending: true });
+      if (error) { console.error('❌ Chat export error', error); return []; }
+      return (data || []).map((m: any) => ({
+        id: m.message_id,
+        event_id: m.event_id,
+        sender_email: m.sender_email,
+        sender_name: m.sender_name,
+        message_text: m.message_text,
+        message_type: m.message_type,
+        created_at: m.created_at,
+      }));
+    } catch (e) { console.warn('Chat export exception', e); return []; }
   };
 
   const exportAddonUsage = async () => {
@@ -613,66 +726,285 @@ export default function ExportReportPage() {
         console.error('❌ No eventId provided for module responses export');
         return [];
       }
-      
       console.log('🔍 Starting exportModuleResponses for eventId:', resolvedEventId);
-      
-      // Get current authenticated user
       const currentUser = await getCurrentUser();
-      console.log('🔍 Current authenticated user:', currentUser);
-      
-      if (!currentUser) {
-        console.error('❌ No authenticated user found');
-        return [];
-      }
-      
-      // Query guest_module_answers with guest information
+      if (!currentUser) return [];
+
       const { data: moduleResponses, error } = await supabase
         .from('guest_module_answers')
-        .select(`
-          *,
-          guests!inner(
-            first_name,
-            last_name,
-            email,
-            company_id
-          )
-        `)
+        .select(`*, guests!left(first_name,last_name,email), users!left(name,email)`)
         .eq('event_id', resolvedEventId)
-        .eq('guests.company_id', currentUser.company_id)
-        .order('timestamp', { ascending: false });
-      
-      if (error) {
-        console.error('❌ Error fetching module responses:', error);
-        return [];
-      }
-      
-      console.log('🔍 Direct module responses query result:', moduleResponses);
-      console.log('🔍 Number of module responses found:', moduleResponses?.length || 0);
-      
-      if (!moduleResponses || moduleResponses.length === 0) {
-        console.log('📝 No module responses found, returning empty array with headers');
-        return [];
-      }
-      
-      // Transform the data to flatten the guest information
-      const transformedResponses = moduleResponses.map(response => ({
-        id: response.id,
-        event_id: response.event_id,
-        module_id: response.module_id,
-        guest_id: response.guest_id,
-        guest_name: `${response.guests?.first_name || ''} ${response.guests?.last_name || ''}`.trim(),
-        guest_email: response.guests?.email || '',
-        answer_text: response.answer_text,
-        timestamp: response.timestamp,
-        created_at: response.created_at
+        .order('created_at', { ascending: false });
+      if (error) return [];
+
+      const transformed = (moduleResponses || []).map(r => ({
+        id: r.id,
+        event_id: r.event_id,
+        module_id: r.module_id,
+        actor_name: r.users?.name || `${r.guests?.first_name || ''} ${r.guests?.last_name || ''}`.trim(),
+        actor_email: r.users?.email || r.guests?.email || '',
+        answer_text: r.answer_text,
+        created_at: r.created_at
       }));
-      
-      console.log('🔍 Transformed module responses:', transformedResponses);
-      return transformedResponses;
-    } catch (error: any) {
-      console.warn('❌ Error fetching module responses:', error);
+      return transformed;
+    } catch {
+        return [];
+      }
+  };
+
+  const getSignedUrlIfPossible = async (rawUrl: string): Promise<string> => {
+    try {
+      // Try to extract bucket and path from a Supabase storage URL
+      const mPublic = rawUrl.match(/storage\/v1\/object\/public\/([^\/]+)\/(.+)$/);
+      const mSign = rawUrl.match(/storage\/v1\/object\/sign\/([^\/]+)\/(.+)\?/);
+      let bucket = '';
+      let path = '';
+      if (mPublic) { bucket = mPublic[1]; path = mPublic[2]; }
+      else if (mSign) { bucket = mSign[1]; path = mSign[2]; }
+      if (bucket && path) {
+        const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 60);
+        if (!error && data?.signedUrl) return data.signedUrl;
+      }
+      return rawUrl; // fallback to raw URL
+    } catch {
+      return rawUrl;
+    }
+  };
+
+  const exportModuleMediaZip = async () => {
+    const JSZip = await import('jszip');
+    const zip = new JSZip.default();
+    try {
+      const { data: answers } = await supabase
+        .from('guest_module_answers')
+        .select('answer_text, id')
+        .eq('event_id', resolvedEventId || '');
+      let added = 0;
+      for (const r of answers || []) {
+        try {
+          const parsed = JSON.parse(r.answer_text || '{}');
+          const rawUrl = parsed.file_url || parsed.url;
+          if (rawUrl) {
+            const url = await getSignedUrlIfPossible(rawUrl);
+            const resp = await fetch(url);
+            if (!resp.ok) continue;
+            const blob = await resp.blob();
+            const filename = parsed.filename || `module-${r.id}.${(parsed.file_type||'').split('/').pop()||'bin'}`;
+            zip.file(`module_media/${filename}`, blob);
+            added++;
+          }
+        } catch {}
+      }
+      if (added === 0) return '';
+      const blob = await zip.generateAsync({ type: 'blob' });
+      return URL.createObjectURL(blob);
+    } catch (e) {
+      console.warn('Module media zip failed', e);
+      return '';
+    }
+  };
+
+  const exportModuleResponsesTyped = async () => {
+    try {
+      if (!resolvedEventId) return [];
+      // 1) fetch raw answers
+      const { data: answers, error: ansErr } = await supabase
+        .from('guest_module_answers')
+        .select('id,event_id,module_id,user_id,guest_id,answer_text,created_at')
+        .eq('event_id', resolvedEventId)
+        .order('created_at', { ascending: true });
+      if (ansErr) { console.error(ansErr); return []; }
+      const userIds = Array.from(new Set((answers || []).map((a:any)=>a.user_id).filter(Boolean)));
+      const guestIds = Array.from(new Set((answers || []).map((a:any)=>a.guest_id).filter(Boolean)));
+      const moduleIds = Array.from(new Set((answers || []).map((a:any)=>a.module_id).filter(Boolean)));
+      // 2) fetch actors and modules
+      const [users, guests, modules] = await Promise.all([
+        userIds.length ? supabase.from('users').select('id,name,email').in('id', userIds) : Promise.resolve({ data: [] as any[] }),
+        guestIds.length ? supabase.from('guests').select('id,first_name,last_name,email').in('id', guestIds) : Promise.resolve({ data: [] as any[] }),
+        moduleIds.length ? supabase.from('timeline_modules').select('id,module_type,title,question').in('id', moduleIds) : Promise.resolve({ data: [] as any[] }),
+      ]);
+      const uMap = new Map((users.data||[]).map((u:any)=>[u.id,u]));
+      const gMap = new Map((guests.data||[]).map((g:any)=>[g.id,g]));
+      const mMap = new Map((modules.data||[]).map((m:any)=>[m.id,m]));
+      const out = (answers||[]).map((r:any)=>{
+        const mod = mMap.get(r.module_id) || {};
+        const actorUser = r.user_id ? uMap.get(r.user_id) : null;
+        const actorGuest = !actorUser && r.guest_id ? gMap.get(r.guest_id) : null;
+        const actor_name = actorUser?.name || `${actorGuest?.first_name || ''} ${actorGuest?.last_name || ''}`.trim();
+        const actor_email = actorUser?.email || actorGuest?.email || '';
+        const actor_role = actorUser ? 'staff' : 'guest';
+        const module_type = mod.module_type || '';
+        const title = mod.title || mod.question || '';
+        const module_name = title || 'Module';
+        // parse answer_text for structured fields
+        let rating = '' as any; let comment = '' as any; let option = '' as any; let media_url = '' as any; let media_type = '' as any; let raw = r.answer_text || '';
+        try {
+          const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          if (parsed && typeof parsed === 'object') {
+            rating = parsed.rating ?? '';
+            comment = parsed.comment ?? parsed.text ?? '';
+            option = parsed.option ?? parsed.selectedOption ?? '';
+            media_url = parsed.file_url ?? parsed.url ?? '';
+            media_type = parsed.file_type ?? parsed.type ?? '';
+          }
+        } catch {}
+        if (!rating && module_type === 'feedback' && /\b\d+(?:\.\d+)?\b/.test(raw)) rating = raw;
+        const response_text = comment || option || raw;
+        return {
+          id: r.id,
+          event_id: r.event_id,
+          module_id: r.module_id,
+          module_name,
+          module_type,
+          title,
+          actor_name,
+          actor_email,
+          actor_role,
+          response_text,
+          rating,
+          selected_option: option,
+          media_url,
+          media_type,
+          answer_text: raw,
+          created_at: r.created_at,
+        };
+      });
+      return out;
+    } catch (e) { console.warn('typed export exception', e); return []; }
+  };
+
+  const exportModuleResponsesPDF = async () => {
+    const jsPDF = (await import('jspdf')).default;
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+    const data = await exportModuleResponsesTyped();
+    const margin = 40; let y = margin;
+    doc.setFont('helvetica','bold'); doc.setFontSize(16);
+    doc.text('Module Responses', margin, y); y += 20;
+    doc.setFont('helvetica','normal'); doc.setFontSize(10);
+    for (const r of data) {
+      if (y > 770) { doc.addPage(); y = margin; }
+      doc.setFont('helvetica','bold'); doc.text(`${r.title} (${r.module_type})`, margin, y); y += 14;
+      doc.setFont('helvetica','normal');
+      doc.text(`Responder: ${r.actor_name} (${r.actor_role}) • ${new Date(r.created_at).toLocaleString()}`, margin, y); y += 12;
+      if (r.rating) { doc.text(`Rating: ${r.rating}`, margin, y); y += 12; }
+      if (r.selected_option) { doc.text(`Selected Option: ${r.selected_option}`, margin, y); y += 12; }
+      if (r.response_text) {
+        const lines = doc.splitTextToSize(`Response: ${r.response_text}`, 520);
+        doc.text(lines, margin, y); y += 12 * lines.length;
+      }
+      if (r.media_url) { doc.text(`Media: ${r.media_url}`, margin, y); y += 12; }
+      y += 8; doc.setDrawColor(220); doc.line(margin, y, 555, y); y += 12;
+    }
+    const blob = doc.output('blob');
+    return URL.createObjectURL(blob);
+  };
+
+  const exportGuestChat = async () => {
+    try {
+      if (!resolvedEventId) return [];
+      const { data, error } = await supabase
+        .from('guests_chat_messages')
+        .select('*')
+        .eq('event_id', resolvedEventId)
+        .order('created_at', { ascending: true });
+      if (error) return [];
+      return data || [];
+    } catch {
       return [];
     }
+  };
+
+  const exportChatMediaZip = async () => {
+    const JSZip = await import('jszip');
+    const zip = new JSZip.default();
+    try {
+      const msgIds = (await supabase.from('guests_chat_messages').select('message_id').eq('event_id', resolvedEventId || '')).data?.map((m:any)=>m.message_id) || [];
+      if (msgIds.length === 0) return '';
+      const { data: attachments } = await supabase
+        .from('guests_chat_attachments')
+        .select('file_url, filename')
+        .in('message_id', msgIds);
+      let added = 0;
+      for (const a of attachments || []) {
+        const url = await getSignedUrlIfPossible(a.file_url);
+        const resp = await fetch(url);
+        if (!resp.ok) continue;
+        const blob = await resp.blob();
+        zip.file(`chat_media/${a.filename || url.split('/').pop()}`, blob);
+        added++;
+      }
+      if (added === 0) return '';
+      const blob = await zip.generateAsync({ type: 'blob' });
+      return URL.createObjectURL(blob);
+    } catch (e) {
+      console.warn('Chat media zip failed', e);
+      return '';
+    }
+  };
+
+  const exportActivityLog = async () => {
+    try {
+      if (!resolvedEventId) return [];
+      const { data, error } = await supabase.from('activity_log').select('*').eq('event_id', resolvedEventId).order('created_at', { ascending: false });
+      if (error) return [];
+      return data || [];
+    } catch { return []; }
+  };
+
+  const exportAnnouncements = async () => {
+    try {
+      if (!resolvedEventId) return [];
+      const { data, error } = await supabase.from('announcements').select('*').eq('event_id', resolvedEventId).order('created_at', { ascending: false });
+      if (error) return [];
+      return data || [];
+    } catch { return []; }
+  };
+
+  const exportAnnouncementsMediaZip = async () => {
+    const JSZip = await import('jszip');
+    const zip = new JSZip.default();
+    try {
+      const { data: anns } = await supabase.from('announcements').select('image_url').eq('event_id', resolvedEventId || '');
+      let added = 0;
+      for (const a of anns || []) {
+        const rawUrl = a.image_url;
+        if (!rawUrl) continue;
+        const url = await getSignedUrlIfPossible(rawUrl);
+        const resp = await fetch(url);
+        if (!resp.ok) continue;
+        const blob = await resp.blob();
+        zip.file(`announcements/${rawUrl.split('/').pop()}`, blob);
+        added++;
+      }
+      if (added === 0) return '';
+      const blob = await zip.generateAsync({ type: 'blob' });
+      return URL.createObjectURL(blob);
+    } catch (e) { console.warn('Announcements media zip failed', e); return ''; }
+  };
+
+  const exportItineraryDocsZip = async () => {
+    const JSZip = await import('jszip');
+    const zip = new JSZip.default();
+    try {
+      const { data: itins } = await supabase.from('itineraries').select('documents').eq('event_id', resolvedEventId || '');
+      let added = 0;
+      for (const it of itins || []) {
+        const docs = Array.isArray(it.documents) ? it.documents : [];
+        for (const d of docs) {
+          const rawUrl = d.url || d.file_url;
+          if (!rawUrl) continue;
+          const url = await getSignedUrlIfPossible(rawUrl);
+          const resp = await fetch(url);
+          if (!resp.ok) continue;
+          const blob = await resp.blob();
+          zip.file(`itineraries/${(d.filename || rawUrl.split('/').pop())}`, blob);
+          added++;
+        }
+      }
+      if (added === 0) return '';
+      const blob = await zip.generateAsync({ type: 'blob' });
+      return URL.createObjectURL(blob);
+    } catch (e) { console.warn('Itinerary docs zip failed', e); return ''; }
   };
 
   const createDownloadUrl = (data: any[], filename: string, bundleId: string): string => {
@@ -718,10 +1050,11 @@ export default function ExportReportPage() {
       'timeline-modules': ['ID', 'Event ID', 'Title', 'Description', 'Type', 'Created At'],
       'itineraries': ['ID', 'Event ID', 'Company ID', 'Title', 'Items', 'Status', 'Is Published', 'Created At', 'Updated At', 'Created By'],
       'guests': ['ID', 'Event ID', 'Company ID', 'First Name', 'Middle Name', 'Last Name', 'Email', 'Contact Number', 'Country Code', 'ID Type', 'ID Number', 'ID Country', 'Date of Birth', 'Gender', 'Group ID', 'Group Name', 'Next of Kin Name', 'Next of Kin Email', 'Next of Kin Phone Country', 'Next of Kin Phone', 'Dietary', 'Medical', 'Modules', 'Module Values', 'Prefix', 'Status', 'Created At', 'Updated At', 'Created By'],
-      'guest-chat': ['ID', 'Event ID', 'Sender ID', 'Receiver ID', 'Message', 'Timestamp', 'Chat Session ID', 'Created At'],
+      'guest-chat': ['ID', 'Event ID', 'Sender', 'Message', 'Type', 'Created At'],
       'addon-usage': ['ID', 'Event ID', 'Addon ID', 'User ID', 'Feature', 'Usage Count', 'Total Time (ms)', 'Last Used', 'Created At'],
-      'module-responses': ['ID', 'Event ID', 'Module ID', 'Guest ID', 'Guest Name', 'Guest Email', 'Answer Text', 'Timestamp', 'Created At']
-    };
+      'module-responses': ['ID','Event ID','Module ID','Module Name','Responder','Role','Response','Rating','Selected Option','Media URL','Created At'],
+      'module-responses-typed': ['Module Name','ID','Event ID','Module ID','Module Type','Title','Actor Name','Actor Email','Rating','Comment','Selected Option','Media URL','Media Type','Answer Text','Created At']
+    } as any;
     
     const headers = headersByBundle[bundleId] || Object.keys(data[0] || {});
     console.log(`🔧 Headers for ${bundleId}:`, headers);
@@ -786,6 +1119,14 @@ export default function ExportReportPage() {
           else if (header === 'Guest Email') value = row.guest_email || '';
           else if (header === 'Answer Text') value = row.answer_text || row.answerText || '';
           else if (header === 'Module ID') value = row.module_id || row.moduleId || '';
+          else if (header === 'Module Type') value = row.module_type || '';
+          else if (header === 'Rating') value = row.rating ?? '';
+          else if (header === 'Comment') value = (row.comment || '').toString().replace(/\n/g,' ');
+          else if (header === 'Selected Option') value = row.selected_option || '';
+          else if (header === 'Media URL') value = row.media_url || '';
+          else if (header === 'Media Type') value = row.media_type || '';
+          else if (header === 'Answer Text') value = (row.answer_text || '').toString().replace(/\n/g,' ');
+          else if (header === 'Created At') value = row.created_at || row.timestamp || '';
           else {
             // Try direct field name or fallback
             value = row[headerLower] || row[header] || row[header.toLowerCase()] || '';
@@ -808,12 +1149,12 @@ export default function ExportReportPage() {
     if (job.downloadUrl) {
       const link = document.createElement('a');
       link.href = job.downloadUrl;
-      
-      // Get the bundle to determine file extension
       const bundle = dataBundles.find(b => b.id === job.bundleId);
-      const fileExtension = bundle?.type === 'txt' ? 'txt' : 'csv';
+      let fileExtension = 'csv';
+      if (bundle?.type === 'txt') fileExtension = 'txt';
+      if (bundle?.type === 'media') fileExtension = 'zip';
+      if (bundle?.type === 'pdf') fileExtension = 'pdf';
       const filename = `${job.bundleId}-${new Date().toISOString().split('T')[0]}.${fileExtension}`;
-      
       link.download = filename;
       document.body.appendChild(link);
       link.click();
@@ -837,10 +1178,11 @@ export default function ExportReportPage() {
       // Add each completed export to the zip
       for (const job of completedJobs) {
         if (job.downloadUrl) {
-          const response = await fetch(job.downloadUrl);
+          const response = await fetch(job.downloadUrl as string);
           const blob = await response.blob();
           const bundle = dataBundles.find(b => b.id === job.bundleId);
-          const filename = `${bundle?.name || job.bundleId}.csv`;
+          const ext = bundle?.type === 'media' ? 'zip' : bundle?.type === 'txt' ? 'txt' : 'csv';
+          const filename = `${bundle?.name || job.bundleId}.${ext}`;
           zip.file(filename, blob);
         }
       }
@@ -1053,9 +1395,252 @@ export default function ExportReportPage() {
             }
           ];
         
+      case 'module-responses-typed':
+        return [
+          {
+            ...baseData,
+            module_id: 'question-1',
+            guest_id: 'guest-1',
+            guest_name: 'John Doe',
+            guest_email: 'john.doe@example.com',
+            answer_text: JSON.stringify({ rating: 5, comment: 'Great event!', selectedOption: 'Option A' }),
+            timestamp: new Date().toISOString()
+          },
+          {
+            ...baseData,
+            id: 'test-2',
+            module_id: 'feedback-1',
+            guest_id: 'guest-2',
+            guest_name: 'Jane Smith',
+            guest_email: 'jane.smith@example.com',
+            answer_text: JSON.stringify({ rating: 4, comment: 'Good organization, but food could be better.', selectedOption: 'Option B' }),
+            timestamp: new Date(Date.now() + 3600000).toISOString()
+          },
+          {
+            ...baseData,
+            id: 'test-3',
+            module_id: 'multiple-choice-1',
+            guest_id: 'guest-3',
+            guest_name: 'Mike Johnson',
+            guest_email: 'mike.johnson@example.com',
+            answer_text: JSON.stringify({ rating: 3, comment: 'Could have been more interactive.', selectedOption: 'Option A' }),
+              timestamp: new Date(Date.now() + 7200000).toISOString()
+            }
+          ];
+        
       default:
         return [baseData];
     }
+  };
+
+  // Helper to draw a simple bar chart
+  const drawBarChart = (
+    doc: any,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    labels: string[],
+    values: number[],
+    title?: string
+  ) => {
+    const formatDateLabel = (s: string) => {
+      const m = s && s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (m) return `${m[3]}/${m[2]}/${m[1]}`; // dd/mm/yyyy
+      return s;
+    };
+    const margin = 8;
+    const maxVal = Math.max(1, ...values);
+    const barGap = 10;
+    const barWidth = (width - (labels.length + 1) * barGap) / Math.max(1, labels.length);
+    if (title) {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12);
+      doc.text(title, x, y - 8);
+    }
+    // Axis
+    doc.setDrawColor(200);
+    doc.line(x, y + height, x + width, y + height);
+    // Bars
+    doc.setDrawColor(60);
+    doc.setFillColor(76, 175, 80);
+    labels.forEach((label, i) => {
+      const val = values[i] || 0;
+      const barH = Math.round((val / maxVal) * (height - margin));
+      const bx = x + barGap + i * (barWidth + barGap);
+      const by = y + height - barH;
+      doc.rect(bx, by, barWidth, barH, 'F');
+      // Label (clipped)
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      const formatted = formatDateLabel(label);
+      const lbl = formatted.length > 10 ? formatted.slice(0, 10) + '…' : formatted;
+      doc.text(lbl, bx + barWidth / 2, y + height + 10, { align: 'center' });
+      // Value above bar
+      doc.setFontSize(9);
+      doc.text(String(val), bx + barWidth / 2, by - 2, { align: 'center' });
+    });
+  };
+
+  // Full analytics PDF export
+  const exportFullAnalyticsPDF = async () => {
+    const jsPDF = (await import('jspdf')).default;
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+    const pageWidth = 595.28; // A4 width in pt
+    const pageHeight = 841.89; // A4 height in pt
+    const margin = 40;
+    const contentW = pageWidth - margin * 2;
+    const eventName = event?.name || 'Event';
+
+    // Load a Unicode font so special characters render correctly
+    try {
+      const fontUrl = 'https://cdn.jsdelivr.net/npm/@fontsource/noto-sans/files/noto-sans-latin-400-normal.ttf';
+      const res = await fetch(fontUrl, { mode: 'cors' });
+      if (res.ok) {
+        const arrayBuffer = await res.arrayBuffer();
+        // Convert to base64
+        let binary = '';
+        const bytes = new Uint8Array(arrayBuffer);
+        const len = bytes.byteLength;
+        for (let i = 0; i < len; i++) binary += String.fromCharCode(bytes[i]);
+        const base64 = btoa(binary);
+        doc.addFileToVFS('NotoSans-Regular.ttf', base64);
+        doc.addFont('NotoSans-Regular.ttf', 'NotoSans', 'normal');
+        doc.setFont('NotoSans', 'normal');
+      }
+    } catch {}
+
+    // 1) Fetch all relevant data
+    const all = resolvedEventId ? await exportEventData(resolvedEventId) : { messages: [], guests: [], itineraries: [], modules: [], module_answers: [], announcements: [], activity_log: [] } as any;
+    // Fetch friendly Activity Feed as used in Event Dashboard
+    let friendlyActivity: any[] = [];
+    try {
+      const user = await getCurrentUser();
+      if (user && resolvedEventId) {
+        friendlyActivity = await getEventActivityFeed(resolvedEventId, user.company_id, 200, 0);
+      }
+    } catch {}
+
+    // Cover Page
+    doc.setFillColor(18, 18, 18);
+    doc.rect(0, 0, pageWidth, 220, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont(undefined, 'bold');
+    doc.setFontSize(26);
+    doc.text(`${eventName.toUpperCase()} FULL DATA EXPORT`, margin, 120);
+    doc.setFontSize(12);
+    doc.text(`Generated: ${new Date().toLocaleString()}`, margin, 150);
+    doc.setTextColor(0,0,0);
+
+    // Helper: add a page with title
+    const newPage = (title: string) => {
+      doc.addPage();
+      doc.setFont(undefined, 'bold');
+      doc.setFontSize(16);
+      doc.text(title, margin, margin);
+      doc.setFont(undefined, 'normal');
+      doc.setFontSize(11);
+      return margin + 24;
+    };
+
+    // 2) Guests page
+    let y = newPage('Guests');
+    const guests = all.guests as any[];
+    if (guests.length === 0) doc.text('No guests', margin, y);
+    guests.slice(0, 45).forEach((g:any) => {
+      const line = `${g.first_name || ''} ${g.last_name || ''} ${g.email ? `• ${g.email}` : ''}`.trim();
+      const wrapped = doc.splitTextToSize(line, contentW);
+      if (y + wrapped.length * 12 > pageHeight - margin) { y = newPage('Guests (cont.)'); }
+      doc.text(wrapped, margin, y); y += wrapped.length * 12 + 4;
+    });
+
+    // 3) Chat Messages page (with per-day and per-user charts)
+    y = newPage('Chat Messages');
+    const messages = all.messages as any[];
+    // Chart: per day
+    const msgsByDayMap: Record<string, number> = {};
+    messages.forEach(m => { const d = (m.created_at || '').slice(0,10); if (!d) return; msgsByDayMap[d]=(msgsByDayMap[d]||0)+1; });
+    const msgsDays = Object.keys(msgsByDayMap).sort();
+    const msgsCounts = msgsDays.map(d=>msgsByDayMap[d]);
+    drawBarChart(doc, margin, y, contentW, 150, msgsDays.slice(-12), msgsCounts.slice(-12), 'Messages per day');
+    y += 180;
+    // Chart: per user
+    const byUser: Record<string, number> = {};
+    messages.forEach((m:any)=>{ const k = m.sender_email || 'unknown'; byUser[k]=(byUser[k]||0)+1; });
+    const top = Object.entries(byUser).sort((a,b)=>b[1]-a[1]).slice(0,10);
+    if (top.length) {
+      drawBarChart(doc, margin, y, contentW, 150, top.map(([k])=>k), top.map(([,v])=>v), 'Top participants');
+      y += 180;
+    }
+
+    // 4) Modules page + by type chart
+    y = newPage('Modules');
+    const modules = all.modules as any[];
+    const modulesByTypeMap: Record<string, number> = {};
+    modules.forEach((m:any)=>{ const t = m.module_type || 'unknown'; modulesByTypeMap[t]=(modulesByTypeMap[t]||0)+1; });
+    const modTypes = Object.keys(modulesByTypeMap);
+    const modCounts = modTypes.map(t=>modulesByTypeMap[t]);
+    drawBarChart(doc, margin, y, contentW, 150, modTypes, modCounts, 'Modules by type');
+    y += 180;
+    modules.slice(0, 30).forEach((m:any)=>{
+      const label = `${m.module_type || ''} • ${m.title || m.question || ''}`.trim();
+      const wrapped = doc.splitTextToSize(label, contentW);
+      if (y + wrapped.length * 12 > pageHeight - margin) { y = newPage('Modules (cont.)'); }
+      doc.text(wrapped, margin, y); y += wrapped.length * 12 + 4;
+    });
+
+    // 5) Module Responses page + average feedback
+    y = newPage('Module Responses');
+    const answers = all.module_answers as any[];
+    const ratings: number[] = [];
+    answers.forEach((a:any)=>{ try { const p = typeof a.answer_text==='string'?JSON.parse(a.answer_text):a.answer_text; if (p && p.rating!=null) { const r=parseFloat(String(p.rating)); if(!Number.isNaN(r)) ratings.push(r);} } catch{} });
+    const avgRating = ratings.length ? (ratings.reduce((s,v)=>s+v,0)/ratings.length) : 0;
+    doc.text(`Average feedback rating: ${ratings.length ? avgRating.toFixed(1) : 'N/A'}`, margin, y); y += 16;
+    answers.slice(0, 40).forEach((a:any)=>{
+      let summary = '';
+      try {
+        const p = typeof a.answer_text==='string'?JSON.parse(a.answer_text):a.answer_text;
+        summary = p?.comment || p?.text || p?.selectedOption || p?.option || p?.file_url || String(a.answer_text || '');
+      } catch { summary = String(a.answer_text || ''); }
+      const wrapped = doc.splitTextToSize(`• ${summary}`, contentW);
+      if (y + wrapped.length * 12 > pageHeight - margin) { y = newPage('Module Responses (cont.)'); }
+      doc.text(wrapped, margin, y); y += wrapped.length * 12 + 4;
+    });
+
+    // 6) Announcements page
+    y = newPage('Announcements');
+    const anns = all.announcements as any[];
+    if (anns.length === 0) doc.text('No announcements', margin, y);
+    anns.slice(0, 40).forEach((a:any)=>{
+      const line = `• ${a.title || 'Untitled'} ${a.description ? '— ' + a.description : ''}`;
+      const wrapped = doc.splitTextToSize(line, contentW);
+      if (y + wrapped.length * 12 > pageHeight - margin) { y = newPage('Announcements (cont.)'); }
+      doc.text(wrapped, margin, y); y += wrapped.length * 12 + 4;
+    });
+
+    // 7) Itineraries page
+    y = newPage('Itineraries');
+    const its = all.itineraries as any[];
+    if (its.length === 0) doc.text('No itineraries', margin, y);
+    its.slice(0, 40).forEach((it:any)=>{
+      const line = `• ${it.title || 'Untitled'} — ${it.date || ''} ${it.start_time || ''}`;
+      const wrapped = doc.splitTextToSize(line, contentW);
+      if (y + wrapped.length * 12 > pageHeight - margin) { y = newPage('Itineraries (cont.)'); }
+      doc.text(wrapped, margin, y); y += wrapped.length * 12 + 4;
+    });
+
+    // 8) Event Dashboard Activity page (friendly feed)
+    y = newPage('Event Activity');
+    if (!friendlyActivity || friendlyActivity.length === 0) doc.text('No activity recorded', margin, y);
+    (friendlyActivity || []).slice(0, 80).forEach((a:any)=>{
+      const line = `• ${a.actor_name || 'Someone'} — ${a.item_type || ''} — ${new Date(a.created_at).toLocaleString()}`;
+      const wrapped = doc.splitTextToSize(line, contentW);
+      if (y + wrapped.length * 12 > pageHeight - margin) { y = newPage('Event Activity (cont.)'); }
+      doc.text(wrapped, margin, y); y += wrapped.length * 12 + 4;
+    });
+
+    const blob = doc.output('blob');
+    return URL.createObjectURL(blob);
   };
 
   if (loading) {
@@ -1532,8 +2117,216 @@ export default function ExportReportPage() {
           })}
         </div>
 
+        {/* Insights Tabs */}
+        <InsightsTabs 
+          isDark={isDark}
+          eventId={resolvedEventId || ''}
+          dataBundles={dataBundles.filter(b => b.type === 'csv')}
+          loaders={{
+            guests: exportGuestData,
+            'guest-chat': exportGuestChat,
+            'timeline-modules': exportTimelineModuleData,
+            itineraries: exportItineraryData,
+            announcements: exportAnnouncements,
+            'activity-log': exportActivityLog,
+            'module-responses': exportModuleResponses,
+            'module-responses-typed': exportModuleResponsesTyped,
+            'event-activity-feed': async () => {
+              const user = await getCurrentUser();
+              const feed = resolvedEventId ? await getEventActivityFeed(resolvedEventId, user?.company_id || '', 200, 0) : [];
+              return feed;
+            },
+          }}
+        />
 
       </div>
     </div>
   );
-} 
+}
+
+// ----------------------------
+// Insights Tabs + Chart
+// ----------------------------
+function InsightsTabs({ isDark, eventId, dataBundles, loaders }: {
+  isDark: boolean;
+  eventId: string;
+  dataBundles: Array<{ id: string; name: string; }>;
+  loaders: Record<string, () => Promise<any[]>>;
+}) {
+  const [active, setActive] = React.useState<string>(dataBundles[0]?.id || '');
+  const [labels, setLabels] = React.useState<string[]>([]);
+  const [values, setValues] = React.useState<number[]>([]);
+  const [title, setTitle] = React.useState<string>('');
+  const [loading, setLoading] = React.useState<boolean>(false);
+
+  const green = '#4CAF50';
+
+  const load = React.useCallback(async (bundleId: string) => {
+    setLoading(true);
+    try {
+      const loader = loaders[bundleId];
+      let data: any[] = [];
+      if (loader) data = await loader();
+      // Compute a simple insight based on bundle
+      switch (bundleId) {
+        case 'guest-chat': {
+          const byDay: Record<string, number> = {};
+          data.forEach((m: any) => { const d = (m.created_at || m.timestamp || '').slice(0,10); if (!d) return; byDay[d] = (byDay[d]||0)+1; });
+          const days = Object.keys(byDay).sort().slice(-12);
+          setLabels(days);
+          setValues(days.map(d=>byDay[d]));
+          setTitle('Messages per day');
+          break;
+        }
+        case 'timeline-modules': {
+          const byType: Record<string, number> = {};
+          data.forEach((m:any)=>{ const t=m.module_type||m.type||'unknown'; byType[t]=(byType[t]||0)+1; });
+          const entries = Object.entries(byType).sort((a,b)=>b[1]-a[1]).slice(0,10);
+          setLabels(entries.map(e=>e[0]));
+          setValues(entries.map(e=>e[1] as number));
+          setTitle('Modules by type');
+          break;
+        }
+        case 'module-responses':
+        case 'module-responses-typed': {
+          const byKind: Record<string, number> = {};
+          data.forEach((r:any)=>{ const t=r.module_type || r.type || 'response'; byKind[t]=(byKind[t]||0)+1; });
+          const entries = Object.entries(byKind).sort((a,b)=>b[1]-a[1]).slice(0,10);
+          setLabels(entries.map(e=>e[0]));
+          setValues(entries.map(e=>e[1] as number));
+          setTitle('Responses by module type');
+          break;
+        }
+        case 'guests': {
+          const byDomain: Record<string, number> = {};
+          data.forEach((g:any)=>{ const e=g.email||''; const dom=e.includes('@')?e.split('@')[1]:'unknown'; byDomain[dom]=(byDomain[dom]||0)+1; });
+          const entries = Object.entries(byDomain).sort((a,b)=>b[1]-a[1]).slice(0,10);
+          setLabels(entries.map(e=>e[0])); setValues(entries.map(e=>e[1] as number));
+          setTitle('Guests by email domain');
+          break;
+        }
+        case 'announcements': {
+          const byDay: Record<string, number> = {};
+          data.forEach((a:any)=>{ const d=(a.created_at||'').slice(0,10); if (!d) return; byDay[d]=(byDay[d]||0)+1; });
+          const days = Object.keys(byDay).sort().slice(-12);
+          setLabels(days); setValues(days.map(d=>byDay[d]));
+          setTitle('Announcements per day');
+          break;
+        }
+        case 'activity-log': {
+          const byType: Record<string, number> = {};
+          data.forEach((a:any)=>{ const t=a.action_type||a.action||'activity'; byType[t]=(byType[t]||0)+1; });
+          const entries = Object.entries(byType).sort((a,b)=>b[1]-a[1]).slice(0,10);
+          setLabels(entries.map(e=>e[0])); setValues(entries.map(e=>e[1] as number));
+          setTitle('Activity by type');
+          break;
+        }
+        case 'event-activity-feed': {
+          const byItem: Record<string, number> = {};
+          data.forEach((a:any)=>{ const t=a.item_type||'item'; byItem[t]=(byItem[t]||0)+1; });
+          const entries = Object.entries(byItem).sort((a,b)=>b[1]-a[1]).slice(0,10);
+          setLabels(entries.map(e=>e[0])); setValues(entries.map(e=>e[1] as number));
+          setTitle('Event activity by item');
+          break;
+        }
+        case 'itineraries': {
+          const byDate: Record<string, number> = {};
+          data.forEach((it:any)=>{ const d=it.date||''; if (!d) return; byDate[d]=(byDate[d]||0)+1; });
+          const days = Object.keys(byDate).sort().slice(-12);
+          setLabels(days); setValues(days.map(d=>byDate[d]));
+          setTitle('Itineraries per day');
+          break;
+        }
+        default: {
+          setLabels([]); setValues([]); setTitle('No insight available');
+        }
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [loaders]);
+
+  React.useEffect(() => { if (active) load(active); }, [active, load]);
+
+  return (
+    <div style={{
+      background: isDark ? '#1e1e1e' : '#fff',
+      borderRadius: 16,
+      padding: 16,
+      marginTop: 8,
+      boxShadow: isDark ? '0 4px 24px rgba(0,0,0,0.3)' : '0 4px 24px rgba(0,0,0,0.08)',
+      border: isDark ? '1px solid #333' : '1px solid #e5e7eb'
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, overflowX: 'auto', whiteSpace: 'nowrap', paddingBottom: 8 }}>
+        {dataBundles.map(b => (
+          <button
+            key={b.id}
+            onClick={() => setActive(b.id)}
+            title={b.name}
+            style={{
+              padding: '8px 12px',
+              fontSize: 12,
+              fontWeight: 700,
+              letterSpacing: 0.3,
+              borderRadius: 999,
+              border: '1px solid ' + (active === b.id ? '#4CAF50' : (isDark ? '#444' : '#ddd')),
+              background: active === b.id ? '#4CAF50' : (isDark ? '#2a2a2a' : '#f8f9fa'),
+              color: active === b.id ? '#fff' : (isDark ? '#fff' : '#222'),
+              cursor: 'pointer'
+            }}
+          >
+            {b.name}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ marginTop: 12 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>{title}</div>
+        {loading ? (
+          <div style={{ padding: 24, color: isDark ? '#aaa' : '#666' }}>Loading…</div>
+        ) : labels.length === 0 ? (
+          <div style={{ padding: 24, color: isDark ? '#aaa' : '#666' }}>No data</div>
+        ) : (
+          <BarChart labels={labels} values={values} isDark={isDark} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function BarChart({ labels, values, isDark }: { labels: string[]; values: number[]; isDark: boolean; }) {
+  const maxVal = Math.max(1, ...values);
+  const w = 940; const h = 260; const pad = 40; const chartW = w - pad * 2; const chartH = h - pad * 2;
+  const gap = 10; const barW = (chartW - gap * (labels.length + 1)) / labels.length;
+  const green = '#4CAF50';
+  const formatDateLabel = (s: string) => {
+    const m = s && s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (m) return `${m[3]}/${m[2]}/${m[1]}`; // dd/mm/yyyy
+    return s;
+  };
+  return (
+    <div style={{ width: '100%', overflowX: 'auto' }}>
+      <svg width={w} height={h} style={{ maxWidth: '100%' }}>
+        {/* Axis */}
+        <line x1={pad} y1={pad + chartH} x2={pad + chartW} y2={pad + chartH} stroke={isDark ? '#555' : '#ccc'} />
+        {labels.map((lbl, i) => {
+          const v = values[i] || 0;
+          const bh = Math.round((v / maxVal) * (chartH - 8));
+          const x = pad + gap + i * (barW + gap);
+          const y = pad + chartH - bh;
+          const primary = i === 0;
+          const formatted = formatDateLabel(lbl);
+          return (
+            <g key={i}>
+              <rect x={x} y={y} width={barW} height={bh} fill={primary ? green : (isDark ? '#333' : '#111')} />
+              <text x={x + barW / 2} y={y - 6} textAnchor="middle" fontSize="10" fill={isDark ? '#ddd' : '#444'}>{v}</text>
+              <text x={x + barW / 2} y={pad + chartH + 12} textAnchor="middle" fontSize="9" fill={isDark ? '#bbb' : '#666'}>
+                {formatted.length > 12 ? formatted.slice(0, 12) + '…' : formatted}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}

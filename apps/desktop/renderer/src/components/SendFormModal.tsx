@@ -53,6 +53,9 @@ export default function SendFormModal({ isOpen, onClose, eventId, eventName }: S
   const [isLoading, setIsLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [successProgress, setSuccessProgress] = useState(100);
+  const [provider, setProvider] = useState<'gmail' | 'outlook' | 'copy'>('gmail');
+  const [generatedLinks, setGeneratedLinks] = useState<string[]>([]);
+  const API_BASE = (import.meta as any).env?.VITE_API_BASE || '';
 
   const colors = {
     background: isDark ? 'rgba(30, 30, 30, 0.95)' : 'rgba(255, 255, 255, 0.95)',
@@ -139,21 +142,65 @@ export default function SendFormModal({ isOpen, onClose, eventId, eventName }: S
     return `${baseUrl}/guest-form/${eventId}?config=${formData}`;
   };
 
+  const createFormAndRecipients = async (): Promise<{ formId: string; links: string[] }> => {
+    // Create a minimal form row using schema_json as config snapshot
+    const { supabase } = await import('../lib/supabase');
+    // Create form
+    const { data: formRow, error: formErr } = await supabase
+      .from('forms')
+      .insert({
+        event_id: eventId,
+        company_id: (await (await import('../lib/auth')).getCurrentUser())?.company_id || null,
+        title: formConfig.fields.length ? `Form • ${new Date().toLocaleString()}` : 'Form',
+        description: 'Generated from Send Form',
+        schema_json: { fields: formConfig.fields, modules: formConfig.modules },
+        created_by: (await (await import('../lib/auth')).getCurrentUser())?.id || null,
+      })
+      .select('*')
+      .single();
+    if (formErr || !formRow) throw formErr || new Error('Failed to create form');
+    const formId = formRow.id as string;
+
+    // Create recipients and tokens
+    const { data: recs, error: recErr } = await supabase.rpc('create_form_recipients', {
+      p_form_id: formId,
+      p_emails: emails,
+      p_names: emails.map(() => null),
+      p_expires_at: null,
+    });
+    if (recErr) throw recErr;
+    const baseUrl = window.location.origin;
+    const links = (recs || []).map((r: any) => `${baseUrl}/forms/${r.token}`);
+    return { formId, links };
+  };
+
   const handleSendForm = async () => {
     setIsLoading(true);
     try {
-      const formUrl = generateFormUrl();
-      
-      // Here you would typically send emails via your backend
-      // For now, we'll simulate the API call
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // In a real implementation, you'd call your email service:
-      // await sendFormEmails(emails, formUrl, eventName);
-      
-      console.log('Form sent to:', emails);
-      console.log('Form URL:', formUrl);
-      
+      const { links } = await createFormAndRecipients();
+      setGeneratedLinks(links);
+
+      if (provider === 'copy') {
+        // Copy all links to clipboard (newline separated)
+        await navigator.clipboard.writeText(links.join('\n'));
+      } else {
+        // Send from our own server (Resend, SES, etc.) so we control deliverability/marketing
+        // Pair each email to its dedicated link
+        for (let i = 0; i < emails.length; i++) {
+          const email = emails[i];
+          const link = links[i] || links[0];
+          try {
+            await fetch(`${API_BASE}/api/send-email`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ emails: [email], link, eventName }),
+            });
+          } catch (e) {
+            console.warn('Email send failed for', email, e);
+          }
+        }
+      }
+       
       setShowSuccess(true);
       setSuccessProgress(100);
       
@@ -167,6 +214,7 @@ export default function SendFormModal({ isOpen, onClose, eventId, eventName }: S
             setStep(1);
             setEmails([]);
             setFormConfig({ fields: [], modules: [] });
+            setGeneratedLinks([]);
             return 100;
           }
           return prev - (100 / 30); // 3 seconds = 30 intervals of 100ms
@@ -187,7 +235,14 @@ export default function SendFormModal({ isOpen, onClose, eventId, eventName }: S
         Add Email Recipients
       </h3>
       
-      <div style={{ marginBottom: 24 }}>
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+          {(['gmail','outlook','copy'] as const).map(p => (
+            <button key={p} onClick={() => setProvider(p)} style={{ padding: '8px 10px', borderRadius: 8, border: `2px solid ${provider===p? colors.accent : colors.border}`, background: provider===p ? colors.accent : colors.buttonBg, color: provider===p ? (isDark ? '#000' : '#fff') : colors.text, fontWeight: 700, cursor: 'pointer' }}>
+              {p === 'gmail' ? 'Gmail' : p === 'outlook' ? 'Outlook' : 'Copy link'}
+            </button>
+          ))}
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
           <input
             type="email"
@@ -235,65 +290,45 @@ export default function SendFormModal({ isOpen, onClose, eventId, eventName }: S
           <label style={{ color: colors.text, fontSize: 16, fontWeight: 500, marginBottom: 8, display: 'block' }}>
             Or upload CSV file:
           </label>
-          <input
-            type="file"
-            accept=".csv"
-            onChange={handleCsvUpload}
-            style={{
-              padding: '12px 16px',
-              border: `2px solid ${colors.border}`,
-              borderRadius: 8,
-              fontSize: 16,
-              background: colors.inputBg,
-              color: colors.text,
-              width: '100%',
-            }}
-          />
-        </div>
-        
-        {emails.length > 0 && (
-          <div style={{ marginTop: 16 }}>
-            <p style={{ color: colors.textSecondary, marginBottom: 12, fontSize: 14 }}>
-              Recipients ({emails.length}):
-            </p>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              {emails.map((email, index) => (
-                <div
-                  key={index}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    background: colors.inputBg,
-                    border: `2px solid ${colors.border}`,
-                    borderRadius: 20,
-                    padding: '6px 12px',
-                    fontSize: 14
-                  }}
-                >
-                  <span style={{ color: colors.text }}>{email}</span>
-                  <button
-                    onClick={() => handleRemoveEmail(index)}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: colors.textSecondary,
-                      cursor: 'pointer',
-                      fontSize: 16,
-                      padding: 0,
-                      width: 20,
-                      height: 20,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center'
-                    }}
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-            </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <input
+              type="file"
+              accept=".csv"
+              onChange={handleCsvUpload}
+              style={{ color: colors.text }}
+            />
+            <button
+              onClick={() => {
+                const header = 'email\n';
+                const example = ['example1@email.com','example2@email.com','example3@email.com'].join('\n');
+                const blob = new Blob([header + example + '\n'], { type: 'text/csv' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'form_recipients_template.csv';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+              }}
+              style={{
+                padding: '10px 14px',
+                borderRadius: 8,
+                border: `2px solid ${colors.border}`,
+                background: colors.buttonBg,
+                color: colors.text,
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+              title="Download CSV template"
+            >
+              Download CSV
+            </button>
           </div>
+        </div>
+
+        {emails.length > 0 && (
+          <div style={{ marginTop: 12, color: colors.textSecondary, fontSize: 14 }}>{emails.length} recipient(s) added</div>
         )}
       </div>
 

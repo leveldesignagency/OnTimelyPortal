@@ -71,6 +71,7 @@ import SettingsPage from './screens/SettingsPage';
 import CreateItineraryPage from './screens/CreateItineraryPage';
 import CreateGuestsPage from './screens/CreateGuestsPage';
 import GuestChatAdminScreen from './screens/GuestChatAdminScreen';
+import NotificationsScreen from './screens/NotificationsScreen';
 
 
 const Tab = createBottomTabNavigator();

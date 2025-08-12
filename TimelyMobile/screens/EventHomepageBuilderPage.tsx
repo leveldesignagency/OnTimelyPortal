@@ -16,6 +16,7 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 import { WebView } from 'react-native-webview';
 import { supabase } from '../lib/supabase';
 import GlobalHeader from '../components/GlobalHeader';
@@ -166,23 +167,26 @@ export default function EventHomepageBuilderPage({ eventId, onNavigate, onMenuPr
 
   const uploadCoverImage = async (imageUri: string) => {
     try {
-      const response = await fetch(imageUri);
-      const blob = await response.blob();
-      const fileName = `cover_${Date.now()}.jpg`;
+      console.log('[HOMEPAGE UPLOAD] Starting upload for:', imageUri);
       
-      const { data, error } = await supabase.storage
-        .from('event-images')
-        .upload(fileName, blob);
-
-      if (error) throw error;
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('event-images')
-        .getPublicUrl(fileName);
-
-      setHomepageData(prev => ({ ...prev, eventImage: publicUrl }));
+      // Read file as base64
+      const base64Data = await FileSystem.readAsStringAsync(imageUri, {
+        encoding: FileSystem.EncodingType.Base64
+      });
+      
+      console.log('[HOMEPAGE UPLOAD] Base64 data length:', base64Data.length);
+      
+      // Create data URL
+      const dataUrl = `data:image/jpeg;base64,${base64Data}`;
+      console.log('[HOMEPAGE UPLOAD] Data URL created, length:', dataUrl.length);
+      
+      // Store the data URL directly instead of uploading to Supabase storage
+      // This bypasses React Native storage issues
+      setHomepageData(prev => ({ ...prev, eventImage: dataUrl }));
+      
+      console.log('[HOMEPAGE UPLOAD] Image uploaded successfully using data URL approach');
     } catch (error) {
-      console.error('Error uploading image:', error);
+      console.error('[HOMEPAGE UPLOAD] Error uploading image:', error);
       Alert.alert('Error', 'Failed to upload image');
     }
   };
@@ -252,18 +256,32 @@ export default function EventHomepageBuilderPage({ eventId, onNavigate, onMenuPr
     });
   };
 
+
+
   const saveHomepage = async () => {
     if (!eventId) return;
     
     setIsSaving(true);
     try {
-      // Get current user to get company_id
-      const { data: { user } } = await supabase.auth.getUser();
+      console.log('Starting save process...');
+      
+      // Test basic Supabase connection first
+      console.log('Testing basic connection...');
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      
+      if (authError) {
+        console.error('Auth error:', authError);
+        throw new Error(`Authentication failed: ${authError.message}`);
+      }
+      
       if (!user) {
+        console.error('No user found');
         Alert.alert('Error', 'No authenticated user found');
         return;
       }
-
+      
+      console.log('User authenticated, getting profile...');
+      
       // Get user profile to get company_id
       const { data: userData, error: userError } = await supabase
         .from('users')
@@ -271,12 +289,17 @@ export default function EventHomepageBuilderPage({ eventId, onNavigate, onMenuPr
         .eq('id', user.id)
         .single();
 
-      if (userError || !userData?.company_id) {
-        Alert.alert('Error', 'Failed to get user company information');
-        return;
+      if (userError) {
+        console.error('User profile error:', userError);
+        throw new Error(`Failed to get user profile: ${userError.message}`);
+      }
+      
+      if (!userData?.company_id) {
+        console.error('No company_id found');
+        throw new Error('User has no company_id');
       }
 
-      console.log('Saving homepage with company_id:', userData.company_id);
+      console.log('Profile loaded, saving homepage...');
 
       const { error } = await supabase
         .from('event_homepage_data')
@@ -292,13 +315,28 @@ export default function EventHomepageBuilderPage({ eventId, onNavigate, onMenuPr
           onConflict: 'event_id,company_id'
         });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Database error:', error);
+        throw error;
+      }
       
       console.log('Homepage saved successfully');
       setShowSuccessModal(true);
     } catch (error) {
       console.error('Error saving homepage:', error);
-      Alert.alert('Error', 'Failed to save homepage');
+      console.error('Error details:', {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint
+      });
+      
+      let errorMessage = 'Failed to save homepage';
+      if (error.message?.includes('Network request failed')) {
+        errorMessage = 'Network connection failed. Please check your internet connection and try again.';
+      }
+      
+      Alert.alert('Error', errorMessage);
     } finally {
       setIsSaving(false);
     }
@@ -611,6 +649,8 @@ export default function EventHomepageBuilderPage({ eventId, onNavigate, onMenuPr
       >
         <MaterialCommunityIcons name="plus" size={24} color="#fff" />
       </TouchableOpacity>
+
+      
 
       {/* Save Button */}
       <TouchableOpacity

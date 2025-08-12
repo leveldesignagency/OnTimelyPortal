@@ -8,28 +8,28 @@
 
 /* Begin PBXBuildFile section */
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
-		2E64E688DD41E9C04A903C8C /* libPods-TimelyMobile.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 9237F1E26FE3E94AA880621A /* libPods-TimelyMobile.a */; };
-		35A965B34B738A18051730E7 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 074254910DD2E34D81C174CA /* PrivacyInfo.xcprivacy */; };
-		3C3A68DDE6EB5DB5F28900FC /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 558B288DB468256CBCE53C6E /* ExpoModulesProvider.swift */; };
 		3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */; };
+		618C13AF3E0AF22A9C1865F6 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = AE0BA9B5D4507981569D3524 /* PrivacyInfo.xcprivacy */; };
+		6571B88A4BA690B58B6805A4 /* libPods-TimelyMobile.a in Frameworks */ = {isa = PBXBuildFile; fileRef = FA1B362698B89C54D19AD5C0 /* libPods-TimelyMobile.a */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
+		D2AF88E7E2EEDE58512C5193 /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80DCAA527E06CC400E5E5ECF /* ExpoModulesProvider.swift */; };
 		F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748412D0307B40044C1D9 /* AppDelegate.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		074254910DD2E34D81C174CA /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = TimelyMobile/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		13B07F961A680F5B00A75B9A /* TimelyMobile.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TimelyMobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = TimelyMobile/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = TimelyMobile/Info.plist; sourceTree = "<group>"; };
-		2ECB8BAB1C625C923CD5DFED /* Pods-TimelyMobile.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-TimelyMobile.debug.xcconfig"; path = "Target Support Files/Pods-TimelyMobile/Pods-TimelyMobile.debug.xcconfig"; sourceTree = "<group>"; };
-		558B288DB468256CBCE53C6E /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-TimelyMobile/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
-		9237F1E26FE3E94AA880621A /* libPods-TimelyMobile.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-TimelyMobile.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		80DCAA527E06CC400E5E5ECF /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-TimelyMobile/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = TimelyMobile/SplashScreen.storyboard; sourceTree = "<group>"; };
-		B6BF3F483511EF5B981F846E /* Pods-TimelyMobile.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-TimelyMobile.release.xcconfig"; path = "Target Support Files/Pods-TimelyMobile/Pods-TimelyMobile.release.xcconfig"; sourceTree = "<group>"; };
+		AE0BA9B5D4507981569D3524 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = TimelyMobile/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		BB2F792C24A3F905000567C9 /* Expo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Expo.plist; sourceTree = "<group>"; };
+		E293ABFED5F44485018F0C53 /* Pods-TimelyMobile.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-TimelyMobile.debug.xcconfig"; path = "Target Support Files/Pods-TimelyMobile/Pods-TimelyMobile.debug.xcconfig"; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = TimelyMobile/AppDelegate.swift; sourceTree = "<group>"; };
 		F11748442D0722820044C1D9 /* TimelyMobile-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "TimelyMobile-Bridging-Header.h"; path = "TimelyMobile/TimelyMobile-Bridging-Header.h"; sourceTree = "<group>"; };
+		F16C445A6BDDFF2473C0117E /* Pods-TimelyMobile.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-TimelyMobile.release.xcconfig"; path = "Target Support Files/Pods-TimelyMobile/Pods-TimelyMobile.release.xcconfig"; sourceTree = "<group>"; };
+		FA1B362698B89C54D19AD5C0 /* libPods-TimelyMobile.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-TimelyMobile.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -37,7 +37,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				2E64E688DD41E9C04A903C8C /* libPods-TimelyMobile.a in Frameworks */,
+				6571B88A4BA690B58B6805A4 /* libPods-TimelyMobile.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -53,26 +53,36 @@
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */,
-				074254910DD2E34D81C174CA /* PrivacyInfo.xcprivacy */,
+				AE0BA9B5D4507981569D3524 /* PrivacyInfo.xcprivacy */,
 			);
 			name = TimelyMobile;
 			sourceTree = "<group>";
 		};
-		232552EB658497DF8BCEC0DD /* ExpoModulesProviders */ = {
+		1CBC71FFFB12D486BBBCB2D1 /* Pods */ = {
 			isa = PBXGroup;
 			children = (
-				B886D71F9C1C9650FE160290 /* TimelyMobile */,
+				E293ABFED5F44485018F0C53 /* Pods-TimelyMobile.debug.xcconfig */,
+				F16C445A6BDDFF2473C0117E /* Pods-TimelyMobile.release.xcconfig */,
 			);
-			name = ExpoModulesProviders;
+			name = Pods;
+			path = Pods;
 			sourceTree = "<group>";
 		};
 		2D16E6871FA4F8E400B85C8A /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
 				ED297162215061F000B7C4FE /* JavaScriptCore.framework */,
-				9237F1E26FE3E94AA880621A /* libPods-TimelyMobile.a */,
+				FA1B362698B89C54D19AD5C0 /* libPods-TimelyMobile.a */,
 			);
 			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		648F3C12CE36BA8FF45C1543 /* ExpoModulesProviders */ = {
+			isa = PBXGroup;
+			children = (
+				86249F28B20D7B1A33804D39 /* TimelyMobile */,
+			);
+			name = ExpoModulesProviders;
 			sourceTree = "<group>";
 		};
 		832341AE1AAA6A7D00B99B32 /* Libraries */ = {
@@ -89,8 +99,8 @@
 				832341AE1AAA6A7D00B99B32 /* Libraries */,
 				83CBBA001A601CBA00E9B192 /* Products */,
 				2D16E6871FA4F8E400B85C8A /* Frameworks */,
-				D7CBEB44C2D6223F2CF2E2F2 /* Pods */,
-				232552EB658497DF8BCEC0DD /* ExpoModulesProviders */,
+				1CBC71FFFB12D486BBBCB2D1 /* Pods */,
+				648F3C12CE36BA8FF45C1543 /* ExpoModulesProviders */,
 			);
 			indentWidth = 2;
 			sourceTree = "<group>";
@@ -105,10 +115,10 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
-		B886D71F9C1C9650FE160290 /* TimelyMobile */ = {
+		86249F28B20D7B1A33804D39 /* TimelyMobile */ = {
 			isa = PBXGroup;
 			children = (
-				558B288DB468256CBCE53C6E /* ExpoModulesProvider.swift */,
+				80DCAA527E06CC400E5E5ECF /* ExpoModulesProvider.swift */,
 			);
 			name = TimelyMobile;
 			sourceTree = "<group>";
@@ -122,16 +132,6 @@
 			path = TimelyMobile/Supporting;
 			sourceTree = "<group>";
 		};
-		D7CBEB44C2D6223F2CF2E2F2 /* Pods */ = {
-			isa = PBXGroup;
-			children = (
-				2ECB8BAB1C625C923CD5DFED /* Pods-TimelyMobile.debug.xcconfig */,
-				B6BF3F483511EF5B981F846E /* Pods-TimelyMobile.release.xcconfig */,
-			);
-			name = Pods;
-			path = Pods;
-			sourceTree = "<group>";
-		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -140,13 +140,13 @@
 			buildConfigurationList = 13B07F931A680F5B00A75B9A /* Build configuration list for PBXNativeTarget "TimelyMobile" */;
 			buildPhases = (
 				08A4A3CD28434E44B6B9DE2E /* [CP] Check Pods Manifest.lock */,
-				4A113EB36F1BE17CCF5EFC03 /* [Expo] Configure project */,
+				F39C7382689A86C4CCD32F30 /* [Expo] Configure project */,
 				13B07F871A680F5B00A75B9A /* Sources */,
 				13B07F8C1A680F5B00A75B9A /* Frameworks */,
 				13B07F8E1A680F5B00A75B9A /* Resources */,
 				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
 				800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */,
-				9162198F92AC268258B40D7D /* [CP] Embed Pods Frameworks */,
+				CE2DFD9E42CCEF5977653CAC /* [CP] Embed Pods Frameworks */,
 			);
 			buildRules = (
 			);
@@ -196,7 +196,7 @@
 				BB2F792D24A3F905000567C9 /* Expo.plist in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */,
-				35A965B34B738A18051730E7 /* PrivacyInfo.xcprivacy in Resources */,
+				618C13AF3E0AF22A9C1865F6 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -240,25 +240,6 @@
 			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
 			showEnvVarsInLog = 0;
 		};
-		4A113EB36F1BE17CCF5EFC03 /* [Expo] Configure project */ = {
-			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-			);
-			name = "[Expo] Configure project";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "# This script configures Expo modules and generates the modules provider file.\nbash -l -c \"./Pods/Target\\ Support\\ Files/Pods-TimelyMobile/expo-configure-project.sh\"\n";
-		};
 		800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
@@ -278,6 +259,7 @@
 				"${PODS_CONFIGURATION_BUILD_DIR}/RNSVG/RNSVGFilters.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/React-Core/React-Core_privacy.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/React-cxxreact/React-cxxreact_privacy.bundle",
+				"${PODS_CONFIGURATION_BUILD_DIR}/SDWebImage/SDWebImage.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/boost/boost_privacy.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/expo-dev-launcher/EXDevLauncher.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/expo-dev-menu/EXDevMenu.bundle",
@@ -297,6 +279,7 @@
 				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/RNSVGFilters.bundle",
 				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/React-Core_privacy.bundle",
 				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/React-cxxreact_privacy.bundle",
+				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/SDWebImage.bundle",
 				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/boost_privacy.bundle",
 				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/EXDevLauncher.bundle",
 				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/EXDevMenu.bundle",
@@ -307,7 +290,7 @@
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-TimelyMobile/Pods-TimelyMobile-resources.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
-		9162198F92AC268258B40D7D /* [CP] Embed Pods Frameworks */ = {
+		CE2DFD9E42CCEF5977653CAC /* [CP] Embed Pods Frameworks */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -333,6 +316,25 @@
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-TimelyMobile/Pods-TimelyMobile-frameworks.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
+		F39C7382689A86C4CCD32F30 /* [Expo] Configure project */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "[Expo] Configure project";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# This script configures Expo modules and generates the modules provider file.\nbash -l -c \"./Pods/Target\\ Support\\ Files/Pods-TimelyMobile/expo-configure-project.sh\"\n";
+		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -341,7 +343,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */,
-				3C3A68DDE6EB5DB5F28900FC /* ExpoModulesProvider.swift in Sources */,
+				D2AF88E7E2EEDE58512C5193 /* ExpoModulesProvider.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -350,7 +352,7 @@
 /* Begin XCBuildConfiguration section */
 		13B07F941A680F5B00A75B9A /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 2ECB8BAB1C625C923CD5DFED /* Pods-TimelyMobile.debug.xcconfig */;
+			baseConfigurationReference = E293ABFED5F44485018F0C53 /* Pods-TimelyMobile.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
@@ -375,7 +377,7 @@
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
 				PRODUCT_BUNDLE_IDENTIFIER = com.leveldesign.TimelyMobile;
-				PRODUCT_NAME = TimelyMobile;
+				PRODUCT_NAME = "TimelyMobile";
 				SWIFT_OBJC_BRIDGING_HEADER = "TimelyMobile/TimelyMobile-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
@@ -386,7 +388,7 @@
 		};
 		13B07F951A680F5B00A75B9A /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = B6BF3F483511EF5B981F846E /* Pods-TimelyMobile.release.xcconfig */;
+			baseConfigurationReference = F16C445A6BDDFF2473C0117E /* Pods-TimelyMobile.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
@@ -406,7 +408,7 @@
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
 				PRODUCT_BUNDLE_IDENTIFIER = com.leveldesign.TimelyMobile;
-				PRODUCT_NAME = TimelyMobile;
+				PRODUCT_NAME = "TimelyMobile";
 				SWIFT_OBJC_BRIDGING_HEADER = "TimelyMobile/TimelyMobile-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";

@@ -13,7 +13,7 @@ const { Resend } = require('resend');
 // You also need to add and verify a domain in Resend to be able to send emails.
 // You can use the 'onboarding@resend.dev' address for testing, but for production,
 // you must use an email from your verified domain (e.g., 'noreply@yourdomain.com').
-const FROM_EMAIL = 'onboarding@resend.dev'; // <-- REPLACE with your verified domain email for production
+const FROM_EMAIL = process.env.FROM_EMAIL || 'noreply@ontimely.co.uk';
 
 module.exports = async (req, res) => {
   // We only allow POST requests to this endpoint.

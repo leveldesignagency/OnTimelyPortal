@@ -68,7 +68,7 @@ export default function NotificationsPage() {
         .select('id, name')
         .eq('company_id', user.company_id);
       setEvents(eventList || []);
-      // Fetch users
+      // Fetch users limited to company initially
       const { data: userList } = await supabase
         .from('users')
         .select('id, name')
@@ -78,17 +78,41 @@ export default function NotificationsPage() {
     })();
   }, [navigate]);
 
-  // Real-time updates
+  // When event filter changes, limit users to those on teams assigned to that event
   useEffect(() => {
-    if (!currentUser) return;
-    const sub = subscribeToActivityLog(currentUser.company_id, (payload: any) => {
-      if (payload.eventType === 'INSERT') {
-        setActivity(prev => [payload.new, ...prev]);
-        setFiltered(prev => [payload.new, ...prev]);
+    (async () => {
+      if (!currentUser) return;
+      if (!eventFilter) {
+        const { data: userList } = await supabase
+          .from('users')
+          .select('id, name')
+          .eq('company_id', currentUser.company_id);
+        setUsers(userList || []);
+        return;
       }
-    });
-    return () => { if (sub) sub.unsubscribe(); };
-  }, [currentUser]);
+      // 1) get team ids for the event
+      const { data: teamEvents } = await supabase
+        .from('team_events')
+        .select('team_id')
+        .eq('event_id', eventFilter);
+      const teamIds = (teamEvents || []).map((t: any) => t.team_id);
+      if (teamIds.length === 0) { setUsers([]); return; }
+      // 2) members of those teams
+      const { data: teamMembers } = await supabase
+        .from('team_members')
+        .select('user_id')
+        .in('team_id', teamIds);
+      const userIds = Array.from(new Set((teamMembers || []).map((m: any) => m.user_id)));
+      if (userIds.length === 0) { setUsers([]); return; }
+      // 3) fetch user records limited to company and these ids
+      const { data: userList } = await supabase
+        .from('users')
+        .select('id, name')
+        .eq('company_id', currentUser.company_id)
+        .in('id', userIds);
+      setUsers(userList || []);
+    })();
+  }, [eventFilter, currentUser]);
 
   // Filtering and search
   useEffect(() => {
@@ -130,6 +154,7 @@ export default function NotificationsPage() {
     switch (type) {
       case 'event_created': return 'created an event';
       case 'event_updated': return 'updated an event';
+      case 'event_deleted': return 'deleted an event';
       case 'guests_added': return 'added guests';
       case 'guest_updated': return 'updated a guest';
       case 'guest_deleted': return 'deleted a guest';
@@ -137,6 +162,11 @@ export default function NotificationsPage() {
       case 'itinerary_updated': return 'updated an itinerary';
       case 'itinerary_deleted': return 'deleted an itinerary';
       case 'homepage_updated': return 'updated the homepage';
+      case 'chat_message': return 'sent a message';
+      case 'chat_attachment': return 'shared an attachment';
+      case 'chat_reaction': return 'reacted in chat';
+      case 'module_response': return 'submitted a module response';
+      case 'timeline_checkpoint': return 'reached a checkpoint';
       default: return type.replace(/_/g, ' ');
     }
   };

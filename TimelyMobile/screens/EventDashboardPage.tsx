@@ -286,6 +286,8 @@ export default function EventDashboardPage({ eventId, onNavigate }: EventDashboa
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [showEditEventModal, setShowEditEventModal] = useState(false);
+  const [activityFeed, setActivityFeed] = useState<any[]>([]);
+  const [activityLoading, setActivityLoading] = useState(false);
   
   // Undo functionality state
   const [lastBulkAction, setLastBulkAction] = useState<{ action: string, affected: any[] } | null>(null);
@@ -712,6 +714,88 @@ export default function EventDashboardPage({ eventId, onNavigate }: EventDashboa
       loadGuests();
     }
   }, [guestSearchQuery]);
+
+  useEffect(() => {
+    (async () => {
+      if (!eventId) return;
+      try {
+        setActivityLoading(true);
+        const { data: auth } = await supabase.auth.getUser();
+        const { data: profile } = await supabase.from('users').select('company_id').eq('id', auth.user?.id || '').single();
+        const companyId = profile?.company_id;
+        // Seed from unified RPC so chat/module activity appears even without activity_log
+        const { data: seed, error: seedErr } = await supabase.rpc('get_event_activity_feed', {
+          p_event_id: eventId,
+          p_company_id: companyId,
+          p_limit: 30,
+          p_offset: 0,
+        });
+        const seedFiltered = (seed || [])
+          .filter((i: any) => i.item_type === 'message' || i.item_type === 'module_answer')
+          .map((i: any) => ({
+            id: `${i.item_type}-${i.source_id}`,
+            created_at: i.created_at,
+            action_type: i.item_type === 'message' ? 'chat_message' : 'module_response',
+            details: { event_title: i.title, actor_name: i.actor_name },
+          }));
+        if (!seedErr) setActivityFeed(seedFiltered.slice(0, 9));
+      } finally {
+        setActivityLoading(false);
+      }
+    })();
+  }, [eventId]);
+
+  // realtime updates
+  useEffect(() => {
+    let sub: any;
+    let subMsg: any;
+    let subMod: any;
+    (async () => {
+      const { data: profile } = await supabase.from('users').select('company_id').eq('id', (await supabase.auth.getUser()).data.user?.id || '').single();
+      const companyId = profile?.company_id;
+      // Listen to activity_log inserts for timeline checkpoints (if present)
+      sub = supabase
+        .channel(`activity-${eventId}`)
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_log', filter: `event_id=eq.${eventId}` }, (payload: any) => {
+          const a = payload.new;
+          if (!['timeline_checkpoint'].includes(a.action_type)) return;
+          if (a.company_id !== companyId) return;
+          setActivityFeed(prev => [a, ...prev].slice(0, 9));
+        })
+        .subscribe();
+
+      // Listen directly to chat messages
+      subMsg = supabase
+        .channel(`msgs-${eventId}`)
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'guests_chat_messages', filter: `event_id=eq.${eventId}` }, (payload: any) => {
+          const m = payload.new;
+          const a = { id: `msg-${m.message_id}`, created_at: m.created_at, action_type: 'chat_message', details: { actor_name: m.sender_name, sender_name: m.sender_name } };
+          setActivityFeed(prev => [a, ...prev].slice(0, 9));
+        })
+        .subscribe();
+
+      // Listen to module responses
+      subMod = supabase
+        .channel(`mods-${eventId}`)
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'guest_module_answers', filter: `event_id=eq.${eventId}` }, async (payload: any) => {
+          const r = payload.new;
+          let actorName = '';
+          try {
+            if (r.user_id) {
+              const { data: u } = await supabase.from('users').select('name').eq('id', r.user_id).single();
+              actorName = u?.name || '';
+            } else if (r.guest_id) {
+              const { data: g } = await supabase.from('guests').select('first_name,last_name').eq('id', r.guest_id).single();
+              actorName = g ? `${g.first_name} ${g.last_name}` : '';
+            }
+          } catch {}
+          const a = { id: `mod-${r.id}`, created_at: r.created_at, action_type: 'module_response', details: { actor_name: actorName || 'Participant' } };
+          setActivityFeed(prev => [a, ...prev].slice(0, 9));
+        })
+        .subscribe();
+    })();
+    return () => { if (sub) sub.unsubscribe(); if (subMsg) subMsg.unsubscribe(); if (subMod) subMod.unsubscribe(); };
+  }, [eventId]);
 
   // Helper functions
   const getEventDisplayStatus = (event: EventType): string => {
@@ -1708,34 +1792,41 @@ export default function EventDashboardPage({ eventId, onNavigate }: EventDashboa
 
             {/* Live Activity Feed */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Live Activity</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Text style={styles.sectionTitle}>Live Activity</Text>
+                <TouchableOpacity onPress={() => onNavigate('notifications', { eventId })} style={{ padding: 6, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.06)' }}>
+                  <MaterialCommunityIcons name="bell-outline" size={20} color="#fff" />
+                </TouchableOpacity>
+              </View>
               <View style={styles.activityContainer}>
-                <View style={styles.activityItem}>
-                  <View style={styles.activityDot} />
-                  <View style={styles.activityContent}>
-                    <Text style={styles.activityTitle}>John Smith confirmed arrival</Text>
-                    <Text style={styles.activitySubtitle}>Through security checkpoint • 2 minutes ago</Text>
-                  </View>
-                  <MaterialCommunityIcons name="clipboard-check" size={20} color="#22c55e" />
-                </View>
-
-                <View style={styles.activityItem}>
-                  <View style={[styles.activityDot, { backgroundColor: '#ccc' }]} />
-                  <View style={styles.activityContent}>
-                    <Text style={styles.activityTitle}>Flight BA123 landed</Text>
-                    <Text style={styles.activitySubtitle}>5 guests on board • 15 minutes ago</Text>
-                  </View>
-                  <MaterialCommunityIcons name="airplane" size={20} color="#fff" />
-                </View>
-
-                <View style={styles.activityItem}>
-                  <View style={[styles.activityDot, { backgroundColor: '#666' }]} />
-                  <View style={styles.activityContent}>
-                    <Text style={styles.activityTitle}>Driver assigned to Group Alpha</Text>
-                    <Text style={styles.activitySubtitle}>Vehicle: Mercedes Sprinter • 18 minutes ago</Text>
-                  </View>
-                  <MaterialCommunityIcons name="car" size={20} color="#fff" />
-                </View>
+                {activityLoading ? (
+                  <Text style={styles.activitySubtitle}>Loading…</Text>
+                ) : activityFeed.length === 0 ? (
+                  <Text style={styles.activitySubtitle}>No recent activity</Text>
+                ) : (
+                  activityFeed.map((a, idx) => {
+                    const friendly = (() => {
+                      const actor = a.details?.actor_name || a.details?.sender_name || a.details?.event_title || 'Someone';
+                      switch (a.action_type) {
+                        case 'chat_message': return `${actor} sent a message…`;
+                        case 'chat_attachment': return `${actor} shared an attachment`;
+                        case 'chat_reaction': return `${actor} reacted in chat`;
+                        case 'module_response': return `${actor} submitted a module response`;
+                        case 'timeline_checkpoint': return `${actor || 'Participant'} reached a checkpoint`;
+                        default: return (a.action_type || '').replace(/_/g, ' ');
+                      }
+                    })();
+                    return (
+                      <View key={a.id || idx} style={styles.activityItem}>
+                        <View style={styles.activityDot} />
+                        <View style={styles.activityContent}>
+                          <Text style={styles.activityTitle}>{friendly}</Text>
+                          <Text style={styles.activitySubtitle}>{new Date(a.created_at).toLocaleString()}</Text>
+                        </View>
+                      </View>
+                    );
+                  })
+                )}
               </View>
             </View>
 

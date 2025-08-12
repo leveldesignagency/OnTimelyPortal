@@ -12,11 +12,38 @@ if (!supabaseUrl || !supabaseAnonKey) {
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage: AsyncStorage,
-    autoRefreshToken: true,
+    autoRefreshToken: false, // Disable auto refresh to prevent token errors
     persistSession: true,
     detectSessionInUrl: false,
   },
 });
+
+export const insertActivityLogMobile = async (params: {
+  company_id: string;
+  user_id: string | null; // can be guest user as null; server will still accept if policy allows
+  event_id?: string;
+  action: 'chat_message' | 'chat_attachment' | 'chat_reaction' | 'module_response';
+  summary: string; // user-friendly text
+  meta?: Record<string, any>;
+}) => {
+  try {
+    const { error } = await supabase.from('activity_log').insert([
+      {
+        company_id: params.company_id,
+        user_id: params.user_id,
+        action_type: params.action,
+        details: { summary: params.summary, ...(params.meta || {}) },
+        event_id: params.event_id || null,
+      },
+    ]);
+    if (error) {
+      // soft-fail; do not break UX
+      console.warn('[activity_log] mobile insert failed:', error.message);
+    }
+  } catch (e) {
+    console.warn('[activity_log] mobile insert exception:', e);
+  }
+};
 
 export const getEventAddOns = async (eventId: string, email: string): Promise<any[]> => {
   const { data, error } = await supabase.rpc('get_guest_event_addons', {
@@ -155,4 +182,8 @@ export type TimelineModule = {
   content: any;
   created_at: string;
   updated_at: string;
-}; 
+};
+
+export { supabaseAnonKey };
+
+export { supabaseAnonKey }; 
