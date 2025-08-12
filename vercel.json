@@ -5,7 +5,7 @@
   "framework": "vite",
   "functions": {
     "api/send-email.js": {
-      "runtime": "nodejs18.x"
+      "runtime": "nodejs18"
     }
   }
 } 
