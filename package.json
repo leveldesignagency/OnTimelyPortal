@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "turbo run dev",
     "build": "turbo run build",
-    "build:renderer": "cd apps/desktop/renderer && npm ci --no-audit --no-fund --workspaces=false && npm run build",
+    "build:renderer": "cd apps/desktop/renderer && npm install && npm run build",
     "test": "turbo run test",
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
