@@ -1,7 +1,7 @@
 {
-  "buildCommand": "cd apps/desktop/renderer && npm install && npm run build",
-  "outputDirectory": "apps/desktop/renderer/dist",
-  "installCommand": "cd apps/desktop/renderer && npm install",
+  "buildCommand": "npm install && npm run build",
+  "outputDirectory": "desktop/renderer/dist",
+  "installCommand": "npm install",
   "framework": "vite",
   "functions": {
     "api/send-email.js": {
