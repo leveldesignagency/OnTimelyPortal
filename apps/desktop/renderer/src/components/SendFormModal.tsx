@@ -43,6 +43,9 @@ const GUEST_MODULES = [
 ];
 
 export default function SendFormModal({ isOpen, onClose, eventId, eventName }: SendFormModalProps) {
+  // Early return to prevent any rendering if modal is not open
+  if (!isOpen) return null;
+  
   const { theme } = useContext(ThemeContext);
   const isDark = theme === 'dark';
   
@@ -72,8 +75,6 @@ export default function SendFormModal({ isOpen, onClose, eventId, eventName }: S
     checkboxBg: isDark ? '#ffffff' : '#000000',
     checkboxTick: isDark ? '#000000' : '#ffffff',
   };
-
-  if (!isOpen) return null;
 
   const handleAddEmail = () => {
     if (currentEmail && !emails.includes(currentEmail) && isValidEmail(currentEmail)) {
@@ -199,8 +200,7 @@ export default function SendFormModal({ isOpen, onClose, eventId, eventName }: S
                 key: field.key,
                 label: field.label,
                 type: field.type,
-                required: field.required,
-                placeholder: field.placeholder
+                required: field.required
               };
             }
             return null;
@@ -217,10 +217,13 @@ export default function SendFormModal({ isOpen, onClose, eventId, eventName }: S
       }
 
       // Create recipients and get form links
+      console.log('Creating form recipients for emails:', emails);
       const { data: linksData, error: linksError } = await supabase.rpc('create_form_recipients', {
         p_form_id: formData.id,
         p_emails: emails
       });
+      
+      console.log('create_form_recipients response:', { linksData, linksError });
 
       if (linksError) {
         console.error('Error creating recipients:', linksError);
@@ -228,7 +231,21 @@ export default function SendFormModal({ isOpen, onClose, eventId, eventName }: S
         return;
       }
 
-      const links = linksData || [];
+      // Extract emails and links from the response
+      const { emails: emailsSent, links: generatedLinks } = linksData || { emails: [], links: [] };
+      
+      // Update the form with the emails that were sent
+      const { error: updateError } = await supabase
+        .from('forms')
+        .update({ emails_sent: emailsSent })
+        .eq('id', formData.id);
+
+      if (updateError) {
+        console.error('Error updating form with emails:', updateError);
+        // Don't fail the whole process for this, just log it
+      }
+
+      const links = generatedLinks || [];
 
       if (provider === 'copy') {
         // Copy all links to clipboard
