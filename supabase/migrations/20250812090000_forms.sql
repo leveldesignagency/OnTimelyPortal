@@ -1,3 +1,9 @@
+-- Drop existing functions to avoid conflicts
+DROP FUNCTION IF EXISTS get_form_by_token(TEXT);
+DROP FUNCTION IF EXISTS create_form_recipients(UUID, TEXT[]);
+DROP FUNCTION IF EXISTS submit_form_response(TEXT, TEXT, JSONB);
+DROP FUNCTION IF EXISTS generate_form_token();
+
 -- Create forms table
 CREATE TABLE IF NOT EXISTS forms (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
