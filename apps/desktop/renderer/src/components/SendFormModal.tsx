@@ -43,9 +43,6 @@ const GUEST_MODULES = [
 ];
 
 export default function SendFormModal({ isOpen, onClose, eventId, eventName }: SendFormModalProps) {
-  // Early return to prevent any rendering if modal is not open
-  if (!isOpen) return null;
-  
   const { theme } = useContext(ThemeContext);
   const isDark = theme === 'dark';
   
@@ -75,6 +72,9 @@ export default function SendFormModal({ isOpen, onClose, eventId, eventName }: S
     checkboxBg: isDark ? '#ffffff' : '#000000',
     checkboxTick: isDark ? '#000000' : '#ffffff',
   };
+
+  // Early return to prevent any rendering if modal is not open
+  if (!isOpen) return null;
 
   const handleAddEmail = () => {
     if (currentEmail && !emails.includes(currentEmail) && isValidEmail(currentEmail)) {
@@ -232,7 +232,15 @@ export default function SendFormModal({ isOpen, onClose, eventId, eventName }: S
       }
 
       // Extract emails and links from the response
-      const { emails: emailsSent, links: generatedLinks } = linksData || { emails: [], links: [] };
+      console.log('Raw linksData:', linksData);
+      
+      // The function returns TABLE(emails TEXT[], links TEXT[]) so linksData should be an array
+      // with the first element containing the emails and links arrays
+      const emailsSent = linksData?.[0]?.emails || emails; // Fallback to original emails if function fails
+      const generatedLinks = linksData?.[0]?.links || [];
+      
+      console.log('Extracted emails:', emailsSent);
+      console.log('Extracted links:', generatedLinks);
       
       // Update the form with the emails that were sent
       const { error: updateError } = await supabase
@@ -245,7 +253,7 @@ export default function SendFormModal({ isOpen, onClose, eventId, eventName }: S
         // Don't fail the whole process for this, just log it
       }
 
-      const links = generatedLinks || [];
+      const links = generatedLinks;
 
       if (provider === 'copy') {
         // Copy all links to clipboard

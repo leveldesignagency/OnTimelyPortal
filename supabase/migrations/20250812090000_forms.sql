@@ -4,14 +4,21 @@ DROP FUNCTION IF EXISTS create_form_recipients(UUID, TEXT[]);
 DROP FUNCTION IF EXISTS submit_form_response(TEXT, TEXT, JSONB);
 DROP FUNCTION IF EXISTS generate_form_token();
 
+-- Drop existing tables if they exist to avoid column conflicts
+DROP TABLE IF EXISTS form_submissions CASCADE;
+DROP TABLE IF EXISTS form_recipients CASCADE;
+DROP TABLE IF EXISTS forms CASCADE;
+
 -- Create forms table
-CREATE TABLE IF NOT EXISTS forms (
+CREATE TABLE forms (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   event_id UUID REFERENCES events(id) ON DELETE CASCADE,
   company_id UUID REFERENCES companies(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
   description TEXT,
   fields JSONB NOT NULL DEFAULT '[]',
+  modules JSONB NOT NULL DEFAULT '[]',
+  emails_sent TEXT[] DEFAULT '{}',
   is_active BOOLEAN DEFAULT true,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   created_by UUID REFERENCES users(id) ON DELETE SET NULL,
@@ -19,7 +26,7 @@ CREATE TABLE IF NOT EXISTS forms (
 );
 
 -- Create form_recipients table
-CREATE TABLE IF NOT EXISTS form_recipients (
+CREATE TABLE form_recipients (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   form_id UUID REFERENCES forms(id) ON DELETE CASCADE,
   email TEXT NOT NULL,
@@ -30,7 +37,7 @@ CREATE TABLE IF NOT EXISTS form_recipients (
 );
 
 -- Create form_submissions table
-CREATE TABLE IF NOT EXISTS form_submissions (
+CREATE TABLE form_submissions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   form_id UUID REFERENCES forms(id) ON DELETE CASCADE,
   recipient_id UUID REFERENCES form_recipients(id) ON DELETE SET NULL,
@@ -111,11 +118,12 @@ CREATE OR REPLACE FUNCTION create_form_recipients(
   p_form_id UUID,
   p_emails TEXT[]
 )
-RETURNS TABLE(links TEXT[]) AS $$
+RETURNS TABLE(emails TEXT[], links TEXT[]) AS $$
 DECLARE
   email TEXT;
   token TEXT;
-  links TEXT[] := '{}';
+  emails_array TEXT[] := '{}';
+  links_array TEXT[] := '{}';
 BEGIN
   FOR email IN SELECT unnest(p_emails)
   LOOP
@@ -124,11 +132,13 @@ BEGIN
     INSERT INTO form_recipients (form_id, email, token)
     VALUES (p_form_id, email, token);
     
-    -- Generate the form link
-    links := array_append(links, 'https://ontimely.co.uk/forms/' || token);
+    -- Build arrays for return
+    emails_array := array_append(emails_array, email);
+    links_array := array_append(links_array, 'https://ontimely.co.uk/forms/' || token);
   END LOOP;
   
-  RETURN QUERY SELECT unnest(links);
+  -- Return both arrays
+  RETURN QUERY SELECT emails_array, links_array;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
