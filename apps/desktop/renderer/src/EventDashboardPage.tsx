@@ -4085,14 +4085,14 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
         )
       })()}
 
-      {showSendFormModal && (
+      {showSendFormModal ? (
         <SendFormModal
-          isOpen={showSendFormModal}
+          isOpen={true}
           onClose={handleCloseModal}
           eventId={event?.id || ''}
           eventName={event?.name || ''}
         />
-      )}
+      ) : null}
 
       {/* Delete Event Confirmation Modal */}
       {showDeleteEventModal && (

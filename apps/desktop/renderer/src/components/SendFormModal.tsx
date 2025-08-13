@@ -261,36 +261,53 @@ export default function SendFormModal({ isOpen, onClose, eventId, eventName }: S
         alert('Form links copied to clipboard!');
       } else {
         // Send emails with form links
+        console.log('Starting to send emails via API...');
+        console.log('API_BASE:', API_BASE);
+        console.log('Emails to send:', emails);
+        console.log('Links to use:', links);
+        
         for (let i = 0; i < emails.length; i++) {
           const email = emails[i];
           const link = links[i] || links[0];
           
+          console.log(`Sending email ${i + 1}/${emails.length} to: ${email}`);
+          console.log(`Using link: ${link}`);
+          
           try {
+            const requestBody = {
+              to: email,
+              subject: `You're invited to: ${eventName}!`,
+              html: `
+                <div style="font-family: sans-serif; text-align: center; padding: 40px;">
+                  <h1 style="color: #333;">You're invited!</h1>
+                  <p style="font-size: 18px; color: #555;">You have been invited to the event: <strong>${eventName}</strong>.</p>
+                  <p style="font-size: 16px; color: #555;">Please click the button below to fill out the guest information form.</p>
+                  <a href="${link}" target="_blank" style="background-color: #000; color: #fff; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-size: 18px; display: inline-block; margin-top: 20px;">
+                    Fill Out Form
+                  </a>
+                  <p style="margin-top: 30px; font-size: 12px; color: #999;">If you cannot click the button, copy and paste this link into your browser: ${link}</p>
+                </div>
+              `
+            };
+            
+            console.log('Request body:', requestBody);
+            
             const response = await fetch(`${API_BASE}/api/send-email`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                to: email,
-                subject: `You're invited to: ${eventName}!`,
-                html: `
-                  <div style="font-family: sans-serif; text-align: center; padding: 40px;">
-                    <h1 style="color: #333;">You're invited!</h1>
-                    <p style="font-size: 18px; color: #555;">You have been invited to the event: <strong>${eventName}</strong>.</p>
-                    <p style="font-size: 16px; color: #555;">Please click the button below to fill out the guest information form.</p>
-                    <a href="${link}" target="_blank" style="background-color: #000; color: #fff; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-size: 18px; display: inline-block; margin-top: 20px;">
-                      Fill Out Form
-                    </a>
-                    <p style="margin-top: 30px; font-size: 12px; color: #999;">If you cannot click the button, copy and paste this link into your browser: ${link}</p>
-                  </div>
-                `
-              })
+              body: JSON.stringify(requestBody)
             });
 
+            console.log(`Response for ${email}:`, response.status, response.statusText);
+            
             if (!response.ok) {
-              console.warn('Email send failed for', email);
+              const errorText = await response.text();
+              console.error('Email send failed for', email, 'Status:', response.status, 'Error:', errorText);
+            } else {
+              console.log(`Email sent successfully to ${email}`);
             }
           } catch (e) {
-            console.warn('Email send failed for', email, e);
+            console.error('Email send failed for', email, 'Error:', e);
           }
         }
       }
