@@ -7,7 +7,7 @@ console.log('🚀 Starting custom Vercel build...');
 
 try {
   // Change to the renderer directory where the actual desktop app lives
-  const rendererPath = path.join(__dirname, 'desktop', 'renderer');
+  const rendererPath = path.join(__dirname, 'apps', 'desktop', 'renderer');
   console.log(`📁 Changing to directory: ${rendererPath}`);
   process.chdir(rendererPath);
   
