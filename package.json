@@ -1,39 +1,13 @@
 {
-  "name": "timely",
-  "private": true,
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ],
-  "scripts": {
-    "dev": "turbo run dev",
-    "build": "turbo run build",
-    "test": "turbo run test",
-    "lint": "turbo run lint",
-    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
-    "android": "expo run:android",
-    "ios": "expo run:ios"
-  },
-  "devDependencies": {
-    "@typescript-eslint/eslint-plugin": "^6.0.0",
-    "@typescript-eslint/parser": "^6.0.0",
-    "eslint": "^8.0.0",
-    "prettier": "^3.0.0",
-    "turbo": "^1.10.0",
-    "typescript": "^5.0.0"
-  },
+  "name": "ontimely",
   "version": "1.0.0",
-  "dependencies": {
-    "@expo/vector-icons": "^14.1.0",
-    "@react-native-community/slider": "^4.5.7",
-    "@react-native/virtualized-lists": "^0.80.1",
-    "@react-navigation/bottom-tabs": "^7.4.2",
-    "expo": "~50.0.17",
-    "jspdf": "^3.0.1",
-    "papaparse": "^5.5.3",
-    "react": "18.2.0",
-    "react-native": "0.73.6",
-    "react-native-gesture-handler": "~2.14.0",
-    "react-native-pager-view": "6.2.3"
-  }
+  "description": "Timely Event Management Platform",
+  "main": "index.js",
+  "scripts": {
+    "build": "echo 'Build completed'",
+    "dev": "echo 'Dev mode'"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
 }

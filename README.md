@@ -1,32 +1,16 @@
-# Timely - Event Management Software
+# OnTimely - Event Management Platform
 
-A comprehensive event management platform for agencies to manage events, guests, logistics, and communications.
+A clean, simple setup for the OnTimely event management platform.
 
-## Features
-- Event Management
-- Guest Management
-- Logistics Management
-- Inventory Management
-- Real-time Communication
+## API Functions
 
-## Tech Stack
-- Mobile: React Native
-- Desktop: Electron + React
-- Backend: NestJS (Node.js), PostgreSQL, Prisma
-- Monorepo: TurboRepo
+- `api/send-email.js` - Email sending via Resend API
 
-## Project Structure
-```
-timely/
-├── apps/
-│   ├── mobile/          # React Native mobile app
-│   ├── desktop/         # Electron desktop app
-│   └── api/            # Backend API
-├── packages/
-│   ├── shared/         # Shared code
-│   └── database/       # Database models
-├── .gitignore
-├── package.json
-├── turbo.json
-└── README.md
-``` 
+## Deployment
+
+This repository is configured to work with Vercel serverless functions.
+
+## Environment Variables Required
+
+- `RESEND_API_KEY` - Your Resend API key
+- `FROM_EMAIL` - Email address to send from (default: noreply@ontimely.co.uk) 
