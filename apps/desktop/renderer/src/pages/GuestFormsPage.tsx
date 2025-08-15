@@ -16,7 +16,6 @@ interface GuestFormResponse {
 interface FormStats {
   totalResponses: number;
   totalFormsSent: number;
-  eventsWithForms: number;
 }
 
 export default function GuestFormsPage() {
@@ -29,8 +28,7 @@ export default function GuestFormsPage() {
   const [error, setError] = useState('');
   const [stats, setStats] = useState<FormStats>({
     totalResponses: 0,
-    totalFormsSent: 0,
-    eventsWithForms: 0
+    totalFormsSent: 0
   });
 
   const colors = {
@@ -44,6 +42,69 @@ export default function GuestFormsPage() {
 
   useEffect(() => {
     loadGuestFormResponses();
+    
+    // Set up real-time subscription for form submissions
+    if (supabase) {
+      const subscription = supabase
+        .channel('form_submissions_changes')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'form_submissions'
+          },
+          (payload) => {
+            console.log('📡 Real-time form submission update:', payload);
+            
+            if (payload.eventType === 'INSERT') {
+              console.log('➕ New form submission:', payload.new);
+              // Refresh the data to get the latest submissions
+              loadGuestFormResponses();
+            } else if (payload.eventType === 'UPDATE') {
+              console.log('✏️ Form submission updated:', payload.new);
+              loadGuestFormResponses();
+            } else if (payload.eventType === 'DELETE') {
+              console.log('🗑️ Form submission deleted:', payload.old);
+              loadGuestFormResponses();
+            }
+            
+            // Also listen for guest creation from form submissions
+            if (payload.eventType === 'INSERT' && payload.table === 'guests') {
+              console.log('👥 New guest created from form:', payload.new);
+              // Refresh stats to show updated guest count
+              loadGuestFormResponses();
+            }
+          }
+        )
+        .subscribe();
+
+      // Also subscribe to guests table changes
+      const guestsSubscription = supabase
+        .channel('guests_changes')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'guests'
+          },
+          (payload) => {
+            console.log('👥 Real-time guest update:', payload);
+            if (payload.eventType === 'INSERT') {
+              console.log('➕ New guest created:', payload.new);
+              // Refresh data to show updated stats
+              loadGuestFormResponses();
+            }
+          }
+        )
+        .subscribe();
+
+      return () => {
+        subscription.unsubscribe();
+        guestsSubscription.unsubscribe();
+      };
+    }
   }, []);
 
   const loadGuestFormResponses = async () => {
@@ -111,8 +172,8 @@ export default function GuestFormsPage() {
       console.log('🔄 Transformed responses:', transformedResponses);
       setFormResponses(transformedResponses);
 
-      // Fetch stats
-      await loadStats(userProfile.company_id);
+      // Fetch stats with the actual formResponses count
+      await loadStats(userProfile.company_id, transformedResponses.length);
 
       // Debug: Check if guests were created from form submissions
       console.log('🔍 Checking if guests were created from form submissions...');
@@ -145,51 +206,62 @@ export default function GuestFormsPage() {
     }
   };
 
-  const loadStats = async (companyId: string) => {
+  const loadStats = async (companyId: string, responsesCount: number) => {
     try {
-      // Get total forms sent (form_recipients count)
-      const { count: totalFormsSent } = await supabase
-        .from('form_recipients')
-        .select('*', { count: 'exact', head: true })
-        .in('form_id', 
-          supabase
-            .from('forms')
-            .select('id')
-            .eq('company_id', companyId)
-        );
-
-      // Get unique events with forms
-      const { data: eventsWithForms, error: eventsError } = await supabase
-        .from('forms')
-        .select('event_id')
-        .eq('company_id', companyId);
-
-      if (eventsError) {
-        console.error('Error fetching events with forms:', eventsError);
-      }
-
-      console.log('📊 Events with forms data:', eventsWithForms);
-
-      // Ensure eventsWithForms is an array before creating Set
-      const eventsArray = Array.isArray(eventsWithForms) ? eventsWithForms : [];
-      console.log('📊 Events array for Set:', eventsArray);
+      // Get total forms sent for the current event (form_recipients count)
+      // First get the current event ID from the URL or context
+      const currentPath = window.location.pathname;
+      let eventId = null;
       
-      const uniqueEvents = new Set(eventsArray.map(f => f.event_id));
-      console.log('📊 Unique events Set:', uniqueEvents);
+      // Try to extract event ID from URL or get it from the forms table
+      if (currentPath.includes('/event/')) {
+        eventId = currentPath.split('/event/')[1]?.split('/')[0];
+      }
+      
+      // If no event ID from URL, get it from the forms that have submissions
+      if (!eventId) {
+        const { data: formsWithSubmissions } = await supabase
+          .from('forms')
+          .select('event_id')
+          .eq('company_id', companyId)
+          .limit(1);
+        
+        if (formsWithSubmissions && formsWithSubmissions.length > 0) {
+          eventId = formsWithSubmissions[0].event_id;
+        }
+      }
+      
+      console.log('🎯 Current event ID for stats:', eventId);
+      
+      // Get total forms sent for this specific event
+      let totalFormsSent = 0;
+      if (eventId) {
+        const { count: formsSent } = await supabase
+          .from('form_recipients')
+          .select('*', { count: 'exact', head: true })
+          .in('form_id', 
+            supabase
+              .from('forms')
+              .select('id')
+              .eq('company_id', companyId)
+              .eq('event_id', eventId)
+          );
+        totalFormsSent = formsSent || 0;
+      }
+      
+      console.log('📊 Total forms sent for event:', totalFormsSent);
 
       setStats({
-        totalResponses: formResponses.length,
-        totalFormsSent: totalFormsSent || 0,
-        eventsWithForms: uniqueEvents.size
+        totalResponses: responsesCount,
+        totalFormsSent: totalFormsSent
       });
 
     } catch (err) {
       console.error('Error loading stats:', err);
       // Set default stats if there's an error
       setStats({
-        totalResponses: formResponses.length,
-        totalFormsSent: 0,
-        eventsWithForms: 0
+        totalResponses: responsesCount,
+        totalFormsSent: 0
       });
     }
   };
@@ -226,52 +298,50 @@ export default function GuestFormsPage() {
       color: colors.text,
       minHeight: '100vh'
     }}>
+      {/* Back Button */}
+      <button
+        onClick={() => navigate(-1)}
+        style={{
+          background: 'transparent',
+          border: `1px solid ${colors.border}`,
+          color: colors.text,
+          padding: '12px 24px',
+          borderRadius: '8px',
+          cursor: 'pointer',
+          fontSize: '14px',
+          fontWeight: '500',
+          maxWidth: '120px',
+          marginBottom: '24px'
+        }}
+      >
+        ← Back
+      </button>
+
       {/* Header */}
       <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
         marginBottom: '32px'
       }}>
-        <div>
-          <h1 style={{
-            fontSize: '32px',
-            fontWeight: '700',
-            margin: '0 0 8px 0',
-            color: colors.text
-          }}>
-            Guest Form Responses
-          </h1>
-          <p style={{
-            fontSize: '16px',
-            color: colors.textSecondary,
-            margin: 0
-          }}>
-            View responses from guests who have completed forms
-          </p>
-        </div>
-
-        <button
-          onClick={() => navigate(-1)}
-          style={{
-            background: 'transparent',
-            border: `1px solid ${colors.border}`,
-            color: colors.text,
-            padding: '12px 24px',
-            borderRadius: '8px',
-            cursor: 'pointer',
-            fontSize: '14px',
-            fontWeight: '500'
-          }}
-        >
-          ← Back
-        </button>
+        <h1 style={{
+          fontSize: '32px',
+          fontWeight: '700',
+          margin: '0 0 8px 0',
+          color: colors.text
+        }}>
+          Guest Form Responses
+        </h1>
+        <p style={{
+          fontSize: '16px',
+          color: colors.textSecondary,
+          margin: 0
+        }}>
+          View responses from guests who have completed forms
+        </p>
       </div>
 
       {/* Stats Cards */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+        gridTemplateColumns: 'repeat(3, 1fr)',
         gap: '16px',
         marginBottom: '32px'
       }}>
@@ -321,28 +391,7 @@ export default function GuestFormsPage() {
           </div>
         </div>
 
-        <div style={{
-          background: colors.cardBg,
-          border: `1px solid ${colors.border}`,
-          borderRadius: '12px',
-          padding: '24px',
-          textAlign: 'center'
-        }}>
-          <div style={{
-            fontSize: '32px',
-            fontWeight: '700',
-            color: colors.accent,
-            marginBottom: '8px'
-          }}>
-            {stats.eventsWithForms}
-          </div>
-          <div style={{
-            fontSize: '14px',
-            color: colors.textSecondary
-          }}>
-            Events with Forms
-          </div>
-        </div>
+
 
         <div style={{
           background: colors.cardBg,
@@ -363,7 +412,7 @@ export default function GuestFormsPage() {
             fontSize: '14px',
             color: colors.textSecondary
           }}>
-            Response Rate
+            Completed Forms
           </div>
         </div>
       </div>
