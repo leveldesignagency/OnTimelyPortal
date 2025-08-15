@@ -75,7 +75,32 @@ export default function EventDetailsAppPage({ onNavigate, onGoBack, eventId }: E
         .eq('event_id', eventId);
 
       if (guestsData) {
-        setGuests(guestsData);
+        // Process guest data to handle both old and new field structures
+        const processedGuests = guestsData.map(guest => ({
+          ...guest,
+          // Ensure dietary and medical are arrays
+          dietary: Array.isArray(guest.dietary) ? guest.dietary : 
+                   (guest.dietary === 'none' ? [] : [guest.dietary || '']),
+          medical: Array.isArray(guest.medical) ? guest.medical : 
+                   (guest.medical === 'none' ? [] : [guest.medical || '']),
+          // Handle modules field
+          modules: Array.isArray(guest.modules) ? {} : (guest.modules || {}),
+          // Ensure all fields have fallbacks
+          first_name: guest.first_name || guest.firstName || '',
+          last_name: guest.last_name || guest.lastName || '',
+          email: guest.email || '',
+          contact_number: guest.contact_number || guest.contactNumber || '',
+          country_code: guest.country_code || guest.countryCode || '',
+          id_type: guest.id_type || guest.idType || '',
+          id_number: guest.id_number || guest.idNumber || '',
+          id_country: guest.id_country || guest.idCountry || '',
+          next_of_kin_name: guest.next_of_kin_name || guest.nextOfKinName || '',
+          next_of_kin_email: guest.next_of_kin_email || guest.nextOfKinEmail || '',
+          next_of_kin_phone_country: guest.next_of_kin_phone_country || guest.nextOfKinPhoneCountry || '',
+          next_of_kin_phone: guest.next_of_kin_phone || guest.nextOfKinPhone || '',
+        }));
+        
+        setGuests(processedGuests);
       }
 
       // Fetch itineraries
@@ -321,6 +346,14 @@ export default function EventDetailsAppPage({ onNavigate, onGoBack, eventId }: E
 
             <TouchableOpacity 
               style={styles.actionButton}
+              onPress={() => onNavigate('guest-form-responses')}
+            >
+              <MaterialCommunityIcons name="clipboard-text" size={24} color="#10b981" />
+              <Text style={styles.actionText}>Guest Form Responses</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.actionButton}
               onPress={() => onNavigate('export-report')}
             >
               <MaterialCommunityIcons name="file-export" size={24} color="#10b981" />
@@ -349,10 +382,60 @@ export default function EventDetailsAppPage({ onNavigate, onGoBack, eventId }: E
             {guests.slice(0, 3).map((guest) => (
               <View key={guest.id} style={styles.guestItem}>
                 <MaterialCommunityIcons name="account" size={20} color="#10b981" />
-                <Text style={styles.guestName}>
-                  {guest.first_name} {guest.last_name}
-                </Text>
-                <Text style={styles.guestEmail}>{guest.email}</Text>
+                <View style={styles.guestInfo}>
+                  <Text style={styles.guestName}>
+                    {guest.first_name} {guest.last_name}
+                  </Text>
+                  {guest.email && (
+                    <Text style={styles.guestEmail}>{guest.email}</Text>
+                  )}
+                  {guest.contact_number && (
+                    <Text style={styles.guestContact}>{guest.contact_number}</Text>
+                  )}
+                  {/* Dietary Requirements */}
+                  {guest.dietary && Array.isArray(guest.dietary) && guest.dietary.length > 0 && (
+                    <View style={styles.tagsContainer}>
+                      <Text style={styles.tagsLabel}>Dietary:</Text>
+                      <View style={styles.tagsList}>
+                        {guest.dietary.slice(0, 3).map((diet: string, index: number) => (
+                          <View key={index} style={styles.tag}>
+                            <Text style={styles.tagText}>{diet}</Text>
+                          </View>
+                        ))}
+                        {guest.dietary.length > 3 && (
+                          <Text style={styles.moreTags}>+{guest.dietary.length - 3} more</Text>
+                        )}
+                      </View>
+                    </View>
+                  )}
+                  {/* Medical Information */}
+                  {guest.medical && Array.isArray(guest.medical) && guest.medical.length > 0 && (
+                    <View style={styles.tagsContainer}>
+                      <Text style={styles.tagsLabel}>Medical:</Text>
+                      <View style={styles.tagsList}>
+                        {guest.medical.slice(0, 2).map((med: string, index: number) => (
+                          <View key={index} style={styles.tag}>
+                            <Text style={styles.tagText}>{med}</Text>
+                          </View>
+                        ))}
+                        {guest.medical.length > 2 && (
+                          <Text style={styles.moreTags}>+{guest.medical.length - 2} more</Text>
+                        )}
+                      </View>
+                    </View>
+                  )}
+                  
+                  {/* Next of Kin Info */}
+                  {guest.next_of_kin_name && (
+                    <View style={styles.nextOfKinContainer}>
+                      <Text style={styles.nextOfKinLabel}>🆘 Next of Kin:</Text>
+                      <Text style={styles.nextOfKinText}>{guest.next_of_kin_name}</Text>
+                      {guest.next_of_kin_phone && (
+                        <Text style={styles.nextOfKinContact}>📱 {guest.next_of_kin_phone}</Text>
+                      )}
+                    </View>
+                  )}
+                </View>
               </View>
             ))}
             {guests.length > 3 && (
@@ -595,19 +678,85 @@ const styles = StyleSheet.create({
   },
   guestItem: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: 12,
-    paddingVertical: 8,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  guestInfo: {
+    flex: 1,
   },
   guestName: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '500',
-    flex: 1,
+    marginBottom: 2,
   },
   guestEmail: {
     color: '#666',
     fontSize: 14,
+    marginBottom: 2,
+  },
+  guestContact: {
+    color: '#666',
+    fontSize: 14,
+    marginBottom: 8,
+  },
+  tagsContainer: {
+    marginTop: 4,
+  },
+  tagsLabel: {
+    color: '#10b981',
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  tagsList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+  },
+  tag: {
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginRight: 6,
+    marginBottom: 4,
+  },
+  tagText: {
+    color: '#10b981',
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  moreTags: {
+    color: '#666',
+    fontSize: 11,
+    fontStyle: 'italic',
+  },
+  nextOfKinContainer: {
+    marginTop: 8,
+    padding: 8,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.2)',
+  },
+  nextOfKinLabel: {
+    color: '#ef4444',
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  nextOfKinText: {
+    color: '#fff',
+    fontSize: 12,
+    marginBottom: 2,
+  },
+  nextOfKinContact: {
+    color: '#10b981',
+    fontSize: 12,
   },
   viewAllButton: {
     alignItems: 'center',

@@ -1,5 +1,5 @@
 import React, { useContext, useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { ThemeContext } from '../ThemeContext';
 import { supabase } from '../lib/supabase';
 
@@ -21,7 +21,10 @@ interface FormStats {
 export default function GuestFormsPage() {
   const { theme } = useContext(ThemeContext);
   const navigate = useNavigate();
+  const { eventId } = useParams();
   const isDark = theme === 'dark';
+  
+  console.log('🎯 GuestFormsPage - Event ID:', eventId);
 
   const [formResponses, setFormResponses] = useState<GuestFormResponse[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,7 +44,9 @@ export default function GuestFormsPage() {
   };
 
   useEffect(() => {
-    loadGuestFormResponses();
+    if (eventId) {
+      loadGuestFormResponses();
+    }
     
     // Set up real-time subscription for form submissions
     if (supabase) {
@@ -95,6 +100,17 @@ export default function GuestFormsPage() {
               console.log('➕ New guest created:', payload.new);
               // Refresh data to show updated stats
               loadGuestFormResponses();
+            } else if (payload.eventType === 'DELETE') {
+              console.log('🗑️ Guest deleted:', payload.old);
+              // Remove deleted guest from responses immediately
+              setFormResponses(prev => 
+                prev.filter(response => response.email !== payload.old.email)
+              );
+              // Update stats
+              setStats(prev => ({
+                ...prev,
+                totalResponses: Math.max(0, prev.totalResponses - 1)
+              }));
             }
           }
         )
@@ -105,7 +121,12 @@ export default function GuestFormsPage() {
         guestsSubscription.unsubscribe();
       };
     }
-  }, []);
+  }, [eventId]);
+
+  // Debug: Log stats changes
+  useEffect(() => {
+    console.log('📊 Stats updated:', stats);
+  }, [stats]);
 
   const loadGuestFormResponses = async () => {
     try {
@@ -130,8 +151,8 @@ export default function GuestFormsPage() {
         return;
       }
 
-      // Fetch form submissions with event details
-      const { data: submissions, error: submissionsError } = await supabase
+      // Fetch form submissions with event details - filter by specific event if provided
+      let query = supabase
         .from('form_submissions')
         .select(`
           id,
@@ -148,8 +169,17 @@ export default function GuestFormsPage() {
             )
           )
         `)
-        .eq('forms.events.company_id', userProfile.company_id)
-        .order('submitted_at', { ascending: false });
+        .eq('forms.events.company_id', userProfile.company_id);
+      
+      // Filter by specific event if eventId is provided
+      if (eventId) {
+        query = query.eq('forms.event_id', eventId);
+        console.log('🎯 Filtering submissions by event ID:', eventId);
+      } else {
+        console.log('⚠️ No event ID provided - showing all company submissions');
+      }
+      
+      const { data: submissions, error: submissionsError } = await query.order('submitted_at', { ascending: false });
 
       if (submissionsError) {
         console.error('Error fetching submissions:', submissionsError);
@@ -159,15 +189,43 @@ export default function GuestFormsPage() {
 
       console.log('📊 Raw submissions data:', submissions);
 
-      // Transform the data
-      const transformedResponses: GuestFormResponse[] = submissions?.map(sub => ({
-        id: sub.id,
-        form_id: sub.form_id,
-        email: sub.email,
-        responses: sub.responses,
-        submitted_at: sub.submitted_at,
-        event_name: sub.forms?.events?.name || 'Unknown Event'
-      })) || [];
+      // Transform the data and filter out submissions where guest no longer exists
+      const transformedResponses: GuestFormResponse[] = [];
+      
+      console.log('🔍 Starting guest existence check for', submissions?.length || 0, 'submissions...');
+      
+      for (const sub of submissions || []) {
+        try {
+          console.log('🔍 Checking guest existence for:', sub.email, 'in event:', sub.forms?.event_id);
+          
+          // Check if the guest still exists in the database
+          const { data: guestExists, error: guestError } = await supabase
+            .from('guests')
+            .select('id')
+            .eq('email', sub.email)
+            .eq('event_id', sub.forms?.event_id)
+            .single();
+          
+          console.log('🔍 Guest check result for', sub.email, ':', { guestExists, guestError });
+          
+          // Only include submissions where the guest still exists
+          if (guestExists && !guestError) {
+            console.log('✅ Guest exists, including submission for:', sub.email);
+            transformedResponses.push({
+              id: sub.id,
+              form_id: sub.form_id,
+              email: sub.email,
+              responses: sub.responses,
+              submitted_at: sub.submitted_at,
+              event_name: sub.forms?.events?.name || 'Unknown Event'
+            });
+          } else {
+            console.log('🗑️ Filtering out submission for deleted guest:', sub.email, guestError);
+          }
+        } catch (error) {
+          console.log('🗑️ Error checking guest existence, filtering out:', sub.email, error);
+        }
+      }
 
       console.log('🔄 Transformed responses:', transformedResponses);
       setFormResponses(transformedResponses);
@@ -208,48 +266,51 @@ export default function GuestFormsPage() {
 
   const loadStats = async (companyId: string, responsesCount: number) => {
     try {
-      // Get total forms sent for the current event (form_recipients count)
-      // First get the current event ID from the URL or context
-      const currentPath = window.location.pathname;
-      let eventId = null;
-      
-      // Try to extract event ID from URL or get it from the forms table
-      if (currentPath.includes('/event/')) {
-        eventId = currentPath.split('/event/')[1]?.split('/')[0];
-      }
-      
-      // If no event ID from URL, get it from the forms that have submissions
-      if (!eventId) {
-        const { data: formsWithSubmissions } = await supabase
-          .from('forms')
-          .select('event_id')
-          .eq('company_id', companyId)
-          .limit(1);
-        
-        if (formsWithSubmissions && formsWithSubmissions.length > 0) {
-          eventId = formsWithSubmissions[0].event_id;
-        }
-      }
-      
+      // Use the eventId from component state
       console.log('🎯 Current event ID for stats:', eventId);
+      
+      if (!eventId) {
+        console.log('⚠️ No event ID available for stats');
+        setStats({
+          totalResponses: responsesCount,
+          totalFormsSent: 0
+        });
+        return;
+      }
       
       // Get total forms sent for this specific event
       let totalFormsSent = 0;
       if (eventId) {
-        const { count: formsSent } = await supabase
-          .from('form_recipients')
-          .select('*', { count: 'exact', head: true })
-          .in('form_id', 
-            supabase
-              .from('forms')
-              .select('id')
-              .eq('company_id', companyId)
-              .eq('event_id', eventId)
-          );
-        totalFormsSent = formsSent || 0;
+        // First get the form IDs for this event
+        const { data: formIds, error: formIdsError } = await supabase
+          .from('forms')
+          .select('id')
+          .eq('company_id', companyId)
+          .eq('event_id', eventId);
+        
+        if (formIdsError) {
+          console.error('Error fetching form IDs:', formIdsError);
+        } else if (formIds && formIds.length > 0) {
+          // Extract the form IDs into an array
+          const formIdArray = formIds.map(f => f.id);
+          console.log('📋 Form IDs for event:', formIdArray);
+          
+          // Now count the form recipients for these forms
+          const { count: formsSent, error: countError } = await supabase
+            .from('form_recipients')
+            .select('*', { count: 'exact', head: true })
+            .in('form_id', formIdArray);
+          
+          if (countError) {
+            console.error('Error counting form recipients:', countError);
+          } else {
+            totalFormsSent = formsSent || 0;
+          }
+        }
       }
       
       console.log('📊 Total forms sent for event:', totalFormsSent);
+      console.log('📊 Setting stats:', { totalResponses: responsesCount, totalFormsSent: totalFormsSent });
 
       setStats({
         totalResponses: responsesCount,
@@ -274,6 +335,33 @@ export default function GuestFormsPage() {
       hour: '2-digit',
       minute: '2-digit'
     });
+  };
+
+  const navigateToEventDashboard = async (formId: string, guestEmail: string) => {
+    try {
+      // Get the event ID from the form
+      const { data: formData, error: formError } = await supabase
+        .from('forms')
+        .select('event_id')
+        .eq('id', formId)
+        .single();
+
+      if (formError) {
+        console.error('Error fetching form data:', formError);
+        return;
+      }
+
+      if (formData?.event_id) {
+        // Navigate to EventDashboard with guests tab and highlight guest
+        const dashboardUrl = `/event/${formData.event_id}?tab=guests&highlight=${encodeURIComponent(guestEmail)}`;
+        console.log('🚀 Navigating to EventDashboard:', dashboardUrl);
+        navigate(dashboardUrl);
+      } else {
+        console.error('No event_id found for form:', formId);
+      }
+    } catch (error) {
+      console.error('Error navigating to EventDashboard:', error);
+    }
   };
 
   if (loading) {
@@ -448,7 +536,7 @@ export default function GuestFormsPage() {
               fontSize: '48px',
               marginBottom: '16px'
             }}>
-              📝
+              
             </div>
             <h3 style={{
               fontSize: '18px',
@@ -547,8 +635,13 @@ export default function GuestFormsPage() {
                     }}>
                       <button
                         onClick={() => {
-                          // TODO: Implement view details modal
-                          console.log('View response details:', response);
+                          // Navigate to EventDashboard guests tab and highlight this guest
+                          if (response.form_id) {
+                            // Get the event ID from the form
+                            navigateToEventDashboard(response.form_id, response.email);
+                          } else {
+                            console.error('No form_id found for response:', response);
+                          }
                         }}
                         style={{
                           background: 'transparent',

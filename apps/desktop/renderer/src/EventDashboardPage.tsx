@@ -38,6 +38,130 @@ import { getEventAddOns, upsertEventAddon } from './lib/supabase';
 import AnnouncementModal from './components/AnnouncementModal';
 import { exportEventData, purgeEvent } from './lib/supabase';
 
+// Custom Dropdown Component
+const CustomDropdown = ({ 
+  value, 
+  onChange, 
+  options, 
+  colors 
+}: { 
+  value: string; 
+  onChange: (value: string) => void; 
+  options: { value: string; label: string }[]; 
+  colors: any; 
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [selectedOption, setSelectedOption] = useState(options.find(opt => opt.value === value) || options[0]);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Update selected option when value changes
+  useEffect(() => {
+    const newOption = options.find(opt => opt.value === value);
+    if (newOption) {
+      setSelectedOption(newOption);
+    }
+  }, [value, options]);
+
+  // Handle click outside to close dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  const handleSelect = (option: { value: string; label: string }) => {
+    setSelectedOption(option);
+    onChange(option.value);
+    setIsOpen(false);
+  };
+
+  return (
+    <div ref={dropdownRef} style={{ position: 'relative', width: '100%' }}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        style={{
+          width: '100%',
+          padding: '10px 14px',
+          borderRadius: 8,
+          border: `2px solid ${colors.border}`,
+          fontSize: 16,
+          background: colors.inputBg,
+          color: colors.text,
+          height: 44,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          cursor: 'pointer',
+          outline: 'none'
+        }}
+      >
+        <span>{selectedOption?.label || 'Select...'}</span>
+        <span style={{ 
+          transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)', 
+          transition: 'transform 0.2s ease',
+          fontSize: '12px'
+        }}>
+          ▼
+        </span>
+      </button>
+      
+      {isOpen && (
+        <div style={{
+          position: 'absolute',
+          top: '100%',
+          left: 0,
+          right: 0,
+          background: colors.cardBg,
+          border: `2px solid ${colors.border}`,
+          borderRadius: 8,
+          marginTop: 4,
+          maxHeight: 200,
+          overflowY: 'auto',
+          zIndex: 1000,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+        }}>
+          {options.map((option) => (
+            <button
+              key={option.value}
+              onClick={() => handleSelect(option)}
+              style={{
+                width: '100%',
+                padding: '10px 14px',
+                border: 'none',
+                background: option.value === value ? colors.accent : 'transparent',
+                color: option.value === value ? (colors.accent === '#ffffff' ? '#000000' : '#ffffff') : colors.text,
+                fontSize: 16,
+                textAlign: 'left',
+                cursor: 'pointer',
+                transition: 'background-color 0.2s ease'
+              }}
+              onMouseEnter={(e) => {
+                if (option.value !== value) {
+                  e.currentTarget.style.background = colors.hoverBg;
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (option.value !== value) {
+                  e.currentTarget.style.background = 'transparent';
+                }
+              }}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 function EventMetaInfo({ event, colors, isDark }: { event: any, colors: any, isDark: boolean }) {
   const [teamNames, setTeamNames] = useState<string[]>([]);
   useEffect(() => {
@@ -81,7 +205,8 @@ const getColors = (isDark: boolean) => ({
   accent: isDark ? '#ffffff' : '#000000',
   hoverBg: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)',
   inputBg: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(255, 255, 255, 0.9)',
-  cardBg: isDark ? 'rgba(30, 30, 30, 0.8)' : 'rgba(255, 255, 255, 0.8)'
+  cardBg: isDark ? 'rgba(30, 30, 30, 0.8)' : 'rgba(255, 255, 255, 0.8)',
+  buttonBg: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)'
 });
 
 console.log("THIS IS EVENT DASHBOARD PAGE");
@@ -226,6 +351,22 @@ const getButtonStyles = (isDark: boolean, variant: 'primary' | 'secondary' = 'pr
 };
 
 export default function EventDashboardPage({ events, onDeleteEvent }: { events: EventType[]; onDeleteEvent?: (eventId: string) => void }) {
+  // Add CSS keyframes for guest highlighting animation
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes pulse {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.02); }
+        100% { transform: scale(1); }
+      }
+    `;
+    document.head.appendChild(style);
+    
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, []);
   const { theme } = useContext(ThemeContext);
   const isDark = theme === 'dark';
   const colors = getColors(isDark);
@@ -287,6 +428,148 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
     return () => clearInterval(interval);
   }, [id]);
   
+  // Handle query parameters for tab and guest highlighting
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const tab = searchParams.get('tab');
+    const highlight = searchParams.get('highlight');
+    
+    if (tab) {
+      setActiveTab(tab);
+      console.log('🎯 Setting active tab from URL:', tab);
+    }
+    
+    if (highlight) {
+      setHighlightedGuestEmail(decodeURIComponent(highlight));
+      console.log('🎯 Setting highlighted guest from URL:', decodeURIComponent(highlight));
+      
+      // Clear highlight after 5 seconds
+      setTimeout(() => {
+        setHighlightedGuestEmail(null);
+        console.log('🎯 Cleared guest highlight');
+      }, 5000);
+    }
+  }, [location.search]);
+
+  // Real-time subscription for guest form submissions to update activity feed
+  useEffect(() => {
+    if (!supabase || !id || !currentUser?.company_id) return;
+
+    const subscription = supabase
+      .channel('guest_form_submissions_activity')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'form_submissions'
+        },
+        async (payload) => {
+          console.log('📡 New guest form submission detected:', payload);
+          
+          // Check if this submission is for our current event
+          try {
+            // Get the form details to check if it's for our event
+            const { data: formData } = await supabase
+              .from('forms')
+              .select('event_id')
+              .eq('id', payload.new.form_id)
+              .single();
+            
+            if (formData?.event_id === id) {
+              console.log('🎯 Form submission is for current event, updating activity feed');
+              
+              // Get guest name from the form responses
+              let guestName = 'Guest';
+              try {
+                const responses = payload.new.responses;
+                if (responses) {
+                  const firstName = responses.firstName || responses.first_name || '';
+                  const lastName = responses.lastName || responses.last_name || '';
+                  if (firstName || lastName) {
+                    guestName = `${firstName} ${lastName}`.trim();
+                  }
+                }
+              } catch (e) {
+                console.log('Could not extract guest name from responses');
+              }
+              
+              // Add the form submission directly to the activity feed
+              const newActivityItem = {
+                item_type: 'form_submission',
+                title: 'Guest Form Submitted',
+                description: `${guestName} completed the guest form`,
+                created_at: payload.new.submitted_at || new Date().toISOString(),
+                actor_name: guestName,
+                actor_email: payload.new.email,
+                source_id: payload.new.id
+              };
+              
+              setActivityFeed(prev => [newActivityItem, ...prev.slice(0, 29)]); // Keep only 30 items
+              console.log('🔄 Activity feed updated with new guest form submission:', newActivityItem);
+            } else {
+              console.log('⚠️ Form submission is for different event, ignoring');
+            }
+          } catch (error) {
+            console.error('Error checking form submission event:', error);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [supabase, id, currentUser?.company_id]);
+
+  // Real-time subscription for guest creation to update activity feed
+  useEffect(() => {
+    if (!supabase || !id || !currentUser?.company_id) return;
+
+    const subscription = supabase
+      .channel('guest_creation_activity')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'guests'
+        },
+        async (payload) => {
+          console.log('📡 New guest created:', payload);
+          
+          // Check if this guest is for our current event
+          if (payload.new.event_id === id) {
+            console.log('🎯 Guest created for current event, updating activity feed');
+            
+            // Get guest name
+            const firstName = payload.new.first_name || '';
+            const lastName = payload.new.last_name || '';
+            const guestName = `${firstName} ${lastName}`.trim() || 'Guest';
+            
+            // Add the guest creation to the activity feed
+            const newActivityItem = {
+              item_type: 'guest_created',
+              title: 'Guest Added',
+              description: `${guestName} was added to the guest list`,
+              created_at: payload.new.created_at || new Date().toISOString(),
+              actor_name: guestName,
+              actor_email: payload.new.email,
+              source_id: payload.new.id
+            };
+            
+            setActivityFeed(prev => [newActivityItem, ...prev.slice(0, 29)]); // Keep only 30 items
+            console.log('🔄 Activity feed updated with new guest creation:', newActivityItem);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [supabase, id, currentUser?.company_id]);
+
   // Refresh event data when navigating back (check location state)
   useEffect(() => {
     if (location.state?.refreshEvent) {
@@ -310,6 +593,7 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
   
   const event = currentEvent;
   const [activeTab, setActiveTab] = useState('settings');
+  const [highlightedGuestEmail, setHighlightedGuestEmail] = useState<string | null>(null);
   const [guests, setGuests] = useState<GuestType[]>([]);
   const [savedItineraries, setSavedItineraries] = useState<ItineraryType[]>([]);
   const [draftItineraries, setDraftItineraries] = useState<ItineraryType[]>([]);
@@ -402,6 +686,7 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
 
   // Refs for click-outside detection
   const optionsMenuRef = useRef<HTMLDivElement>(null);
+  const filterPopupRef = useRef<HTMLDivElement>(null);
 
   // Add state for CSV export modal
   const [showCsvExportModal, setShowCsvExportModal] = useState(false);
@@ -416,6 +701,23 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
   // Add missing state variables
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [showOptionsMenu, setShowOptionsMenu] = useState(false);
+
+  // Handle click outside filter popup
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (filterPopupRef.current && !filterPopupRef.current.contains(event.target as Node)) {
+        setShowFilterPopup(false);
+      }
+    };
+
+    if (showFilterPopup) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showFilterPopup]);
 
   // Add state for itinerary date sort order
   const [filtersItineraryDateSort, setFiltersItineraryDateSort] = useState<'asc' | 'desc'>('asc');
@@ -1069,6 +1371,10 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
   };
 
   const GuestCard = ({ guest, isSelected, onSelect, standalone, isSelectModeActive }: { guest: GuestType, isSelected: boolean, onSelect: (id: string) => void, standalone?: boolean, isSelectModeActive: boolean }) => {
+    // Check if this guest should be highlighted
+    const isHighlighted = highlightedGuestEmail === guest.email;
+    
+
     const handleNavigate = () => {
       if (!isSelectModeActive) {
         navigate(`/event/${event?.id}/guests/edit/${guest.id}`);
@@ -1090,25 +1396,35 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
 
     return (
       <div
+        data-guest-email={guest.email}
         onClick={handleNavigate}
         style={{
           ...getGlassStyles(isDark),
           border: isSelected
             ? (isDark ? '2px solid #fff' : '2px solid #000')
+            : isHighlighted
+            ? (isDark ? '3px solid #fbbf24' : '3px solid #f59e0b') // Yellow highlight border
             : (isDark ? '1px solid rgba(255,255,255,0.13)' : '1px solid #e5e7eb'),
           borderRadius: 16,
           padding: '28px 28px 20px 28px',
           marginBottom: 0,
-          boxShadow: isDark
+          boxShadow: isHighlighted
+            ? (isDark ? '0 0 20px rgba(251, 191, 36, 0.6)' : '0 0 20px rgba(245, 158, 11, 0.6)') // Glowing highlight shadow
+            : isDark
             ? '0 4px 16px rgba(0,0,0,0.25)'
             : '0 4px 16px rgba(0,0,0,0.08)',
           cursor: isSelectModeActive ? 'default' : 'pointer',
           position: 'relative',
           minHeight: 120,
-          transition: 'background 0.2s, border 0.2s',
+          transition: 'all 0.3s ease',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'center',
+          transform: isHighlighted ? 'scale(1.02)' : 'scale(1)', // Slight scale up when highlighted
+          background: isHighlighted 
+            ? (isDark ? 'rgba(251, 191, 36, 0.1)' : 'rgba(245, 158, 11, 0.1)') // Subtle highlight background
+            : undefined,
+          animation: isHighlighted ? 'pulse 2s ease-in-out infinite' : 'none',
         }}
       >
         {isSelectModeActive && (
@@ -2201,18 +2517,21 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                   >
                     Send Announcement
                   </button>
-                  <button style={{
-                    ...getButtonStyles(isDark, 'secondary'),
-                    padding: '16px 20px',
-                    fontSize: 15,
-                    fontWeight: 500,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 8,
-                    textAlign: 'center'
-                  }}>
-                    Emergency Alert
+                  <button 
+                    onClick={() => navigate(`/guest-forms/${event?.id}`)}
+                    style={{
+                      ...getButtonStyles(isDark, 'secondary'),
+                      padding: '16px 20px',
+                      fontSize: '15px',
+                      fontWeight: 500,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                      textAlign: 'center'
+                    }}
+                  >
+                    Guest Form Responses
                   </button>
                   <button 
                     onClick={() => {
@@ -3445,44 +3764,87 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                       Filters
                     </button>
                     {showFilterPopup && (
-                      <div style={{
+                      <div ref={filterPopupRef} style={{
                         position: 'absolute', top: 'calc(100% + 8px)', right: 0, 
-                        ...getGlassStyles(isDark),
-                        borderRadius: 12, boxShadow: '0 8px 32px rgba(0,0,0,0.12)', border: '2px solid #e5e7eb',
-                        zIndex: 10, width: 380, padding: 28,
+                        background: colors.cardBg,
+                        borderRadius: 12, 
+                        boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.3)' : '0 8px 32px rgba(0,0,0,0.1)', 
+                        border: `2px solid ${colors.border}`,
+                        zIndex: 10, 
+                        width: 380, 
+                        padding: 28,
                       }}>
                         <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24}}>
-                          <h4 style={{margin: 0, fontSize: 18, fontWeight: 600}}>Filters</h4>
+                          <h4 style={{margin: 0, fontSize: 18, fontWeight: 600, color: colors.text}}>Filters</h4>
                             <button 
                             onClick={() => setShowFilterPopup(false)} 
                             style={{
-                              background: '#f1f5f9', border: 'none', borderRadius: '50%', width: 32, height: 32,
-                              cursor: 'pointer', color: '#475569', display: 'flex', alignItems: 'center',
-                              justifyContent: 'center', fontSize: 18
+                              background: colors.buttonBg, 
+                              border: `2px solid ${colors.border}`, 
+                              borderRadius: '50%', 
+                              width: 32, 
+                              height: 32,
+                              cursor: 'pointer', 
+                              color: colors.text, 
+                              display: 'flex', 
+                              alignItems: 'center',
+                              justifyContent: 'center', 
+                              fontSize: 18
                             }}
                           >&times;</button>
                         </div>
                         <div style={{ display: 'grid', gap: 20 }}>
                           <div>
-                            <label style={{ fontWeight: 500, fontSize: 14, color: '#4a5568', display: 'block', marginBottom: 8 }}>Sort by</label>
-                            <select
+                            <label style={{ fontWeight: 500, fontSize: 14, color: colors.text, display: 'block', marginBottom: 8 }}>Sort by</label>
+                            <CustomDropdown
                               value={filters.sort}
-                              onChange={(e) => setFilters(f => ({ ...f, sort: e.target.value }))}
-                              style={{ width: '100%', padding: '10px 14px', borderRadius: 8, border: '2px solid #d1d5db', fontSize: 16, background: '#f7f8fa', height: 44 }}
-                            >
-                              <option value="firstName-asc">First Name (A-Z)</option>
-                              <option value="firstName-desc">First Name (Z-A)</option>
-                              <option value="lastName-asc">Last Name (A-Z)</option>
-                              <option value="lastName-desc">Last Name (Z-A)</option>
-                              <option value="countryCode-asc">Nationality (A-Z)</option>
-                              <option value="countryCode-desc">Nationality (Z-A)</option>
-                            </select>
+                              onChange={(value) => setFilters(f => ({ ...f, sort: value }))}
+                              options={[
+                                { value: 'firstName-asc', label: 'First Name (A-Z)' },
+                                { value: 'firstName-desc', label: 'First Name (Z-A)' },
+                                { value: 'lastName-asc', label: 'Last Name (A-Z)' },
+                                { value: 'lastName-desc', label: 'Last Name (Z-A)' },
+                                { value: 'countryCode-asc', label: 'Nationality (A-Z)' },
+                                { value: 'countryCode-desc', label: 'Nationality (Z-A)' }
+                              ]}
+                              colors={colors}
+                            />
                           </div>
                           <div>
-                            <label style={{ fontWeight: 500, fontSize: 14, color: '#4a5568', display: 'block', marginBottom: 8 }}>Age Range</label>
+                            <label style={{ fontWeight: 500, fontSize: 14, color: colors.text, display: 'block', marginBottom: 8 }}>Age Range</label>
                             <div style={{display: 'flex', gap: 12}}>
-                                <input type="number" placeholder="Min" value={filters.ageRange.min} onChange={(e) => setFilters(f => ({ ...f, ageRange: { ...f.ageRange, min: e.target.value } }))} style={{width: '100%', padding: '10px 14px', borderRadius: 8, border: '2px solid #d1d5db', fontSize: 16, background: '#f7f8fa', height: 44}} />
-                                <input type="number" placeholder="Max" value={filters.ageRange.max} onChange={(e) => setFilters(f => ({ ...f, ageRange: { ...f.ageRange, max: e.target.value } }))} style={{width: '100%', padding: '10px 14px', borderRadius: 8, border: '2px solid #d1d5db', fontSize: 16, background: '#f7f8fa', height: 44}} />
+                                <input 
+                                  type="number" 
+                                  placeholder="Min" 
+                                  value={filters.ageRange.min} 
+                                  onChange={(e) => setFilters(f => ({ ...f, ageRange: { ...f.ageRange, min: e.target.value } }))} 
+                                  style={{
+                                    width: '100%', 
+                                    padding: '10px 14px', 
+                                    borderRadius: 8, 
+                                    border: `2px solid ${colors.border}`, 
+                                    fontSize: 16, 
+                                    background: colors.inputBg, 
+                                    color: colors.text,
+                                    height: 44
+                                  }} 
+                                />
+                                <input 
+                                  type="number" 
+                                  placeholder="Max" 
+                                  value={filters.ageRange.max} 
+                                  onChange={(e) => setFilters(f => ({ ...f, ageRange: { ...f.ageRange, max: e.target.value } }))} 
+                                  style={{
+                                    width: '100%', 
+                                    padding: '10px 14px', 
+                                    borderRadius: 8, 
+                                    border: `2px solid ${colors.border}`, 
+                                    fontSize: 16, 
+                                    background: colors.inputBg, 
+                                    color: colors.text,
+                                    height: 44
+                                  }} 
+                                />
                             </div>
                           </div>
                           {[
@@ -3491,27 +3853,35 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                             {key: 'idType', label: 'ID Type', options: [...new Set(guests.map(g => g.idType).filter(Boolean))]},
                           ].map(filter => (
                             <div key={filter.key}>
-                              <label style={{ fontWeight: 500, fontSize: 14, color: '#4a5568', display: 'block', marginBottom: 8 }}>{filter.label}</label>
-                              <select
+                              <label style={{ fontWeight: 500, fontSize: 14, color: colors.text, display: 'block', marginBottom: 8 }}>{filter.label}</label>
+                              <CustomDropdown
                                 value={(filters as any)[filter.key]}
-                                onChange={(e) => setFilters(f => ({ ...f, [filter.key]: e.target.value }))}
-                                style={{ width: '100%', padding: '10px 14px', borderRadius: 8, border: '2px solid #d1d5db', fontSize: 16, background: '#f7f8fa', height: 44 }}
-                              >
-                                <option value="all">All</option>
-                                {filter.options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                              </select>
+                                onChange={(value) => setFilters(f => ({ ...f, [filter.key]: value }))}
+                                options={[
+                                  { value: 'all', label: 'All' },
+                                  ...filter.options.map(opt => ({ value: opt, label: opt }))
+                                ]}
+                                colors={colors}
+                              />
                             </div>
                           ))}
                         </div>
-                        <div style={{borderTop: '2px solid #e5e7eb', marginTop: 24, paddingTop: 20, display: 'flex', justifyContent: 'space-between', gap: 12}}>
+                        <div style={{borderTop: `2px solid ${colors.border}`, marginTop: 24, paddingTop: 20, display: 'flex', justifyContent: 'space-between', gap: 12}}>
                             <button
                               onClick={() => {
                                   setFilters({ sort: 'firstName-asc', group: 'all', nationality: 'all', gender: 'all', idType: 'all', ageRange: { min: '', max: '' } });
                                   setSearchQuery('');
                               }}
                               style={{
-                                  width: '100%', padding: '12px', background: '#f1f5f9', border: 'none',
-                                  borderRadius: 8, color: '#1f2937', fontWeight: 600, cursor: 'pointer', fontSize: 16
+                                  width: '100%', 
+                                  padding: '12px', 
+                                  background: colors.buttonBg, 
+                                  border: `2px solid ${colors.border}`,
+                                  borderRadius: 8, 
+                                  color: colors.text, 
+                                  fontWeight: 600, 
+                                  cursor: 'pointer', 
+                                  fontSize: 16
                               }}
                           >
                               Clear
@@ -3519,8 +3889,15 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                           <button
                               onClick={() => setShowFilterPopup(false)}
                               style={{
-                                  width: '100%', padding: '12px', background: '#1f2937', color: '#fff', border: 'none',
-                                  borderRadius: 8, fontWeight: 600, cursor: 'pointer', fontSize: 16
+                                  width: '100%', 
+                                  padding: '12px', 
+                                  background: colors.accent, 
+                                  color: isDark ? '#000000' : '#ffffff', 
+                                  border: `2px solid ${colors.accent}`,
+                                  borderRadius: 8, 
+                                  fontWeight: 600, 
+                                  cursor: 'pointer', 
+                                  fontSize: 16
                               }}
                           >
                               Apply Filters

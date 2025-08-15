@@ -28,6 +28,7 @@ import NotificationsPage from './pages/NotificationsPage';
 import ExportReportPage from './pages/ExportReportPage';
 import NotificationSettingsPage from './pages/NotificationSettingsPage';
 import SettingsPage from './pages/SettingsPage';
+import GuestFormsPage from './pages/GuestFormsPage';
 import { getEventsCreatedByUser } from './lib/supabase';
 
 // Update EventType to match Supabase Event type
@@ -321,6 +322,7 @@ const AppContent = () => {
           </Route>
           <Route path="/guest-form/:eventId" element={<ProtectedRoute><GuestFormPage /></ProtectedRoute>} />
           <Route path="/guest-form/:eventId/edit/:guestIndex" element={<ProtectedRoute><GuestFormPage /></ProtectedRoute>} />
+          <Route path="/guest-forms/:eventId" element={<ProtectedRoute><GuestFormsPage /></ProtectedRoute>} />
           <Route path="/link-itineraries/:id" element={<LinkItinerariesPage />} />
           <Route path="/link-itineraries/:id/assign-overview" element={<AssignOverviewPage />} />
           <Route path="/event-portal-management" element={<ProtectedRoute><EventPortalManagementPage /></ProtectedRoute>} />

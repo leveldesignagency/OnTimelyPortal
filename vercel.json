@@ -1,27 +1,6 @@
 {
-  "buildCommand": "echo 'No build needed for static HTML'",
-  "outputDirectory": "website",
-  "devCommand": "echo 'No dev command needed'",
-  "installCommand": "echo 'No install needed'",
-  "functions": {
-    "api/send-email.js": {
-      "runtime": "nodejs18.x"
-    },
-    "api/get-form.js": {
-      "runtime": "nodejs18.x"
-    },
-    "api/submit-form.js": {
-      "runtime": "nodejs18.x"
-    }
-  },
   "routes": [
-    {
-      "src": "/",
-      "dest": "/index.html"
-    },
-    {
-      "src": "/forms/(.*)",
-      "dest": "/forms.html"
-    }
+    { "src": "/", "dest": "/website/index.html" },
+    { "src": "/forms(?:/.*)?", "dest": "/website/forms.html" }
   ]
 } 

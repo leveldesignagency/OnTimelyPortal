@@ -323,12 +323,36 @@ export const updateGuest = async (id: string, updates: Partial<Guest>) => {
 }
 
 export const deleteGuest = async (id: string) => {
-  const { error } = await supabase
-    .from('guests')
-    .delete()
-    .eq('id', id)
-  
-  if (error) throw error
+  try {
+    // 1. First, clean up all guest data using our comprehensive function
+    const { data: cleanupResult, error: cleanupError } = await supabase.rpc('delete_guest_completely', {
+      p_guest_id: id
+    });
+    
+    if (cleanupError) {
+      console.error('Error cleaning up guest data:', cleanupError);
+      throw new Error(`Failed to clean up guest data: ${cleanupError.message}`);
+    }
+    
+    console.log('Guest data cleanup result:', cleanupResult);
+    
+    // 2. Then delete the guest record itself
+    const { error: deleteError } = await supabase
+      .from('guests')
+      .delete()
+      .eq('id', id);
+    
+    if (deleteError) {
+      console.error('Error deleting guest record:', deleteError);
+      throw new Error(`Failed to delete guest record: ${deleteError.message}`);
+    }
+    
+    console.log('Guest deleted successfully with complete cleanup');
+    
+  } catch (error) {
+    console.error('Error in deleteGuest function:', error);
+    throw error;
+  }
 }
 
 export const deleteGuestsByGroupId = async (groupId: string) => {

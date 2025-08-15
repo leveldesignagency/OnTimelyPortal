@@ -43,6 +43,9 @@ const GUEST_MODULES = [
 ];
 
 export default function SendFormModal({ isOpen, onClose, eventId, eventName }: SendFormModalProps) {
+  // Early return to prevent any rendering if modal is not open
+  if (!isOpen) return null;
+  
   const { theme } = useContext(ThemeContext);
   const isDark = theme === 'dark';
   
@@ -53,7 +56,6 @@ export default function SendFormModal({ isOpen, onClose, eventId, eventName }: S
   const [isLoading, setIsLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [successProgress, setSuccessProgress] = useState(100);
-  const [provider, setProvider] = useState<'gmail' | 'outlook' | 'copy'>('gmail');
   const [generatedLinks, setGeneratedLinks] = useState<string[]>([]);
   const API_BASE = (import.meta as any).env?.VITE_API_BASE || '';
 
@@ -73,13 +75,22 @@ export default function SendFormModal({ isOpen, onClose, eventId, eventName }: S
     checkboxTick: isDark ? '#000000' : '#ffffff',
   };
 
-  // Early return to prevent any rendering if modal is not open
-  if (!isOpen) return null;
-
   const handleAddEmail = () => {
+    console.log('handleAddEmail called with:', currentEmail);
+    console.log('Current emails:', emails);
+    console.log('Is valid email:', isValidEmail(currentEmail));
+    console.log('Already includes email:', emails.includes(currentEmail));
+    
     if (currentEmail && !emails.includes(currentEmail) && isValidEmail(currentEmail)) {
+      console.log('Adding email:', currentEmail);
       setEmails([...emails, currentEmail]);
       setCurrentEmail('');
+      console.log('Email added successfully');
+    } else {
+      console.log('Email not added. Reasons:');
+      console.log('- currentEmail exists:', !!currentEmail);
+      console.log('- not already in emails:', !emails.includes(currentEmail));
+      console.log('- is valid email:', isValidEmail(currentEmail));
     }
   };
 
@@ -133,47 +144,11 @@ export default function SendFormModal({ isOpen, onClose, eventId, eventName }: S
   };
 
   const generateFormUrl = () => {
-    const baseUrl = window.location.origin;
-    const formData = btoa(JSON.stringify({
-      eventId,
-      eventName,
-      fields: formConfig.fields,
-      modules: formConfig.modules
-    }));
-    return `${baseUrl}/guest-form/${eventId}?config=${formData}`;
+    // This function is no longer used - we now use database-generated tokens
+    return '';
   };
 
-  const createFormAndRecipients = async (): Promise<{ formId: string; links: string[] }> => {
-    // Create a minimal form row using schema_json as config snapshot
-    const { supabase } = await import('../lib/supabase');
-    // Create form
-    const { data: formRow, error: formErr } = await supabase
-      .from('forms')
-      .insert({
-        event_id: eventId,
-        company_id: (await (await import('../lib/auth')).getCurrentUser())?.company_id || null,
-        title: formConfig.fields.length ? `Form • ${new Date().toLocaleString()}` : 'Form',
-        description: 'Generated from Send Form',
-        schema_json: { fields: formConfig.fields, modules: formConfig.modules },
-        created_by: (await (await import('../lib/auth')).getCurrentUser())?.id || null,
-      })
-      .select('*')
-      .single();
-    if (formErr || !formRow) throw formErr || new Error('Failed to create form');
-    const formId = formRow.id as string;
 
-    // Create recipients and tokens
-    const { data: recs, error: recErr } = await supabase.rpc('create_form_recipients', {
-      p_form_id: formId,
-      p_emails: emails,
-      p_names: emails.map(() => null),
-      p_expires_at: null,
-    });
-    if (recErr) throw recErr;
-    const baseUrl = window.location.origin;
-    const links = (recs || []).map((r: any) => `${baseUrl}/forms/${r.token}`);
-    return { formId, links };
-  };
 
   const handleSendForm = async () => {
     if (emails.length === 0 || formConfig.fields.length === 0) {
@@ -253,62 +228,48 @@ export default function SendFormModal({ isOpen, onClose, eventId, eventName }: S
         // Don't fail the whole process for this, just log it
       }
 
-      const links = generatedLinks;
+      // Generate OnTimely URLs from the database tokens
+      const baseUrl = 'https://guestsform.ontimely.co.uk';
+      const links = generatedLinks.map((token: string) => `${baseUrl}/forms/${token}`);
 
-      if (provider === 'copy') {
-        // Copy all links to clipboard
-        await navigator.clipboard.writeText(links.join('\n'));
-        alert('Form links copied to clipboard!');
-      } else {
-        // Send emails with form links
-        console.log('Starting to send emails via API...');
-        console.log('API_BASE:', API_BASE);
-        console.log('Emails to send:', emails);
-        console.log('Links to use:', links);
+      // Send emails with form links
+      console.log('Starting to send emails via API...');
+      console.log('API_BASE:', API_BASE);
+      console.log('Emails to send:', emails);
+      console.log('Links to use:', links);
+      
+      for (let i = 0; i < emails.length; i++) {
+        const email = emails[i];
+        const link = links[i] || links[0];
         
-        for (let i = 0; i < emails.length; i++) {
-          const email = emails[i];
-          const link = links[i] || links[0];
+        console.log(`Sending email ${i + 1}/${emails.length} to: ${email}`);
+        console.log(`Using link: ${link}`);
+        
+        try {
+          const requestBody = {
+            emails: [email],
+            link: link,
+            eventName: eventName
+          };
           
-          console.log(`Sending email ${i + 1}/${emails.length} to: ${email}`);
-          console.log(`Using link: ${link}`);
+          console.log('Request body:', requestBody);
           
-          try {
-            const requestBody = {
-              to: email,
-              subject: `You're invited to: ${eventName}!`,
-              html: `
-                <div style="font-family: sans-serif; text-align: center; padding: 40px;">
-                  <h1 style="color: #333;">You're invited!</h1>
-                  <p style="font-size: 18px; color: #555;">You have been invited to the event: <strong>${eventName}</strong>.</p>
-                  <p style="font-size: 16px; color: #555;">Please click the button below to fill out the guest information form.</p>
-                  <a href="${link}" target="_blank" style="background-color: #000; color: #fff; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-size: 18px; display: inline-block; margin-top: 20px;">
-                    Fill Out Form
-                  </a>
-                  <p style="margin-top: 30px; font-size: 12px; color: #999;">If you cannot click the button, copy and paste this link into your browser: ${link}</p>
-                </div>
-              `
-            };
-            
-            console.log('Request body:', requestBody);
-            
-            const response = await fetch(`${API_BASE}/api/send-email`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(requestBody)
-            });
+          const response = await fetch(`/api/send-email`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestBody)
+          });
 
-            console.log(`Response for ${email}:`, response.status, response.statusText);
-            
-            if (!response.ok) {
-              const errorText = await response.text();
-              console.error('Email send failed for', email, 'Status:', response.status, 'Error:', errorText);
-            } else {
-              console.log(`Email sent successfully to ${email}`);
-            }
-          } catch (e) {
-            console.error('Email send failed for', email, 'Error:', e);
+          console.log(`Response for ${email}:`, response.status, response.statusText);
+          
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Email send failed for', email, 'Status:', response.status, 'Error:', errorText);
+          } else {
+            console.log(`Email sent successfully to ${email}`);
           }
+        } catch (e) {
+          console.error('Email send failed for', email, 'Error:', e);
         }
       }
        
@@ -347,14 +308,8 @@ export default function SendFormModal({ isOpen, onClose, eventId, eventName }: S
       </h3>
       
       <div style={{ marginBottom: 12 }}>
-        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-          {(['gmail','outlook','copy'] as const).map(p => (
-            <button key={p} onClick={() => setProvider(p)} style={{ padding: '8px 10px', borderRadius: 8, border: `2px solid ${provider===p? colors.accent : colors.border}`, background: provider===p ? colors.accent : colors.buttonBg, color: provider===p ? (isDark ? '#000' : '#fff') : colors.text, fontWeight: 700, cursor: 'pointer' }}>
-              {p === 'gmail' ? 'Gmail' : p === 'outlook' ? 'Outlook' : 'Copy link'}
-            </button>
-          ))}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+        {/* Email input with plus button - PERFECTLY aligned */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
           <input
             type="email"
             value={currentEmail}
@@ -362,9 +317,8 @@ export default function SendFormModal({ isOpen, onClose, eventId, eventName }: S
             onKeyDown={(e) => e.key === 'Enter' && handleAddEmail()}
             placeholder="Enter email address"
             style={{
-              flex: 1,
-              minWidth: '300px',
-              padding: '12px 16px',
+              width: '500px',
+              padding: '12px 12px',
               border: `2px solid ${colors.border}`,
               borderRadius: 8,
               fontSize: 16,
@@ -372,10 +326,20 @@ export default function SendFormModal({ isOpen, onClose, eventId, eventName }: S
               color: colors.text,
               outline: 'none',
               height: '44px',
+              flexShrink: 0,
+              boxSizing: 'border-box',
+              display: 'flex',
+              alignItems: 'center',
             }}
           />
           <button
-            onClick={handleAddEmail}
+            onClick={() => {
+              console.log('Add button clicked!');
+              console.log('Current email:', currentEmail);
+              console.log('Is valid email:', isValidEmail(currentEmail));
+              console.log('Current emails array:', emails);
+              handleAddEmail();
+            }}
             disabled={!isValidEmail(currentEmail)}
             style={{
               width: 44,
@@ -391,22 +355,110 @@ export default function SendFormModal({ isOpen, onClose, eventId, eventName }: S
               fontSize: 18,
               fontWeight: 'bold',
               transition: 'all 0.2s ease',
+              flexShrink: 0,
+              boxSizing: 'border-box',
+              margin: 0,
+              padding: 0,
             }}
           >
             +
           </button>
         </div>
 
+        {/* Recipient count - moved above email pills */}
+        {emails.length > 0 && (
+          <div style={{ marginTop: 8, marginBottom: 12, color: colors.textSecondary, fontSize: 14 }}>
+            {emails.length} recipient(s) added
+          </div>
+        )}
+
+        {/* Email pills display */}
+        {emails.length > 0 && (
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+              {emails.slice(0, 5).map((email, index) => (
+                <div
+                  key={index}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '6px 12px',
+                    background: colors.cardBg,
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: '20px',
+                    fontSize: 14,
+                    color: colors.text
+                  }}
+                >
+                  <span>{email}</span>
+                  <button
+                    onClick={() => handleRemoveEmail(index)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: colors.textSecondary,
+                      cursor: 'pointer',
+                      fontSize: 16,
+                      padding: 0,
+                      width: 16,
+                      height: 16,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+              {emails.length > 5 && (
+                <div
+                  style={{
+                    padding: '6px 12px',
+                    background: colors.cardBg,
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: '20px',
+                    fontSize: 14,
+                    color: colors.textSecondary,
+                    fontStyle: 'italic'
+                  }}
+                >
+                  +{emails.length - 5} more
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         <div style={{ marginBottom: 16 }}>
           <label style={{ color: colors.text, fontSize: 16, fontWeight: 500, marginBottom: 8, display: 'block' }}>
             Or upload CSV file:
           </label>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <button
+              onClick={() => document.getElementById('csvFileInput').click()}
+              style={{
+                padding: '12px 16px',
+                borderRadius: 8,
+                border: `2px solid ${colors.border}`,
+                background: colors.buttonBg,
+                color: colors.text,
+                fontWeight: 600,
+                cursor: 'pointer',
+                height: '44px',
+                fontSize: 14
+              }}
+              title="Choose CSV file"
+            >
+              Choose File
+            </button>
             <input
+              id="csvFileInput"
               type="file"
               accept=".csv"
               onChange={handleCsvUpload}
-              style={{ color: colors.text }}
+              style={{ display: 'none' }}
             />
             <button
               onClick={() => {
@@ -423,13 +475,15 @@ export default function SendFormModal({ isOpen, onClose, eventId, eventName }: S
                 URL.revokeObjectURL(url);
               }}
               style={{
-                padding: '10px 14px',
+                padding: '12px 16px',
                 borderRadius: 8,
                 border: `2px solid ${colors.border}`,
                 background: colors.buttonBg,
                 color: colors.text,
                 fontWeight: 600,
-                cursor: 'pointer'
+                cursor: 'pointer',
+                height: '44px',
+                fontSize: 14
               }}
               title="Download CSV template"
             >
@@ -438,27 +492,23 @@ export default function SendFormModal({ isOpen, onClose, eventId, eventName }: S
           </div>
         </div>
 
-        {emails.length > 0 && (
-          <div style={{ marginTop: 12, color: colors.textSecondary, fontSize: 14 }}>{emails.length} recipient(s) added</div>
-        )}
+
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 24 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <button
           onClick={onClose}
           style={{
-            padding: '12px 24px',
+            padding: '12px 16px',
             background: colors.buttonBg,
             color: colors.text,
             border: `2px solid ${colors.border}`,
             borderRadius: 8,
             fontWeight: 600,
             cursor: 'pointer',
-            fontSize: 16,
+            fontSize: 14,
             transition: 'all 0.2s ease',
-            minWidth: 140,
-            whiteSpace: 'nowrap',
-            textAlign: 'center',
+            height: '44px'
           }}
         >
           Cancel
@@ -467,18 +517,16 @@ export default function SendFormModal({ isOpen, onClose, eventId, eventName }: S
           onClick={() => setStep(2)}
           disabled={emails.length === 0}
           style={{
-            padding: '12px 24px',
+            padding: '12px 16px',
             background: emails.length > 0 ? colors.accent : colors.buttonBg,
             color: emails.length > 0 ? (isDark ? '#000000' : '#ffffff') : colors.textSecondary,
             border: `2px solid ${emails.length > 0 ? colors.accent : colors.border}`,
             borderRadius: 8,
             fontWeight: 600,
             cursor: emails.length > 0 ? 'pointer' : 'not-allowed',
-            fontSize: 16,
+            fontSize: 14,
             transition: 'all 0.2s ease',
-            minWidth: 140,
-            whiteSpace: 'nowrap',
-            textAlign: 'center',
+            height: '44px'
           }}
         >
           Next
@@ -494,9 +542,40 @@ export default function SendFormModal({ isOpen, onClose, eventId, eventName }: S
       </h3>
       
       <div style={{ marginBottom: 32 }}>
-        <h4 style={{ color: colors.text, marginBottom: 16, fontSize: 16, fontWeight: 600 }}>
-          Basic Fields
-        </h4>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <h4 style={{ color: colors.text, fontSize: 16, fontWeight: 600 }}>
+            Basic Fields
+          </h4>
+          <button
+            onClick={() => {
+              const defaultFields = [
+                'firstName', 'middleName', 'lastName', 'email', 'contactNumber', 
+                'countryCode', 'dob', 'gender', 'idType', 'idNumber', 'idCountry',
+                'nextOfKinName', 'nextOfKinEmail', 'nextOfKinPhone', 'dietary', 'medical'
+              ];
+              setFormConfig(prev => ({
+                ...prev,
+                fields: defaultFields
+              }));
+            }}
+            style={{
+              padding: '8px 16px',
+              borderRadius: 6,
+              border: `2px solid ${colors.border}`,
+              background: colors.buttonBg,
+              color: colors.text,
+              fontWeight: 500,
+              cursor: 'pointer',
+              fontSize: 14,
+              transition: 'all 0.2s ease',
+              maxWidth: '120px',
+              width: '120px'
+            }}
+            title="Select all required fields"
+          >
+            Select Default
+          </button>
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 12 }}>
           {GUEST_FIELDS.map(field => (
             <label
@@ -820,9 +899,9 @@ export default function SendFormModal({ isOpen, onClose, eventId, eventName }: S
               <span style={{ color: colors.text, marginLeft: 8 }}>{formConfig.modules.length}</span>
             </div>
             <div>
-              <span style={{ color: colors.textSecondary }}>Form URL:</span>
+              <span style={{ color: colors.textSecondary }}>Form Hosting:</span>
               <span style={{ color: colors.accent, marginLeft: 8, fontSize: 12, fontFamily: 'monospace' }}>
-                {generateFormUrl().substring(0, 40)}...
+                guestsform.ontimely.co.uk
               </span>
             </div>
           </div>
@@ -999,8 +1078,8 @@ export default function SendFormModal({ isOpen, onClose, eventId, eventName }: S
             position: 'absolute',
             top: 16,
             right: 16,
-            width: 32,
-            height: 32,
+            width: 36,
+            height: 36,
             borderRadius: '50%',
             border: `2px solid ${colors.border}`,
             background: colors.buttonBg,
@@ -1009,10 +1088,12 @@ export default function SendFormModal({ isOpen, onClose, eventId, eventName }: S
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: 18,
+            fontSize: 20,
             fontWeight: 'bold',
             transition: 'all 0.2s ease',
-            zIndex: 10
+            zIndex: 10,
+            lineHeight: 1,
+            padding: 0
           }}
         >
           ×

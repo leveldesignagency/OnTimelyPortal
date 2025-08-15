@@ -2117,36 +2117,14 @@ export default function ExportReportPage() {
           })}
         </div>
 
-        {/* Insights Tabs */}
-        <InsightsTabs 
-          isDark={isDark}
-          eventId={resolvedEventId || ''}
-          dataBundles={dataBundles.filter(b => b.type === 'csv')}
-          loaders={{
-            guests: exportGuestData,
-            'guest-chat': exportGuestChat,
-            'timeline-modules': exportTimelineModuleData,
-            itineraries: exportItineraryData,
-            announcements: exportAnnouncements,
-            'activity-log': exportActivityLog,
-            'module-responses': exportModuleResponses,
-            'module-responses-typed': exportModuleResponsesTyped,
-            'event-activity-feed': async () => {
-              const user = await getCurrentUser();
-              const feed = resolvedEventId ? await getEventActivityFeed(resolvedEventId, user?.company_id || '', 200, 0) : [];
-              return feed;
-            },
-          }}
-        />
+
 
       </div>
     </div>
   );
-}
+} 
 
-// ----------------------------
-// Insights Tabs + Chart
-// ----------------------------
+
 function InsightsTabs({ isDark, eventId, dataBundles, loaders }: {
   isDark: boolean;
   eventId: string;
@@ -2329,4 +2307,4 @@ function BarChart({ labels, values, isDark }: { labels: string[]; values: number
       </svg>
     </div>
   );
-}
+} 

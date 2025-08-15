@@ -64,31 +64,31 @@ interface FlightModuleState {
 interface Guest {
   // Basic Info
   id?: string;
-  prefix: string;
-  gender: string;
-  firstName: string;
-  middleName: string;
-  lastName: string;
-  dob: string;
+  prefix?: string;
+  gender?: string;
+  firstName: string; // Required
+  middleName?: string;
+  lastName: string; // Required
+  dob?: string;
   // Contact
-  countryCode: string;
-  contactNumber: string;
-  email: string;
+  countryCode?: string;
+  contactNumber?: string;
+  email?: string;
   // ID
-  idType: string;
-  idNumber: string;
-  idCountry: string;
+  idType?: string;
+  idNumber?: string;
+  idCountry?: string;
   // Next of Kin
-  nextOfKinName: string;
-  nextOfKinEmail: string;
-  nextOfKinPhoneCountry: string;
-  nextOfKinPhone: string;
+  nextOfKinName?: string;
+  nextOfKinEmail?: string;
+  nextOfKinPhoneCountry?: string;
+  nextOfKinPhone?: string;
   // Additional Info
-  dietary: string[];
-  medical: string[];
+  dietary?: string[];
+  medical?: string[];
   // Modules
-  modules: Record<string, boolean[]>;
-  moduleValues: Record<string, any[]>;
+  modules?: Record<string, boolean[]>;
+  moduleValues?: Record<string, any[]>;
   moduleFlightData?: Record<string, (FlightModuleState | null)[]>;
   // UI State for Drafts
   dietaryInput?: string;
@@ -185,11 +185,11 @@ const GUEST_FIELDS = [
   { key: 'firstName', label: 'First Name', required: true },
   { key: 'middleName', label: 'Middle Name', required: false },
   { key: 'lastName', label: 'Last Name', required: true },
-  { key: 'contactNumber', label: 'Contact Number', required: true },
-  { key: 'email', label: 'Email', required: true },
+  { key: 'contactNumber', label: 'Contact Number', required: false },
+  { key: 'email', label: 'Email', required: false },
   { key: 'nextOfKin', label: 'Next of Kin Contact Information', required: false },
-  { key: 'idType', label: 'ID Type', required: true },
-  { key: 'idNumber', label: 'ID Number', required: true },
+  { key: 'idType', label: 'ID Type', required: false },
+  { key: 'idNumber', label: 'ID Number', required: false },
 ];
 
 const PREFIXES = ['Mr', 'Mrs', 'Ms', 'Mx', 'Dr', 'Prof'];
@@ -782,6 +782,7 @@ export default function CreateGuests() {
           // Load guests from Supabase instead of localStorage
           const supabaseGuests = await getGuests(eventId);
           convertedGuests = supabaseGuests.map((guest: any) => {
+            try {
             // Convert database columns back to the array format expected by the UI
             const moduleValues: Record<string, any> = {};
             
@@ -792,11 +793,21 @@ export default function CreateGuests() {
             if (guest.arrival_airport) {
               moduleValues['flightNumber_arrivalAirport'] = [guest.arrival_airport];
             }
-            if (guest.departure_time) {
-              moduleValues['flightNumber_departureTime'] = [stripSecondsFromTime(guest.departure_time)];
+            if (guest.departure_time && typeof guest.departure_time === 'string') {
+              try {
+                moduleValues['flightNumber_departureTime'] = [stripSecondsFromTime(guest.departure_time)];
+              } catch (error) {
+                console.warn('Error processing departure_time:', error);
+                moduleValues['flightNumber_departureTime'] = [guest.departure_time];
+              }
             }
-            if (guest.arrival_time) {
-              moduleValues['flightNumber_arrivalTime'] = [stripSecondsFromTime(guest.arrival_time)];
+            if (guest.arrival_time && typeof guest.arrival_time === 'string') {
+              try {
+                moduleValues['flightNumber_arrivalTime'] = [stripSecondsFromTime(guest.arrival_time)];
+              } catch (error) {
+                console.warn('Error processing arrival_time:', error);
+                moduleValues['flightNumber_arrivalTime'] = [guest.arrival_time];
+              }
             }
             if (guest.departure_date) {
               moduleValues['flightNumber_departureDate'] = [guest.departure_date];
@@ -811,8 +822,13 @@ export default function CreateGuests() {
                 location: guest.hotel_location || ''
               }];
             }
-            if (guest.check_in_time) {
-              moduleValues['hotelReservation_checkInTime'] = [stripSecondsFromTime(guest.check_in_time)];
+            if (guest.check_in_time && typeof guest.check_in_time === 'string') {
+              try {
+                moduleValues['hotelReservation_checkInTime'] = [stripSecondsFromTime(guest.check_in_time)];
+              } catch (error) {
+                console.warn('Error processing check_in_time:', error);
+                moduleValues['hotelReservation_checkInTime'] = [guest.check_in_time];
+              }
             }
             if (guest.check_in_date) {
               moduleValues['hotelReservation_checkInDate'] = [guest.check_in_date];
@@ -835,11 +851,21 @@ export default function CreateGuests() {
             if (guest.train_station) {
               moduleValues['trainBookingNumber_station'] = [guest.train_station];
             }
-            if (guest.train_departure_time) {
-              moduleValues['trainBookingNumber_departureTime'] = [stripSecondsFromTime(guest.train_departure_time)];
+            if (guest.train_departure_time && typeof guest.train_departure_time === 'string') {
+              try {
+                moduleValues['trainBookingNumber_departureTime'] = [stripSecondsFromTime(guest.train_departure_time)];
+              } catch (error) {
+                console.warn('Error processing train_departure_time:', error);
+                moduleValues['trainBookingNumber_departureTime'] = [guest.train_departure_time];
+              }
             }
-            if (guest.train_arrival_time) {
-              moduleValues['trainBookingNumber_arrivalTime'] = [stripSecondsFromTime(guest.train_arrival_time)];
+            if (guest.train_arrival_time && typeof guest.train_arrival_time === 'string') {
+              try {
+                moduleValues['trainBookingNumber_arrivalTime'] = [stripSecondsFromTime(guest.train_arrival_time)];
+              } catch (error) {
+                console.warn('Error processing train_arrival_time:', error);
+                moduleValues['trainBookingNumber_arrivalTime'] = [guest.train_arrival_time];
+              }
             }
             if (guest.train_departure_date) {
               moduleValues['trainBookingNumber_departureDate'] = [guest.train_departure_date];
@@ -855,11 +881,21 @@ export default function CreateGuests() {
             if (guest.coach_station) {
               moduleValues['coachBookingNumber_station'] = [guest.coach_station];
             }
-            if (guest.coach_departure_time) {
-              moduleValues['coachBookingNumber_departureTime'] = [stripSecondsFromTime(guest.coach_departure_time)];
+            if (guest.coach_departure_time && typeof guest.coach_departure_time === 'string') {
+              try {
+                moduleValues['coachBookingNumber_departureTime'] = [stripSecondsFromTime(guest.coach_departure_time)];
+              } catch (error) {
+                console.warn('Error processing coach_departure_time:', error);
+                moduleValues['coachBookingNumber_departureTime'] = [guest.coach_departure_time];
+              }
             }
-            if (guest.coach_arrival_time) {
-              moduleValues['coachBookingNumber_arrivalTime'] = [stripSecondsFromTime(guest.coach_arrival_time)];
+            if (guest.coach_arrival_time && typeof guest.coach_arrival_time === 'string') {
+              try {
+                moduleValues['coachBookingNumber_arrivalTime'] = [stripSecondsFromTime(guest.coach_arrival_time)];
+              } catch (error) {
+                console.warn('Error processing coach_arrival_time:', error);
+                moduleValues['coachBookingNumber_arrivalTime'] = [guest.coach_arrival_time];
+              }
             }
             if (guest.coach_departure_date) {
               moduleValues['coachBookingNumber_departureDate'] = [guest.coach_departure_date];
@@ -877,35 +913,80 @@ export default function CreateGuests() {
             }
 
             return {
-            id: guest.id, // Ensure ID is preserved
-            firstName: guest.first_name,
-            middleName: guest.middle_name,
-            lastName: guest.last_name,
-            email: guest.email,
-            contactNumber: guest.contact_number,
-            countryCode: guest.country_code,
-            idType: guest.id_type,
-            idNumber: guest.id_number,
-            idCountry: guest.id_country,
-            dob: guest.dob,
-            gender: guest.gender,
-            groupId: guest.group_id,
-            groupName: guest.group_name,
-            nextOfKinName: guest.next_of_kin_name,
-            nextOfKinEmail: guest.next_of_kin_email,
-            nextOfKinPhoneCountry: guest.next_of_kin_phone_country,
-            nextOfKinPhone: guest.next_of_kin_phone,
-            dietary: guest.dietary || [],
-            medical: guest.medical || [],
-            modules: guest.modules || {},
-              moduleValues: moduleValues,
-            prefix: guest.prefix,
-            status: guest.status
+              id: guest.id || '', // Ensure ID is preserved
+              firstName: guest.first_name || '',
+              middleName: guest.middle_name || '',
+              lastName: guest.last_name || '',
+              email: guest.email || '',
+              contactNumber: guest.contact_number || '',
+              countryCode: guest.country_code || '',
+              idType: guest.id_type || '',
+              idNumber: guest.id_number || '',
+              idCountry: guest.id_country || '',
+              dob: guest.dob || '',
+              gender: guest.gender || '',
+              groupId: guest.group_id || '',
+              groupName: guest.group_name || '',
+              nextOfKinName: guest.next_of_kin_name || '',
+              nextOfKinEmail: guest.next_of_kin_email || '',
+              nextOfKinPhoneCountry: guest.next_of_kin_phone_country || '',
+              nextOfKinPhone: guest.next_of_kin_phone || '',
+              dietary: Array.isArray(guest.dietary) ? guest.dietary : (guest.dietary === 'none' ? [] : [guest.dietary || '']),
+              medical: Array.isArray(guest.medical) ? guest.medical : (guest.medical === 'none' ? [] : [guest.medical || '']),
+              modules: Array.isArray(guest.modules) ? {} : (guest.modules || {}),
+              moduleValues: moduleValues || {},
+              prefix: guest.prefix || '',
+              status: guest.status || 'pending'
             };
+            } catch (guestError) {
+              console.error('Error processing guest:', guest.id, guestError);
+              // Return a minimal guest object to prevent crashes
+              return {
+                id: guest.id || '',
+                firstName: guest.first_name || 'Error',
+                middleName: '',
+                lastName: 'Guest',
+                email: guest.email || '',
+                contactNumber: '',
+                countryCode: '',
+                idType: '',
+                idNumber: '',
+                idCountry: '',
+                dob: '',
+                gender: '',
+                groupId: '',
+                groupName: '',
+                nextOfKinName: '',
+                nextOfKinEmail: '',
+                nextOfKinPhoneCountry: '',
+                nextOfKinPhone: '',
+                dietary: [],
+                medical: [],
+                modules: {},
+                moduleValues: {},
+                prefix: '',
+                status: 'error'
+              };
+            }
           });
           console.log('[CreateGuests] Loaded guests IDs:', convertedGuests.map(g => g.id));
           console.log('[CreateGuests] Types of loaded guest IDs:', convertedGuests.map(g => typeof g.id));
           console.log('[CreateGuests] guestIndex:', guestIndex, 'type:', typeof guestIndex, 'isUUID:', isUUID);
+          
+          // Debug modules data
+          if (convertedGuests.length > 0) {
+            const firstGuest = convertedGuests[0];
+            console.log('[CreateGuests] First guest modules type:', typeof firstGuest.modules);
+            console.log('[CreateGuests] First guest modules value:', firstGuest.modules);
+            if (Array.isArray(firstGuest.modules)) {
+              console.log('[CreateGuests] Modules is array, length:', firstGuest.modules.length);
+            }
+            
+            // Debug dietary and medical
+            console.log('[CreateGuests] First guest dietary:', firstGuest.dietary, 'type:', typeof firstGuest.dietary);
+            console.log('[CreateGuests] First guest medical:', firstGuest.medical, 'type:', typeof firstGuest.medical);
+            console.log('[CreateGuests] First guest moduleValues:', firstGuest.moduleValues, 'type:', typeof firstGuest.moduleValues);
+          }
 
           if (!isNaN(idx)) {
             console.log('[CreateGuests] Using index lookup:', idx);
@@ -919,27 +1000,55 @@ export default function CreateGuests() {
             });
           }
           console.log('[CreateGuests] guestToEdit found:', guestToEdit);
+          console.log('[CreateGuests] guestToEdit type:', typeof guestToEdit);
+          console.log('[CreateGuests] guestToEdit keys:', Object.keys(guestToEdit || {}));
+          console.log('[CreateGuests] About to process guestToEdit...');
 
           if (guestToEdit) {
-            if (guestToEdit.dob) {
-              guestToEdit.dob = convertDOBtoDisplay(guestToEdit.dob);
+            // Validate all required fields exist
+            const requiredFields = ['id', 'firstName', 'lastName', 'email'];
+            const missingFields = requiredFields.filter(field => !guestToEdit[field]);
+            if (missingFields.length > 0) {
+              console.warn('[CreateGuests] Missing required fields:', missingFields);
+            }
+
+            if (guestToEdit.dob && typeof guestToEdit.dob === 'string') {
+              try {
+                guestToEdit.dob = convertDOBtoDisplay(guestToEdit.dob);
+              } catch (error) {
+                console.warn('Error converting DOB:', error);
+                guestToEdit.dob = '';
+              }
             }
           }
 
           if (guestToEdit) {
-            setGuests([]); // Clear guests state to avoid rendering the summary card
-            setEditGuestIdx(!isNaN(idx) ? idx : null);
+            try {
+              console.log('[CreateGuests] Setting guests state to empty array...');
+              setGuests([]); // Clear guests state to avoid rendering the summary card
+              console.log('[CreateGuests] Setting editGuestIdx...');
+              setEditGuestIdx(!isNaN(idx) ? idx : null);
 
-            if (guestToEdit.groupId) {
-              // Editing a group
-              const groupGuests = convertedGuests.filter((g: any) => g.groupId === guestToEdit.groupId);
-              setDrafts(groupGuests);
-              setIsGroup(true);
-              setGroupName(guestToEdit.groupName || '');
-              setGroupNameConfirmed(true); // When editing a group, name is already set
-              setExpandedDraftIndex(null);
-            } else {
-              // Editing a single guest
+              if (guestToEdit.groupId && guestToEdit.groupId !== '') {
+                // Editing a group
+                const groupGuests = convertedGuests.filter((g: any) => g.groupId === guestToEdit.groupId);
+                setDrafts(groupGuests);
+                setIsGroup(true);
+                setGroupName(guestToEdit.groupName || '');
+                setGroupNameConfirmed(true); // When editing a group, name is already set
+                setExpandedDraftIndex(null);
+              } else {
+                // Editing a single guest
+                console.log('[CreateGuests] Setting drafts for single guest...');
+                setDrafts([guestToEdit]);
+                console.log('[CreateGuests] Setting isGroup to false...');
+                setIsGroup(false);
+                console.log('[CreateGuests] Setting expandedDraftIndex to 0...');
+                setExpandedDraftIndex(0);
+              }
+            } catch (error) {
+              console.error('Error setting up guest edit mode:', error);
+              // Fallback to single guest mode
               setDrafts([guestToEdit]);
               setIsGroup(false);
               setExpandedDraftIndex(0);
@@ -947,6 +1056,12 @@ export default function CreateGuests() {
           }
         } catch (error) {
           console.error('Error loading guest data for edit:', error);
+          console.error('Error details:', {
+            message: error.message,
+            stack: error.stack,
+            guestIndex,
+            eventId
+          });
           // Fallback to localStorage if Supabase fails
           const allGuests = JSON.parse(localStorage.getItem(`event_guests_${eventId}`) || '[]');
           console.log('[CreateGuests] Fallback allGuests:', allGuests.map((g: any) => g.id));
@@ -1069,21 +1184,34 @@ export default function CreateGuests() {
 
   function validateDraft(draft: Draft): Record<string, string> {
     const errs: Record<string, string> = {};
+    
+    // Only require first name and last name - all other fields are optional
     if (!draft.firstName.trim()) errs.firstName = 'First name is required.';
     if (!draft.lastName.trim()) errs.lastName = 'Last name is required.';
-    if (!draft.contactNumber.trim()) errs.contactNumber = 'Contact number is required.';
-    if (!draft.email.trim()) errs.email = 'Email is required.';
-    if (!draft.idType) errs.idType = 'ID type is required.';
-    if (!draft.idNumber.trim()) errs.idNumber = 'ID number is required.';
-    if (!draft.idCountry) errs.idCountry = 'Country of origin is required.';
-    if (!draft.nextOfKinName.trim()) errs.nextOfKinName = 'Next of kin name is required.';
-    if (!draft.nextOfKinEmail.trim()) errs.nextOfKinEmail = 'Next of kin email is required.';
-    if (!draft.nextOfKinPhone.trim()) errs.nextOfKinPhone = 'Next of kin phone is required.';
-    if (draft.idType === 'Passport' && !/^\w{6,9}$/.test(draft.idNumber)) errs.idNumber = 'Passport number must be 6-9 alphanumeric characters.';
-    if (draft.idType === 'Identity Card' && !/^\w{6,12}$/.test(draft.idNumber)) errs.idNumber = 'Identity Card number must be 6-12 alphanumeric characters.';
-    if (draft.idType === 'Drivers License' && !/^\w{6,15}$/.test(draft.idNumber)) errs.idNumber = 'Drivers License number must be 6-15 alphanumeric characters.';
-    if (draft.email && !/^\S+@\S+\.\S+$/.test(draft.email)) errs.email = 'Invalid email address.';
-    if (draft.nextOfKinEmail && !/^\S+@\S+\.\S+$/.test(draft.nextOfKinEmail)) errs.nextOfKinEmail = 'Invalid next of kin email address.';
+    
+    // All other fields are optional, but validate format if provided
+    if (draft.contactNumber && draft.contactNumber.trim() && !/^[\d\s\-\+\(\)]+$/.test(draft.contactNumber.trim())) {
+      errs.contactNumber = 'Contact number contains invalid characters.';
+    }
+    
+    if (draft.email && draft.email.trim() && !/^\S+@\S+\.\S+$/.test(draft.email.trim())) {
+      errs.email = 'Invalid email address.';
+    }
+    
+    if (draft.idNumber && draft.idNumber.trim() && draft.idType) {
+      if (draft.idType === 'Passport' && !/^\w{6,9}$/.test(draft.idNumber.trim())) {
+        errs.idNumber = 'Passport number must be 6-9 alphanumeric characters.';
+      } else if (draft.idType === 'Identity Card' && !/^\w{6,12}$/.test(draft.idNumber.trim())) {
+        errs.idNumber = 'Identity Card number must be 6-12 alphanumeric characters.';
+      } else if (draft.idType === 'Drivers License' && !/^\w{6,15}$/.test(draft.idNumber.trim())) {
+        errs.idNumber = 'Drivers License number must be 6-15 alphanumeric characters.';
+      }
+    }
+    
+    if (draft.nextOfKinEmail && draft.nextOfKinEmail.trim() && !/^\S+@\S+\.\S+\.\S+$/.test(draft.nextOfKinEmail.trim())) {
+      errs.nextOfKinEmail = 'Invalid next of kin email address.';
+    }
+    
     return errs;
   }
 
@@ -1507,13 +1635,13 @@ export default function CreateGuests() {
       first_name: guest.firstName,
       middle_name: guest.middleName || '',
       last_name: guest.lastName,
-      email: guest.email,
-      contact_number: guest.contactNumber,
-      country_code: guest.countryCode,
-      id_type: guest.idType,
-      id_number: guest.idNumber,
+      email: guest.email || '',
+      contact_number: guest.contactNumber || '',
+      country_code: guest.countryCode || '',
+      id_type: guest.idType || '',
+      id_number: guest.idNumber || '',
       id_country: guest.idCountry || '',
-      dob: convertDOBtoISO(guest.dob) || undefined,
+      dob: guest.dob ? convertDOBtoISO(guest.dob) : undefined,
       gender: guest.gender || '',
       group_id: isGroup ? `group-${Date.now()}` : undefined,
       group_name: isGroup ? groupName : undefined,

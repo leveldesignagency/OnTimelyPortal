@@ -70,6 +70,10 @@ import ViewModulesPage from './screens/ViewModulesPage';
 import SettingsPage from './screens/SettingsPage';
 import CreateItineraryPage from './screens/CreateItineraryPage';
 import CreateGuestsPage from './screens/CreateGuestsPage';
+import GuestFormResponsesPage from './screens/GuestFormResponsesPage';
+import ExportReportPage from './screens/ExportReportPage';
+import SendFormPage from './screens/SendFormPage';
+import UploadGuestsPage from './screens/UploadGuestsPage';
 import GuestChatAdminScreen from './screens/GuestChatAdminScreen';
 import NotificationsScreen from './screens/NotificationsScreen';
 
@@ -379,6 +383,26 @@ export default function App() {
           options={{ headerShown: false }}
         />
         <Stack.Screen 
+          name="GuestFormResponses" 
+          component={GuestFormResponsesPage}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen 
+          name="ExportReport" 
+          component={ExportReportPage}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen 
+          name="SendForm" 
+          component={SendFormPage}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen 
+          name="UploadGuests" 
+          component={UploadGuestsPage}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen 
           name="GuestChatAdmin" 
           component={GuestChatAdminScreenWrapper}
           options={{ headerShown: false }}
@@ -485,6 +509,26 @@ export default function App() {
           } else if (route === 'create-guests' || route === 'add-guests' || route === 'CreateGuests') {
             console.log('🔍 EventDashboard navigating to CreateGuests with params:', params);
             props.navigation.navigate('CreateGuests', params);
+          } else if (route === 'guest-form-responses') {
+            console.log('🔍 EventDashboard navigating to GuestFormResponses with params:', params);
+            props.navigation.navigate('GuestFormResponses', { 
+              eventId: props.route.params?.eventId
+            });
+          } else if (route === 'export-report') {
+            console.log('🔍 EventDashboard navigating to ExportReport with params:', params);
+            props.navigation.navigate('ExportReport', { 
+              eventId: props.route.params?.eventId
+            });
+          } else if (route === 'send-form') {
+            console.log('🔍 EventDashboard navigating to SendForm with params:', params);
+            props.navigation.navigate('SendForm', { 
+              eventId: props.route.params?.eventId
+            });
+          } else if (route === 'upload-guests') {
+            console.log('🔍 EventDashboard navigating to UploadGuests with params:', params);
+            props.navigation.navigate('UploadGuests', { 
+              eventId: props.route.params?.eventId
+            });
           } else {
             // Handle other navigation routes
             console.log('EventDashboard navigation:', route, params);

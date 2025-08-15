@@ -69,6 +69,10 @@ const CreateTeamPage: React.FC = () => {
   const [openMenuTeamId, setOpenMenuTeamId] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [teamToDelete, setTeamToDelete] = useState<Team | null>(null);
+  
+  // Member modal state
+  const [showMemberModal, setShowMemberModal] = useState(false);
+  const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
 
   useEffect(() => {
     loadInitialData();
@@ -543,7 +547,7 @@ const CreateTeamPage: React.FC = () => {
           fontWeight: '600',
           color: colors.text
         }}>
-                      Company Workspace ({existingTeams.length})
+          Created Teams ({existingTeams.length})
         </h2>
       </div>
 
@@ -575,15 +579,15 @@ const CreateTeamPage: React.FC = () => {
               style={{
                 background: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(255, 255, 255, 0.1)',
                 backdropFilter: 'blur(10px)',
-                padding: '38px',
+                padding: '24px',
                 transition: 'all 0.2s ease',
                 cursor: 'pointer',
-                aspectRatio: '1',
+                height: '280px',
                 display: 'flex',
                 flexDirection: 'column',
                 position: 'relative',
                 border: '1.5px solid rgba(255, 255, 255, 0.8)',
-                borderRadius: '35px',
+                borderRadius: '20px',
                 boxShadow: isDark 
                   ? '0 8px 32px rgba(0, 0, 0, 0.3), inset 0 2px 4px rgba(255, 255, 255, 0.1), 0 0 30px rgba(255, 255, 255, 0.3)' 
                   : '0 8px 32px rgba(0, 0, 0, 0.1), inset 0 2px 4px rgba(255, 255, 255, 0.9), 0 0 30px rgba(255, 255, 255, 0.6)'
@@ -705,10 +709,10 @@ const CreateTeamPage: React.FC = () => {
               </p>
 
               {/* Team Members Section */}
-              <div style={{ flex: 1, marginBottom: '60px' }}>
+              <div style={{ flex: 1, marginBottom: '20px' }}>
                 <h4 style={{
-                  margin: '0 0 20px 0',
-                  fontSize: '18px',
+                  margin: '0 0 16px 0',
+                  fontSize: '16px',
                   fontWeight: '600',
                   color: colors.text,
                   textAlign: 'left'
@@ -718,20 +722,46 @@ const CreateTeamPage: React.FC = () => {
                 
                 <div>
                   {team.members && team.members.length > 0 ? (
-                    team.members.slice(0, 4).map((member: any, index: number) => (
-                      <div key={member.id || index} style={{
-                        fontSize: '14px',
-                        color: colors.textSecondary,
-                        marginBottom: '12px',
-                        textAlign: 'left',
-                        lineHeight: '1.4'
-                      }}>
-                        {member.user?.name || member.name || 'Unknown'}
-                      </div>
-                    ))
+                    <>
+                      {team.members.slice(0, 5).map((member: any, index: number) => (
+                        <div key={member.id || index} style={{
+                          fontSize: '13px',
+                          color: colors.textSecondary,
+                          marginBottom: '8px',
+                          textAlign: 'left',
+                          lineHeight: '1.4'
+                        }}>
+                          {member.user?.name || member.name || 'Unknown'}
+                        </div>
+                      ))}
+                      
+                      {team.members.length > 5 && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedTeam(team);
+                            setShowMemberModal(true);
+                          }}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            fontSize: '13px',
+                            color: colors.textSecondary,
+                            fontStyle: 'italic',
+                            textAlign: 'left',
+                            padding: '0',
+                            marginTop: '4px',
+                            textDecoration: 'underline'
+                          }}
+                        >
+                          +{team.members.length - 5} more members
+                        </button>
+                      )}
+                    </>
                   ) : (
                     <div style={{
-                      fontSize: '14px',
+                      fontSize: '13px',
                       color: colors.textSecondary,
                       fontStyle: 'italic',
                       textAlign: 'left'
@@ -739,22 +769,97 @@ const CreateTeamPage: React.FC = () => {
                       No members yet
                     </div>
                   )}
-                  
-                  {team.members && team.members.length > 4 && (
-                    <div style={{
-                      fontSize: '13px',
-                      color: colors.textSecondary,
-                      marginTop: '8px',
-                      fontStyle: 'italic',
-                      textAlign: 'left'
-                    }}>
-                      +{team.members.length - 4} more members
-                    </div>
-                  )}
                 </div>
               </div>
             </div>
           ))}
+        </div>
+      )}
+      
+      {/* Member Modal */}
+      {showMemberModal && selectedTeam && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          background: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10000
+        }}>
+          <div style={{
+            background: isDark ? '#1a1a1a' : '#ffffff',
+            borderRadius: '20px',
+            padding: '32px',
+            maxWidth: '500px',
+            width: '90%',
+            maxHeight: '80vh',
+            overflow: 'auto',
+            position: 'relative',
+            border: `1px solid ${isDark ? '#333' : '#e0e0e0'}`
+          }}>
+            {/* Close button */}
+            <button
+              onClick={() => setShowMemberModal(false)}
+              style={{
+                position: 'absolute',
+                top: '16px',
+                right: '16px',
+                width: '32px',
+                height: '32px',
+                borderRadius: '50%',
+                border: 'none',
+                background: isDark ? '#333' : '#f0f0f0',
+                color: isDark ? '#fff' : '#333',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '18px'
+              }}
+            >
+              ×
+            </button>
+            
+            <h3 style={{
+              margin: '0 0 24px 0',
+              fontSize: '24px',
+              fontWeight: '600',
+              color: colors.text
+            }}>
+              {selectedTeam.name} - All Members
+            </h3>
+            
+            <div>
+              {selectedTeam.members && selectedTeam.members.length > 0 ? (
+                selectedTeam.members.map((member: any, index: number) => (
+                  <div key={member.id || index} style={{
+                    padding: '12px',
+                    marginBottom: '8px',
+                    background: isDark ? '#2a2a2a' : '#f8f9fa',
+                    borderRadius: '8px',
+                    fontSize: '16px',
+                    color: colors.text
+                  }}>
+                    {member.user?.name || member.name || 'Unknown'}
+                  </div>
+                ))
+              ) : (
+                <div style={{
+                  fontSize: '16px',
+                  color: colors.textSecondary,
+                  fontStyle: 'italic',
+                  textAlign: 'center',
+                  padding: '40px'
+                }}>
+                  No members yet
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>

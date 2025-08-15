@@ -1356,14 +1356,31 @@ export default function EventDashboardPage({ eventId, onNavigate }: EventDashboa
 
     try {
       console.log('🔍 Deleting guest:', guestToDelete);
-      const { error } = await supabase
+      
+      // 1. First, clean up all guest data using our comprehensive function
+      const { data: cleanupResult, error: cleanupError } = await supabase.rpc('delete_guest_completely', {
+        p_guest_id: guestToDelete
+      });
+      
+      if (cleanupError) {
+        console.error('Error cleaning up guest data:', cleanupError);
+        throw new Error(`Failed to clean up guest data: ${cleanupError.message}`);
+      }
+      
+      console.log('Guest data cleanup result:', cleanupResult);
+      
+      // 2. Then delete the guest record itself
+      const { error: deleteError } = await supabase
         .from('guests')
         .delete()
         .eq('id', guestToDelete);
 
-      if (error) throw error;
+      if (deleteError) {
+        console.error('Error deleting guest record:', deleteError);
+        throw new Error(`Failed to delete guest record: ${deleteError.message}`);
+      }
 
-      console.log('✅ Guest deleted successfully');
+      console.log('✅ Guest deleted successfully with complete cleanup');
       setShowDeleteGuestModal(false);
       setGuestToDelete(null);
 
@@ -1637,10 +1654,10 @@ export default function EventDashboardPage({ eventId, onNavigate }: EventDashboa
                 
                 <TouchableOpacity
                   style={styles.quickActionButton}
-                  onPress={() => onNavigate('emergency-alert', { eventId })}
+                  onPress={() => onNavigate('guest-form-responses', { eventId })}
                 >
-                  <MaterialCommunityIcons name="alert" size={24} color="#ef4444" />
-                  <Text style={styles.quickActionText}>Emergency Alert</Text>
+                  <MaterialCommunityIcons name="clipboard-text" size={24} color="#10b981" />
+                  <Text style={styles.quickActionText}>Guest Form Responses</Text>
                 </TouchableOpacity>
                 
                 <TouchableOpacity

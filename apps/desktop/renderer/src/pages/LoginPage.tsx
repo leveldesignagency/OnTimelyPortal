@@ -154,6 +154,30 @@ const LoginPage = () => {
               }}
               required
             />
+            <div style={{ 
+              textAlign: 'right', 
+              marginTop: '8px' 
+            }}>
+              <a
+                href="https://ontimely.co.uk/reset-password"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  color: '#228B22',
+                  fontSize: '14px',
+                  textDecoration: 'none',
+                  cursor: 'pointer'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.textDecoration = 'underline';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.textDecoration = 'none';
+                }}
+              >
+                Forgot Password?
+              </a>
+            </div>
           </div>
           
           <button

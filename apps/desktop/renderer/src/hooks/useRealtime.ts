@@ -76,6 +76,7 @@ export const useRealtimeGuests = (eventId: string | null) => {
     
     try {
       setLoading(true)
+      console.log('🔄 Fetching guests for event:', eventId)
       const { data, error } = await supabase
         .from('guests')
         .select('*')
@@ -83,8 +84,10 @@ export const useRealtimeGuests = (eventId: string | null) => {
         .order('created_at', { ascending: false })
       
       if (error) throw error
+      console.log('✅ Fetched guests:', data?.length || 0, 'guests')
       setGuests(data || [])
     } catch (err) {
+      console.error('❌ Error fetching guests:', err)
       setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
       setLoading(false)
@@ -97,21 +100,26 @@ export const useRealtimeGuests = (eventId: string | null) => {
     fetchGuests()
 
     // Set up real-time subscription
+    console.log('🔌 Setting up real-time subscription for guests, event:', eventId)
     const subscription = subscribeToGuests(eventId, (payload) => {
-      console.log('Real-time guest update:', payload)
+      console.log('📡 Real-time guest update received:', payload)
       
       if (payload.eventType === 'INSERT') {
+        console.log('➕ New guest inserted:', payload.new)
         setGuests(prev => [payload.new, ...prev])
       } else if (payload.eventType === 'UPDATE') {
+        console.log('✏️ Guest updated:', payload.new)
         setGuests(prev => prev.map(guest => 
           guest.id === payload.new.id ? payload.new : guest
         ))
       } else if (payload.eventType === 'DELETE') {
+        console.log('🗑️ Guest deleted:', payload.old)
         setGuests(prev => prev.filter(guest => guest.id !== payload.old.id))
       }
     })
 
     return () => {
+      console.log('🔌 Unsubscribing from guests real-time updates')
       subscription.unsubscribe()
     }
   }, [eventId, fetchGuests])

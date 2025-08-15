@@ -12,6 +12,7 @@ import {
   Dimensions,
   TouchableWithoutFeedback,
   Keyboard,
+  Linking,
 } from 'react-native'
 import { signIn, signInAsGuest, guestLogin } from '../lib/auth'
 import { getGlassCardStyle } from '../lib/glassmorphic'
@@ -268,9 +269,17 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
               <Text style={{ color: '#000', fontSize: 18, fontWeight: '700' }}>{loading ? 'Logging in...' : 'Login'}</Text>
             </TouchableOpacity>
             {/* Forgot password */}
-            <Text style={{ color: '#fff', fontSize: 15, textAlign: 'center', marginTop: 18 }}>
-              Forgot Password? <Text style={{ fontWeight: '700' }}>Contact your event host.</Text>
-            </Text>
+            <TouchableOpacity
+              onPress={() => {
+                // Open the reset password page in the device's default browser
+                Linking.openURL('https://ontimely.co.uk/reset-password');
+              }}
+              style={{ marginTop: 18 }}
+            >
+              <Text style={{ color: '#fff', fontSize: 15, textAlign: 'center' }}>
+                <Text style={{ fontWeight: '700' }}>Forgot Password?</Text> Click here to reset
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
       </TouchableWithoutFeedback>
