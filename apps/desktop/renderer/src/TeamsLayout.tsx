@@ -108,21 +108,21 @@ export default function TeamsLayout() {
                 navigate(to);
               }}
               style={{
-                width: '80px', // Slightly larger than original 64px
-                height: '80px', // Slightly larger than original 64px
+                width: '56px', // Smaller container
+                height: '56px', // Smaller container
                 background: 'transparent',
-                border: location.pathname === to ? '2px solid white' : 'none', // White border for selected
+                border: location.pathname === to ? '1px solid rgba(255, 255, 255, 0.6)' : 'none', // Lighter, thinner border
                 cursor: 'pointer',
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
                 marginBottom: '16px',
-                padding: '12px 8px', // Adjusted padding for new size
+                padding: '8px 4px', // Reduced padding for smaller size
                 borderRadius: '8px'
               }}
             >
-              {React.cloneElement(icon, { size: 40 })} {/* Slightly larger than original 32px */}
+              {React.cloneElement(icon, { size: 32 })} {/* Adjusted for smaller container */}
             </button>
           ))}
         </nav>

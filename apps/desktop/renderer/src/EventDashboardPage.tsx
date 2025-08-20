@@ -28,7 +28,7 @@ import {
   type Itinerary,
   deleteEvent as supabaseDeleteEvent
 } from './lib/supabase';
-import { getEventActivityFeed } from './lib/supabase';
+import { supabase, getEventActivityFeed } from './lib/supabase';
 import { Itinerary as SupabaseItinerary } from './lib/supabase';
 import AddOnCard from './components/AddOnCard';
 import { User } from './lib/auth';
@@ -181,8 +181,16 @@ function EventMetaInfo({ event, colors, isDark }: { event: any, colors: any, isD
   if (event.location) metaParts.push(`Location: ${event.location}`);
   if (event.time_zone) metaParts.push(`Time Zone: ${event.time_zone}`);
   if (teamNames.length > 0) metaParts.push(`Team Assigned: ${teamNames.join(', ')}`);
-  if (event.from) metaParts.push(`From: ${new Date(event.from).toLocaleDateString('en-GB', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}`);
-  if (event.to) metaParts.push(`To: ${new Date(event.to).toLocaleDateString('en-GB', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}`);
+  if (event.from) {
+    const fromDate = new Date(event.from).toLocaleDateString('en-GB', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
+    const fromTime = event.start_time ? ` ${event.start_time}` : '';
+    metaParts.push(`From: ${fromDate}${fromTime}`);
+  }
+  if (event.to) {
+    const toDate = new Date(event.to).toLocaleDateString('en-GB', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
+    const toTime = event.end_time ? ` ${event.end_time}` : '';
+    metaParts.push(`To: ${toDate}${toTime}`);
+  }
   if (metaParts.length === 0) return null;
   return (
     <div style={{ marginTop: 4, marginBottom: 16, fontSize: 15, color: colors.textSecondary, display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -408,8 +416,68 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
         setCurrentEvent(updatedEvent);
         if (currentUser && id) {
           try {
+            // Load activity feed from RPC function
             const data = await getEventActivityFeed(id, currentUser.company_id, 30, 0);
-            setActivityFeed(data || []);
+            
+            // Also load form submissions directly to ensure they're included
+            const { data: formSubmissions, error: formError } = await supabase
+              .from('form_submissions')
+              .select(`
+                id,
+                email,
+                responses,
+                submitted_at,
+                forms!inner(
+                  event_id,
+                  title
+                )
+              `)
+              .eq('forms.event_id', id);
+            
+            if (formError) {
+              console.error('Error querying form submissions:', formError);
+            }
+            
+            // Transform form submissions to match activity feed format
+            const transformedFormSubmissions = (formSubmissions || []).map(sub => {
+              const actorName = (() => {
+                try {
+                  const responses = sub.responses;
+                  if (responses) {
+                    const firstName = responses.firstName || responses.first_name || '';
+                    const lastName = responses.lastName || responses.last_name || '';
+                    if (firstName || lastName) {
+                      return `${firstName} ${lastName}`.trim();
+                    }
+                  }
+                } catch (e) {
+                  console.log('Error extracting name from responses:', e);
+                }
+                return sub.email || 'Guest';
+              })();
+              
+              return {
+                item_type: 'form_submission',
+                title: 'Guest Form Submitted',
+                description: 'Form response received',
+                created_at: sub.submitted_at,
+                actor_name: actorName,
+                actor_email: sub.email,
+                source_id: sub.id
+              };
+            });
+            
+            // Merge and sort by created_at
+            const allActivity = [...(data || []), ...transformedFormSubmissions]
+              .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+              .slice(0, 30);
+            
+            setActivityFeed(allActivity);
+            console.log('🔄 Activity feed loaded:', { 
+              rpcCount: data?.length || 0, 
+              formSubmissionsCount: formSubmissions?.length || 0,
+              totalCount: allActivity.length 
+            });
           } catch (e) {
             console.error('Error loading event activity feed:', e);
           }
@@ -740,6 +808,8 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
     name: '',
     from: '',
     to: '',
+    startTime: '',
+    endTime: '',
     description: '',
     location: '',
     timeZone: 'UTC',
@@ -2078,6 +2148,8 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
         name: currentEvent.name || '',
         from: currentEvent.from || '',
         to: currentEvent.to || '',
+        startTime: (currentEvent as any).start_time || '',
+        endTime: (currentEvent as any).end_time || '',
         description: (currentEvent as any).description || '',
         location: (currentEvent as any).location || '',
         timeZone: (currentEvent as any).time_zone || 'UTC',
@@ -2785,6 +2857,9 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                       if (item.item_type === 'itinerary') {
                         return `${item.title || 'Itinerary'} updated`;
                       }
+                      if (item.item_type === 'form_submission') {
+                        return `${item.actor_name || 'Guest'} responded to form`;
+                      }
                       return item.title || item.item_type;
                     })();
                     return (
@@ -2801,7 +2876,13 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                         </div>
                         <div style={{ position: 'absolute', top: 10, right: 14, color: isDark ? '#aaa' : '#666', fontSize: 12 }}>{ts}</div>
                         <div style={{ fontSize: 20 }}>
-                          <Icon name={item.item_type === 'announcement' ? 'announcement' : item.item_type === 'message' ? 'chat' : item.item_type === 'module_answer' ? 'clipboard' : 'pin'} style={{ fontSize: 18, color: '#fff' }} />
+                          <Icon name={
+                            item.item_type === 'announcement' ? 'announcement' : 
+                            item.item_type === 'message' ? 'chat' : 
+                            item.item_type === 'module_answer' ? 'clipboard' : 
+                            item.item_type === 'form_submission' ? 'description' : 
+                            'pin'
+                          } style={{ fontSize: 18, color: '#fff' }} />
                         </div>
                       </div>
                     );
@@ -4977,7 +5058,7 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
         }}>
           <div style={{
             width: '100%',
-            maxWidth: '800px',
+            maxWidth: '900px',
             ...getGlassStyles(isDark),
             padding: '40px',
             position: 'relative',
@@ -5006,6 +5087,8 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                     name: values.name,
                     from: values.from,
                     to: values.to,
+                    start_time: values.startTime,
+                    end_time: values.endTime,
                     description: values.description,
                     location: values.location,
                     time_zone: values.timeZone

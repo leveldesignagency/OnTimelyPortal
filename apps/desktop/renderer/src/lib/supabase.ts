@@ -18,6 +18,8 @@ export type Event = {
   name: string
   from: string
   to: string
+  start_time?: string
+  end_time?: string
   status: string
   description?: string
   location?: string

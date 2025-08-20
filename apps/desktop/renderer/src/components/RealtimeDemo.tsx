@@ -7,25 +7,8 @@ const RealtimeDemo: React.FC = () => {
   const { events, loading: eventsLoading, error: eventsError } = useRealtimeEvents()
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const { guests, loading: guestsLoading, error: guestsError } = useRealtimeGuests(selectedEventId)
-  const [newGuestName, setNewGuestName] = useState('')
-  const [newGuestEmail, setNewGuestEmail] = useState('')
-
-  const handleAddGuest = async () => {
-    if (!selectedEventId || !newGuestName || !newGuestEmail) return
-    
-    try {
-      await addGuest({
-        event_id: selectedEventId,
-        name: newGuestName,
-        email: newGuestEmail,
-        status: 'pending'
-      })
-      setNewGuestName('')
-      setNewGuestEmail('')
-    } catch (error) {
-      console.error('Error adding guest:', error)
-    }
-  }
+  // Demo page no longer performs inserts to strict 'guests' schema to avoid type/DB constraint issues.
+  // If you want add support here, wire this to your guest creation flow with required fields.
 
   const handleUpdateGuestStatus = async (guestId: string, status: 'confirmed' | 'declined' | 'pending') => {
     try {
@@ -69,10 +52,12 @@ const RealtimeDemo: React.FC = () => {
             }}
             onClick={() => setSelectedEventId(event.id)}
           >
-            <h3>{event.title}</h3>
-            <p>{event.description}</p>
-            <p><strong>Date:</strong> {new Date(event.date).toLocaleDateString()}</p>
-            <p><strong>Location:</strong> {event.location}</p>
+            <h3>{event.name}</h3>
+            {event.description && <p>{event.description}</p>}
+            {(event.from || event.start_time) && (
+              <p><strong>Date:</strong> {new Date(event.from || event.start_time as string).toLocaleDateString()}</p>
+            )}
+            {event.location && <p><strong>Location:</strong> {event.location}</p>}
           </div>
         ))}
       </div>
@@ -82,45 +67,7 @@ const RealtimeDemo: React.FC = () => {
         <div>
           <h2>Guests for Selected Event</h2>
           
-          {/* Add Guest Form */}
-          <div style={{ 
-            border: '1px solid #ddd', 
-            padding: '15px', 
-            marginBottom: '20px', 
-            borderRadius: '5px',
-            backgroundColor: '#f9f9f9'
-          }}>
-            <h3>Add New Guest</h3>
-            <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-              <input
-                type="text"
-                placeholder="Guest Name"
-                value={newGuestName}
-                onChange={(e) => setNewGuestName(e.target.value)}
-                style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
-              />
-              <input
-                type="email"
-                placeholder="Guest Email"
-                value={newGuestEmail}
-                onChange={(e) => setNewGuestEmail(e.target.value)}
-                style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
-              />
-              <button 
-                onClick={handleAddGuest}
-                style={{ 
-                  padding: '8px 16px', 
-                  backgroundColor: '#007bff', 
-                  color: 'white', 
-                  border: 'none', 
-                  borderRadius: '4px',
-                  cursor: 'pointer'
-                }}
-              >
-                Add Guest
-              </button>
-            </div>
-          </div>
+          {/* Add Guest form removed in demo to avoid DB schema mismatch. */}
 
           {/* Guests List */}
           {guestsLoading && <p>Loading guests...</p>}
@@ -142,7 +89,7 @@ const RealtimeDemo: React.FC = () => {
               }}
             >
               <div>
-                <strong>{guest.name}</strong> ({guest.email})
+                <strong>{[guest.first_name, guest.last_name].filter(Boolean).join(' ') || guest.email}</strong> ({guest.email})
                 <br />
                 <span style={{ 
                   color: guest.status === 'confirmed' ? 'green' : 

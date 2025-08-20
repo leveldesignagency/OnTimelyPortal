@@ -242,7 +242,7 @@ const MessageBubble = ({ message, isDark, currentUserEmail, onReply, onReact, me
       // console.log(`[AVATAR DEBUG] Message from ${message.sender_email}, current user: ${currentUserEmail}, isCurrentUser: ${isCurrentUser}, avatar_url: ${message.avatar_url}, sender_type: ${message.sender_type}`);
   const [showActions, setShowActions] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [hideActionsTimeout, setHideActionsTimeout] = useState<number | null>(null);
+  const [hideActionsTimeout, setHideActionsTimeout] = useState<ReturnType<typeof setTimeout> | null>(null);
   const iconList = [
     { id: 'thumbs-up', icon: '👍', name: 'Like' },
     { id: 'heart', icon: '❤️', name: 'Love' },
@@ -1299,7 +1299,7 @@ export default function GuestChatInterface({ eventId, isDark, guests }: GuestCha
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   const [eventTitle, setEventTitle] = useState<string>('Guest Chat');
   const [typingUsers, setTypingUsers] = useState<{ [email: string]: string }>({});
-  const typingTimeouts = useRef<{ [email: string]: number }>({});
+  const typingTimeouts = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const reactionsFetched = useRef<boolean>(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
@@ -1309,7 +1309,7 @@ export default function GuestChatInterface({ eventId, isDark, guests }: GuestCha
   const [selectedModule, setSelectedModule] = useState<any>(null);
   const [showModuleResponse, setShowModuleResponse] = useState(false);
   const [hasSubmittedMap, setHasSubmittedMap] = useState<Record<string, boolean>>({});
-  const [moduleAnswerState, setModuleAnswerState] = useState<{ rating?: number; text?: string; option?: string; mediaUrl?: string; submitting?: boolean; comment?: string; file?: File | null }>({});
+  const [moduleAnswerState, setModuleAnswerState] = useState<{ rating?: number; text?: string; option?: string; mediaUrl?: string; submitting?: boolean; comment?: string; file?: File | null; filePreviewUrl?: string | null }>({});
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const starBarRef = useRef<HTMLDivElement | null>(null);
   const [isDeleteMode, setIsDeleteMode] = useState(false);
@@ -1630,12 +1630,14 @@ export default function GuestChatInterface({ eventId, isDark, guests }: GuestCha
             table: 'guests_chat_reactions',
           },
           (payload) => {
-            console.log('[REACTION REALTIME] Reaction change detected:', payload.eventType, 'for message:', payload.new?.message_id || payload.old?.message_id);
+            const maybeNew = (payload as any).new as { message_id?: string } | undefined;
+            const maybeOld = (payload as any).old as { message_id?: string } | undefined;
+            console.log('[REACTION REALTIME] Reaction change detected:', payload.eventType, 'for message:', maybeNew?.message_id || maybeOld?.message_id);
             
             // Update reactions state directly based on the specific change
             setReactions(prevReactions => {
               const newReactions = { ...prevReactions };
-              const messageId = payload.new?.message_id || payload.old?.message_id;
+              const messageId = maybeNew?.message_id || maybeOld?.message_id;
               
               if (!messageId) return prevReactions;
               

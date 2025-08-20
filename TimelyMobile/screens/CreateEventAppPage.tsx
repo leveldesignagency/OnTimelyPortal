@@ -41,6 +41,8 @@ export default function CreateEventAppPage({ onNavigate, onGoBack, onMenuPress }
     location: '',
     from: '',
     to: '',
+    startTime: '',
+    endTime: '',
     timeZone: 'UTC',
   });
   
@@ -177,6 +179,8 @@ export default function CreateEventAppPage({ onNavigate, onGoBack, onMenuPress }
           location: formData.location.trim(),
           from: formData.from,
           to: formData.to,
+          start_time: formData.startTime,
+          end_time: formData.endTime,
           time_zone: formData.timeZone,
           company_id: userData.company_id,
           created_by: user.id,
@@ -216,6 +220,117 @@ export default function CreateEventAppPage({ onNavigate, onGoBack, onMenuPress }
     } finally {
       setLoading(false);
     }
+  };
+
+  const TimePicker = ({ 
+    value, 
+    onChange, 
+    placeholder 
+  }: {
+    value: string;
+    onChange: (value: string) => void;
+    placeholder: string;
+  }) => {
+    const [showPicker, setShowPicker] = useState(false);
+    const [currentTime, setCurrentTime] = useState(value || '09:00');
+    const [selectedHour, setSelectedHour] = useState('09');
+    const [selectedMinute, setSelectedMinute] = useState('00');
+
+    const handleTimeSelect = (hour: string, minute: string) => {
+      const timeString = `${hour}:${minute}`;
+      setCurrentTime(timeString);
+      onChange(timeString);
+      setShowPicker(false);
+    };
+
+    const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
+    const minutes = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'));
+
+    return (
+      <View style={{ flex: 1 }}>
+        <TouchableOpacity
+          style={[styles.datePickerButton, getGlassCardStyle()]}
+          onPress={() => setShowPicker(true)}
+        >
+          <MaterialCommunityIcons name="clock" size={20} color="#fff" />
+          <Text style={styles.datePickerText}>
+            {value || placeholder}
+          </Text>
+        </TouchableOpacity>
+
+        <Modal
+          visible={showPicker}
+          transparent={true}
+          animationType="fade"
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.calendarModal}>
+              <View style={styles.calendarHeader}>
+                <Text style={styles.calendarTitle}>Select Time</Text>
+                <TouchableOpacity onPress={() => setShowPicker(false)} style={styles.calendarNavButton}>
+                  <Ionicons name="close" size={24} color="#fff" />
+                </TouchableOpacity>
+              </View>
+              <View style={styles.timePickerContainer}>
+                <View style={styles.timePickerRow}>
+                  <View style={styles.timeColumn}>
+                    <Text style={styles.timeColumnLabel}>Hour</Text>
+                    <ScrollView style={styles.timeScrollView} showsVerticalScrollIndicator={false}>
+                      {hours.map(hour => (
+                        <TouchableOpacity
+                          key={hour}
+                          style={[
+                            styles.timeOption,
+                            selectedHour === hour && styles.timeOptionSelected
+                          ]}
+                          onPress={() => setSelectedHour(hour)}
+                        >
+                          <Text style={[
+                            styles.timeOptionText,
+                            selectedHour === hour && styles.timeOptionTextSelected
+                          ]}>
+                            {hour}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                  <Text style={styles.timeSeparator}>:</Text>
+                  <View style={styles.timeColumn}>
+                    <Text style={styles.timeColumnLabel}>Minute</Text>
+                    <ScrollView style={styles.timeScrollView} showsVerticalScrollIndicator={false}>
+                      {minutes.map(minute => (
+                        <TouchableOpacity
+                          key={minute}
+                          style={[
+                            styles.timeOption,
+                            selectedMinute === minute && styles.timeOptionSelected
+                          ]}
+                          onPress={() => setSelectedMinute(minute)}
+                        >
+                          <Text style={[
+                            styles.timeOptionText,
+                            selectedMinute === minute && styles.timeOptionTextSelected
+                          ]}>
+                            {minute}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                </View>
+                <TouchableOpacity
+                  style={styles.timeConfirmButton}
+                  onPress={() => handleTimeSelect(selectedHour, selectedMinute)}
+                >
+                  <Text style={styles.timeConfirmButtonText}>Confirm</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      </View>
+    );
   };
 
   const CalendarDatePicker = ({ 
@@ -478,6 +593,24 @@ export default function CreateEventAppPage({ onNavigate, onGoBack, onMenuPress }
                 value={formData.to}
                 onChange={(date) => handleInputChange('to', date)}
                 placeholder="End date"
+              />
+            </View>
+          </View>
+
+          {/* Times */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>TIMES</Text>
+            <View style={styles.dateContainer}>
+              <TimePicker
+                value={formData.startTime}
+                onChange={(time) => handleInputChange('startTime', time)}
+                placeholder="Start time"
+              />
+              <Text style={styles.dateArrow}>▶</Text>
+              <TimePicker
+                value={formData.endTime}
+                onChange={(time) => handleInputChange('endTime', time)}
+                placeholder="End time"
               />
             </View>
           </View>
@@ -893,5 +1026,65 @@ const styles = StyleSheet.create({
     marginTop: 10,
     marginBottom: 20,
     lineHeight: 22,
+  },
+  timePickerContainer: {
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  timePickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  timeColumn: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  timeColumnLabel: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 10,
+  },
+  timeScrollView: {
+    maxHeight: 200,
+    width: 80,
+  },
+  timeOption: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginVertical: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  timeOptionSelected: {
+    backgroundColor: '#10b981',
+  },
+  timeOptionText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '500',
+  },
+  timeOptionTextSelected: {
+    color: '#fff',
+    fontWeight: '700',
+  },
+  timeSeparator: {
+    color: '#fff',
+    fontSize: 32,
+    fontWeight: '700',
+    marginHorizontal: 20,
+  },
+  timeConfirmButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    backgroundColor: '#10b981',
+  },
+  timeConfirmButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 }); 

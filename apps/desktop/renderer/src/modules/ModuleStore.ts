@@ -30,7 +30,7 @@ export const AVAILABLE_MODULES: ModuleType[] = [
       'Alternative Routes'
     ],
     configRequired: true,
-    apiKey: 'AVIATION_STACK_API_KEY'
+    apiKey: '8b8117fd5f6f048d0904c8e884939449'
   },
   {
     id: 'logistics-tracker',
@@ -76,8 +76,8 @@ export const getModuleApiConfig = async (moduleId: string, apiKey?: string) => {
   switch (moduleId) {
     case 'flight-tracker':
       return {
-        baseUrl: 'http://api.aviationstack.com/v1/',
-        apiKey: apiKey || process.env.AVIATION_STACK_API_KEY,
+        baseUrl: 'https://api.aviationstack.com/v1/',
+        apiKey: apiKey || '8b8117fd5f6f048d0904c8e884939449',
         endpoints: {
           flightStatus: 'flights',
           airports: 'airports',

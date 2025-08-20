@@ -7,7 +7,7 @@ import { getCurrentUser } from './lib/auth';
 import { addMultipleGuests, deleteGuest, deleteGuestsByGroupId, insertActivityLog } from './lib/supabase';
 import { v4 as uuidv4 } from 'uuid';
 
-const AVIATIONSTACK_API_KEY = 'bb7fd8369e323c356434d5b1ac77b437'; // 🚨 PASTE YOUR NEW AVIATIONSTACK API KEY HERE 🚨
+const AVIATIONSTACK_API_KEY = '8b8117fd5f6f048d0904c8e884939449'; // 🚨 PASTE YOUR NEW AVIATIONSTACK API KEY HERE 🚨
 
 // --- TYPE DEFINITIONS ---
 interface FlightData {
@@ -86,7 +86,7 @@ async function fetchFlightData(flightNumber: string, flightDate: string): Promis
   }
 
   const upperCaseFlightNumber = flightNumber.toUpperCase();
-  const requestUrl = `http://api.aviationstack.com/v1/flights?access_key=${AVIATIONSTACK_API_KEY}&flight_iata=${upperCaseFlightNumber}&flight_date=${flightDate}`;
+      const requestUrl = `https://api.aviationstack.com/v1/flights?access_key=${AVIATIONSTACK_API_KEY}&flight_iata=${upperCaseFlightNumber}&flight_date=${flightDate}`;
   
   try {
     const response = await fetch(requestUrl);

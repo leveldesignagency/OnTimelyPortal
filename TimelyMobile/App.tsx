@@ -76,6 +76,7 @@ import SendFormPage from './screens/SendFormPage';
 import UploadGuestsPage from './screens/UploadGuestsPage';
 import GuestChatAdminScreen from './screens/GuestChatAdminScreen';
 import NotificationsScreen from './screens/NotificationsScreen';
+import NotificationsPage from './screens/NotificationsPage';
 
 
 const Tab = createBottomTabNavigator();
@@ -407,7 +408,30 @@ export default function App() {
           component={GuestChatAdminScreenWrapper}
           options={{ headerShown: false }}
         />
+        <Stack.Screen 
+          name="Notifications" 
+          component={NotificationsScreen}
+          options={{ headerShown: false }}
+        />
       </Stack.Navigator>
+    );
+  }
+
+  function NotificationsScreen(props: any) {
+    return (
+      <NotificationsPage
+        {...props}
+        eventId={props.route.params?.eventId}
+        onNavigate={(route: string, params?: any) => {
+          if (route === 'back') {
+            props.navigation.goBack();
+          } else if (route === 'event-dashboard') {
+            props.navigation.navigate('EventDashboard', { eventId: params?.eventId });
+          } else if (route === 'login') {
+            props.navigation.navigate('Login');
+          }
+        }}
+      />
     );
   }
 
@@ -529,6 +553,9 @@ export default function App() {
             props.navigation.navigate('UploadGuests', { 
               eventId: props.route.params?.eventId
             });
+          } else if (route === 'notifications') {
+            console.log('🔍 EventDashboard navigating to Notifications with params:', params);
+            props.navigation.navigate('Notifications', params);
           } else {
             // Handle other navigation routes
             console.log('EventDashboard navigation:', route, params);

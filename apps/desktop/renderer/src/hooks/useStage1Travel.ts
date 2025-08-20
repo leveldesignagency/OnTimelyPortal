@@ -119,7 +119,7 @@ export const useStage1Travel = (options: UseStage1TravelOptions): [Stage1TravelS
 
     try {
       const profile = await Stage1TravelService.createTravelProfile({
-        id: guestId,
+        guest_id: guestId,
         event_id: eventId,
         ...profileData
       });

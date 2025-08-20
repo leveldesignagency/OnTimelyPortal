@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { insertActivityLog } from '../lib/supabase';
 
+
 // ============================================
 // TYPE DEFINITIONS
 // ============================================
@@ -170,7 +171,7 @@ export class Stage1TravelService {
     const { data, error } = await supabase
       .from('guest_travel_profiles')
       .select('*')
-      .eq('id', guestId)
+      .eq('guest_id', guestId)
       .eq('event_id', eventId)
       .single();
 
@@ -216,6 +217,65 @@ export class Stage1TravelService {
     if (error) {
       console.error('Error deleting travel profile:', error);
       throw new Error(`Failed to delete travel profile: ${error.message}`);
+    }
+  }
+
+  /**
+   * Hard-delete ALL Stage 1 profiles for a given guest and event.
+   * Use this when the user clicks the X to ensure no stale searches remain.
+   */
+  static async deleteProfilesByGuestEvent(guestId: string, eventId: string): Promise<void> {
+    const { error } = await supabase
+      .from('guest_travel_profiles')
+      .delete()
+      .eq('guest_id', guestId)
+      .eq('event_id', eventId);
+
+    if (error) {
+      console.error('Error deleting profiles by guest/event:', error);
+      throw new Error(`Failed to delete travel profiles: ${error.message}`);
+    }
+  }
+
+  /**
+   * Clean up duplicate travel profiles for a guest/event combination
+   * Keeps the most recent one and deletes the rest
+   */
+  static async cleanupDuplicateProfiles(guestId: string, eventId: string): Promise<void> {
+    try {
+      // Get all profiles for this guest/event combination
+      const { data: profiles, error } = await supabase
+        .from('guest_travel_profiles')
+        .select('*')
+        .eq('guest_id', guestId)
+        .eq('event_id', eventId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching profiles for cleanup:', error);
+        return;
+      }
+
+      // If more than one profile exists, delete the older ones
+      if (profiles && profiles.length > 1) {
+        console.log(`🧹 Found ${profiles.length} profiles, cleaning up duplicates...`);
+        
+        const profilesToDelete = profiles.slice(1); // Keep the first (most recent) one
+        const deleteIds = profilesToDelete.map(p => p.id);
+        
+        const { error: deleteError } = await supabase
+          .from('guest_travel_profiles')
+          .delete()
+          .in('id', deleteIds);
+
+        if (deleteError) {
+          console.error('Error deleting duplicate profiles:', deleteError);
+        } else {
+          console.log(`✅ Cleaned up ${profilesToDelete.length} duplicate profiles`);
+        }
+      }
+    } catch (error) {
+      console.error('Error during profile cleanup:', error);
     }
   }
 
@@ -701,73 +761,148 @@ export class Stage1TravelService {
   // ============================================
 
   /**
-   * Fetch flight data from external API (AviationStack)
+   * Fetch flight data from multiple APIs with fallback
    */
-  static async fetchFlightData(flightNumber: string, flightDate: string): Promise<any> {
-    const AVIATIONSTACK_API_KEY = 'bb7fd8369e323c356434d5b1ac77b437';
-    
-    if (!flightNumber || !flightDate || !AVIATIONSTACK_API_KEY) {
-      throw new Error('Missing required flight data parameters or API key');
+    static async fetchFlightData(flightNumber: string, flightDate: string): Promise<any> {
+    if (!flightNumber || !flightDate) {
+      throw new Error('Missing required flight data parameters');
     }
 
     const upperCaseFlightNumber = flightNumber.toUpperCase();
-    const requestUrl = `http://api.aviationstack.com/v1/flights?access_key=${AVIATIONSTACK_API_KEY}&flight_iata=${upperCaseFlightNumber}&flight_date=${flightDate}`;
     
+    // Use FlightAware AeroAPI directly (no fallback needed)
     try {
-      console.log('Fetching flight data for:', flightNumber, flightDate);
-      
-      const response = await fetch(requestUrl);
+      console.log(`🔄 Using FlightAware AeroAPI for flight:`, flightNumber, flightDate);
+      const result = await this.tryFlightAwareAPI(upperCaseFlightNumber, flightDate);
+      console.log(`✅ FlightAware AeroAPI succeeded!`);
+      return result;
+    } catch (error) {
+      console.error('❌ FlightAware AeroAPI failed:', error);
+      throw new Error(`FlightAware API failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
 
-      if (!response.ok) {
-        console.error(`AviationStack API error! Status: ${response.status}`);
-        try {
-          const errorData = await response.json();
-          console.error('API Error Details:', errorData);
-        } catch (e) {
-          console.error('Could not parse error response from API.');
+  /**
+   * Try FlightAware AeroAPI (real flight data)
+   */
+  private static async tryFlightAwareAPI(flightNumber: string, flightDate: string): Promise<any> {
+    console.log('   🚀 Trying FlightAware (Cloud → Local proxy → Direct)...');
+
+    // Resolve bases from env (build-time). Cloud is optional.
+    const cloudBase = (import.meta as any)?.env?.VITE_CLOUD_API_BASE_URL as string | undefined; // e.g. https://timely.yourdomain.com
+    const localBase = ((import.meta as any)?.env?.VITE_LOCAL_API_BASE_URL as string | undefined) || 'http://localhost:3001';
+
+    // 1) Cloud (if configured): `${cloudBase}/api/flightaware-proxy`
+    if (cloudBase) {
+      try {
+        const cloudUrl = `${cloudBase.replace(/\/$/, '')}/api/flightaware-proxy?flightNumber=${encodeURIComponent(flightNumber)}&flightDate=${encodeURIComponent(flightDate)}`;
+        console.log('   🔍 Cloud API URL:', cloudUrl);
+        const cloudResp = await fetch(cloudUrl, { mode: 'cors' });
+        console.log('   📡 Cloud API status:', cloudResp.status);
+        if (cloudResp.ok) {
+          const cloudData = await cloudResp.json();
+          if (cloudData?.success && cloudData?.flight) {
+            console.log('   ✅ Cloud API succeeded!');
+            return cloudData.flight;
+          }
+          console.warn('   ⚠️ Cloud API unexpected payload:', cloudData);
+        } else {
+          const txt = await cloudResp.text();
+          console.warn('   ⚠️ Cloud API error:', txt);
         }
-        throw new Error(`API request failed with status: ${response.status}`);
+      } catch (e) {
+        console.warn('   ⚠️ Cloud API fetch failed:', e);
+      }
+    }
+
+    // 2) Local proxy on http://localhost:3001 (bundled with the app)
+    try {
+      const localUrl = `${localBase.replace(/\/$/, '')}/api/flightaware?flightNumber=${encodeURIComponent(flightNumber)}&flightDate=${encodeURIComponent(flightDate)}`;
+      console.log('   🔍 Local proxy URL:', localUrl);
+      
+      const localResp = await fetch(localUrl);
+      console.log('   📡 Local proxy status:', localResp.status);
+      
+      if (localResp.ok) {
+        const localData = await localResp.json();
+        if (localData?.success && localData?.flight) {
+          console.log('   ✅ Local proxy succeeded!');
+          return localData.flight;
+        }
+        console.warn('   ⚠️ Local proxy returned unexpected payload:', localData);
+      } else {
+        const txt = await localResp.text();
+        console.warn('   ⚠️ Local proxy error:', txt);
+      }
+    } catch (e) {
+      console.warn('   ⚠️ Local proxy fetch failed:', e);
+    }
+
+    // 3) Last resort: direct FlightAware API (likely blocked by CORS in browser)
+    try {
+      console.log('   🔁 Falling back to direct FlightAware (may be blocked by CORS)');
+      const FLIGHTAWARE_API_KEY = 'tc87hHhGcuEA3fitkPGgvO0eGqaltNJ4';
+      const baseUrl = 'https://aeroapi.flightaware.com/aeroapi';
+      const searchUrl = `${baseUrl}/flights/${encodeURIComponent(flightNumber)}`;
+      console.log('   🔍 Direct API URL:', searchUrl);
+
+      const response = await fetch(searchUrl, {
+        headers: {
+          'x-apikey': FLIGHTAWARE_API_KEY,
+          'Accept': 'application/json'
+        }
+      });
+
+      console.log('   📡 Direct API status:', response.status);
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`FlightAware API error: ${response.status} ${response.statusText} ${errorText}`);
       }
 
       const data = await response.json();
+      if (!data?.flights?.length) throw new Error('No flights found in FlightAware response');
 
-      if (data.error) {
-        console.error('AviationStack API returned an error object:', data.error);
-        throw new Error(`API Error: ${data.error.message || 'Unknown error'}`);
+      let targetFlight = data.flights[0];
+      if (flightDate) {
+        const match = data.flights.find((flight: any) => {
+          const depCandidate = flight?.scheduled_out || flight?.estimated_out || flight?.scheduled_off || flight?.estimated_off || flight?.filed_departure_time;
+          if (!depCandidate) return false;
+          const flightDateStr = new Date(depCandidate).toISOString().split('T')[0];
+          return flightDateStr === flightDate;
+        });
+        if (match) targetFlight = match;
       }
 
-      if (data.data && data.data.length > 0) {
-        const flightData = data.data[0];
-        
-        // Transform API response to match our interface
-        return {
-          flight_number: flightNumber,
-          flight_date: flightDate,
-          flight_status: flightData.flight_status || 'scheduled',
-          departure_airport: flightData.departure?.airport || flightData.departure?.iata,
-          arrival_airport: flightData.arrival?.airport || flightData.arrival?.iata,
-          departure_time: flightData.departure?.scheduled || flightData.departure?.estimated,
-          arrival_time: flightData.arrival?.scheduled || flightData.arrival?.estimated,
-          departure_iata: flightData.departure?.iata,
-          arrival_iata: flightData.arrival?.iata,
-          departure_terminal: flightData.departure?.terminal,
-          arrival_terminal: flightData.arrival?.terminal,
-          departure_gate: flightData.departure?.gate,
-          arrival_gate: flightData.arrival?.gate,
-          raw_data: flightData // Store original API response for debugging
-        };
-      } else {
-        throw new Error('No flight data found for the specified flight number and date');
-      }
+      return {
+        flight_number: flightNumber,
+        flight_date: flightDate || 'Current',
+        flight_status: targetFlight.status || targetFlight.flight_status || 'scheduled',
+        departure_airport: targetFlight.origin?.name || targetFlight.origin?.city || targetFlight.origin?.code_iata || targetFlight.origin?.code,
+        arrival_airport: targetFlight.destination?.name || targetFlight.destination?.city || targetFlight.destination?.code_iata || targetFlight.destination?.code,
+        departure_time: targetFlight.scheduled_out || targetFlight.estimated_out || targetFlight.scheduled_off || targetFlight.estimated_off || targetFlight.filed_departure_time,
+        arrival_time: targetFlight.scheduled_in || targetFlight.estimated_in || targetFlight.scheduled_on || targetFlight.estimated_on || targetFlight.filed_arrival_time,
+        departure_iata: targetFlight.origin?.code_iata || targetFlight.origin?.code,
+        arrival_iata: targetFlight.destination?.code_iata || targetFlight.destination?.code,
+        departure_terminal: targetFlight.terminal_origin || targetFlight.origin?.terminal,
+        arrival_terminal: targetFlight.terminal_destination || targetFlight.destination?.terminal,
+        departure_gate: targetFlight.gate_origin || targetFlight.origin?.gate,
+        arrival_gate: targetFlight.gate_destination || targetFlight.destination?.gate,
+        api_source: 'FlightAware AeroAPI',
+        raw_data: targetFlight
+      };
     } catch (error) {
-      console.error('Error fetching flight data:', error);
-      if (error instanceof Error) {
-        throw error;
-      } else {
-        throw new Error('Failed to fetch flight data. This could be a network error or a Cross-Origin (CORS) issue.');
-      }
+      throw new Error(`FlightAware API failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
+
+
+
+
+
+  
+
+
+
 
   // ============================================
   // UTILITY FUNCTIONS

@@ -26,10 +26,10 @@ function GlassDatePicker({ value, onChange, isDark }) {
     'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December'
   ];
-  const ref = React.useRef();
+  const ref = React.useRef<HTMLDivElement | null>(null);
   React.useEffect(() => {
-    function handleClick(e) {
-      if (ref.current && !ref.current.contains(e.target)) setShow(false);
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setShow(false);
     }
     if (show) document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
@@ -131,10 +131,10 @@ function GlassTimePicker({ value, onChange, isDark }) {
   const [open, setOpen] = React.useState(false);
   const [hour, setHour] = React.useState('');
   const [minute, setMinute] = React.useState('');
-  const ref = React.useRef();
+  const ref = React.useRef<HTMLDivElement | null>(null);
   React.useEffect(() => {
-    function handleClick(e) {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     }
     if (open) document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);

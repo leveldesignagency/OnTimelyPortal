@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useContext } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useContext, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import Tesseract from 'tesseract.js';
 import { codes as countryCallingCodes } from 'country-calling-code';
@@ -10,8 +10,9 @@ import Papa from 'papaparse';
 import { v4 as uuidv4 } from 'uuid';
 import ReactDOM from 'react-dom';
 import airportsRaw from '../../../../airports.json';
+import Stage1Module from './components/Stage1Module';
 
-const AVIATIONSTACK_API_KEY = 'bb7fd8369e323c356434d5b1ac77b437'; // 🚨 PASTE YOUR NEW AVIATIONSTACK API KEY HERE 🚨
+const AVIATIONSTACK_API_KEY = '8b8117fd5f6f048d0904c8e884939449'; // 🚨 PASTE YOUR NEW AVIATIONSTACK API KEY HERE 🚨
 
 // File upload function for guest files
 async function uploadGuestFile(file: File, guestId: string, fileType: 'document' | 'id' | 'qrcode'): Promise<string> {
@@ -110,7 +111,7 @@ async function fetchFlightData(flightNumber: string, flightDate: string): Promis
   }
 
   const upperCaseFlightNumber = flightNumber.toUpperCase();
-  const requestUrl = `http://api.aviationstack.com/v1/flights?access_key=${AVIATIONSTACK_API_KEY}&flight_iata=${upperCaseFlightNumber}&flight_date=${flightDate}`;
+      const requestUrl = `https://api.aviationstack.com/v1/flights?access_key=${AVIATIONSTACK_API_KEY}&flight_iata=${upperCaseFlightNumber}&flight_date=${flightDate}`;
   
   try {
     const response = await fetch(requestUrl);
@@ -766,6 +767,16 @@ export default function CreateGuests() {
 
   const [eventDetails, setEventDetails] = useState<any>(null);
   const [dateRange, setDateRange] = useState('');
+
+  // Memoized callback for Stage1Module data changes
+  const handleStage1ModuleDataChange = useCallback((draftIndex: number, moduleKey: string, moduleIndex: number, data: any) => {
+    const draft = drafts[draftIndex];
+    if (!draft) return;
+    
+    const newVals = [...(draft.moduleValues?.[moduleKey] || [])];
+    newVals[moduleIndex] = { ...newVals[moduleIndex], ...data };
+    handleDraftChange(draftIndex, 'moduleValues', { ...draft.moduleValues, [moduleKey]: newVals });
+  }, [drafts]);
 
   useEffect(() => {
     if (!eventId) return;
@@ -1688,31 +1699,73 @@ export default function CreateGuests() {
 
     console.log('Saving guests to Supabase:', guestsForSupabase);
 
-    // Save to Supabase
-    addMultipleGuests(guestsForSupabase)
-      .then(() => {
-        console.log('Guests saved to Supabase successfully');
-        showSuccess('Guests saved successfully!');
-        // Reset state and navigate after a short delay
-        setTimeout(() => {
-          setGuests([]);
-          setDrafts([]);
-          setIsGroup(false);
-          setGroupName('');
-          setGroupNameConfirmed(false);
-          navigate(`/event/${eventId}?tab=guests`, { replace: true });
-        }, 1500);
-      })
-      .catch(error => {
-        console.error('Error saving guests to Supabase:', error);
-        console.error('Error details:', {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code
-        });
-        alert(`Failed to save guests. Error: ${error.message || 'Unknown error'}`);
+    try {
+      // Save to Supabase
+      const savedGuests = await addMultipleGuests(guestsForSupabase);
+      
+      console.log('Guests saved to Supabase successfully');
+      
+      // Create Stage 1 travel profiles for guests who have the module enabled
+      if (savedGuests && savedGuests.length > 0) {
+        for (let i = 0; i < savedGuests.length; i++) {
+          const savedGuest = savedGuests[i];
+          const originalGuest = guestsToProcess[i];
+          
+          // Check if this guest has Stage 1 module enabled
+          if (originalGuest.modules?.stage1TravelCompanion && 
+              originalGuest.moduleValues?.stage1TravelCompanion?.[0]) {
+            
+            const stage1Data = originalGuest.moduleValues.stage1TravelCompanion[0];
+            
+            // Only create travel profile if we have flight information
+            if (stage1Data.flightNumber && stage1Data.flightDate) {
+              try {
+                // Import Stage1TravelService dynamically to avoid circular dependencies
+                const { Stage1TravelService } = await import('./services/stage1TravelService');
+                
+                await Stage1TravelService.createTravelProfile({
+                  guest_id: savedGuest.id,
+                  event_id: eventId,
+                  flight_number: stage1Data.flightNumber,
+                  flight_date: stage1Data.flightDate,
+                  hotel_name: stage1Data.hotelName || '',
+                  hotel_address: stage1Data.hotelAddress || '',
+                  journey_status: 'not_started',
+                  gps_tracking_enabled: true,
+                  checkpoint_notifications_enabled: true
+                });
+                
+                console.log('✅ Stage 1 travel profile created for guest:', savedGuest.id);
+              } catch (error) {
+                console.error('❌ Failed to create Stage 1 travel profile for guest:', savedGuest.id, error);
+              }
+            }
+          }
+        }
+      }
+      
+      showSuccess('Guests saved successfully!');
+      
+      // Reset state and navigate after a short delay
+      setTimeout(() => {
+        setGuests([]);
+        setDrafts([]);
+        setIsGroup(false);
+        setGroupName('');
+        setGroupNameConfirmed(false);
+        navigate(`/event/${eventId}?tab=guests`, { replace: true });
+      }, 1500);
+      
+    } catch (error) {
+      console.error('Error saving guests to Supabase:', error);
+      console.error('Error details:', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code
       });
+      alert(`Failed to save guests. Error: ${error.message || 'Unknown error'}`);
+    }
 
     // After guests are added:
     const user = await getCurrentUser();
@@ -2644,98 +2697,19 @@ export default function CreateGuests() {
                         {/* Module-specific fields */}
                         {key === 'stage1TravelCompanion' && (
                           <div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
-                              <div>
-                                <h3 style={{ 
-                                  fontSize: 20, 
-                                  fontWeight: 700, 
-                                  margin: 0, 
-                                  marginBottom: 16,
-                                  color: isDark ? '#fff' : '#222'
-                                }}>
-                                  Stage 1: Travel Companion
-                                  <span style={{
-                                    background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
-                                    color: 'white',
-                                    padding: '3px 8px',
-                                    borderRadius: 6,
-                                    fontSize: 11,
-                                    fontWeight: 600,
-                                    marginLeft: 12,
-                                    textTransform: 'uppercase',
-                                    letterSpacing: 0.5
-                                  }}>
-                                    PREMIUM
-                                  </span>
-                                </h3>
-                                <p style={{ 
-                                  fontSize: 13, 
-                                  color: isDark ? '#cbd5e1' : '#666', 
-                                  margin: 0,
-                                  lineHeight: 1.4,
-                                  marginBottom: 24
-                                }}>
-                                  Complete travel tracking from airport to hotel with GPS monitoring, driver verification, and real-time notifications.
-                                </p>
-                              </div>
-                            </div>
-
-                            <div style={{ display: 'grid', gap: 16 }}>
-                              {/* Flight Number */}
-                              <div>
-                                <label style={labelStyle(isDark)}>Flight Number</label>
-                                <input
-                                  type="text"
-                                  style={inputStyle(isDark)}
-                                  value={draft.moduleValues?.[key]?.[index]?.flightNumber || ''}
-                                  onChange={(e) => {
-                                    const newVals = [...(draft.moduleValues?.[key] || [])];
-                                    newVals[index] = { ...newVals[index], flightNumber: e.target.value };
-                                    handleDraftChange(idx, 'moduleValues', { ...draft.moduleValues, [key]: newVals });
-                                  }}
-                                  placeholder="e.g. BA2490"
-                                />
-                              </div>
-
-                              {/* Destination Address (formerly Hotel Name) */}
-                              <div>
-                                <label style={labelStyle(isDark)}>Destination Address</label>
-                                <input
-                                  type="text"
-                                  style={inputStyle(isDark)}
-                                  value={draft.moduleValues?.[key]?.[index]?.destinationAddress || ''}
-                                  onChange={(e) => {
-                                    const newVals = [...(draft.moduleValues?.[key] || [])];
-                                    newVals[index] = { ...newVals[index], destinationAddress: e.target.value };
-                                    handleDraftChange(idx, 'moduleValues', { ...draft.moduleValues, [key]: newVals });
-                                  }}
-                                  placeholder="Enter destination address"
-                                />
-                              </div>
-
-                              {/* Driver Verification (Read-only info field) */}
-                              <div>
-                                <label style={labelStyle(isDark)}>Driver Verification</label>
-                                <div style={{
-                                  ...inputStyle(isDark),
-                                  backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)',
-                                  color: isDark ? '#a1a1aa' : '#6b7280',
-                                  fontStyle: 'italic',
-                                  cursor: 'not-allowed',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: 8,
-                                  padding: '12px'
-                                }}>
-                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                                    <rect x="7" y="8" width="10" height="8" rx="1" ry="1"/>
-                                    <path d="M7 8V6a3 3 0 0 1 6 0v2"/>
-                                  </svg>
-                                  QR codes are generated when Stage 1 is active
-                                </div>
-                              </div>
-                            </div>
+                            <Stage1Module
+                              guestId={draft.id || `draft-${idx}`}
+                              eventId={eventId || ''}
+                              initialData={{
+                                flightNumber: draft.moduleValues?.[key]?.[index]?.flightNumber || '',
+                                hotelName: draft.moduleValues?.[key]?.[index]?.hotelName || '',
+                                hotelAddress: draft.moduleValues?.[key]?.[index]?.hotelAddress || '',
+                                flightDate: draft.moduleValues?.[key]?.[index]?.flightDate || ''
+                              }}
+                              onModuleDataChange={(moduleKey, data) => {
+                                handleStage1ModuleDataChange(idx, key, index, data);
+                              }}
+                            />
                           </div>
                         )}
                         {key === 'flightNumber' && (

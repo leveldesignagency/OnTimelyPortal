@@ -31,8 +31,14 @@ interface FeedbackModuleModalProps {
   currentUser: { id: string };
 }
 
+interface DatePickerProps {
+  value: string;
+  onChange: (val: string) => void;
+  isDark: boolean;
+}
+
 // --- Local Glassmorphic Date Picker ---
-function GlassDatePicker({ value, onChange, isDark }) {
+function GlassDatePicker({ value, onChange, isDark }: DatePickerProps) {
   const [show, setShow] = useState(false);
   const [month, setMonth] = useState(() => value ? new Date(value).getMonth() : new Date().getMonth());
   const [year, setYear] = useState(() => value ? new Date(value).getFullYear() : new Date().getFullYear());
@@ -43,23 +49,23 @@ function GlassDatePicker({ value, onChange, isDark }) {
     'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December'
   ];
-  const ref = useRef();
+  const ref = useRef<HTMLDivElement | null>(null);
   React.useEffect(() => {
-    function handleClick(e) {
-      if (ref.current && !ref.current.contains(e.target)) setShow(false);
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setShow(false);
     }
     if (show) document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, [show]);
-  function selectDate(day) {
+  function selectDate(day: number) {
     const mm = String(month + 1).padStart(2, '0');
     const dd = String(day).padStart(2, '0');
     onChange(`${year}-${mm}-${dd}`);
     setShow(false);
   }
   // Format value as dd/MM/yyyy for display
-  let displayValue = value;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+  let displayValue: string = value;
+  if (value && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
     const [yyyy, mm, dd] = value.split('-');
     displayValue = `${dd}/${mm}/${yyyy}`;
   }
@@ -144,15 +150,21 @@ function GlassDatePicker({ value, onChange, isDark }) {
   );
 }
 
+interface TimePickerProps {
+  value: string;
+  onChange: (val: string) => void;
+  isDark: boolean;
+}
+
 // --- Local Glassmorphic Time Picker ---
-function GlassTimePicker({ value, onChange, isDark }) {
+function GlassTimePicker({ value, onChange, isDark }: TimePickerProps) {
   const [open, setOpen] = useState(false);
   const [hour, setHour] = useState('');
   const [minute, setMinute] = useState('');
-  const ref = useRef();
+  const ref = useRef<HTMLDivElement | null>(null);
   React.useEffect(() => {
-    function handleClick(e) {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     }
     if (open) document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
@@ -164,7 +176,7 @@ function GlassTimePicker({ value, onChange, isDark }) {
       setMinute(m);
     }
   }, [value]);
-  const handleSelect = (h, m) => {
+  const handleSelect = (h: string, m: string) => {
     setHour(h);
     setMinute(m);
     onChange(`${h}:${m}`);
@@ -179,7 +191,7 @@ function GlassTimePicker({ value, onChange, isDark }) {
         value={value}
         onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
-        onChange={e => {
+        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
           const val = e.target.value;
           if (/^\d{2}:\d{2}$/.test(val)) {
             const [h, m] = val.split(':');
@@ -425,7 +437,7 @@ export default function FeedbackModuleModal({ open, onClose, onNext, guests, eve
                 date: date,
                 label: title,
                 link: '',
-                file: null,
+                file: undefined,
                 created_by: currentUser.id,
               });
               if (module && module.id && selectedGuests.length > 0) {

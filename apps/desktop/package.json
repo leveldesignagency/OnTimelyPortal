@@ -28,6 +28,11 @@
     ],
     "mac": {
       "category": "public.app-category.productivity",
+      "identity": "Apple Development: leveldesignagency@gmail.com (J48D645JGR)",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
       "target": [
         {
           "target": "dmg",

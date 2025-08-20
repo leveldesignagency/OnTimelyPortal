@@ -428,11 +428,13 @@ const Dashboard = ({ events: propEvents }: DashboardProps) => {
   };
 
   const cardStyle: React.CSSProperties = {
-    background: isDark ? '#1e1e1e' : '#ffffff',
-    borderRadius: '12px',
+    background: isDark ? 'rgba(30, 30, 30, 0.55)' : 'rgba(255, 255, 255, 0.9)',
+    borderRadius: '18px',
     padding: '24px',
-    boxShadow: isDark ? '0 4px 24px rgba(0,0,0,0.3)' : '0 2px 12px rgba(0,0,0,0.08)',
-    border: isDark ? '1px solid #333' : '1px solid #e5e7eb',
+    boxShadow: isDark 
+      ? 'inset 0 1px 0 rgba(255,255,255,0.04), 0 8px 30px rgba(0,0,0,0.45)'
+      : '0 4px 20px rgba(0,0,0,0.1)',
+    border: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(0, 0, 0, 0.1)',
   };
 
   const cardTitleStyle: React.CSSProperties = {
@@ -469,7 +471,7 @@ const Dashboard = ({ events: propEvents }: DashboardProps) => {
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: '12px 0',
-    borderBottom: isDark ? '1px solid #333' : '1px solid #e5e7eb',
+    borderBottom: isDark ? '1px solid rgba(255,255,255,0.2)' : '1px solid rgba(0,0,0,0.1)',
   };
 
   const eventNameStyle: React.CSSProperties = {
@@ -495,17 +497,17 @@ const Dashboard = ({ events: propEvents }: DashboardProps) => {
     if (status === 'Upcoming') {
       return { ...baseStyle, background: '#fbbf24', color: '#fff' };
     } else if (status === 'Live') {
-      return { ...baseStyle, background: '#22c55e', color: '#fff' };
+      return { ...baseStyle, background: '#10b981', color: '#fff' };
     } else if (status === 'Finished') {
       return { ...baseStyle, background: '#ef4444', color: '#fff' };
     } else {
-      return { ...baseStyle, background: isDark ? '#4CAF50' : '#4CAF50', color: '#fff' };
+      return { ...baseStyle, background: isDark ? '#6b7280' : '#6b7280', color: '#fff' };
     }
   };
 
   const activityItemStyle: React.CSSProperties = {
     padding: '12px 0',
-    borderBottom: isDark ? '1px solid #333' : '1px solid #e5e7eb',
+    borderBottom: isDark ? '1px solid rgba(255,255,255,0.2)' : '1px solid rgba(0,0,0,0.1)',
     display: 'flex',
     alignItems: 'flex-start',
     gap: '12px',
@@ -530,11 +532,14 @@ const Dashboard = ({ events: propEvents }: DashboardProps) => {
   };
 
   const statCardStyle: React.CSSProperties = {
-    background: isDark ? '#2a2a2a' : '#f8fafc',
-    borderRadius: '8px',
+    background: isDark ? 'rgba(30, 30, 30, 0.4)' : 'rgba(255, 255, 255, 0.8)',
+    borderRadius: '12px',
     padding: '20px',
     textAlign: 'center',
-    border: isDark ? '1px solid #404040' : '1px solid #e2e8f0',
+    border: isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(0, 0, 0, 0.08)',
+    boxShadow: isDark 
+      ? 'inset 0 1px 0 rgba(255,255,255,0.02), 0 4px 16px rgba(0,0,0,0.3)'
+      : '0 2px 8px rgba(0,0,0,0.06)',
   };
 
   const statNumberStyle: React.CSSProperties = {
@@ -573,7 +578,7 @@ const Dashboard = ({ events: propEvents }: DashboardProps) => {
   const mainContainerStyle: React.CSSProperties = {
     padding: '32px 16px 0 16px',
     minHeight: '100vh',
-    background: isDark ? '#121212' : '#f7f8fa',
+    background: 'transparent',
     color: isDark ? '#ffffff' : '#333',
     fontFamily: 'Roboto, Arial, system-ui, sans-serif',
     maxWidth: 1200,
@@ -612,11 +617,9 @@ const Dashboard = ({ events: propEvents }: DashboardProps) => {
     justifyContent: 'center',
     cursor: 'pointer',
     transition: 'all 0.2s',
-    background: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(255, 255, 255, 0.8)',
+    background: isDark ? 'rgba(30, 30, 30, 0.4)' : 'rgba(255, 255, 255, 0.8)',
     color: isDark ? '#fff' : '#222',
-    backdropFilter: 'blur(10px)',
-    border: isDark ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid rgba(255, 255, 255, 0.2)',
-    boxShadow: isDark ? '0 4px 20px rgba(0,0,0,0.3)' : '0 4px 20px rgba(0,0,0,0.1)',
+    border: isDark ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid rgba(255, 255, 255, 0.2)',
   };
 
   if (loading) {
@@ -632,13 +635,20 @@ const Dashboard = ({ events: propEvents }: DashboardProps) => {
   }
 
   return (
-    <div style={mainContainerStyle}>
-      <div style={headerStyle}>
-        <h1 style={titleStyle}>Dashboard</h1>
-        <p style={subtitleStyle}>
-          Welcome back{currentUser ? `, ${currentUser.name}` : ''}! Here's what's happening with your events.
-        </p>
-      </div>
+    <div style={{
+      minHeight: '100vh',
+      background: isDark 
+        ? 'radial-gradient(1200px 800px at 20% -10%, rgba(34,197,94,0.12), transparent 40%), radial-gradient(1000px 700px at 120% 10%, rgba(34,197,94,0.08), transparent 45%), #0f1115'
+        : '#f7f8fa',
+      padding: '24px'
+    }}>
+      <div style={mainContainerStyle}>
+        <div style={headerStyle}>
+          <h1 style={titleStyle}>Dashboard</h1>
+          <p style={subtitleStyle}>
+            Welcome back{currentUser ? `, ${currentUser.name}` : ''}! Here's what's happening with your events.
+          </p>
+        </div>
       <div style={twoColStyle}>
         {/* Quick Stats */}
         <div style={cardStyle}>
@@ -706,12 +716,10 @@ const Dashboard = ({ events: propEvents }: DashboardProps) => {
                 }}
                 onClick={() => navigate('/create-event')}
                 onMouseEnter={e => {
-                  e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.95)';
-                  e.currentTarget.style.boxShadow = isDark ? '0 2px 12px rgba(0,0,0,0.25)' : '0 2px 12px rgba(0,0,0,0.08)';
+                  e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.95)';
                 }}
                 onMouseLeave={e => {
-                  e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.8)';
-                  e.currentTarget.style.boxShadow = isDark ? '0 4px 20px rgba(0,0,0,0.3)' : '0 4px 20px rgba(0,0,0,0.1)';
+                  e.currentTarget.style.background = isDark ? 'rgba(30, 30, 30, 0.4)' : 'rgba(255, 255, 255, 0.8)';
                 }}
               >
                 Create Event
@@ -737,12 +745,10 @@ const Dashboard = ({ events: propEvents }: DashboardProps) => {
                 }}
                 onClick={() => navigate('/teams')}
                 onMouseEnter={e => {
-                  e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.95)';
-                  e.currentTarget.style.boxShadow = isDark ? '0 2px 12px rgba(0,0,0,0.25)' : '0 2px 12px rgba(0,0,0,0.08)';
+                  e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.95)';
                 }}
                 onMouseLeave={e => {
-                  e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.8)';
-                  e.currentTarget.style.boxShadow = isDark ? '0 4px 20px rgba(0,0,0,0.3)' : '0 4px 20px rgba(0,0,0,0.1)';
+                  e.currentTarget.style.background = isDark ? 'rgba(30, 30, 30, 0.4)' : 'rgba(255, 255, 255, 0.8)';
                 }}
               >
                 Go to Teams
@@ -768,12 +774,10 @@ const Dashboard = ({ events: propEvents }: DashboardProps) => {
                 }}
                 onClick={() => navigate('/guests')}
                 onMouseEnter={e => {
-                  e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.95)';
-                  e.currentTarget.style.boxShadow = isDark ? '0 2px 12px rgba(0,0,0,0.25)' : '0 2px 12px rgba(0,0,0,0.08)';
+                  e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.95)';
                 }}
                 onMouseLeave={e => {
-                  e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.8)';
-                  e.currentTarget.style.boxShadow = isDark ? '0 4px 20px rgba(0,0,0,0.3)' : '0 4px 20px rgba(0,0,0,0.1)';
+                  e.currentTarget.style.background = isDark ? 'rgba(30, 30, 30, 0.4)' : 'rgba(255, 255, 255, 0.8)';
                 }}
               >
                 Manage Guests
@@ -799,12 +803,10 @@ const Dashboard = ({ events: propEvents }: DashboardProps) => {
                 }}
                 onClick={() => window.open('https://help.yourapp.com', '_blank')}
                 onMouseEnter={e => {
-                  e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.95)';
-                  e.currentTarget.style.boxShadow = isDark ? '0 2px 12px rgba(0,0,0,0.25)' : '0 2px 12px rgba(0,0,0,0.08)';
+                  e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.95)';
                 }}
                 onMouseLeave={e => {
-                  e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.8)';
-                  e.currentTarget.style.boxShadow = isDark ? '0 4px 20px rgba(0,0,0,0.3)' : '0 4px 20px rgba(0,0,0,0.1)';
+                  e.currentTarget.style.background = isDark ? 'rgba(30, 30, 30, 0.4)' : 'rgba(255, 255, 255, 0.8)';
                 }}
               >
                 Help Centre
@@ -826,26 +828,24 @@ const Dashboard = ({ events: propEvents }: DashboardProps) => {
               events.slice(0, 5).map(event => (
                 <div
                   key={event.id}
-                  style={{
-                    background: isDark ? '#23272a' : '#f8fafc',
-                    borderRadius: 8,
-                    boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.18)' : '0 2px 8px rgba(0,0,0,0.06)',
-                    marginBottom: 14,
-                    transition: 'background 0.15s, box-shadow 0.15s',
-                    cursor: 'pointer',
-                    padding: '18px 20px',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                  }}
+                                      style={{
+                      background: isDark ? 'rgba(30, 30, 30, 0.4)' : 'rgba(255, 255, 255, 0.8)',
+                      borderRadius: 12,
+                      marginBottom: 14,
+                      transition: 'background 0.15s',
+                      cursor: 'pointer',
+                      padding: '18px 20px',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      border: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(0,0,0,0.06)',
+                    }}
                   onClick={() => navigate(`/event/${event.id}`)}
                   onMouseEnter={e => {
-                    e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.08)' : '#f1f5f9';
-                    e.currentTarget.style.boxShadow = isDark ? '0 4px 16px rgba(0,0,0,0.22)' : '0 4px 16px rgba(0,0,0,0.10)';
+                    e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.9)';
                   }}
                   onMouseLeave={e => {
-                    e.currentTarget.style.background = isDark ? '#23272a' : '#f8fafc';
-                    e.currentTarget.style.boxShadow = isDark ? '0 2px 8px rgba(0,0,0,0.18)' : '0 2px 8px rgba(0,0,0,0.06)';
+                    e.currentTarget.style.background = isDark ? 'rgba(30, 30, 30, 0.4)' : 'rgba(255, 255, 255, 0.8)';
                   }}
                 >
                   <div>
@@ -863,7 +863,7 @@ const Dashboard = ({ events: propEvents }: DashboardProps) => {
         </div>
         {/* Recent Activity (last in stack) */}
         <div style={cardStyle}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
           <h2 style={cardTitleStyle}>Recent Activity</h2>
             <button
               onClick={() => navigate('/notifications')}
@@ -881,6 +881,7 @@ const Dashboard = ({ events: propEvents }: DashboardProps) => {
                 height: 32,
                 transition: 'background 0.15s',
                 color: isDark ? '#fff' : '#222',
+                marginTop: '-8px',
               }}
               title="View all notifications"
               aria-label="View all notifications"
@@ -903,27 +904,25 @@ const Dashboard = ({ events: propEvents }: DashboardProps) => {
                 <div
                   key={activity.id}
                   style={{
-                    background: isDark ? '#23272a' : '#f8fafc',
-                    borderRadius: 8,
-                    boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.18)' : '0 2px 8px rgba(0,0,0,0.06)',
+                    background: isDark ? 'rgba(30, 30, 30, 0.4)' : 'rgba(255, 255, 255, 0.8)',
+                    borderRadius: 12,
                     marginBottom: 14,
-                    transition: 'background 0.15s, box-shadow 0.15s',
+                    transition: 'background 0.15s',
                     cursor: activity.eventId ? 'pointer' : 'default',
                     padding: '18px 20px',
                     display: 'flex',
                     alignItems: 'flex-start',
                     gap: '12px',
+                    border: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(0,0,0,0.06)',
                   }}
                   onClick={() => { if (activity.eventId) navigate(`/event/${activity.eventId}`); }}
                   onMouseEnter={e => {
                     if (activity.eventId) {
-                      e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.08)' : '#f1f5f9';
-                      e.currentTarget.style.boxShadow = isDark ? '0 4px 16px rgba(0,0,0,0.22)' : '0 4px 16px rgba(0,0,0,0.10)';
+                      e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.9)';
                     }
                   }}
                   onMouseLeave={e => {
-                    e.currentTarget.style.background = isDark ? '#23272a' : '#f8fafc';
-                    e.currentTarget.style.boxShadow = isDark ? '0 2px 8px rgba(0,0,0,0.18)' : '0 2px 8px rgba(0,0,0,0.06)';
+                    e.currentTarget.style.background = isDark ? 'rgba(30, 30, 30, 0.4)' : 'rgba(255, 255, 255, 0.8)';
                   }}
                 >
                   <div style={{
@@ -957,6 +956,7 @@ const Dashboard = ({ events: propEvents }: DashboardProps) => {
         </div>
       </div>
     </div>
+  </div>
   );
 };
 

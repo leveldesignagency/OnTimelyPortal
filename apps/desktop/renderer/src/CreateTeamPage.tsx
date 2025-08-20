@@ -419,7 +419,9 @@ const CreateTeamPage: React.FC = () => {
   };
 
   const containerStyle: React.CSSProperties = {
-    background: colors.bg,
+    background: isDark 
+      ? 'radial-gradient(1200px 800px at 20% -10%, rgba(34,197,94,0.12), transparent 40%), radial-gradient(1000px 700px at 120% 10%, rgba(34,197,94,0.08), transparent 45%), #0f1115'
+      : '#f7f8fa',
     minHeight: '100vh',
     padding: '20px',
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
@@ -589,19 +591,19 @@ const CreateTeamPage: React.FC = () => {
                 border: '1.5px solid rgba(255, 255, 255, 0.8)',
                 borderRadius: '20px',
                 boxShadow: isDark 
-                  ? '0 8px 32px rgba(0, 0, 0, 0.3), inset 0 2px 4px rgba(255, 255, 255, 0.1), 0 0 30px rgba(255, 255, 255, 0.3)' 
-                  : '0 8px 32px rgba(0, 0, 0, 0.1), inset 0 2px 4px rgba(255, 255, 255, 0.9), 0 0 30px rgba(255, 255, 255, 0.6)'
+                  ? '0 8px 32px rgba(0, 0, 0, 0.3), inset 0 2px 4px rgba(255, 255, 255, 0.1), 0 0 15px rgba(255, 255, 255, 0.15)' 
+                  : '0 8px 32px rgba(0, 0, 0, 0.1), inset 0 2px 4px rgba(255, 255, 255, 0.9), 0 0 15px rgba(255, 255, 255, 0.3)'
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.boxShadow = isDark 
-                  ? '0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 0 30px rgba(255, 255, 255, 0.2)' 
-                  : '0 8px 32px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 0 30px rgba(0, 0, 0, 0.1)';
+                  ? '0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 0 15px rgba(255, 255, 255, 0.1)' 
+                  : '0 8px 32px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 0 15px rgba(0, 0, 0, 0.05)';
                 e.currentTarget.style.transform = 'translateY(-2px)';
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.boxShadow = isDark 
-                  ? '0 4px 16px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 0 20px rgba(255, 255, 255, 0.1)' 
-                  : '0 4px 16px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 0 20px rgba(0, 0, 0, 0.05)';
+                  ? '0 4px 16px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 0 10px rgba(255, 255, 255, 0.05)' 
+                  : '0 4px 16px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 0 10px rgba(0, 0, 0, 0.02)';
                 e.currentTarget.style.transform = 'translateY(0px)';
               }}
             >

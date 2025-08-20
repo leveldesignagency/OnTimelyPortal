@@ -172,59 +172,56 @@ export default function NotificationsPage() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', background: colors.bg, padding: 0 }}>
+    <div style={{ 
+      minHeight: '100vh', 
+      background: isDark 
+        ? 'radial-gradient(1200px 800px at 20% -10%, rgba(34,197,94,0.12), transparent 40%), radial-gradient(1000px 700px at 120% 10%, rgba(34,197,94,0.08), transparent 45%), #0f1115'
+        : '#f7f8fa', 
+      padding: 0 
+    }}>
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: '40px 16px 0 16px', position: 'relative' }}>
-        {/* Refresh Icon Top Right - OUTSIDE filter row */}
-        <div style={{ position: 'absolute', top: 32, right: 32, zIndex: 20 }}>
-          <div
-            onClick={() => {
-              setSearch('');
-              setTypeFilter('');
-              setEventFilter('');
-              setUserFilter('');
-            }}
-            style={{
-              cursor: 'pointer',
-              padding: 8,
-              borderRadius: '50%',
-              transition: 'background 0.2s',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: colors.textSecondary,
-              background: 'transparent',
-              boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.25)' : '0 2px 8px rgba(0,0,0,0.08)',
-            }}
-            title="Refresh notifications"
-            onMouseEnter={e => (e.currentTarget.style.background = isDark ? '#23272a' : '#e5e7eb')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-          >
-            <Icon name="refresh" style={{ width: 28, height: 28, color: colors.textSecondary }} />
-          </div>
-        </div>
+        {/* Back Button */}
+        <button
+          onClick={() => navigate(-1)}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: colors.text,
+            fontSize: 16,
+            cursor: 'pointer',
+            padding: '8px 0',
+            marginBottom: '16px',
+            display: 'flex',
+            alignItems: 'center',
+            fontFamily: 'inherit',
+          }}
+        >
+          ← Back
+        </button>
         <h1 style={{ color: colors.text, fontWeight: 700, fontSize: 32, marginBottom: 24 }}>Notifications</h1>
         {/* Filters and search */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 32 }}>
           {/* Filters Row */}
           <div style={{ display: 'flex', gap: 16, flex: 1 }}>
-            <input
-              type="text"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search notifications..."
-              style={{
-                padding: '16px 20px',
-                borderRadius: 12,
-                border: `2px solid ${colors.border}`,
-                background: colors.card,
-                color: colors.text,
-                fontSize: 18,
-                minWidth: 220,
-                height: 56,
-                flex: 1,
-                boxSizing: 'border-box',
-              }}
-            />
+                          <input
+                type="text"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search notifications..."
+                style={{
+                  padding: '16px 20px',
+                  borderRadius: 12,
+                  border: `2px solid ${colors.border}`,
+                  background: isDark ? 'rgba(30, 30, 30, 0.6)' : 'rgba(255, 255, 255, 0.8)',
+                  color: colors.text,
+                  fontSize: 18,
+                  minWidth: 220,
+                  height: 56,
+                  flex: 1,
+                  boxSizing: 'border-box',
+                  backdropFilter: isDark ? 'blur(8px)' : 'blur(4px)',
+                }}
+              />
             {/* Custom dropdowns styled like CreateEvent dropdowns */}
             <div style={{ position: 'relative', minWidth: 180, width: 220 }}>
               <input
@@ -239,11 +236,12 @@ export default function NotificationsPage() {
                   padding: '16px 20px',
                   borderRadius: 12,
                   border: `2px solid ${colors.border}`,
-                  background: colors.card,
+                  background: isDark ? 'rgba(30, 30, 30, 0.6)' : 'rgba(255, 255, 255, 0.8)',
                   color: colors.text,
                   fontSize: 18,
                   cursor: 'pointer',
                   boxSizing: 'border-box',
+                  backdropFilter: isDark ? 'blur(8px)' : 'blur(4px)',
                 }}
               />
               {showTypeDropdown && (
@@ -252,13 +250,14 @@ export default function NotificationsPage() {
                   top: 60,
                   left: 0,
                   width: '100%',
-                  background: colors.card,
+                  background: isDark ? 'rgba(30, 30, 30, 0.9)' : 'rgba(255, 255, 255, 0.95)',
                   border: `2px solid ${colors.border}`,
                   borderRadius: 12,
                   boxShadow: '0 8px 32px rgba(0,0,0,0.15)',
                   zIndex: 10,
                   maxHeight: 260,
                   overflowY: 'auto',
+                  backdropFilter: isDark ? 'blur(12px)' : 'blur(8px)',
                 }}>
                   <div
                     style={{ padding: '12px 20px', cursor: 'pointer', color: colors.text, fontSize: 18, borderRadius: 8 }}
@@ -267,7 +266,7 @@ export default function NotificationsPage() {
                   {Array.from(new Set(activity.map(a => a.action_type))).map(type => (
                     <div
                       key={type}
-                      style={{ padding: '12px 20px', cursor: 'pointer', color: colors.text, fontSize: 18, borderRadius: 8, background: typeFilter === type ? (isDark ? '#23272a' : '#e5e7eb') : 'transparent' }}
+                      style={{ padding: '12px 20px', cursor: 'pointer', color: colors.text, fontSize: 18, borderRadius: 8, background: typeFilter === type ? (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)') : 'transparent' }}
                       onClick={() => { setTypeFilter(type); setShowTypeDropdown(false); }}
                     >{actionPhrase(type)}</div>
                   ))}
@@ -287,11 +286,12 @@ export default function NotificationsPage() {
                   padding: '16px 20px',
                   borderRadius: 12,
                   border: `2px solid ${colors.border}`,
-                  background: colors.card,
+                  background: isDark ? 'rgba(30, 30, 30, 0.6)' : 'rgba(255, 255, 255, 0.8)',
                   color: colors.text,
                   fontSize: 18,
                   cursor: 'pointer',
                   boxSizing: 'border-box',
+                  backdropFilter: isDark ? 'blur(8px)' : 'blur(4px)',
                 }}
               />
               {showEventDropdown && (
@@ -300,13 +300,14 @@ export default function NotificationsPage() {
                   top: 60,
                   left: 0,
                   width: '100%',
-                  background: colors.card,
+                  background: isDark ? 'rgba(30, 30, 30, 0.9)' : 'rgba(255, 255, 255, 0.95)',
                   border: `2px solid ${colors.border}`,
                   borderRadius: 12,
                   boxShadow: '0 8px 32px rgba(0,0,0,0.15)',
                   zIndex: 10,
                   maxHeight: 260,
                   overflowY: 'auto',
+                  backdropFilter: isDark ? 'blur(12px)' : 'blur(8px)',
                 }}>
                   <div
                     style={{ padding: '12px 20px', cursor: 'pointer', color: colors.text, fontSize: 18, borderRadius: 8 }}
@@ -315,7 +316,7 @@ export default function NotificationsPage() {
                   {events.map(ev => (
                     <div
                       key={ev.id}
-                      style={{ padding: '12px 20px', cursor: 'pointer', color: colors.text, fontSize: 18, borderRadius: 8, background: eventFilter === ev.id ? (isDark ? '#23272a' : '#e5e7eb') : 'transparent' }}
+                      style={{ padding: '12px 20px', cursor: 'pointer', color: colors.text, fontSize: 18, borderRadius: 8, background: eventFilter === ev.id ? (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)') : 'transparent' }}
                       onClick={() => { setEventFilter(ev.id); setShowEventDropdown(false); }}
                     >{ev.name}</div>
                   ))}
@@ -335,11 +336,12 @@ export default function NotificationsPage() {
                   padding: '16px 20px',
                   borderRadius: 12,
                   border: `2px solid ${colors.border}`,
-                  background: colors.card,
+                  background: isDark ? 'rgba(30, 30, 30, 0.6)' : 'rgba(255, 255, 255, 0.8)',
                   color: colors.text,
                   fontSize: 18,
                   cursor: 'pointer',
                   boxSizing: 'border-box',
+                  backdropFilter: isDark ? 'blur(8px)' : 'blur(4px)',
                 }}
               />
               {showUserDropdown && (
@@ -348,13 +350,14 @@ export default function NotificationsPage() {
                   top: 60,
                   left: 0,
                   width: '100%',
-                  background: colors.card,
+                  background: isDark ? 'rgba(30, 30, 30, 0.9)' : 'rgba(255, 255, 255, 0.95)',
                   border: `2px solid ${colors.border}`,
                   borderRadius: 12,
                   boxShadow: '0 8px 32px rgba(0,0,0,0.15)',
                   zIndex: 10,
                   maxHeight: 260,
                   overflowY: 'auto',
+                  backdropFilter: isDark ? 'blur(12px)' : 'blur(8px)',
                 }}>
                   <div
                     style={{ padding: '12px 20px', cursor: 'pointer', color: colors.text, fontSize: 18, borderRadius: 8 }}
@@ -363,7 +366,7 @@ export default function NotificationsPage() {
                   {users.map(u => (
                     <div
                       key={u.id}
-                      style={{ padding: '12px 20px', cursor: 'pointer', color: colors.text, fontSize: 18, borderRadius: 8, background: userFilter === u.id ? (isDark ? '#23272a' : '#e5e7eb') : 'transparent' }}
+                      style={{ padding: '12px 20px', cursor: 'pointer', color: colors.text, fontSize: 18, borderRadius: 8, background: userFilter === u.id ? (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)') : 'transparent' }}
                       onClick={() => { setUserFilter(u.id); setShowUserDropdown(false); }}
                     >{u.name}</div>
                   ))}
@@ -373,7 +376,7 @@ export default function NotificationsPage() {
           </div>
         </div>
         {/* Notification List */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 0, paddingBottom: '40px' }}>
           {loading ? (
             <div style={{ color: colors.textSecondary, fontSize: 18, textAlign: 'center', padding: 40 }}>Loading notifications...</div>
           ) : filtered.length === 0 ? (
@@ -383,7 +386,7 @@ export default function NotificationsPage() {
               <div
                 key={a.id}
                 style={{
-                  background: colors.card,
+                  background: isDark ? 'rgba(30, 30, 30, 0.6)' : 'rgba(255, 255, 255, 0.8)',
                   borderBottom: `1px solid ${colors.border}`,
                   padding: '24px 32px',
                   display: 'flex',
@@ -397,21 +400,22 @@ export default function NotificationsPage() {
                   boxShadow: 'none',
                   position: 'relative',
                   minHeight: 64,
+                  backdropFilter: isDark ? 'blur(8px)' : 'blur(4px)',
                 }}
                 onClick={() => {
                   if (a.event_id) navigate(`/event/${a.event_id}`);
                 }}
                 onMouseEnter={e => {
                   if (a.event_id) {
-                    e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)';
+                    e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.9)';
                     e.currentTarget.style.boxShadow = isDark ? '0 2px 12px rgba(0,0,0,0.25)' : '0 2px 12px rgba(0,0,0,0.08)';
                   } else {
-                    e.currentTarget.style.background = colors.card;
+                    e.currentTarget.style.background = isDark ? 'rgba(30, 30, 30, 0.6)' : 'rgba(255, 255, 255, 0.8)';
                     e.currentTarget.style.boxShadow = 'none';
                   }
                 }}
                 onMouseLeave={e => {
-                  e.currentTarget.style.background = colors.card;
+                  e.currentTarget.style.background = isDark ? 'rgba(30, 30, 30, 0.6)' : 'rgba(255, 255, 255, 0.8)';
                   e.currentTarget.style.boxShadow = 'none';
                 }}
               >

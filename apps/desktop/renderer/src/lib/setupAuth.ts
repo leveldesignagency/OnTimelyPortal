@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import { User } from './auth'
+import type { User } from './auth'
 
 // Setup function to create Supabase Auth users for existing profiles
 export const setupSupabaseAuth = async (): Promise<void> => {
@@ -68,14 +68,6 @@ export const onAuthStateChange = (callback: (user: User | null) => void) => {
     console.log('Auth state changed:', event, session?.user?.email)
     if (event === 'SIGNED_IN' && session?.user) {
       // User signed in, fetch their profile
-      const userProfile = await getCurrentAuthenticatedUser();
-      callback(userProfile);
-    } else if (event === 'SIGNED_OUT') {
-      // User signed out
-      callback(null);
-    }
-  });
-}; 
       const userProfile = await getCurrentAuthenticatedUser()
       if (userProfile) {
         // Store in localStorage for backward compatibility

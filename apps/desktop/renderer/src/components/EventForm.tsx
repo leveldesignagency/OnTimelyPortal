@@ -334,6 +334,155 @@ function CustomDatePicker({ value, onChange, placeholder, isDark, colors, requir
   );
 }
 
+// Custom Glass Time Picker Component (matching CreateItinerary style)
+const TimePicker = ({ 
+  value, 
+  onChange, 
+  placeholder, 
+  colors 
+}: { 
+  value: string; 
+  onChange: (value: string) => void; 
+  placeholder: string; 
+  colors: any; 
+}) => {
+  const [open, setOpen] = React.useState(false);
+  const [hour, setHour] = React.useState('');
+  const [minute, setMinute] = React.useState('');
+  const ref = React.useRef<HTMLDivElement>(null);
+  
+  React.useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    if (open) document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [open]);
+  
+  React.useEffect(() => {
+    if (value && /^\d{2}:\d{2}$/.test(value)) {
+      const [h, m] = value.split(':');
+      setHour(h);
+      setMinute(m);
+    }
+  }, [value]);
+  
+  const handleSelect = (h: string, m: string) => {
+    setHour(h);
+    setMinute(m);
+    onChange(`${h}:${m}`);
+    setOpen(false);
+  };
+  
+  const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
+  const minutes = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'));
+  
+  return (
+    <div style={{ position: 'relative', width: '100%', boxSizing: 'border-box' }} ref={ref}>
+      <input
+        type="text"
+        value={value}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        onChange={e => {
+          const val = e.target.value;
+          if (/^\d{2}:\d{2}$/.test(val)) {
+            const [h, m] = val.split(':');
+            setHour(h);
+            setMinute(m);
+            onChange(val);
+          } else {
+            setHour('');
+            setMinute('');
+            onChange(val);
+          }
+        }}
+        placeholder={placeholder}
+        style={{
+          width: '100%',
+          padding: '16px 20px',
+          borderRadius: '12px',
+          border: `2px solid ${colors.border}`,
+          background: colors.inputBg,
+          color: colors.text,
+          fontSize: '16px',
+          transition: 'all 0.2s ease',
+          height: '56px',
+          boxSizing: 'border-box',
+          outline: 'none',
+          boxShadow: 'none',
+          backdropFilter: 'blur(10px)'
+        }}
+        maxLength={5}
+      />
+      {open && (
+        <div style={{
+          position: 'absolute',
+          left: 0,
+          top: '100%',
+          marginTop: 8,
+          width: '100%',
+          minWidth: '100%',
+          maxWidth: '100%',
+          display: 'flex',
+          gap: 8,
+          borderRadius: 16,
+          boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+          border: `1.5px solid rgba(255,255,255,0.18)`,
+          background: 'rgba(30, 30, 30, 0.95)',
+          zIndex: 1000,
+          maxHeight: 220,
+          overflow: 'hidden',
+          boxSizing: 'border-box',
+        }}>
+          <div style={{ flex: 1, overflowY: 'auto', maxHeight: 220 }}>
+            {hours.map(h => (
+              <div
+                key={h}
+                onMouseDown={() => handleSelect(h, minute || '00')}
+                style={{
+                  padding: '8px 0',
+                  textAlign: 'center',
+                  background: h === hour ? '#fff' : 'transparent',
+                  color: h === hour ? '#000' : '#fff',
+                  fontWeight: h === hour ? 700 : 400,
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  fontSize: 16,
+                  transition: 'all 0.2s',
+                }}
+              >
+                {h}
+              </div>
+            ))}
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto', maxHeight: 220 }}>
+            {minutes.map(m => (
+              <div
+                key={m}
+                onMouseDown={() => handleSelect(hour || '00', m)}
+                style={{
+                  padding: '8px 0',
+                  textAlign: 'center',
+                  background: m === minute ? '#fff' : 'transparent',
+                  color: m === minute ? '#000' : '#fff',
+                  fontWeight: m === minute ? 700 : 400,
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  fontSize: 16,
+                  transition: 'all 0.2s',
+                }}
+              >
+                {m}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // Props: mode ('create'|'edit'), initialValues, onSubmit, onCancel, isDark, colors
 export default function EventForm({
   mode = 'create',
@@ -354,6 +503,8 @@ export default function EventForm({
   const [name, setName] = useState(initialValues.name || '');
   const [from, setFrom] = useState(initialValues.from || '');
   const [to, setTo] = useState(initialValues.to || '');
+  const [startTime, setStartTime] = useState(initialValues.startTime || '');
+  const [endTime, setEndTime] = useState(initialValues.endTime || '');
   const [location, setLocation] = useState(initialValues.location || '');
   const [timeZone, setTimeZone] = useState(initialValues.timeZone || 'UTC');
   const [loading, setLoading] = useState(false);
@@ -410,6 +561,8 @@ export default function EventForm({
         name,
         from,
         to,
+        startTime,
+        endTime,
         location,
         timeZone,
         teamIds: selectedTeamIds
@@ -422,7 +575,7 @@ export default function EventForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} style={{ width: '100%' }}>
+    <form onSubmit={handleSubmit} style={{ width: '100%', maxWidth: '100%' }}>
       <h2 style={{ color: colors.text, fontWeight: 700, fontSize: 28, marginBottom: 24 }}>{mode === 'edit' ? 'Edit Event' : 'Create New Event'}</h2>
       {/* Event Name field */}
       <div style={{ marginBottom: 20, width: '100%', position: 'relative' }}>
@@ -573,12 +726,12 @@ export default function EventForm({
           )}
         </div>
       </div>
-      {/* Date and Time fields */}
+      {/* Date fields */}
       <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
         <CustomDatePicker
           value={from}
           onChange={setFrom}
-          placeholder="Select start date and time"
+          placeholder="Select start date"
           isDark={isDark}
           colors={colors}
           required
@@ -586,11 +739,23 @@ export default function EventForm({
         <CustomDatePicker
           value={to}
           onChange={setTo}
-          placeholder="Select end date and time"
+          placeholder="Select end date"
           isDark={isDark}
           colors={colors}
           required
         />
+      </div>
+      {/* Time fields */}
+      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 20, gap: 20, width: '100%' }}>
+        <div style={{ flex: 1 }}>
+          <label style={{ color: colors.text, fontWeight: 600, fontSize: 15, marginBottom: 8, display: 'block' }}>Start Time</label>
+          <TimePicker value={startTime} onChange={setStartTime} placeholder="Start time" colors={colors} />
+        </div>
+        <span style={{ fontSize: 32, color: colors.textSecondary, margin: '0 12px', userSelect: 'none' }}>&#9654;</span>
+        <div style={{ flex: 1 }}>
+          <label style={{ color: colors.text, fontWeight: 600, fontSize: 15, marginBottom: 8, display: 'block' }}>End Time</label>
+          <TimePicker value={endTime} onChange={setEndTime} placeholder="End time" colors={colors} />
+        </div>
       </div>
       {/* Submit/Cancel buttons */}
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>

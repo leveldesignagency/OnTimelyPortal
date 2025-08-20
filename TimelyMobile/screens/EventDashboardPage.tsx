@@ -23,6 +23,8 @@ type EventType = {
   name: string;
   from: string;
   to: string;
+  start_time?: string;
+  end_time?: string;
   status: string;
   location?: string;
   time_zone?: string;
@@ -176,6 +178,8 @@ const EditEventForm = ({ event, onSave, onCancel }: EditEventFormProps) => {
   const [name, setName] = useState(event.name);
   const [from, setFrom] = useState(event.from);
   const [to, setTo] = useState(event.to);
+  const [startTime, setStartTime] = useState((event as any).start_time || '');
+  const [endTime, setEndTime] = useState((event as any).end_time || '');
   const [location, setLocation] = useState(event.location || '');
   const [description, setDescription] = useState(event.description || '');
 
@@ -184,6 +188,8 @@ const EditEventForm = ({ event, onSave, onCancel }: EditEventFormProps) => {
       name,
       from,
       to,
+      start_time: startTime,
+      end_time: endTime,
       location,
       description,
     };
@@ -211,6 +217,20 @@ const EditEventForm = ({ event, onSave, onCancel }: EditEventFormProps) => {
         placeholder="End Date (YYYY-MM-DD)"
         value={to}
         onChangeText={setTo}
+        placeholderTextColor="#888"
+      />
+      <TextInput
+        style={styles.editFormInput}
+        placeholder="Start Time (HH:MM)"
+        value={startTime}
+        onChangeText={setStartTime}
+        placeholderTextColor="#888"
+      />
+      <TextInput
+        style={styles.editFormInput}
+        placeholder="End Time (HH:MM)"
+        value={endTime}
+        onChangeText={setEndTime}
         placeholderTextColor="#888"
       />
       <TextInput
@@ -1573,6 +1593,14 @@ export default function EventDashboardPage({ eventId, onNavigate }: EventDashboa
             {' '}{formatDate(currentEvent.from)} - {formatDate(currentEvent.to)}
           </Text>
           
+          {(currentEvent.start_time || currentEvent.end_time) && (
+            <Text style={styles.eventInfoText}>
+              <MaterialCommunityIcons name="clock" size={16} color="#10b981" />
+              {' '}
+              {currentEvent.start_time || 'TBD'} - {currentEvent.end_time || 'TBD'}
+            </Text>
+          )}
+          
           {currentEvent.location && (
             <Text style={styles.eventInfoText}>
               <MaterialCommunityIcons name="map-marker" size={16} color="#10b981" />
@@ -1830,6 +1858,7 @@ export default function EventDashboardPage({ eventId, onNavigate }: EventDashboa
                         case 'chat_reaction': return `${actor} reacted in chat`;
                         case 'module_response': return `${actor} submitted a module response`;
                         case 'timeline_checkpoint': return `${actor || 'Participant'} reached a checkpoint`;
+                        case 'form_submission': return `${actor} responded to form`;
                         default: return (a.action_type || '').replace(/_/g, ' ');
                       }
                     })();
@@ -3212,7 +3241,8 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 30,
     alignItems: 'center',
-    width: '80%',
+    width: '90%',
+    maxWidth: 400,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
   },
@@ -3843,6 +3873,8 @@ const styles = StyleSheet.create({
   editFormContainer: {
     gap: 16,
     marginTop: 20,
+    width: '100%',
+    alignItems: 'stretch',
   },
   editFormInput: {
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
@@ -3853,6 +3885,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
+    width: '100%',
+    minHeight: 48,
   },
   editFormButtons: {
     flexDirection: 'row',

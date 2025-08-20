@@ -88,6 +88,7 @@ export default function FeedbackGuestSelectionModal({ open, onClose, guests, onS
                 module_type: 'feedback',
                 title: moduleData.title,
                 time: moduleData.time,
+                date: new Date().toISOString().slice(0, 10),
                 feedback_data: { defaultRating: moduleData.defaultRating },
                 created_by: moduleData.currentUser.id,
               });

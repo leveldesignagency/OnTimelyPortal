@@ -121,6 +121,18 @@ CREATE OR REPLACE FUNCTION public.get_event_activity_feed(
     FROM public.itineraries i
     LEFT JOIN public.users u ON u.id = i.created_by::uuid
     WHERE i.event_id::text = p_event_id::text AND i.company_id::text = p_company_id::text
+  ), forms AS (
+    SELECT
+      'form_submission'::text AS item_type,
+      COALESCE(f.title, 'Form submitted') AS title,
+      'Form response received from ' || fs.email AS description,
+      fs.submitted_at AS created_at,
+      fs.email AS actor_name,
+      fs.email AS actor_email,
+      fs.id::text AS source_id
+    FROM public.form_submissions fs
+    JOIN public.forms f ON f.id = fs.form_id
+    WHERE f.event_id::text = p_event_id::text AND f.company_id::text = p_company_id::text
   )
   SELECT * FROM (
     SELECT * FROM msgs
@@ -130,6 +142,8 @@ CREATE OR REPLACE FUNCTION public.get_event_activity_feed(
     SELECT * FROM mods
     UNION ALL
     SELECT * FROM itins
+    UNION ALL
+    SELECT * FROM forms
   ) t
   ORDER BY created_at DESC
   LIMIT p_limit OFFSET p_offset;
