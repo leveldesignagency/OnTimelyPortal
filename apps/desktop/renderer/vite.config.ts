@@ -41,7 +41,7 @@ export default defineConfig(({ mode }) => {
     },
     optimizeDeps: {
       exclude: ['electron'],
-      include: ['@supabase/supabase-js'],
+      include: isElectron ? ['@supabase/supabase-js'] : [],
       esbuildOptions: {
         define: {
           global: 'globalThis'
@@ -52,11 +52,10 @@ export default defineConfig(({ mode }) => {
       outDir: isElectron ? '../dist' : 'dist', // Parent dir for Electron, local for web
       emptyOutDir: true,
       rollupOptions: {
-        external: isElectron ? ['electron', 'path', 'fs', 'os'] : [],
+        external: isElectron ? ['electron', 'path', 'fs', 'os'] : ['@supabase/supabase-js'],
         output: {
           manualChunks: {
-            vendor: ['react', 'react-dom'],
-            supabase: ['@supabase/supabase-js']
+            vendor: ['react', 'react-dom']
           },
           globals: {
             '@supabase/supabase-js': 'supabase'
