@@ -10,20 +10,27 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing required environment variables: VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY')
 }
 
-// Create the Supabase client directly (like the working mobile version)
+// Create Supabase client with proper configuration for web environment
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    storage: window.localStorage,
+    // Use browser storage for web builds
+    storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+    // Use memory storage instead
     storageKey: 'timely-auth',
+    // Auto refresh tokens
     autoRefreshToken: true,
+    // Persist session across app restarts
     persistSession: true,
+    // Detect session in URL
     detectSessionInUrl: false
   },
+  // Real-time configuration
   realtime: {
     params: {
       eventsPerSecond: 10
     }
   },
+  // Global configuration for browser compatibility
   global: {
     headers: {
       'X-Client-Info': 'timely-web-app'

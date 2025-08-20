@@ -13,16 +13,23 @@ import { DraggableAction } from '../components/DraggableAction';
 
 import { getCurrentUser } from '../lib/auth';
 
-// Remove the problematic admin Supabase client creation that was breaking the web version
-// We'll handle admin operations differently for Electron vs web builds
-
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
-const SERVICE_ROLE_KEY = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY || '';
+const SERVICE_ROLE_KEY = import.meta.env.VITE_SERVICE_ROLE_KEY || '';
 
 // Debug logging
 console.log('🔧 Admin Supabase Config:');
 console.log('SUPABASE_URL:', SUPABASE_URL);
 console.log('SERVICE_ROLE_KEY:', SERVICE_ROLE_KEY ? `${SERVICE_ROLE_KEY.substring(0, 20)}...` : 'NOT SET');
+
+// Create admin client function that checks if window.supabase exists
+const createAdminSupabase = () => {
+  if (typeof window !== 'undefined' && (window as any).supabase && (window as any).supabase.createClient) {
+    return (window as any).supabase.createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+  }
+  return null;
+};
+
+const adminSupabase = createAdminSupabase();
 
 // Add email validation helper functions
 const isValidEmail = (email: string): boolean => {
