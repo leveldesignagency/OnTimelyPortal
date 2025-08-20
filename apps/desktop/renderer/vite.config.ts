@@ -3,11 +3,16 @@ import react from '@vitejs/plugin-react'
 import { resolve } from 'path'
 
 // https://vite.dev/config/
-export default defineConfig(({ command, mode }) => {
+export default defineConfig(({ mode }) => {
   // Load env file based on `mode` in the current working directory.
   const env = loadEnv(mode, process.cwd(), '')
   
+  // Determine build target
+  const target = process.env.VITE_TARGET || 'web';
+  const isElectron = target === 'electron';
+  
   return {
+    base: isElectron ? './' : '/', // Relative for Electron, absolute for web
     plugins: [react()],
     server: {
       port: 3003,
@@ -29,7 +34,7 @@ export default defineConfig(({ command, mode }) => {
       exclude: ['electron']
     },
     build: {
-      outDir: '../dist',
+      outDir: isElectron ? '../dist' : 'dist', // Parent dir for Electron, local for web
       emptyOutDir: true,
       rollupOptions: {
         external: ['electron', 'path', 'fs', 'os'],

@@ -62,6 +62,7 @@ type HoverPopupState = {
   activeMessageId: string | null;
   position: { x: number; y: number } | null;
   message: Message | null;
+  hideTimeoutId: NodeJS.Timeout | null;
 };
 
 type UserStatus = 'online' | 'offline' | 'away' | 'busy';
@@ -3502,7 +3503,8 @@ export default function TeamChatPage() {
   const [hoverPopupState, setHoverPopupState] = useState<HoverPopupState>({
     activeMessageId: null,
     position: null,
-    message: null
+    message: null,
+    hideTimeoutId: null
   });
   
   const messagesEndRef = useRef<null | HTMLDivElement>(null);
@@ -4806,7 +4808,8 @@ export default function TeamChatPage() {
     setHoverPopupState({
       activeMessageId: null,
       position: null,
-      message: null
+      message: null,
+      hideTimeoutId: null
     });
   };
 
@@ -5957,4 +5960,4 @@ export default function TeamChatPage() {
       )}
     </div>
   );
-} 
+}

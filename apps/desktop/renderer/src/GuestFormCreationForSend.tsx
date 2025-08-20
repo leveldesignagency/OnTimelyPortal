@@ -669,7 +669,7 @@ export default function GuestFormCreationForSend() {
     setGuests(g => g.filter((_, i) => i !== idx));
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!eventId) {
         console.error('Save failed: no eventId');
         return;
@@ -684,7 +684,7 @@ export default function GuestFormCreationForSend() {
     }
 
     // Check if user is logged in
-    const currentUser = getCurrentUser();
+    const currentUser = await getCurrentUser();
     if (!currentUser) {
         console.error('No user logged in');
         alert('You must be logged in to save guests. Please log in and try again.');

@@ -153,7 +153,7 @@ export class CalendarConnectionService {
         attendees: event.attendees?.map(a => a.email) || [],
         isAllDay: event.isAllDay || false,
         recurrence: event.recurrence,
-        status: event.status || 'confirmed',
+        status: (event.status === 'tentative' || event.status === 'cancelled') ? event.status : 'confirmed',
         createdAt: new Date(),
         updatedAt: new Date()
       }));

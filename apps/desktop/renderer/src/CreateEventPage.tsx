@@ -1,6 +1,6 @@
 import React, { useState, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Event, insertActivityLog, assignTeamToEvent } from './lib/supabase';
+import { SupabaseEvent, insertActivityLog, assignTeamToEvent } from './lib/supabase';
 import { ThemeContext } from './ThemeContext';
 import ThemedIcon from './components/ThemedIcon';
 import { getCurrentUser } from './lib/auth';
@@ -326,7 +326,7 @@ function GlassTimeZoneDropdown({ value, onChange, colors, isDark }: GlassTimeZon
 }
 
 interface CreateEventPageProps {
-  onCreate: (event: Omit<Event, 'id' | 'created_at' | 'updated_at'>) => Promise<Event>;
+  onCreate: (event: Omit<SupabaseEvent, 'id' | 'created_at' | 'updated_at'>) => Promise<SupabaseEvent>;
 }
 
 export default function CreateEventPage({ onCreate }: CreateEventPageProps) {
@@ -403,7 +403,7 @@ export default function CreateEventPage({ onCreate }: CreateEventPageProps) {
         return;
       }
       console.log('Creating event with user:', currentUser);
-      const eventData: Omit<Event, 'id' | 'created_at' | 'updated_at'> = {
+      const eventData: Omit<SupabaseEvent, 'id' | 'created_at' | 'updated_at'> = {
         name,
         from,
         to,

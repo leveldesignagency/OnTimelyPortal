@@ -2,7 +2,7 @@ import React, { useState, useContext, useEffect, useRef, useMemo } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ThemeContext } from '../ThemeContext';
 import TimelinePreview from '../components/TimelinePreview';
-import { supabase, getEvent, getGuests, getItineraries, getEventAssignments, type Event } from '../lib/supabase';
+import { supabase, getEvent, getGuests, getItineraries, getEventAssignments, type SupabaseEvent } from '../lib/supabase';
 import FeedbackModuleModal from '../components/FeedbackModuleModal';
 import FeedbackGuestSelectionModal from '../components/FeedbackGuestSelectionModal';
 import MultipleChoiceModuleModal from '../components/MultipleChoiceModuleModal';
@@ -95,7 +95,7 @@ export default function EventPortalManagementPage() {
   }, [eventId]);
 
   // Add state for event and selected date
-  const [event, setEvent] = useState<Event | null>(null);
+  const [event, setEvent] = useState<SupabaseEvent | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [eventDates, setEventDates] = useState<Date[]>([]);
 

@@ -38,7 +38,7 @@ if (typeof window !== 'undefined') {
 }
 
 // Types for your database tables
-export type Event = {
+export type SupabaseEvent = {
   id: string
   company_id: string
   name: string
@@ -137,7 +137,7 @@ export const subscribeToItineraries = (eventId: string, callback: (payload: any)
 // ============================================
 
 // Get all events for user's company
-export const getEvents = async (companyId: string) => {
+export const getEvents = async (companyId: string): Promise<SupabaseEvent[]> => {
   const { data, error } = await supabase
     .from('events')
     .select('*')
@@ -149,7 +149,7 @@ export const getEvents = async (companyId: string) => {
 }
 
 // Create a new event
-export const createEvent = async (event: Omit<Event, 'id' | 'created_at' | 'updated_at'>) => {
+export const createEvent = async (event: Omit<SupabaseEvent, 'id' | 'created_at' | 'updated_at'>) => {
   const { data, error } = await supabase
     .from('events')
     .insert([event])
@@ -160,7 +160,7 @@ export const createEvent = async (event: Omit<Event, 'id' | 'created_at' | 'upda
 }
 
 // Update an event
-export const updateEvent = async (id: string, updates: Partial<Event>) => {
+export const updateEvent = async (id: string, updates: Partial<SupabaseEvent>) => {
   const { data, error } = await supabase
     .from('events')
     .update(updates)

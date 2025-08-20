@@ -2,12 +2,12 @@
   "name": "desktop",
   "private": true,
   "version": "1.0.0",
-  "type": "module",
+
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "build:prod": "tsc -b && vite build --mode production",
+    "build:prod": "cd renderer && npm run build:electron && cd .. && tsc main.ts --outDir dist-electron --target es2020 --module commonjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "electron": "electron .",
@@ -15,7 +15,7 @@
     "electron:build": "npm run build:prod && electron-builder",
     "electron:pack": "npm run build:prod && electron-builder --dir",
     "electron:dist": "npm run build:prod && electron-builder",
-    "dmg": "npm run build:prod && electron-builder --mac --dmg",
+    "dmg": "npm run build:prod && electron-builder --mac",
     "clean": "rm -rf dist dist-electron node_modules package-lock.json"
   },
   "build": {
@@ -94,6 +94,5 @@
   },
   "engines": {
     "node": "18.x"
-  },
-  "packageManager": "npm@10.8.2"
+  }
 }

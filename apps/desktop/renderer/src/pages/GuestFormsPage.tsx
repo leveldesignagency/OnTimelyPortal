@@ -11,6 +11,30 @@ interface GuestFormResponse {
   submitted_at: string;
   event_name?: string;
   guest_id?: string;
+  forms?: {
+    event_id: string;
+    title: string;
+    events: {
+      name: string;
+      company_id: string;
+    };
+  };
+}
+
+interface FormSubmission {
+  id: string;
+  form_id: string;
+  email: string;
+  responses: any;
+  submitted_at: string;
+  forms: {
+    event_id: string;
+    title: string;
+    events: {
+      name: string;
+      company_id: string;
+    };
+  };
 }
 
 interface FormStats {
@@ -179,7 +203,7 @@ export default function GuestFormsPage() {
         console.log('⚠️ No event ID provided - showing all company submissions');
       }
       
-      const { data: submissions, error: submissionsError } = await query.order('submitted_at', { ascending: false });
+      const { data: submissions, error: submissionsError } = await query.order('submitted_at', { ascending: false }) as { data: FormSubmission[] | null, error: any };
 
       if (submissionsError) {
         console.error('Error fetching submissions:', submissionsError);

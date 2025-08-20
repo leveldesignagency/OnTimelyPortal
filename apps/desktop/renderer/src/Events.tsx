@@ -1,5 +1,11 @@
  import React from 'react';
-import type { Event } from '../../../packages/shared/types/event';
+type Event = {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  status: 'PUBLISHED' | 'DRAFT';
+};
 
 const mockEvents: Event[] = [
   { id: '1', name: 'Launch Party', startDate: '2025-07-01', endDate: '2025-07-02', status: 'PUBLISHED' },
@@ -15,6 +21,17 @@ export default function Events() {
           <li key={event.id}>
             <strong>{event.name}</strong> ({event.status})<br />
             {event.startDate} to {event.endDate}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}           </li>
+        ))}
+      </ul>
+    </div>
+  );
+} 
           </li>
         ))}
       </ul>

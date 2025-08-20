@@ -1,7 +1,7 @@
 import React, { useState, useContext, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ThemeContext } from '../ThemeContext';
-import { supabase, getEvent, type Event, uploadImageToStorage, validateImageFile, insertActivityLog } from '../lib/supabase';
+import { supabase, getEvent, type SupabaseEvent, uploadImageToStorage, validateImageFile, insertActivityLog } from '../lib/supabase';
 import ImageCollageModal, { LAYOUTS } from '../components/ImageCollageModal';
 import TOSModal from '../components/TOSModal';
 import { getCurrentUser, getCurrentUserCompanyId } from '../lib/auth';
@@ -51,7 +51,7 @@ export default function EventHomepageBuilderPage() {
   const isDark = theme === 'dark';
   
   const eventId = location.state?.eventId;
-  const [event, setEvent] = useState<Event | null>(null);
+  const [event, setEvent] = useState<SupabaseEvent | null>(null);
   const [homepageData, setHomepageData] = useState<HomepageData>({
     eventImage: null,
     welcomeTitle: 'WELCOME TO THE EVENT',

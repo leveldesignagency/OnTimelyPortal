@@ -557,7 +557,7 @@ export default function CreateItinerary() {
         // Always treat as published: update if id exists and is a number, add if not
         if (safeId && !isNaN(Number(safeId))) {
           try {
-            const result = await updateItinerary(String(safeId), itineraryData);
+            const result = await updateItinerary(Number(safeId), itineraryData);
             console.log('✅ Update successful:', result);
           } catch (updateError) {
             console.error('❌ Update failed:', updateError);
@@ -872,7 +872,7 @@ export default function CreateItinerary() {
             }
           };
 
-          await updateItinerary(updatedItem.id, itineraryData);
+          await updateItinerary(Number(updatedItem.id), itineraryData);
           console.log('✅ Module added and saved to database:', moduleKey);
         } catch (error) {
           console.error('❌ Failed to save module addition to database:', error);
@@ -943,7 +943,7 @@ export default function CreateItinerary() {
           }
         };
 
-        await updateItinerary(updatedItem.id, itineraryData);
+        await updateItinerary(Number(updatedItem.id), itineraryData);
         console.log('✅ Module removed and saved to database:', moduleKey);
       } catch (error) {
         console.error('❌ Failed to save module removal to database:', error);
@@ -1020,7 +1020,7 @@ export default function CreateItinerary() {
           }
         };
 
-        await updateItinerary(updatedItem.id, itineraryData);
+        await updateItinerary(Number(updatedItem.id), itineraryData);
         console.log('✅ Module value updated and saved to database:', moduleKey);
       } catch (error) {
         console.error('❌ Failed to save module value change to database:', error);

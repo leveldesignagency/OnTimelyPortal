@@ -1002,7 +1002,9 @@ const CreateTeamPage: React.FC = () => {
                   fontWeight: '600',
                   marginRight: '12px'
                 }}>
-                  {user.avatar && user.avatar.length <= 3 ? user.avatar : user.name.charAt(0).toUpperCase()}
+                  {(user as any)?.avatar && (user as any).avatar.length <= 3
+                    ? (user as any).avatar
+                    : (user.name || '').charAt(0).toUpperCase()}
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{
@@ -1563,6 +1565,9 @@ const CreateTeamPage: React.FC = () => {
 
 export default CreateTeamPage; 
  
+ 
+ 
+  
  
  
  

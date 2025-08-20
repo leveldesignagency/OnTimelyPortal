@@ -147,10 +147,10 @@ const LoginPage = () => {
                 transition: 'border-color 0.2s'
               }}
               onFocus={(e) => {
-                e.target.style.borderColor = '#228B22';
+                (e.target as HTMLElement).style.borderColor = '#228B22';
               }}
               onBlur={(e) => {
-                e.target.style.borderColor = isDark ? '#404040' : '#dee2e6';
+                (e.target as HTMLElement).style.borderColor = isDark ? '#404040' : '#dee2e6';
               }}
               required
             />
@@ -169,10 +169,10 @@ const LoginPage = () => {
                   cursor: 'pointer'
                 }}
                 onMouseEnter={(e) => {
-                  e.target.style.textDecoration = 'underline';
+                  (e.target as HTMLElement).style.textDecoration = 'underline';
                 }}
                 onMouseLeave={(e) => {
-                  e.target.style.textDecoration = 'none';
+                  (e.target as HTMLElement).style.textDecoration = 'none';
                 }}
               >
                 Forgot Password?

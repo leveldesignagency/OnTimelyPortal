@@ -18,7 +18,7 @@ import LoginPage from './pages/LoginPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import { ThemeProvider, ThemeContext } from './ThemeContext';
 import { getCurrentUser, getCompanyEvents } from './lib/auth';
-import { getEvents, createEvent, Event, getUserTeamEvents } from './lib/supabase';
+import { getEvents, createEvent, SupabaseEvent, getUserTeamEvents } from './lib/supabase';
 import LinkItinerariesPage from './pages/LinkItinerariesPage';
 import AssignOverviewPage from './pages/AssignOverviewPage';
 import EventPortalManagementPage from './pages/EventPortalManagementPage';
@@ -32,7 +32,7 @@ import GuestFormsPage from './pages/GuestFormsPage';
 import { getEventsCreatedByUser } from './lib/supabase';
 
 // Update EventType to match Supabase Event type
-export type EventType = Event;
+export type EventType = SupabaseEvent;
 
 const PublicFormPage = React.lazy(() => import('./pages/PublicFormPage'));
 
@@ -75,7 +75,7 @@ const AppContent = () => {
         allEvents.reduce((acc, event) => {
           acc[event.id] = event;
           return acc;
-        }, {} as Record<string, Event>)
+        }, {} as Record<string, SupabaseEvent>)
       );
       if (dedupedEvents.length > 0) {
         setEvents(dedupedEvents as EventType[]);
@@ -257,7 +257,11 @@ const AppContent = () => {
       const newEvent = await createEvent({
         ...eventData,
         company_id: user.company_id,
-        created_by: user.id
+        created_by: user.id,
+        name: eventData.name || 'Untitled Event',
+        from: eventData.from || new Date().toISOString(),
+        to: eventData.to || new Date().toISOString(),
+        status: eventData.status || 'draft'
       });
       setEvents(prev => [newEvent, ...prev]);
       return newEvent;

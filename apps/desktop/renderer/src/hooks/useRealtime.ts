@@ -1,10 +1,10 @@
 import { useEffect, useState, useCallback } from 'react'
-import { supabase, subscribeToEvents, subscribeToGuests, subscribeToItineraries, getItineraries, type Event, type Guest, type Itinerary } from '../lib/supabase'
+import { supabase, subscribeToEvents, subscribeToGuests, subscribeToItineraries, getItineraries, type SupabaseEvent, type Guest, type Itinerary } from '../lib/supabase'
 import { getCurrentUser } from '../lib/auth'
 
 // Hook for real-time events
 export const useRealtimeEvents = (companyId?: string | null) => {
-  const [events, setEvents] = useState<Event[]>([])
+  const [events, setEvents] = useState<SupabaseEvent[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -138,7 +138,7 @@ export const useRealtimeItineraries = (eventId: string | null) => {
     
     try {
       setLoading(true)
-      const currentUser = getCurrentUser()
+      const currentUser = await getCurrentUser()
       const data = await getItineraries(eventId, currentUser?.company_id)
       setItineraries(data || [])
     } catch (err) {
@@ -154,11 +154,11 @@ export const useRealtimeItineraries = (eventId: string | null) => {
     fetchItineraries()
 
     // Set up real-time subscription
-    const subscription = subscribeToItineraries(eventId, (payload) => {
+    const subscription = subscribeToItineraries(eventId, async (payload) => {
       console.log('Real-time itinerary update:', payload)
       
       // Additional security check: only process updates for the current user's company
-      const currentUser = getCurrentUser()
+      const currentUser = await getCurrentUser()
       if (currentUser && payload.new?.company_id !== currentUser.company_id) {
         return // Ignore updates from other companies
       }
