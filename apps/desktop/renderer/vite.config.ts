@@ -25,6 +25,10 @@ export default defineConfig(({ mode }) => {
       'globalThis.Request': 'undefined',
       'globalThis.Response': 'undefined',
       'globalThis.fetch': 'fetch',
+      // Additional polyfills for Supabase
+      'process.env.NODE_ENV': JSON.stringify(mode),
+      'process.env.SUPABASE_URL': JSON.stringify(env.VITE_SUPABASE_URL),
+      'process.env.SUPABASE_ANON_KEY': JSON.stringify(env.VITE_SUPABASE_ANON_KEY),
       // Expose env variables to the app
       'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(env.VITE_SUPABASE_URL),
       'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(env.VITE_SUPABASE_ANON_KEY),
@@ -37,7 +41,12 @@ export default defineConfig(({ mode }) => {
     },
     optimizeDeps: {
       exclude: ['electron'],
-      include: ['@supabase/supabase-js']
+      include: ['@supabase/supabase-js'],
+      esbuildOptions: {
+        define: {
+          global: 'globalThis'
+        }
+      }
     },
     build: {
       outDir: isElectron ? '../dist' : 'dist', // Parent dir for Electron, local for web

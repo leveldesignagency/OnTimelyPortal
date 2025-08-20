@@ -10,11 +10,11 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing required environment variables: VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY')
 }
 
-// Create Supabase client with proper configuration for Electron
+// Create Supabase client with proper configuration for web environment
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    // Disable local storage usage in Electron
-    storage: undefined,
+    // Use browser storage for web builds
+    storage: typeof window !== 'undefined' ? window.localStorage : undefined,
     // Use memory storage instead
     storageKey: 'timely-auth',
     // Auto refresh tokens
@@ -28,6 +28,12 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   realtime: {
     params: {
       eventsPerSecond: 10
+    }
+  },
+  // Global configuration for browser compatibility
+  global: {
+    headers: {
+      'X-Client-Info': 'timely-web-app'
     }
   }
 })
