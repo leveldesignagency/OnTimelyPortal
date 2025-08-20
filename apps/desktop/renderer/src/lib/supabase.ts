@@ -1,15 +1,3 @@
-// Import Supabase based on build target
-let createClient: any;
-
-if (typeof window !== 'undefined' && (window as any).supabase) {
-  // Use CDN version for web builds
-  createClient = (window as any).supabase.createClient;
-} else {
-  // Use module import for Electron builds
-  const supabaseModule = require('@supabase/supabase-js');
-  createClient = supabaseModule.createClient;
-}
-
 import { getCurrentUser } from './auth'
 
 // Environment variables for Supabase configuration
@@ -22,32 +10,44 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 // Create Supabase client with proper configuration for web environment
-export const supabase = (window as any).supabase.createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    // Use browser storage for web builds
-    storage: typeof window !== 'undefined' ? window.localStorage : undefined,
-    // Use memory storage instead
-    storageKey: 'timely-auth',
-    // Auto refresh tokens
-    autoRefreshToken: true,
-    // Persist session across app restarts
-    persistSession: true,
-    // Detect session in URL
-    detectSessionInUrl: false
-  },
-  // Real-time configuration
-  realtime: {
-    params: {
-      eventsPerSecond: 10
-    }
-  },
-  // Global configuration for browser compatibility
-  global: {
-    headers: {
-      'X-Client-Info': 'timely-web-app'
-    }
+export const supabase = (() => {
+  // Check if we're in a browser environment
+  if (typeof window === 'undefined') {
+    throw new Error('Supabase client can only be used in browser environment');
   }
-})
+
+  // Wait for Supabase to be available
+  if (!(window as any).supabase || !(window as any).supabase.createClient) {
+    throw new Error('Supabase not loaded. Please ensure the CDN script is loaded before using this module.');
+  }
+
+  return (window as any).supabase.createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      // Use browser storage for web builds
+      storage: window.localStorage,
+      // Use memory storage instead
+      storageKey: 'timely-auth',
+      // Auto refresh tokens
+      autoRefreshToken: true,
+      // Persist session across app restarts
+      persistSession: true,
+      // Detect session in URL
+      detectSessionInUrl: false
+    },
+    // Real-time configuration
+    realtime: {
+      params: {
+        eventsPerSecond: 10
+      }
+    },
+    // Global configuration for browser compatibility
+    global: {
+      headers: {
+        'X-Client-Info': 'timely-web-app'
+      }
+    }
+  });
+})();
 
 // Expose supabase to window for debugging
 if (typeof window !== 'undefined') {
