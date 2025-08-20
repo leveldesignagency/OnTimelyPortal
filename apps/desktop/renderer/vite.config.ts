@@ -51,7 +51,8 @@ export default defineConfig(({ mode }) => {
         onwarn(warning, warn) {
           // Ignore certain warnings that are not critical
           if (warning.code === 'UNRESOLVED_IMPORT' && 
-              warning.message.includes('define-globalThis-property')) {
+              (warning.message.includes('define-globalThis-property') ||
+               warning.message.includes('internals/define-globalThis-property'))) {
             return;
           }
           warn(warning);
@@ -59,11 +60,16 @@ export default defineConfig(({ mode }) => {
       },
       // Ensure environment variables are available at build time
       envPrefix: 'VITE_',
-      target: 'es2020'
+      target: 'es2020',
+      commonjsOptions: {
+        ignore: ['define-globalThis-property']
+      }
     },
     resolve: {
       alias: {
-        '@': resolve(__dirname, 'src')
+        '@': resolve(__dirname, 'src'),
+        // Add alias to handle problematic imports
+        '../internals/define-globalThis-property': resolve(__dirname, 'src/utils/empty-module.js')
       }
     }
   }
