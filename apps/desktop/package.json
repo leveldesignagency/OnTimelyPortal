@@ -7,13 +7,16 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:prod": "tsc -b && vite build --mode production",
     "lint": "eslint .",
     "preview": "vite preview",
     "electron": "electron .",
     "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:5173 && electron .\"",
-    "electron:build": "npm run build && electron-builder",
-    "electron:pack": "npm run build && electron-builder --dir",
-    "electron:dist": "npm run build && electron-builder"
+    "electron:build": "npm run build:prod && electron-builder",
+    "electron:pack": "npm run build:prod && electron-builder --dir",
+    "electron:dist": "npm run build:prod && electron-builder",
+    "dmg": "npm run build:prod && electron-builder --mac --dmg",
+    "clean": "rm -rf dist dist-electron node_modules package-lock.json"
   },
   "build": {
     "appId": "com.timely.app",
@@ -66,6 +69,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.50.0",
+    "electron-updater": "^6.1.7",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.22.3",
@@ -87,5 +91,9 @@
     "typescript-eslint": "^8.30.1",
     "vite": "^6.3.5",
     "wait-on": "^7.2.0"
-  }
+  },
+  "engines": {
+    "node": "18.x"
+  },
+  "packageManager": "npm@10.8.2"
 }
