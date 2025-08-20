@@ -1,10 +1,36 @@
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from './auth'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://ijsktwmevnqgzwwuggkf.supabase.co'
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlqc2t0d21ldm5xZ3p3d3VnZ2tmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTA3MDU4MTYsImV4cCI6MjA2NjI4MTgxNn0.w4eBL4hOZoAOo33ZXX-lSqQmIuSoP3fBEO1lBlpIRNw'
+// Environment variables for Supabase configuration
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+// Validate environment variables
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error('Missing required environment variables: VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY')
+}
+
+// Create Supabase client with proper configuration for Electron
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    // Disable local storage usage in Electron
+    storage: undefined,
+    // Use memory storage instead
+    storageKey: 'timely-auth',
+    // Auto refresh tokens
+    autoRefreshToken: true,
+    // Persist session across app restarts
+    persistSession: true,
+    // Detect session in URL
+    detectSessionInUrl: false
+  },
+  // Real-time configuration
+  realtime: {
+    params: {
+      eventsPerSecond: 10
+    }
+  }
+})
 
 // Expose supabase to window for debugging
 if (typeof window !== 'undefined') {

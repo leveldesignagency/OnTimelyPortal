@@ -1,0 +1,16 @@
+{
+  "name": "timely-desktop-backend",
+  "version": "1.0.0",
+  "description": "Local backend server for Timely Desktop App",
+  "main": "flight-proxy-server.js",
+  "type": "module",
+  "dependencies": {
+    "express": "^5.1.0",
+    "cors": "^2.8.5",
+    "node-fetch": "^3.3.2"
+  },
+  "scripts": {
+    "start": "node flight-proxy-server.js",
+    "install-deps": "npm install"
+  }
+} 
