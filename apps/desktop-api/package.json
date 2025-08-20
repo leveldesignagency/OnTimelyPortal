@@ -1,0 +1,7 @@
+{
+  "name": "ontimely-desktop-api",
+  "private": true,
+  "type": "module",
+  "engines": { "node": "22.x" },
+  "packageManager": "npm@10.8.2"
+}
