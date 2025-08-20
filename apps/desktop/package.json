@@ -1,7 +1,7 @@
 {
   "name": "desktop",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
 
   "main": "dist-electron/main.js",
   "scripts": {
@@ -26,8 +26,7 @@
     },
     "files": [
       "dist/**/*",
-      "dist-electron/**/*",
-      "node_modules/**/*"
+      "dist-electron/main.js"
     ],
     "mac": {
       "category": "public.app-category.productivity",

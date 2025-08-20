@@ -216,6 +216,7 @@ const AppContent = () => {
         const user = await getCurrentUser();
         if (!user) {
           setEvents([]);
+          setLoading(false);
           return;
         }
         // 1. Fetch team events
@@ -244,7 +245,13 @@ const AppContent = () => {
         setLoading(false);
       }
     };
-    fetchEvents();
+    
+    // Only fetch events if not on login page
+    if (!isLoginPage) {
+      fetchEvents();
+    } else {
+      setLoading(false);
+    }
   }, [isLoginPage]);
 
   // Event creation handler

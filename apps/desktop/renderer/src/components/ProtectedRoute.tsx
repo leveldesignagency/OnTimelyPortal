@@ -26,6 +26,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
     checkAuth();
   }, []);
 
+  // Show loading only briefly to avoid flash
   if (loading) {
     return (
       <div style={{ 

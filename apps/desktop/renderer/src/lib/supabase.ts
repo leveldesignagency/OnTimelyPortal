@@ -1,3 +1,4 @@
+import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from './auth'
 
 // Environment variables for Supabase configuration
@@ -9,65 +10,31 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing required environment variables: VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY')
 }
 
-// Create Supabase client with proper configuration for web environment
-let supabaseInstance: any = null;
-
-export async function getSupabase() {
-  if (supabaseInstance) {
-    return supabaseInstance;
-  }
-
-  // Check if we're in a browser environment
-  if (typeof window === 'undefined') {
-    throw new Error('Supabase client can only be used in browser environment');
-  }
-
-  // Wait for Supabase to be available
-  if ((window as any).supabaseLoadPromise) {
-    await (window as any).supabaseLoadPromise;
-  }
-
-  if (!(window as any).supabase || !(window as any).supabase.createClient) {
-    throw new Error('Supabase failed to load from CDN');
-  }
-
-  supabaseInstance = (window as any).supabase.createClient(supabaseUrl, supabaseAnonKey, {
-    auth: {
-      // Use browser storage for web builds
-      storage: window.localStorage,
-      // Use memory storage instead
-      storageKey: 'timely-auth',
-      // Auto refresh tokens
-      autoRefreshToken: true,
-      // Persist session across app restarts
-      persistSession: true,
-      // Detect session in URL
-      detectSessionInUrl: false
-    },
-    // Real-time configuration
-    realtime: {
-      params: {
-        eventsPerSecond: 10
-      }
-    },
-    // Global configuration for browser compatibility
-    global: {
-      headers: {
-        'X-Client-Info': 'timely-web-app'
-      }
+// Create the Supabase client directly (like the working mobile version)
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    storage: window.localStorage,
+    storageKey: 'timely-auth',
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: false
+  },
+  realtime: {
+    params: {
+      eventsPerSecond: 10
     }
-  });
+  },
+  global: {
+    headers: {
+      'X-Client-Info': 'timely-web-app'
+    }
+  }
+})
 
-  // Expose supabase to window for debugging
-  (window as any).supabase = supabaseInstance;
-  
-  return supabaseInstance;
+// Keep the getSupabase function for cases where we need async initialization
+export async function getSupabase() {
+  return supabase;
 }
-
-// For backward compatibility, export a promise that resolves to the client
-export const supabase = getSupabase();
-
-// Force Vercel deployment - commit b5d03fa
 
 // Types for your database tables
 export type SupabaseEvent = {
