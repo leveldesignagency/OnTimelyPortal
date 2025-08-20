@@ -52,7 +52,9 @@ export default defineConfig(({ mode }) => {
           // Ignore certain warnings that are not critical
           if (warning.code === 'UNRESOLVED_IMPORT' && 
               (warning.message.includes('define-globalThis-property') ||
-               warning.message.includes('internals/define-globalThis-property'))) {
+               warning.message.includes('internals/define-globalThis-property') ||
+               warning.message.includes('globalThis-this') ||
+               warning.message.includes('internals/globalThis-this'))) {
             return;
           }
           warn(warning);
@@ -62,14 +64,17 @@ export default defineConfig(({ mode }) => {
       envPrefix: 'VITE_',
       target: 'es2020',
       commonjsOptions: {
-        ignore: ['define-globalThis-property']
+        ignore: ['define-globalThis-property', 'globalThis-this']
       }
     },
     resolve: {
       alias: {
         '@': resolve(__dirname, 'src'),
-        // Add alias to handle problematic imports
-        '../internals/define-globalThis-property': resolve(__dirname, 'src/utils/empty-module.js')
+        // Add aliases to handle problematic imports
+        '../internals/define-globalThis-property': resolve(__dirname, 'src/utils/empty-module.js'),
+        '../internals/globalThis-this': resolve(__dirname, 'src/utils/empty-module.js'),
+        'define-globalThis-property': resolve(__dirname, 'src/utils/empty-module.js'),
+        'globalThis-this': resolve(__dirname, 'src/utils/empty-module.js')
       }
     }
   }
