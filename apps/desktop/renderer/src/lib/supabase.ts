@@ -10,18 +10,28 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 // Create Supabase client with proper configuration for web environment
-export const supabase = (() => {
+let supabaseInstance: any = null;
+
+export async function getSupabase() {
+  if (supabaseInstance) {
+    return supabaseInstance;
+  }
+
   // Check if we're in a browser environment
   if (typeof window === 'undefined') {
     throw new Error('Supabase client can only be used in browser environment');
   }
 
   // Wait for Supabase to be available
-  if (!(window as any).supabase || !(window as any).supabase.createClient) {
-    throw new Error('Supabase not loaded. Please ensure the CDN script is loaded before using this module.');
+  if ((window as any).supabaseLoadPromise) {
+    await (window as any).supabaseLoadPromise;
   }
 
-  return (window as any).supabase.createClient(supabaseUrl, supabaseAnonKey, {
+  if (!(window as any).supabase || !(window as any).supabase.createClient) {
+    throw new Error('Supabase failed to load from CDN');
+  }
+
+  supabaseInstance = (window as any).supabase.createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
       // Use browser storage for web builds
       storage: window.localStorage,
@@ -47,12 +57,15 @@ export const supabase = (() => {
       }
     }
   });
-})();
 
-// Expose supabase to window for debugging
-if (typeof window !== 'undefined') {
-  (window as any).supabase = supabase;
+  // Expose supabase to window for debugging
+  (window as any).supabase = supabaseInstance;
+  
+  return supabaseInstance;
 }
+
+// For backward compatibility, export a promise that resolves to the client
+export const supabase = getSupabase();
 
 // Types for your database tables
 export type SupabaseEvent = {
@@ -114,8 +127,9 @@ export type TeamEvent = {
 }
 
 // Real-time subscription helpers
-export const subscribeToEvents = (callback: (payload: any) => void) => {
-  return supabase
+export const subscribeToEvents = async (callback: (payload: any) => void) => {
+  const client = await getSupabase();
+  return client
     .channel('events')
     .on('postgres_changes', { 
       event: '*', 
@@ -125,8 +139,9 @@ export const subscribeToEvents = (callback: (payload: any) => void) => {
     .subscribe()
 }
 
-export const subscribeToGuests = (eventId: string, callback: (payload: any) => void) => {
-  return supabase
+export const subscribeToGuests = async (eventId: string, callback: (payload: any) => void) => {
+  const client = await getSupabase();
+  return client
     .channel('guests')
     .on('postgres_changes', { 
       event: '*', 
@@ -137,8 +152,9 @@ export const subscribeToGuests = (eventId: string, callback: (payload: any) => v
     .subscribe()
 }
 
-export const subscribeToItineraries = (eventId: string, callback: (payload: any) => void) => {
-  return supabase
+export const subscribeToItineraries = async (eventId: string, callback: (payload: any) => void) => {
+  const client = await getSupabase();
+  return client
     .channel('itineraries')
     .on('postgres_changes', { 
       event: '*', 
@@ -155,7 +171,8 @@ export const subscribeToItineraries = (eventId: string, callback: (payload: any)
 
 // Get all events for user's company
 export const getEvents = async (companyId: string): Promise<SupabaseEvent[]> => {
-  const { data, error } = await supabase
+  const client = await getSupabase();
+  const { data, error } = await client
     .from('events')
     .select('*')
     .eq('company_id', companyId)
@@ -167,7 +184,8 @@ export const getEvents = async (companyId: string): Promise<SupabaseEvent[]> => 
 
 // Create a new event
 export const createEvent = async (event: Omit<SupabaseEvent, 'id' | 'created_at' | 'updated_at'>) => {
-  const { data, error } = await supabase
+  const client = await getSupabase();
+  const { data, error } = await client
     .from('events')
     .insert([event])
     .select()
@@ -178,7 +196,8 @@ export const createEvent = async (event: Omit<SupabaseEvent, 'id' | 'created_at'
 
 // Update an event
 export const updateEvent = async (id: string, updates: Partial<SupabaseEvent>) => {
-  const { data, error } = await supabase
+  const client = await getSupabase();
+  const { data, error } = await client
     .from('events')
     .update(updates)
     .eq('id', id)
@@ -189,7 +208,7 @@ export const updateEvent = async (id: string, updates: Partial<SupabaseEvent>) =
   
   // Log activity for event updates
   try {
-    const event = await supabase
+    const event = await client
       .from('events')
       .select('company_id, name, created_by')
       .eq('id', id)
@@ -217,13 +236,14 @@ export const updateEvent = async (id: string, updates: Partial<SupabaseEvent>) =
 
 export const deleteEvent = async (id: string) => {
   // Get event details before deletion for activity logging
-  const { data: event } = await supabase
+  const client = await getSupabase();
+  const { data: event } = await client
     .from('events')
     .select('company_id, name, created_by')
     .eq('id', id)
     .single();
   
-  const { error } = await supabase
+  const { error } = await client
     .from('events')
     .delete()
     .eq('id', id);
@@ -252,7 +272,8 @@ export const deleteEvent = async (id: string) => {
 
 // Get single event by ID
 export const getEvent = async (id: string) => {
-  const { data, error } = await supabase
+  const client = await getSupabase();
+  const { data, error } = await client
     .from('events')
     .select('*')
     .eq('id', id)
@@ -268,7 +289,8 @@ export const getEvent = async (id: string) => {
 
 // Assign team to event
 export const assignTeamToEvent = async (teamId: string, eventId: string, assignedBy: string, accessLevel: 'full' | 'read_only' | 'limited' = 'full') => {
-  const { data, error } = await supabase
+  const client = await getSupabase();
+  const { data, error } = await client
     .from('team_events')
     .insert([{
       team_id: teamId,
@@ -284,7 +306,8 @@ export const assignTeamToEvent = async (teamId: string, eventId: string, assigne
 
 // Get events assigned to a team
 export const getTeamEvents = async (teamId: string) => {
-  const { data, error } = await supabase
+  const client = await getSupabase();
+  const { data, error } = await client
     .from('team_events')
     .select(`
       *,
@@ -298,7 +321,8 @@ export const getTeamEvents = async (teamId: string) => {
 
 // Get teams assigned to an event
 export const getEventTeams = async (eventId: string) => {
-  const { data, error } = await supabase
+  const client = await getSupabase();
+  const { data, error } = await client
     .from('team_events')
     .select(`
       *,
@@ -312,7 +336,8 @@ export const getEventTeams = async (eventId: string) => {
 
 // Remove team from event
 export const removeTeamFromEvent = async (teamId: string, eventId: string) => {
-  const { error } = await supabase
+  const client = await getSupabase();
+  const { error } = await client
     .from('team_events')
     .delete()
     .eq('team_id', teamId)
@@ -326,7 +351,8 @@ export const removeTeamFromEvent = async (teamId: string, eventId: string) => {
 // ============================================
 
 export const getGuests = async (eventId: string) => {
-  const { data, error } = await supabase
+  const client = await getSupabase();
+  const { data, error } = await client
     .from('guests')
     .select('*')
     .eq('event_id', eventId)
@@ -337,7 +363,8 @@ export const getGuests = async (eventId: string) => {
 }
 
 export const addGuest = async (guest: Omit<Guest, 'id' | 'created_at' | 'updated_at'>) => {
-  const { data, error } = await supabase
+  const client = await getSupabase();
+  const { data, error } = await client
     .from('guests')
     .insert([guest])
     .select()
@@ -347,7 +374,8 @@ export const addGuest = async (guest: Omit<Guest, 'id' | 'created_at' | 'updated
 }
 
 export const addMultipleGuests = async (guests: Omit<Guest, 'id' | 'created_at' | 'updated_at'>[]) => {
-  const { data, error } = await supabase
+  const client = await getSupabase();
+  const { data, error } = await client
     .from('guests')
     .upsert(guests, { onConflict: 'event_id,email' })
     .select()
@@ -357,7 +385,8 @@ export const addMultipleGuests = async (guests: Omit<Guest, 'id' | 'created_at' 
 }
 
 export const updateGuest = async (id: string, updates: Partial<Guest>) => {
-  const { data, error } = await supabase
+  const client = await getSupabase();
+  const { data, error } = await client
     .from('guests')
     .update(updates)
     .eq('id', id)
@@ -370,7 +399,8 @@ export const updateGuest = async (id: string, updates: Partial<Guest>) => {
 export const deleteGuest = async (id: string) => {
   try {
     // 1. First, clean up all guest data using our comprehensive function
-    const { data: cleanupResult, error: cleanupError } = await supabase.rpc('delete_guest_completely', {
+    const client = await getSupabase();
+    const { data: cleanupResult, error: cleanupError } = await client.rpc('delete_guest_completely', {
       p_guest_id: id
     });
     
@@ -382,7 +412,7 @@ export const deleteGuest = async (id: string) => {
     console.log('Guest data cleanup result:', cleanupResult);
     
     // 2. Then delete the guest record itself
-    const { error: deleteError } = await supabase
+    const { error: deleteError } = await client
       .from('guests')
       .delete()
       .eq('id', id);
@@ -401,7 +431,8 @@ export const deleteGuest = async (id: string) => {
 }
 
 export const deleteGuestsByGroupId = async (groupId: string) => {
-  const { error } = await supabase
+  const client = await getSupabase();
+  const { error } = await client
     .from('guests')
     .delete()
     .eq('group_id', groupId)
@@ -445,7 +476,8 @@ export type Itinerary = {
 }
 
 export const getItineraries = async (eventId: string, companyId?: string, sortOrder: 'asc' | 'desc' = 'asc') => {
-  let query = supabase
+  const client = await getSupabase();
+  let query = client
     .from('itineraries')
     .select('*')
     .eq('event_id', eventId)
@@ -465,7 +497,8 @@ export const getItineraries = async (eventId: string, companyId?: string, sortOr
 
 export const addItinerary = async (itinerary: Omit<Itinerary, 'id' | 'created_at' | 'updated_at'>) => {
   console.log('[addItinerary] Attempting to insert:', itinerary);
-  const { data, error } = await supabase
+  const client = await getSupabase();
+  const { data, error } = await client
     .from('itineraries')
     .insert(itinerary)
     .select()
@@ -498,7 +531,8 @@ export const addItinerary = async (itinerary: Omit<Itinerary, 'id' | 'created_at
 
 export const updateItinerary = async (id: number, updates: Partial<Itinerary>) => {
   console.log('[updateItinerary] Called with id:', id, 'updates:', updates);
-  const { data, error } = await supabase
+  const client = await getSupabase();
+  const { data, error } = await client
     .from('itineraries')
     .update(updates)
     .eq('id', id)
@@ -513,7 +547,7 @@ export const updateItinerary = async (id: number, updates: Partial<Itinerary>) =
   
   // Log activity for itinerary updates
   try {
-    const itinerary = await supabase
+    const itinerary = await client
       .from('itineraries')
       .select('company_id, event_id, title, created_by')
       .eq('id', id)
@@ -541,13 +575,14 @@ export const updateItinerary = async (id: number, updates: Partial<Itinerary>) =
 
 export const deleteItinerary = async (id: string) => {
   // Get itinerary details before deletion for activity logging
-  const { data: itinerary } = await supabase
+  const client = await getSupabase();
+  const { data: itinerary } = await client
     .from('itineraries')
     .select('company_id, event_id, title, created_by')
     .eq('id', id)
     .single();
   
-  const { error } = await supabase
+  const { error } = await client
     .from('itineraries')
     .delete()
     .eq('id', id);
@@ -577,7 +612,8 @@ export const deleteItinerary = async (id: string) => {
 
 // Bulk delete multiple itineraries
 export const deleteMultipleItineraries = async (ids: string[]) => {
-  const { error } = await supabase
+  const client = await getSupabase();
+  const { error } = await client
     .from('itineraries')
     .delete()
     .in('id', ids)
@@ -597,7 +633,8 @@ export type GuestDraft = {
 }
 
 export const getGuestDrafts = async (eventId: string) => {
-  const { data, error } = await supabase
+  const client = await getSupabase();
+  const { data, error } = await client
     .from('guest_drafts')
     .select('*')
     .eq('event_id', eventId)
@@ -608,7 +645,8 @@ export const getGuestDrafts = async (eventId: string) => {
 }
 
 export const addGuestDraft = async (draft: Omit<GuestDraft, 'id' | 'created_at' | 'updated_at'>) => {
-  const { data, error } = await supabase
+  const client = await getSupabase();
+  const { data, error } = await client
     .from('guest_drafts')
     .insert(draft)
     .select()
@@ -619,7 +657,8 @@ export const addGuestDraft = async (draft: Omit<GuestDraft, 'id' | 'created_at' 
 }
 
 export const updateGuestDraft = async (id: string, updates: Partial<GuestDraft>) => {
-  const { data, error } = await supabase
+  const client = await getSupabase();
+  const { data, error } = await client
     .from('guest_drafts')
     .update(updates)
     .eq('id', id)
@@ -631,7 +670,8 @@ export const updateGuestDraft = async (id: string, updates: Partial<GuestDraft>)
 }
 
 export const deleteGuestDraft = async (id: string) => {
-  const { error } = await supabase
+  const client = await getSupabase();
+  const { error } = await client
     .from('guest_drafts')
     .delete()
     .eq('id', id)
@@ -651,11 +691,12 @@ export type EventModule = {
 }
 
 export const getEventModules = async (eventId: string) => {
+  const client = await getSupabase();
   const currentUser = await getCurrentUser();
   if (!currentUser) {
     throw new Error('No authenticated user found');
   }
-  const { data, error } = await supabase
+  const { data, error } = await client
     .from('event_modules')
     .select('*')
     .eq('event_id', eventId)
@@ -671,6 +712,7 @@ export const getEventModules = async (eventId: string) => {
 
 export const saveEventModules = async (eventId: string, moduleData: any, createdBy?: string) => {
   // Get current user for company_id
+  const client = await getSupabase();
   const currentUser = await getCurrentUser()
   if (!currentUser) {
     throw new Error('No authenticated user found')
@@ -678,7 +720,7 @@ export const saveEventModules = async (eventId: string, moduleData: any, created
 
   console.log('saveEventModules called with:', JSON.stringify({ eventId, companyId: currentUser.company_id, moduleData, createdBy }, null, 2));
 
-  let upsertQuery = supabase
+  let upsertQuery = client
     .from('event_modules')
     .upsert({
       event_id: eventId,
@@ -715,7 +757,8 @@ export type CanvasSession = {
 }
 
 export const getCanvasSession = async (sessionId: string) => {
-  const { data, error } = await supabase
+  const client = await getSupabase();
+  const { data, error } = await client
     .from('canvas_sessions')
     .select('*')
     .eq('session_id', sessionId)
@@ -726,7 +769,8 @@ export const getCanvasSession = async (sessionId: string) => {
 }
 
 export const saveCanvasSession = async (sessionId: string, companyId: string, sessionData: any, createdBy?: string) => {
-  const { data, error } = await supabase
+  const client = await getSupabase();
+  const { data, error } = await client
     .from('canvas_sessions')
     .upsert({
       session_id: sessionId,
@@ -779,7 +823,8 @@ export const convertCsvToGuests = (csvData: any[], eventId: string, companyId: s
 
 // Fetch guest-itinerary assignments for an event
 export const getEventAssignments = async (eventId: string) => {
-  const { data, error } = await supabase.rpc('get_event_assignments', {
+  const client = await getSupabase();
+  const { data, error } = await client.rpc('get_event_assignments', {
     event_identifier: eventId
   });
   if (error) throw error;
@@ -823,19 +868,21 @@ export async function uploadImageToStorage(file: File, pathPrefix: string): Prom
   
   const fileExt = file.name.split('.').pop();
   const filePath = `${pathPrefix}/${Date.now()}.${fileExt}`;
-  const { data, error } = await supabase.storage
+  const client = await getSupabase();
+  const { data, error } = await client.storage
     .from('event-images')
     .upload(filePath, file, { upsert: true });
   if (error) throw error;
   // For public buckets:
-  const { publicUrl } = supabase.storage.from('event-images').getPublicUrl(filePath).data;
+  const { publicUrl } = client.storage.from('event-images').getPublicUrl(filePath).data;
   return publicUrl;
 } 
 
 // Get all events for teams the user is a member of
 export const getUserTeamEvents = async (userId: string) => {
   // 1. Find all team_ids where user is a member
-  const { data: teamMemberships, error: teamMembershipsError } = await supabase
+  const client = await getSupabase();
+  const { data: teamMemberships, error: teamMembershipsError } = await client
     .from('team_members')
     .select('team_id')
     .eq('user_id', userId);
@@ -844,7 +891,7 @@ export const getUserTeamEvents = async (userId: string) => {
   if (teamIds.length === 0) return [];
 
   // 2. Find all event_ids linked to those teams
-  const { data: teamEvents, error: teamEventsError } = await supabase
+  const { data: teamEvents, error: teamEventsError } = await client
     .from('team_events')
     .select('event_id')
     .in('team_id', teamIds);
@@ -853,7 +900,7 @@ export const getUserTeamEvents = async (userId: string) => {
   if (eventIds.length === 0) return [];
 
   // 3. Fetch all events by those IDs
-  const { data: events, error: eventsError } = await supabase
+  const { data: events, error: eventsError } = await client
     .from('events')
     .select('*')
     .in('id', eventIds);
@@ -863,7 +910,8 @@ export const getUserTeamEvents = async (userId: string) => {
 
 // Add functions for draft itineraries
 export const getDraftItineraries = async (eventId: string, companyId?: string) => {
-  let query = supabase
+  const client = await getSupabase();
+  let query = client
     .from('draft_itineraries')
     .select('*')
     .eq('event_id', eventId)
@@ -881,7 +929,8 @@ export const getDraftItineraries = async (eventId: string, companyId?: string) =
 }
 
 export const addDraftItinerary = async (itinerary: any) => {
-  const { data, error } = await supabase
+  const client = await getSupabase();
+  const { data, error } = await client
     .from('draft_itineraries')
     .insert(itinerary)
     .select()
@@ -892,7 +941,8 @@ export const addDraftItinerary = async (itinerary: any) => {
 }
 
 export const updateDraftItinerary = async (id: string, updates: any) => {
-  const { data, error } = await supabase
+  const client = await getSupabase();
+  const { data, error } = await client
     .from('draft_itineraries')
     .update(updates)
     .eq('id', id)
@@ -904,7 +954,8 @@ export const updateDraftItinerary = async (id: string, updates: any) => {
 }
 
 export const deleteDraftItinerary = async (id: string) => {
-  const { error } = await supabase
+  const client = await getSupabase();
+  const { error } = await client
     .from('draft_itineraries')
     .delete()
     .eq('id', id)
@@ -913,7 +964,8 @@ export const deleteDraftItinerary = async (id: string) => {
 }
 
 export const publishDraftItinerary = async (draftId: string) => {
-  const { data, error } = await supabase
+  const client = await getSupabase();
+  const { data, error } = await client
     .rpc('publish_draft_itinerary', { draft_id: draftId })
 
   if (error) throw error
@@ -936,7 +988,8 @@ export const insertActivityLog = async ({ company_id, user_id, action_type, deta
   details?: Record<string, any>;
   event_id?: string;
 }) => {
-  const { error } = await supabase.from('activity_log').insert([
+  const client = await getSupabase();
+  const { error } = await client.from('activity_log').insert([
     {
       company_id,
       user_id,
@@ -954,8 +1007,9 @@ export const insertActivityLog = async ({ company_id, user_id, action_type, deta
  * @param {(payload: any) => void} callback - Callback for new/updated/deleted activity log entries
  * @returns {any} The Supabase channel subscription
  */
-export const subscribeToActivityLog = (_companyId: string, callback: (payload: any) => void) => {
-  return supabase
+export const subscribeToActivityLog = async (_companyId: string, callback: (payload: any) => void) => {
+  const client = await getSupabase();
+  return client
     .channel('activity_log')
     .on('postgres_changes', {
       event: '*',
@@ -966,7 +1020,8 @@ export const subscribeToActivityLog = (_companyId: string, callback: (payload: a
 }; 
 
 export const getEventActivityFeed = async (eventId: string, companyId: string, limit = 50, offset = 0) => {
-  const { data, error } = await supabase.rpc('get_event_activity_feed', {
+  const client = await getSupabase();
+  const { data, error } = await client.rpc('get_event_activity_feed', {
     p_event_id: eventId,
     p_company_id: companyId,
     p_limit: limit,
@@ -985,14 +1040,15 @@ export const getEventActivityFeed = async (eventId: string, companyId: string, l
 };
 
 export const exportEventData = async (eventId: string) => {
+  const client = await getSupabase();
   const [messages, guests, itineraries, modules, answers, announcements, activity] = await Promise.all([
-    supabase.from('guests_chat_messages').select('*').eq('event_id', eventId),
-    supabase.from('guests').select('*').eq('event_id', eventId),
-    supabase.from('itineraries').select('*').eq('event_id', eventId),
-    supabase.from('timeline_modules').select('*').eq('event_id', eventId),
-    supabase.from('guest_module_answers').select('*').eq('event_id', eventId),
-    supabase.from('announcements').select('*').eq('event_id', eventId),
-    supabase.from('activity_log').select('*').eq('event_id', eventId),
+    client.from('guests_chat_messages').select('*').eq('event_id', eventId),
+    client.from('guests').select('*').eq('event_id', eventId),
+    client.from('itineraries').select('*').eq('event_id', eventId),
+    client.from('timeline_modules').select('*').eq('event_id', eventId),
+    client.from('guest_module_answers').select('*').eq('event_id', eventId),
+    client.from('announcements').select('*').eq('event_id', eventId),
+    client.from('activity_log').select('*').eq('event_id', eventId),
   ]);
   return {
     messages: messages.data || [],
@@ -1007,15 +1063,16 @@ export const exportEventData = async (eventId: string) => {
 
 export const purgeEvent = async (eventId: string) => {
   // Delete DB rows in dependency-safe order
+  const client = await getSupabase();
   const tasks = [
-    supabase.from('guest_module_answers').delete().eq('event_id', eventId),
-    supabase.from('timeline_modules').delete().eq('event_id', eventId),
-    supabase.from('guests_chat_reactions').delete().in('message_id', (await supabase.from('guests_chat_messages').select('message_id').eq('event_id', eventId)).data?.map((m:any)=>m.message_id) || []),
-    supabase.from('guests_chat_messages').delete().eq('event_id', eventId),
-    supabase.from('announcements').delete().eq('event_id', eventId),
-    supabase.from('itineraries').delete().eq('event_id', eventId),
-    supabase.from('draft_itineraries').delete().eq('event_id', eventId),
-    supabase.from('team_events').delete().eq('event_id', eventId),
+    client.from('guest_module_answers').delete().eq('event_id', eventId),
+    client.from('timeline_modules').delete().eq('event_id', eventId),
+    client.from('guests_chat_reactions').delete().in('message_id', (await client.from('guests_chat_messages').select('message_id').eq('event_id', eventId)).data?.map((m:any)=>m.message_id) || []),
+    client.from('guests_chat_messages').delete().eq('event_id', eventId),
+    client.from('announcements').delete().eq('event_id', eventId),
+    client.from('itineraries').delete().eq('event_id', eventId),
+    client.from('draft_itineraries').delete().eq('event_id', eventId),
+    client.from('team_events').delete().eq('event_id', eventId),
   ];
   for (const t of tasks) { const { error } = await t; if (error) console.warn('Purge warning:', error.message); }
 
@@ -1023,10 +1080,10 @@ export const purgeEvent = async (eventId: string) => {
   const buckets = ['event-images','itinerary-documents','guest-files','chat-attachments','guest_event_module_responses'];
   for (const bucket of buckets) {
     try {
-      const { data: list } = await supabase.storage.from(bucket).list(undefined, { limit: 1000, search: eventId });
+      const { data: list } = await client.storage.from(bucket).list(undefined, { limit: 1000, search: eventId });
       const paths = (list || []).map((f:any) => f.name).filter(Boolean);
       if (paths.length > 0) {
-        await supabase.storage.from(bucket).remove(paths);
+        await client.storage.from(bucket).remove(paths);
       }
     } catch (e) {
       console.warn('Storage purge warning for bucket', bucket, e);
@@ -1034,12 +1091,13 @@ export const purgeEvent = async (eventId: string) => {
   }
 
   // Finally delete the event
-  const { error: delErr } = await supabase.from('events').delete().eq('id', eventId);
+  const { error: delErr } = await client.from('events').delete().eq('id', eventId);
   if (delErr) throw delErr;
 };
 
 export const getEventsCreatedByUser = async (userId: string, companyId: string) => {
-  const { data, error } = await supabase
+  const client = await getSupabase();
+  const { data, error } = await client
     .from('events')
     .select('*')
     .eq('company_id', companyId)
@@ -1064,7 +1122,8 @@ export const addTimelineModule = async (module: {
   feedback_data?: any,
   created_by?: string
 }) => {
-  const { data, error } = await supabase
+  const client = await getSupabase();
+  const { data, error } = await client
     .from('timeline_modules')
     .insert([module])
     .select()
@@ -1090,7 +1149,8 @@ export type EventAddon = {
 
 // Fetch all add-ons for an event
 export const getEventAddOns = async (eventId: string): Promise<EventAddon[]> => {
-  const { data, error } = await supabase
+  const client = await getSupabase();
+  const { data, error } = await client
     .from('event_addons')
     .select('*')
     .eq('event_id', eventId)
@@ -1101,7 +1161,8 @@ export const getEventAddOns = async (eventId: string): Promise<EventAddon[]> => 
 
 // Upsert (enable/disable) an add-on for an event
 export const upsertEventAddon = async (addon: Omit<EventAddon, 'id' | 'created_at' | 'updated_at'>) => {
-  const { data, error } = await supabase
+  const client = await getSupabase();
+  const { data, error } = await client
     .from('event_addons')
     .upsert([addon], { onConflict: 'event_id,addon_key' })
     .select()
@@ -1122,7 +1183,8 @@ export const sendGuestsChatMessage = async (messageData: {
   reply_to_message_id?: string;
   company_id: string;
 }) => {
-  const { data, error } = await supabase.rpc('send_guests_chat_message', messageData);
+  const client = await getSupabase();
+  const { data, error } = await client.rpc('send_guests_chat_message', messageData);
   if (error) throw error;
   
   // Log activity for chat messages
@@ -1130,7 +1192,7 @@ export const sendGuestsChatMessage = async (messageData: {
     await insertActivityLog({
       company_id: messageData.company_id,
       user_id: messageData.sender_type === 'admin' ? 
-        (await supabase.auth.getUser()).data.user?.id || 'unknown' : 'guest',
+        (await client.auth.getUser()).data.user?.id || 'unknown' : 'guest',
       action_type: 'chat_message_sent',
       details: {
         event_id: messageData.event_id,
@@ -1149,24 +1211,29 @@ export const sendGuestsChatMessage = async (messageData: {
 
 export const addGuestsChatReaction = async (reactionData: {
   message_id: string;
-  user_email: string;
-  emoji: string;
+  reaction_type: string;
+  reaction_value: string;
+  sender_email: string;
+  sender_name: string;
+  sender_type: 'guest' | 'admin';
   company_id: string;
   event_id: string;
 }) => {
-  const { data, error } = await supabase.rpc('add_guests_chat_reaction_unified', reactionData);
+  const client = await getSupabase();
+  const { data, error } = await client.rpc('add_guests_chat_reaction_unified', reactionData);
   if (error) throw error;
   
   // Log activity for reactions
   try {
     await insertActivityLog({
       company_id: reactionData.company_id,
-      user_id: 'guest', // Reactions are usually from guests
+      user_id: reactionData.sender_type === 'admin' ? 
+        (await client.auth.getUser()).data.user?.id || 'unknown' : 'guest',
       action_type: 'chat_reaction_added',
       details: {
         event_id: reactionData.event_id,
-        emoji: reactionData.emoji,
-        message_id: reactionData.message_id
+        reaction_type: reactionData.reaction_type,
+        reaction_value: reactionData.reaction_value
       },
       event_id: reactionData.event_id
     });
@@ -1175,4 +1242,217 @@ export const addGuestsChatReaction = async (reactionData: {
   }
   
   return data;
+}; 
+
+// Get all reactions for a message
+export const getMessageReactions = async (messageId: string) => {
+  const client = await getSupabase();
+  const { data, error } = await client
+    .from('guests_chat_reactions')
+    .select('*')
+    .eq('message_id', messageId);
+  
+  if (error) throw error;
+  return data;
+};
+
+// Get all messages for an event
+export const getEventMessages = async (eventId: string) => {
+  const client = await getSupabase();
+  const { data, error } = await client
+    .from('guests_chat_messages')
+    .select('*')
+    .eq('event_id', eventId)
+    .order('created_at', { ascending: true });
+  
+  if (error) throw error;
+  return data;
+};
+
+// Get all announcements for an event
+export const getEventAnnouncements = async (eventId: string) => {
+  const client = await getSupabase();
+  const { data, error } = await client
+    .from('announcements')
+    .select('*')
+    .eq('event_id', eventId)
+    .order('created_at', { ascending: false });
+  
+  if (error) throw error;
+  return data;
+};
+
+// Create a new announcement
+export const createAnnouncement = async (announcement: {
+  event_id: string;
+  company_id: string;
+  title: string;
+  message: string;
+  created_by?: string;
+  scheduled_for?: string;
+}) => {
+  const client = await getSupabase();
+  const { data, error } = await client
+    .from('announcements')
+    .insert([announcement])
+    .select()
+    .single();
+  
+  if (error) throw error;
+  
+  // Log activity for announcement creation
+  try {
+    await insertActivityLog({
+      company_id: announcement.company_id,
+      user_id: announcement.created_by || 'unknown',
+      action_type: 'announcement_created',
+      details: {
+        event_id: announcement.event_id,
+        announcement_title: announcement.title
+      },
+      event_id: announcement.event_id
+    });
+  } catch (e) {
+    console.warn('Failed to log announcement activity:', e);
+  }
+  
+  return data;
+};
+
+// Update an announcement
+export const updateAnnouncement = async (id: string, updates: Partial<{
+  title: string;
+  message: string;
+  scheduled_for?: string;
+}>) => {
+  const client = await getSupabase();
+  const { data, error } = await client
+    .from('announcements')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single();
+  
+  if (error) throw error;
+  return data;
+};
+
+// Delete an announcement
+export const deleteAnnouncement = async (id: string) => {
+  const client = await getSupabase();
+  const { error } = await client
+    .from('announcements')
+    .delete()
+    .eq('id', id);
+  
+  if (error) throw error;
+};
+
+// Get all teams for a company
+export const getTeams = async (companyId: string) => {
+  const client = await getSupabase();
+  const { data, error } = await client
+    .from('teams')
+    .select('*')
+    .eq('company_id', companyId)
+    .order('created_at', { ascending: false });
+  
+  if (error) throw error;
+  return data;
+};
+
+// Create a new team
+export const createTeam = async (team: {
+  name: string;
+  company_id: string;
+  created_by?: string;
+  description?: string;
+}) => {
+  const client = await getSupabase();
+  const { data, error } = await client
+    .from('teams')
+    .insert([team])
+    .select()
+    .single();
+  
+  if (error) throw error;
+  return data;
+};
+
+// Update a team
+export const updateTeam = async (id: string, updates: Partial<{
+  name: string;
+  description: string;
+}>) => {
+  const client = await getSupabase();
+  const { data, error } = await client
+    .from('teams')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single();
+  
+  if (error) throw error;
+  return data;
+};
+
+// Delete a team
+export const deleteTeam = async (id: string) => {
+  const client = await getSupabase();
+  const { error } = await client
+    .from('teams')
+    .delete()
+    .eq('id', id);
+  
+  if (error) throw error;
+};
+
+// Get team members
+export const getTeamMembers = async (teamId: string) => {
+  const client = await getSupabase();
+  const { data, error } = await client
+    .from('team_members')
+    .select(`
+      *,
+      users:user_id (
+        id,
+        email,
+        name,
+        avatar
+      )
+    `)
+    .eq('team_id', teamId);
+  
+  if (error) throw error;
+  return data;
+};
+
+// Add member to team
+export const addTeamMember = async (member: {
+  team_id: string;
+  user_id: string;
+  role?: string;
+  added_by?: string;
+}) => {
+  const client = await getSupabase();
+  const { data, error } = await client
+    .from('team_members')
+    .insert([member])
+    .select()
+    .single();
+  
+  if (error) throw error;
+  return data;
+};
+
+// Remove member from team
+export const removeTeamMember = async (teamId: string, userId: string) => {
+  const client = await getSupabase();
+  const { error } = await client
+    .from('team_members')
+    .delete()
+    .eq('team_id', teamId)
+    .eq('user_id', userId);
+  
+  if (error) throw error;
 }; 

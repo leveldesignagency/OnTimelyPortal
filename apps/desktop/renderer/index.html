@@ -10,7 +10,23 @@
       referrerpolicy="no-referrer" />
     <script src="https://alcdn.msauth.net/browser/2.30.0/js/msal-browser.min.js"></script>
     <!-- Supabase CDN for web builds to avoid bundling issues -->
-    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <script>
+      // Ensure Supabase is loaded before our app starts
+      window.supabaseLoaded = false;
+      window.supabaseLoadPromise = new Promise((resolve) => {
+        const script = document.createElement('script');
+        script.src = 'https://unpkg.com/@supabase/supabase-js@2';
+        script.onload = () => {
+          window.supabaseLoaded = true;
+          resolve();
+        };
+        script.onerror = () => {
+          console.error('Failed to load Supabase CDN');
+          resolve();
+        };
+        document.head.appendChild(script);
+      });
+    </script>
   </head>
   <body>
     <div id="root"></div>
