@@ -67,6 +67,8 @@ export async function getSupabase() {
 // For backward compatibility, export a promise that resolves to the client
 export const supabase = getSupabase();
 
+// Force Vercel deployment - commit b5d03fa
+
 // Types for your database tables
 export type SupabaseEvent = {
   id: string
