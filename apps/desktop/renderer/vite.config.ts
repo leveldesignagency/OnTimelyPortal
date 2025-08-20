@@ -31,22 +31,35 @@ export default defineConfig(({ mode }) => {
       'import.meta.env.VITE_UPDATE_SERVER_URL': JSON.stringify(env.VITE_UPDATE_SERVER_URL)
     },
     optimizeDeps: {
-      exclude: ['electron']
+      exclude: ['electron'],
+      include: ['@supabase/supabase-js']
     },
     build: {
       outDir: isElectron ? '../dist' : 'dist', // Parent dir for Electron, local for web
       emptyOutDir: true,
       rollupOptions: {
-        external: ['electron', 'path', 'fs', 'os'],
+        external: isElectron ? ['electron', 'path', 'fs', 'os'] : [],
         output: {
           manualChunks: {
             vendor: ['react', 'react-dom'],
             supabase: ['@supabase/supabase-js']
+          },
+          globals: {
+            '@supabase/supabase-js': 'supabase'
           }
+        },
+        onwarn(warning, warn) {
+          // Ignore certain warnings that are not critical
+          if (warning.code === 'UNRESOLVED_IMPORT' && 
+              warning.message.includes('define-globalThis-property')) {
+            return;
+          }
+          warn(warning);
         }
       },
       // Ensure environment variables are available at build time
-      envPrefix: 'VITE_'
+      envPrefix: 'VITE_',
+      target: 'es2020'
     },
     resolve: {
       alias: {
