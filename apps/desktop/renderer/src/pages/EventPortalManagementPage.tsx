@@ -11,7 +11,6 @@ import QuestionModal from '../components/QuestionModuleModal';
 import ModuleManagementModal from '../components/ModuleManagementModal';
 import { DraggableAction } from '../components/DraggableAction';
 
-import { createClient } from '@supabase/supabase-js';
 import { getCurrentUser } from '../lib/auth';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
@@ -22,7 +21,7 @@ console.log('🔧 Admin Supabase Config:');
 console.log('SUPABASE_URL:', SUPABASE_URL);
 console.log('SERVICE_ROLE_KEY:', SERVICE_ROLE_KEY ? `${SERVICE_ROLE_KEY.substring(0, 20)}...` : 'NOT SET');
 
-const adminSupabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY); // Use your service role key
+const adminSupabase = (window as any).supabase.createClient(SUPABASE_URL, SERVICE_ROLE_KEY); // Use your service role key
 
 // Add email validation helper functions
 const isValidEmail = (email: string): boolean => {
