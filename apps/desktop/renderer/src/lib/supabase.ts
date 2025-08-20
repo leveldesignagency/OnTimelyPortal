@@ -1,4 +1,15 @@
-import { createClient } from '@supabase/supabase-js'
+// Import Supabase based on build target
+let createClient: any;
+
+if (typeof window !== 'undefined' && (window as any).supabase) {
+  // Use CDN version for web builds
+  createClient = (window as any).supabase.createClient;
+} else {
+  // Use module import for Electron builds
+  const supabaseModule = require('@supabase/supabase-js');
+  createClient = supabaseModule.createClient;
+}
+
 import { getCurrentUser } from './auth'
 
 // Environment variables for Supabase configuration
@@ -11,7 +22,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 // Create Supabase client with proper configuration for web environment
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+export const supabase = (window as any).supabase.createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     // Use browser storage for web builds
     storage: typeof window !== 'undefined' ? window.localStorage : undefined,
