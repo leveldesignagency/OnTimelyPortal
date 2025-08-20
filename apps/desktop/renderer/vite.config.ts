@@ -20,6 +20,11 @@ export default defineConfig(({ mode }) => {
     },
     define: {
       global: 'globalThis',
+      // Fix Supabase browser compatibility
+      'globalThis.Headers': 'undefined',
+      'globalThis.Request': 'undefined',
+      'globalThis.Response': 'undefined',
+      'globalThis.fetch': 'fetch',
       // Expose env variables to the app
       'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(env.VITE_SUPABASE_URL),
       'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(env.VITE_SUPABASE_ANON_KEY),
