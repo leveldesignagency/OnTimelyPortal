@@ -11,6 +11,8 @@ export default defineConfig(({ mode }) => {
   const target = process.env.VITE_TARGET || 'web';
   const isElectron = target === 'electron';
   
+  console.log(`🔧 Building for target: ${target} (isElectron: ${isElectron})`);
+  
   return {
     base: isElectron ? './' : '/', // Relative for Electron, absolute for web
     plugins: [react()],
@@ -19,16 +21,9 @@ export default defineConfig(({ mode }) => {
       host: 'localhost'
     },
     define: {
-      global: 'globalThis',
-      // Fix Supabase browser compatibility
-      'globalThis.Headers': 'undefined',
-      'globalThis.Request': 'undefined',
-      'globalThis.Response': 'undefined',
-      'globalThis.fetch': 'fetch',
-      // Additional polyfills for Supabase
+      // Only add process.env polyfills that are actually needed
       'process.env.NODE_ENV': JSON.stringify(mode),
-      'process.env.SUPABASE_URL': JSON.stringify(env.VITE_SUPABASE_URL),
-      'process.env.SUPABASE_ANON_KEY': JSON.stringify(env.VITE_SUPABASE_ANON_KEY),
+      'process.env.VITE_TARGET': JSON.stringify(target),
       // Expose env variables to the app
       'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(env.VITE_SUPABASE_URL),
       'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(env.VITE_SUPABASE_ANON_KEY),
@@ -37,57 +32,35 @@ export default defineConfig(({ mode }) => {
       'import.meta.env.VITE_APP_NAME': JSON.stringify(env.VITE_APP_NAME || 'Timely'),
       'import.meta.env.VITE_APP_VERSION': JSON.stringify(env.VITE_APP_VERSION || '1.0.0'),
       'import.meta.env.VITE_APP_ENV': JSON.stringify(env.VITE_APP_ENV || mode),
-      'import.meta.env.VITE_UPDATE_SERVER_URL': JSON.stringify(env.VITE_UPDATE_SERVER_URL)
+      'import.meta.env.VITE_UPDATE_SERVER_URL': JSON.stringify(env.VITE_UPDATE_SERVER_URL),
+      // Add calendar service environment variables
+      'process.env.VITE_GOOGLE_CLIENT_ID': JSON.stringify(env.VITE_GOOGLE_CLIENT_ID),
+      'process.env.VITE_OUTLOOK_CLIENT_ID': JSON.stringify(env.VITE_OUTLOOK_CLIENT_ID),
+      'process.env.VITE_GOOGLE_CLIENT_SECRET': JSON.stringify(env.VITE_GOOGLE_CLIENT_SECRET),
+      'process.env.VITE_OUTLOOK_CLIENT_SECRET': JSON.stringify(env.VITE_OUTLOOK_CLIENT_SECRET)
     },
     optimizeDeps: {
       exclude: ['electron'],
-      include: isElectron ? ['@supabase/supabase-js'] : [],
-      esbuildOptions: {
-        define: {
-          global: 'globalThis'
-        }
-      }
+      include: isElectron ? ['@supabase/supabase-js'] : []
     },
     build: {
       outDir: isElectron ? '../dist' : 'dist', // Parent dir for Electron, local for web
       emptyOutDir: true,
       rollupOptions: {
-        external: isElectron ? ['electron', 'path', 'fs', 'os'] : ['@supabase/supabase-js'],
+        external: isElectron ? ['electron', 'path', 'fs', 'os'] : [],
         output: {
           manualChunks: {
             vendor: ['react', 'react-dom']
-          },
-          globals: {
-            '@supabase/supabase-js': 'supabase'
           }
-        },
-        onwarn(warning, warn) {
-          // Ignore certain warnings that are not critical
-          if (warning.code === 'UNRESOLVED_IMPORT' && 
-              (warning.message.includes('define-globalThis-property') ||
-               warning.message.includes('internals/define-globalThis-property') ||
-               warning.message.includes('globalThis-this') ||
-               warning.message.includes('internals/globalThis-this'))) {
-            return;
-          }
-          warn(warning);
         }
       },
       // Ensure environment variables are available at build time
       envPrefix: 'VITE_',
-      target: 'es2020',
-      commonjsOptions: {
-        ignore: ['define-globalThis-property', 'globalThis-this']
-      }
+      target: 'es2020'
     },
     resolve: {
       alias: {
-        '@': resolve(__dirname, 'src'),
-        // Add aliases to handle problematic imports
-        '../internals/define-globalThis-property': resolve(__dirname, 'src/utils/empty-module.js'),
-        '../internals/globalThis-this': resolve(__dirname, 'src/utils/empty-module.js'),
-        'define-globalThis-property': resolve(__dirname, 'src/utils/empty-module.js'),
-        'globalThis-this': resolve(__dirname, 'src/utils/empty-module.js')
+        '@': resolve(__dirname, 'src')
       }
     }
   }

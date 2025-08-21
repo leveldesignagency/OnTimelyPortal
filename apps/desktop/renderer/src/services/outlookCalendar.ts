@@ -464,7 +464,7 @@ class OutlookCalendarService {
       const attendees: CalendarEventAttendee[] = (event.attendees || []).map(attendee => ({
         email: attendee.emailAddress.address,
         name: attendee.emailAddress.name || attendee.emailAddress.address,
-        responseStatus: (attendee.status.response === 'declined' || attendee.status.response === 'tentative' || attendee.status.response === 'accepted') ? attendee.status.response : 'needsAction'
+        responseStatus: attendee.status.response || 'needsAction'
       }));
 
       return {

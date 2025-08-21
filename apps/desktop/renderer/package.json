@@ -5,10 +5,12 @@
   "scripts": {
     "dev": "vite",
     "dev:web": "VITE_TARGET=web vite",
-    "build": "tsc -b && vite build",
+    "dev:electron": "VITE_TARGET=electron vite",
+    "build": "vite build",
     "build:web": "VITE_TARGET=web vite build",
     "build:electron": "VITE_TARGET=electron vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "preview:web": "VITE_TARGET=web vite preview"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.50.0",

@@ -2,7 +2,7 @@ import React, { useState, useContext, useEffect, useRef, useMemo } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ThemeContext } from '../ThemeContext';
 import TimelinePreview from '../components/TimelinePreview';
-import { supabase, getEvent, getGuests, getItineraries, getEventAssignments, type SupabaseEvent } from '../lib/supabase';
+import { supabase, getEvent, getGuests, getItineraries, getEventAssignments, type Event } from '../lib/supabase';
 import FeedbackModuleModal from '../components/FeedbackModuleModal';
 import FeedbackGuestSelectionModal from '../components/FeedbackGuestSelectionModal';
 import MultipleChoiceModuleModal from '../components/MultipleChoiceModuleModal';
@@ -11,6 +11,7 @@ import QuestionModal from '../components/QuestionModuleModal';
 import ModuleManagementModal from '../components/ModuleManagementModal';
 import { DraggableAction } from '../components/DraggableAction';
 
+import { createClient } from '@supabase/supabase-js';
 import { getCurrentUser } from '../lib/auth';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
@@ -21,15 +22,7 @@ console.log('🔧 Admin Supabase Config:');
 console.log('SUPABASE_URL:', SUPABASE_URL);
 console.log('SERVICE_ROLE_KEY:', SERVICE_ROLE_KEY ? `${SERVICE_ROLE_KEY.substring(0, 20)}...` : 'NOT SET');
 
-// Create admin client function that checks if window.supabase exists
-const createAdminSupabase = () => {
-  if (typeof window !== 'undefined' && (window as any).supabase && (window as any).supabase.createClient) {
-    return (window as any).supabase.createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
-  }
-  return null;
-};
-
-const adminSupabase = createAdminSupabase();
+const adminSupabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY); // Use your service role key
 
 // Add email validation helper functions
 const isValidEmail = (email: string): boolean => {
@@ -102,7 +95,7 @@ export default function EventPortalManagementPage() {
   }, [eventId]);
 
   // Add state for event and selected date
-  const [event, setEvent] = useState<SupabaseEvent | null>(null);
+  const [event, setEvent] = useState<Event | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [eventDates, setEventDates] = useState<Date[]>([]);
 

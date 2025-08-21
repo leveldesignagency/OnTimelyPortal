@@ -19,9 +19,32 @@ export interface AuthState {
   error: string | null
 }
 
+// Clear any cached authentication state (useful for Electron builds)
+export const clearCachedAuth = async (): Promise<void> => {
+  try {
+    // Clear Supabase session
+    await supabase.auth.signOut();
+    
+    // Clear localStorage
+    localStorage.removeItem('currentUser');
+    localStorage.removeItem('sb-ijsktwmevnqgzwwuggkf-auth-token');
+    localStorage.removeItem('sb-ijsktwmevnqgzwwuggkf-auth-token-expires');
+    
+    // Clear any other potential auth-related storage
+    sessionStorage.clear();
+    
+    console.log('✅ Cached authentication cleared');
+  } catch (error) {
+    console.error('Error clearing cached auth:', error);
+  }
+};
+
 // Enhanced login with custom authentication (matching existing database structure)
 export const login = async (email: string, password: string): Promise<{ user: User | null; error: string | null }> => {
   try {
+    // Clear any existing cached auth first
+    await clearCachedAuth();
+    
     // Use a custom function to verify password against password_hash
     const { data: loginResult, error: loginError } = await supabase.rpc('login_user', {
       user_email: email,
@@ -66,20 +89,36 @@ export const logout = async (): Promise<void> => {
       await updateUserStatus(currentUser.id, 'offline')
     }
     
-    // Clear localStorage session
-    localStorage.removeItem('currentUser')
+    // Clear all cached authentication
+    await clearCachedAuth();
     
     console.log('✅ User logged out successfully')
   } catch (error) {
     console.error('Logout error:', error)
     // Still clear session even if status update fails
-    localStorage.removeItem('currentUser')
+    await clearCachedAuth();
   }
 }
 
 // New async getCurrentUser implementation
 export const getCurrentUser = async (): Promise<User | null> => {
   try {
+    // Check localStorage first for our custom session
+    const cachedUser = localStorage.getItem('currentUser');
+    if (cachedUser) {
+      try {
+        const user = JSON.parse(cachedUser);
+        // Validate the cached user has required fields
+        if (user && user.id && user.email && user.company_id) {
+          return user;
+        }
+      } catch (e) {
+        // Invalid JSON, clear it
+        localStorage.removeItem('currentUser');
+      }
+    }
+    
+    // If no valid cached user, check Supabase auth
     const { data: { user: authUser } } = await supabase.auth.getUser();
     if (!authUser || !authUser.email) return null;
     

@@ -1075,8 +1075,8 @@ export const removeMessageReaction = async (messageId: string, userId: string, e
 };
 
 // Real-time subscriptions with company isolation
-export const subscribeToMessages = async (chatId: string, onMessage: (message: Message) => void) => {
-  const currentUser = await getCurrentUser()
+export const subscribeToMessages = (chatId: string, onMessage: (message: Message) => void) => {
+  const currentUser = getCurrentUser()
   if (!currentUser) {
     console.error('No authenticated user for message subscription')
     return null
@@ -1120,8 +1120,8 @@ export const subscribeToMessages = async (chatId: string, onMessage: (message: M
     .subscribe()
 }
 
-export const subscribeToUserStatus = async (companyId: string, onStatusChange: (user: User) => void) => {
-  const currentUser = await getCurrentUser()
+export const subscribeToUserStatus = (companyId: string, onStatusChange: (user: User) => void) => {
+  const currentUser = getCurrentUser()
   if (!currentUser || !validateCompanyAccess(companyId)) {
     console.error('Access denied for user status subscription')
     return null
@@ -1148,7 +1148,7 @@ export const subscribeToUserStatus = async (companyId: string, onStatusChange: (
 // Team invitation functions (keeping the existing ones with validation)
 export const getTeamInvitations = async (teamId: string): Promise<TeamInvitation[]> => {
   try {
-    const currentUser = await getCurrentUser()
+    const currentUser = getCurrentUser()
     if (!currentUser) return []
 
     // Validate team access
@@ -1182,7 +1182,7 @@ export const getTeamInvitations = async (teamId: string): Promise<TeamInvitation
 
 export const getUserPendingInvitations = async (email: string): Promise<TeamInvitation[]> => {
   try {
-    const currentUser = await getCurrentUser()
+    const currentUser = getCurrentUser()
     if (!currentUser) return []
 
     const { data, error } = await supabase
@@ -1216,7 +1216,7 @@ export const acceptTeamInvitation = async (
   userId: string
 ): Promise<boolean> => {
   try {
-    const currentUser = await getCurrentUser()
+    const currentUser = getCurrentUser()
     if (!currentUser || currentUser.id !== userId) {
       return false
     }
@@ -1475,7 +1475,7 @@ export const createTeamInvitation = async (
   role: 'admin' | 'member' = 'member'
 ): Promise<TeamInvitation | null> => {
   try {
-    const currentUser = await getCurrentUser()
+    const currentUser = getCurrentUser()
     if (!currentUser) {
       throw new Error('User must be logged in to create invitations')
     }
@@ -1675,7 +1675,7 @@ export const deleteChat = async (chatId: string): Promise<boolean> => {
 
 export const getGroupAdmin = async (chatId: string): Promise<User | null> => {
   try {
-    const currentUser = await getCurrentUser()
+    const currentUser = getCurrentUser()
     if (!currentUser) {
       return null
     }
@@ -1695,7 +1695,7 @@ export const getGroupAdmin = async (chatId: string): Promise<User | null> => {
       return null
     }
 
-    return chat.users?.[0] || null
+    return chat.users || null
   } catch (error) {
     console.error('Failed to get group admin:', error)
     return null
@@ -1708,7 +1708,7 @@ export const transferGroupAdmin = async (
   newAdminId: string
 ): Promise<boolean> => {
   try {
-    const currentUser = await getCurrentUser()
+    const currentUser = getCurrentUser()
     if (!currentUser || currentUser.id !== currentAdminId) {
       return false
     }

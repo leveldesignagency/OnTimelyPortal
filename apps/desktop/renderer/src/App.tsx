@@ -17,8 +17,8 @@ import RealtimeTestPage from './pages/realtime-test';
 import LoginPage from './pages/LoginPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import { ThemeProvider, ThemeContext } from './ThemeContext';
-import { getCurrentUser, getCompanyEvents } from './lib/auth';
-import { getEvents, createEvent, SupabaseEvent, getUserTeamEvents } from './lib/supabase';
+import { getCurrentUser, getCompanyEvents, clearCachedAuth } from './lib/auth';
+import { getEvents, createEvent, Event, getUserTeamEvents } from './lib/supabase';
 import LinkItinerariesPage from './pages/LinkItinerariesPage';
 import AssignOverviewPage from './pages/AssignOverviewPage';
 import EventPortalManagementPage from './pages/EventPortalManagementPage';
@@ -32,7 +32,7 @@ import GuestFormsPage from './pages/GuestFormsPage';
 import { getEventsCreatedByUser } from './lib/supabase';
 
 // Update EventType to match Supabase Event type
-export type EventType = SupabaseEvent;
+export type EventType = Event;
 
 const PublicFormPage = React.lazy(() => import('./pages/PublicFormPage'));
 
@@ -47,6 +47,18 @@ const AppContent = () => {
   const [isSidebarOpen, setSidebarOpen] = useState(true);
   const isTeamsPage = location.pathname.startsWith('/teams');
   const isLoginPage = location.pathname === '/login';
+  
+  // Clear cached authentication on app startup (especially important for Electron builds)
+  useEffect(() => {
+    const clearAuthOnStartup = async () => {
+      // Only clear auth if we're not already on the login page
+      if (!isLoginPage) {
+        await clearCachedAuth();
+      }
+    };
+    
+    clearAuthOnStartup();
+  }, [isLoginPage]);
   
   // Ensure sidebar is open for non-teams pages
   useEffect(() => {
@@ -75,7 +87,7 @@ const AppContent = () => {
         allEvents.reduce((acc, event) => {
           acc[event.id] = event;
           return acc;
-        }, {} as Record<string, SupabaseEvent>)
+        }, {} as Record<string, Event>)
       );
       if (dedupedEvents.length > 0) {
         setEvents(dedupedEvents as EventType[]);
