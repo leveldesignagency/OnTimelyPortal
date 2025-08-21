@@ -1,55 +1,89 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { ThemeContext } from '../ThemeContext';
 import { supabase } from '../lib/supabase';
 
-const ResetPasswordPage = () => {
-  const [email, setEmail] = useState('');
+const ResetPasswordConfirmPage = () => {
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const navigate = useNavigate();
+  const location = useLocation();
   const { theme } = useContext(ThemeContext);
   const isDark = theme === 'dark';
 
-  // This page only handles email requests - password reset is handled by ResetPasswordConfirmPage
+  // Check if we have access token in URL
   useEffect(() => {
-    console.log('ResetPasswordPage - Email request mode only');
-  }, []);
-
-  // Shimmer effect for background
-  useEffect(() => {
-    const shimmerElements = document.querySelectorAll('.shimmer-bg');
+    const hash = location.hash;
+    console.log('ResetPasswordConfirmPage - URL hash:', hash);
     
-    shimmerElements.forEach((el, index) => {
-      const delay = index * 2; // Stagger the animations
-      (el as HTMLElement).style.animationDelay = `${delay}s`;
-    });
-  }, []);
+    if (hash && hash.includes('access_token')) {
+      console.log('ResetPasswordConfirmPage - Access token detected');
+      
+      // Extract access token and set it in Supabase session
+      const accessToken = hash.match(/access_token=([^&]+)/)?.[1];
+      if (accessToken) {
+        console.log('ResetPasswordConfirmPage - Setting access token in session');
+        // Set the session manually for password reset
+        supabase.auth.setSession({ access_token: accessToken, refresh_token: '' });
+      }
+    } else {
+      console.log('ResetPasswordConfirmPage - No access token found, redirecting to login');
+      navigate('/login');
+    }
+  }, [location, navigate]);
 
-  const handleRequestReset = async (e: React.FormEvent) => {
+  const handlePasswordReset = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
+    if (newPassword !== confirmPassword) {
+      setError('Passwords do not match');
+      setLoading(false);
+      return;
+    }
+
+    // Enhanced password validation
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+    if (!passwordRegex.test(newPassword)) {
+      setError('Password must meet all requirements: 8+ characters, uppercase, lowercase, number, and special character');
+      setLoading(false);
+      return;
+    }
+
     try {
-      console.log('ResetPasswordPage - Sending reset email to:', email);
+      // First, ensure we have a valid session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        setError('No valid session found. Please use the reset link from your email.');
+        setLoading(false);
+        return;
+      }
+
+      console.log('ResetPasswordConfirmPage - Updating password for user:', session.user.email);
       
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: 'https://dashboard.ontimely.co.uk/reset-password-confirm'
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword
       });
 
       if (error) {
-        console.error('ResetPasswordPage - Reset email error:', error);
+        console.error('ResetPasswordConfirmPage - Password update error:', error);
         setError(error.message);
       } else {
-        console.log('ResetPasswordPage - Reset email sent successfully');
-        setSuccess('Password reset link sent! Check your email and click the link to reset your password.');
-        setEmail(''); // Clear email field after success
+        console.log('ResetPasswordConfirmPage - Password updated successfully');
+        setSuccess('Password updated successfully! Redirecting to login...');
+        
+        // Sign out the user after password reset
+        await supabase.auth.signOut();
+        
+        setTimeout(() => navigate('/login'), 2000);
       }
     } catch (error) {
-      console.error('ResetPasswordPage - Unexpected error sending reset email:', error);
-      setError('Failed to send reset link. Please try again.');
+      console.error('ResetPasswordConfirmPage - Unexpected error:', error);
+      setError('Failed to update password. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -101,7 +135,7 @@ const ResetPasswordPage = () => {
         }}
       />
 
-      {/* Main Container - Glassmorphic design matching LoginPage */}
+      {/* Main Container - Glassmorphic design */}
       <div style={{
         maxWidth: '480px', width: '100%', background: 'rgba(17, 24, 39, 0.55)',
         borderRadius: '18px', border: '1px solid rgba(255, 255, 255, 0.08)',
@@ -109,21 +143,21 @@ const ResetPasswordPage = () => {
         backdropFilter: 'blur(8px)', overflow: 'hidden', zIndex: 10, position: 'relative'
       }}>
         
-        {/* Header - matching LoginPage header styling */}
+        {/* Header */}
         <div style={{
           background: 'linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02))',
           color: '#e5e7eb', padding: '36px 40px', textAlign: 'center',
           borderBottom: '1px solid rgba(255,255,255,0.06)'
         }}>
           <h1 style={{ fontSize: '2.5rem', marginBottom: '10px', fontWeight: '700', color: '#e5e7eb' }}>
-            Forgot Your Password?
+            Reset Your Password
           </h1>
           <p style={{ fontSize: '1.1rem', opacity: 0.9, color: '#22c55e', fontWeight: '600' }}>
-            Enter your email address and we'll send you a password reset link
+            Enter your new password below
           </p>
         </div>
         
-        {/* Form Container - matching LoginPage form-container styling */}
+        {/* Form Container */}
         <div style={{ padding: '40px' }}>
           
           {error && (
@@ -146,16 +180,16 @@ const ResetPasswordPage = () => {
             </div>
           )}
           
-          <form onSubmit={handleRequestReset}>
+          <form onSubmit={handlePasswordReset}>
             
-            {/* Email Field */}
-            <div style={{ marginBottom: '30px' }}>
+            {/* New Password Field */}
+            <div style={{ marginBottom: '25px' }}>
               <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#cbd5e1', fontSize: '14px' }}>
-                Email Address
+                New Password
               </label>
               <input
-                type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-                placeholder="Enter your email address"
+                type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Enter your new password"
                 style={{
                   width: '100%', padding: '16px 20px', fontSize: '16px',
                   background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)',
@@ -174,7 +208,55 @@ const ResetPasswordPage = () => {
               />
             </div>
             
-            {/* Submit Button - matching LoginPage submit-btn styling */}
+            {/* Confirm Password Field */}
+            <div style={{ marginBottom: '30px' }}>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#cbd5e1', fontSize: '14px' }}>
+                Confirm Password
+              </label>
+              <input
+                type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Confirm your new password"
+                style={{
+                  width: '100%', padding: '16px 20px', fontSize: '16px',
+                  background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)',
+                  borderRadius: '10px', color: '#e5e7eb', outline: 'none',
+                  transition: 'all 0.2s ease'
+                }}
+                onFocus={(e) => {
+                  e.target.style.borderColor = '#22c55e';
+                  e.target.style.boxShadow = '0 0 0 3px rgba(34, 197, 94, 0.1)';
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                  e.target.style.boxShadow = 'none';
+                }}
+                required
+              />
+            </div>
+            
+            {/* Password Requirements with Visual Indicators */}
+            <div style={{ marginBottom: '30px', padding: '16px', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '8px' }}>
+              <h4 style={{ margin: '0 0 12px 0', color: '#22c55e', fontSize: '14px' }}>Password Requirements:</h4>
+              <ul style={{ margin: 0, paddingLeft: '20px', color: '#9ca3af', fontSize: '13px', lineHeight: '1.5' }}>
+                <li style={{ color: newPassword.length >= 8 ? '#22c55e' : '#9ca3af' }}>
+                  {newPassword.length >= 8 ? '✓' : '○'} At least 8 characters
+                </li>
+                <li style={{ color: /[A-Z]/.test(newPassword) ? '#22c55e' : '#9ca3af' }}>
+                  {/[A-Z]/.test(newPassword) ? '✓' : '○'} One uppercase letter
+                </li>
+                <li style={{ color: /[a-z]/.test(newPassword) ? '#22c55e' : '#9ca3af' }}>
+                  {/[a-z]/.test(newPassword) ? '✓' : '○'} One lowercase letter
+                </li>
+                <li style={{ color: /\d/.test(newPassword) ? '#22c55e' : '#9ca3af' }}>
+                  {/\d/.test(newPassword) ? '✓' : '○'} One number
+                </li>
+                <li style={{ color: /[@$!%*?&]/.test(newPassword) ? '#22c55e' : '#9ca3af' }}>
+                  {/[@$!%*?&]/.test(newPassword) ? '✓' : '○'} One special character (@$!%*?&)
+                </li>
+              </ul>
+            </div>
+            
+            {/* Submit Button */}
             <button
               type="submit" disabled={loading}
               style={{
@@ -204,9 +286,9 @@ const ResetPasswordPage = () => {
                     borderTop: '2px solid #ffffff', borderRadius: '50%',
                     animation: 'spin 1s linear infinite'
                   }} />
-                  Sending Reset Link...
+                  Updating Password...
                 </div>
-              ) : 'Send Reset Link'}
+              ) : 'Reset Password'}
             </button>
           </form>
           
@@ -255,4 +337,4 @@ const ResetPasswordPage = () => {
   );
 };
 
-export default ResetPasswordPage;
+export default ResetPasswordConfirmPage;

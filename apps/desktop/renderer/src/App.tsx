@@ -16,6 +16,7 @@ import CanvasPage from './CanvasPage';
 import RealtimeTestPage from './pages/realtime-test';
 import LoginPage from './pages/LoginPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
+import ResetPasswordConfirmPage from './pages/ResetPasswordConfirmPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import WelcomeScreen from './components/WelcomeScreen';
 import { ThemeProvider, ThemeContext } from './ThemeContext';
@@ -383,7 +384,7 @@ const AppContent = () => {
           {/* Public routes */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
-        <Route path="/reset-password-confirm" element={<ResetPasswordPage />} />
+        <Route path="/reset-password-confirm" element={<ResetPasswordConfirmPage />} />
           
           {/* Protected routes */}
           <Route path="/" element={<ProtectedRoute><Dashboard events={events} /></ProtectedRoute>} />
