@@ -46,7 +46,7 @@
 }
 
 .sidebarOverlay.sidebarClosed .logo {
-    display: block;
+    display: block !important;
     writing-mode: vertical-rl;
     text-orientation: mixed;
     transform: rotate(180deg);
@@ -59,17 +59,10 @@
     cursor: pointer;
     background: rgba(45, 45, 45, 0.9);
     backdrop-filter: blur(10px);
+    z-index: 10000;
 }
 
 .sidebarOverlay.sidebarClosed > *:not(.logo) {
-    display: none;
-}
-
-.sidebarOverlay.sidebarClosed .logo {
-    display: none; /* Hide the logo when collapsed */
-}
-
-.sidebarOverlay.sidebarClosed > * {
     display: none;
 }
 
