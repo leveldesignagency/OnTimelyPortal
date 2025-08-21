@@ -8,6 +8,7 @@ interface WelcomeScreenProps {
 const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onComplete, isDark }) => {
   const [currentStep, setCurrentStep] = useState(0);
   const [isVisible, setIsVisible] = useState(true);
+  const [isTransitioning, setIsTransitioning] = useState(false);
 
   const steps = [
     {
@@ -47,33 +48,22 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onComplete, isDark }) => 
     }
   ];
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (currentStep < steps.length - 1) {
-        setCurrentStep(currentStep + 1);
-      } else {
-        // Final step - wait a bit then complete
-        setTimeout(() => {
-          setIsVisible(false);
-          setTimeout(onComplete, 500); // Wait for fade out animation
-        }, 2000);
-      }
-    }, 3000); // 3 seconds per step
-
-    return () => clearTimeout(timer);
-  }, [currentStep, steps.length, onComplete]);
-
   const handleSkip = () => {
-    setIsVisible(false);
-    setTimeout(onComplete, 500);
+    setIsTransitioning(true);
+    setTimeout(() => {
+      onComplete(); // Call onComplete immediately for seamless transition
+    }, 400); // Shorter transition time
   };
 
   const handleNext = () => {
     if (currentStep < steps.length - 1) {
       setCurrentStep(currentStep + 1);
     } else {
-      setIsVisible(false);
-      setTimeout(onComplete, 500);
+      // Final step - user clicked "Get Started"
+      setIsTransitioning(true);
+      setTimeout(() => {
+        onComplete(); // Call onComplete immediately for seamless transition
+      }, 400); // Shorter transition time
     }
   };
 
@@ -98,7 +88,42 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onComplete, isDark }) => 
       transition: 'opacity 0.5s ease-out'
     }}>
       
-      {/* Main Container - matching forms.html styling */}
+      {/* Background Animation Elements */}
+      <div style={{
+        position: 'absolute',
+        top: '20%',
+        left: '10%',
+        width: 100,
+        height: 100,
+        background: 'rgba(34,197,94,0.1)',
+        borderRadius: '50%',
+        animation: 'float 6s ease-in-out infinite',
+        zIndex: -1
+      }} />
+      <div style={{
+        position: 'absolute',
+        bottom: '20%',
+        right: '10%',
+        width: 150,
+        height: 150,
+        background: 'rgba(59,130,246,0.1)',
+        borderRadius: '50%',
+        animation: 'float 8s ease-in-out infinite reverse',
+        zIndex: -1
+      }} />
+      <div style={{
+        position: 'absolute',
+        top: '60%',
+        left: '20%',
+        width: 80,
+        height: 80,
+        background: 'rgba(139,92,246,0.1)',
+        borderRadius: '50%',
+        animation: 'float 7s ease-in-out infinite',
+        zIndex: -1
+      }} />
+
+      {/* Main Container - Glassmorphic design matching forms.html */}
       <div style={{
         maxWidth: '880px',
         width: '100%',
@@ -107,7 +132,13 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onComplete, isDark }) => 
         border: '1px solid rgba(255, 255, 255, 0.08)',
         boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04), 0 8px 30px rgba(0,0,0,0.45)',
         backdropFilter: 'blur(8px)',
-        overflow: 'hidden'
+        overflow: 'hidden',
+        zIndex: 10,
+        position: 'relative',
+        transform: isTransitioning ? 'scale(0.9) translateY(30px) rotateX(10deg)' : 'scale(1) translateY(0) rotateX(0deg)',
+        opacity: isTransitioning ? 0 : 1,
+        transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+        filter: isTransitioning ? 'blur(2px)' : 'blur(0px)'
       }}>
         
         {/* Header - matching forms.html header styling */}
@@ -133,7 +164,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onComplete, isDark }) => 
           <h1 style={{
             fontSize: '2.5rem',
             marginBottom: '10px',
-            fontWeight: 700,
+            fontWeight: '700',
             color: '#e5e7eb'
           }}>
             {steps[currentStep].title}
@@ -144,7 +175,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onComplete, isDark }) => 
             fontSize: '1.1rem',
             opacity: 0.9,
             color: steps[currentStep].color,
-            fontWeight: 600
+            fontWeight: '600'
           }}>
             {steps[currentStep].subtitle}
           </p>
@@ -276,41 +307,6 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onComplete, isDark }) => 
           </div>
         </div>
       </div>
-
-      {/* Background Animation Elements */}
-      <div style={{
-        position: 'absolute',
-        top: '20%',
-        left: '10%',
-        width: 100,
-        height: 100,
-        background: 'rgba(34,197,94,0.1)',
-        borderRadius: '50%',
-        animation: 'float 6s ease-in-out infinite',
-        zIndex: -1
-      }} />
-      <div style={{
-        position: 'absolute',
-        bottom: '20%',
-        right: '10%',
-        width: 150,
-        height: 150,
-        background: 'rgba(59,130,246,0.1)',
-        borderRadius: '50%',
-        animation: 'float 8s ease-in-out infinite reverse',
-        zIndex: -1
-      }} />
-      <div style={{
-        position: 'absolute',
-        top: '60%',
-        left: '20%',
-        width: 80,
-        height: 80,
-        background: 'rgba(139,92,246,0.1)',
-        borderRadius: '50%',
-        animation: 'float 7s ease-in-out infinite',
-        zIndex: -1
-      }} />
 
       <style>{`
         @keyframes bounceIn {
