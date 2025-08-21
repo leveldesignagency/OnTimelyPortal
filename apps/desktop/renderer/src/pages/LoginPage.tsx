@@ -270,7 +270,7 @@ const LoginPage = () => {
                 marginTop: '8px' 
               }}>
                 <a
-                  href="https://ontimely.co.uk/reset-password"
+                  href="https://dashboard.ontimely.co.uk/reset-password"
                   target="_blank"
                   rel="noopener noreferrer"
                   style={{

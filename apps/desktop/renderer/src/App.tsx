@@ -15,6 +15,7 @@ import CalendarPage from './CalendarPage';
 import CanvasPage from './CanvasPage';
 import RealtimeTestPage from './pages/realtime-test';
 import LoginPage from './pages/LoginPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import WelcomeScreen from './components/WelcomeScreen';
 import { ThemeProvider, ThemeContext } from './ThemeContext';
@@ -50,6 +51,7 @@ const AppContent = () => {
   const [isSidebarOpen, setSidebarOpen] = useState(true);
   const isTeamsPage = location.pathname.startsWith('/teams');
   const isLoginPage = location.pathname === '/login';
+  const isResetPasswordPage = location.pathname === '/reset-password';
   
   // Check if this is the first time opening the desktop app
   useEffect(() => {
@@ -62,14 +64,14 @@ const AppContent = () => {
   // Clear cached authentication on app startup (especially important for Electron builds)
   useEffect(() => {
     const clearAuthOnStartup = async () => {
-      // Only clear auth if we're not already on the login page
-      if (!isLoginPage) {
+      // Only clear auth if we're not already on the login or reset password page
+      if (!isLoginPage && !isResetPasswordPage) {
         await clearCachedAuth();
       }
     };
     
     clearAuthOnStartup();
-  }, [isLoginPage]);
+  }, [isLoginPage, isResetPasswordPage]);
   
   // Check authentication status
   useEffect(() => {
@@ -335,12 +337,12 @@ const AppContent = () => {
     );
   }
   
-  // If not authenticated and not on login page, redirect to login
-  if (!isAuthenticated && !isLoginPage) {
+  // If not authenticated and not on login or reset password page, redirect to login
+  if (!isAuthenticated && !isLoginPage && !isResetPasswordPage) {
     return <Navigate to="/login" replace />;
   }
   
-  if (error && !isLoginPage) {
+  if (error && !isLoginPage && !isResetPasswordPage) {
     return <div style={{ padding: 64, color: isDark ? '#ff6b6b' : 'red', fontFamily: 'Roboto, Arial, system-ui, sans-serif' }}>{error}</div>;
   }
 
@@ -352,14 +354,14 @@ const AppContent = () => {
     transition: 'margin-left 0.3s ease',
     // For teams pages: small margin for collapsed overlay sidebar
     // For other pages: account for fixed sidebar width
-    marginLeft: isLoginPage ? '0' : (isTeamsPage ? '50px' : '250px'),
+    marginLeft: (isLoginPage || isResetPasswordPage) ? '0' : (isTeamsPage ? '50px' : '250px'),
     height: '100vh',
     overflowY: 'auto',
   }
 
   return (
     <div style={{ display: 'flex', position: 'relative', height: '100vh', overflow: 'hidden' }}>
-      {!isLoginPage && (
+      {!isLoginPage && !isResetPasswordPage && (
         <Sidebar 
           events={events}
           isOverlay={isTeamsPage} 
@@ -369,8 +371,9 @@ const AppContent = () => {
       )}
       <main style={mainContentStyle}>
         <Routes>
-          {/* Public route - Login */}
+          {/* Public routes */}
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
           
           {/* Protected routes */}
           <Route path="/" element={<ProtectedRoute><Dashboard events={events} /></ProtectedRoute>} />
