@@ -19,8 +19,22 @@ const ResetPasswordPage = () => {
   // Check if we're in reset mode (have access token in URL)
   useEffect(() => {
     const hash = location.hash;
+    console.log('ResetPasswordPage - URL hash:', hash);
+    
     if (hash && hash.includes('access_token')) {
+      console.log('ResetPasswordPage - Access token detected, switching to reset mode');
       setIsResetMode(true);
+      
+      // Extract access token and set it in Supabase session
+      const accessToken = hash.match(/access_token=([^&]+)/)?.[1];
+      if (accessToken) {
+        console.log('ResetPasswordPage - Setting access token in session');
+        // Set the session manually for password reset
+        supabase.auth.setSession({ access_token: accessToken, refresh_token: '' });
+      }
+    } else {
+      console.log('ResetPasswordPage - No access token, staying in request mode');
+      setIsResetMode(false);
     }
   }, [location]);
 
@@ -40,16 +54,22 @@ const ResetPasswordPage = () => {
     setError('');
 
     try {
+      console.log('ResetPasswordPage - Sending reset email to:', email);
+      
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: 'https://dashboard.ontimely.co.uk/reset-password'
       });
 
       if (error) {
+        console.error('ResetPasswordPage - Reset email error:', error);
         setError(error.message);
       } else {
-        setSuccess('Password reset link sent! Check your email.');
+        console.log('ResetPasswordPage - Reset email sent successfully');
+        setSuccess('Password reset link sent! Check your email and click the link to reset your password.');
+        setEmail(''); // Clear email field after success
       }
     } catch (error) {
+      console.error('ResetPasswordPage - Unexpected error sending reset email:', error);
       setError('Failed to send reset link. Please try again.');
     } finally {
       setLoading(false);
@@ -67,24 +87,43 @@ const ResetPasswordPage = () => {
       return;
     }
 
-    if (newPassword.length < 8) {
-      setError('Password must be at least 8 characters long');
+    // Enhanced password validation
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+    if (!passwordRegex.test(newPassword)) {
+      setError('Password must meet all requirements: 8+ characters, uppercase, lowercase, number, and special character');
       setLoading(false);
       return;
     }
 
     try {
+      // First, ensure we have a valid session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        setError('No valid session found. Please use the reset link from your email.');
+        setLoading(false);
+        return;
+      }
+
+      console.log('ResetPasswordPage - Updating password for user:', session.user.email);
+      
       const { error } = await supabase.auth.updateUser({
         password: newPassword
       });
 
       if (error) {
+        console.error('ResetPasswordPage - Password update error:', error);
         setError(error.message);
       } else {
+        console.log('ResetPasswordPage - Password updated successfully');
         setSuccess('Password updated successfully! Redirecting to login...');
+        
+        // Sign out the user after password reset
+        await supabase.auth.signOut();
+        
         setTimeout(() => navigate('/login'), 2000);
       }
     } catch (error) {
+      console.error('ResetPasswordPage - Unexpected error:', error);
       setError('Failed to update password. Please try again.');
     } finally {
       setLoading(false);
@@ -237,15 +276,25 @@ const ResetPasswordPage = () => {
                 />
               </div>
               
-              {/* Password Requirements */}
+              {/* Password Requirements with Visual Indicators */}
               <div style={{ marginBottom: '30px', padding: '16px', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '8px' }}>
                 <h4 style={{ margin: '0 0 12px 0', color: '#22c55e', fontSize: '14px' }}>Password Requirements:</h4>
                 <ul style={{ margin: 0, paddingLeft: '20px', color: '#9ca3af', fontSize: '13px', lineHeight: '1.5' }}>
-                  <li>At least 8 characters</li>
-                  <li>One uppercase letter</li>
-                  <li>One lowercase letter</li>
-                  <li>One number</li>
-                  <li>One special character</li>
+                  <li style={{ color: newPassword.length >= 8 ? '#22c55e' : '#9ca3af' }}>
+                    {newPassword.length >= 8 ? '✓' : '○'} At least 8 characters
+                  </li>
+                  <li style={{ color: /[A-Z]/.test(newPassword) ? '#22c55e' : '#9ca3af' }}>
+                    {/[A-Z]/.test(newPassword) ? '✓' : '○'} One uppercase letter
+                  </li>
+                  <li style={{ color: /[a-z]/.test(newPassword) ? '#22c55e' : '#9ca3af' }}>
+                    {/[a-z]/.test(newPassword) ? '✓' : '○'} One lowercase letter
+                  </li>
+                  <li style={{ color: /\d/.test(newPassword) ? '#22c55e' : '#9ca3af' }}>
+                    {/\d/.test(newPassword) ? '✓' : '○'} One number
+                  </li>
+                  <li style={{ color: /[@$!%*?&]/.test(newPassword) ? '#22c55e' : '#9ca3af' }}>
+                    {/[@$!%*?&]/.test(newPassword) ? '✓' : '○'} One special character (@$!%*?&)
+                  </li>
                 </ul>
               </div>
               
