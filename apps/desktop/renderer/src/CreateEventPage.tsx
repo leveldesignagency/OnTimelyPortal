@@ -1,6 +1,6 @@
 import React, { useState, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { SupabaseEvent, insertActivityLog, assignTeamToEvent } from './lib/supabase';
+import { Event, insertActivityLog, assignTeamToEvent } from './lib/supabase';
 import { ThemeContext } from './ThemeContext';
 import ThemedIcon from './components/ThemedIcon';
 import { getCurrentUser } from './lib/auth';
@@ -326,7 +326,7 @@ function GlassTimeZoneDropdown({ value, onChange, colors, isDark }: GlassTimeZon
 }
 
 interface CreateEventPageProps {
-  onCreate: (event: Omit<SupabaseEvent, 'id' | 'created_at' | 'updated_at'>) => Promise<SupabaseEvent>;
+  onCreate: (event: Omit<Event, 'id' | 'created_at' | 'updated_at'>) => Promise<Event>;
 }
 
 export default function CreateEventPage({ onCreate }: CreateEventPageProps) {
@@ -337,6 +337,8 @@ export default function CreateEventPage({ onCreate }: CreateEventPageProps) {
   const [name, setName] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
+  const [startTime, setStartTime] = useState('');
+  const [endTime, setEndTime] = useState('');
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState('');
   const [timeZone, setTimeZone] = useState('UTC');
@@ -403,10 +405,12 @@ export default function CreateEventPage({ onCreate }: CreateEventPageProps) {
         return;
       }
       console.log('Creating event with user:', currentUser);
-      const eventData: Omit<SupabaseEvent, 'id' | 'created_at' | 'updated_at'> = {
+      const eventData: Omit<Event, 'id' | 'created_at' | 'updated_at'> = {
         name,
         from,
         to,
+        start_time: startTime || undefined,
+        end_time: endTime || undefined,
         status: 'Upcoming',
         description: description || undefined,
         location: location || undefined,
@@ -625,7 +629,7 @@ export default function CreateEventPage({ onCreate }: CreateEventPageProps) {
           </div>
           {/* DATES/DURATION label - white, no asterisk */}
           <label style={{ color: colors.text, fontWeight: 600, fontSize: 15, marginBottom: 8, display: 'block', marginTop: 12, alignSelf: 'flex-start' }} htmlFor="event-from">DATES/DURATION</label>
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 40, gap: 20, width: '100%' }}>
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 20, gap: 20, width: '100%' }}>
           <CustomDatePicker
             value={from}
             onChange={setFrom}
@@ -643,6 +647,66 @@ export default function CreateEventPage({ onCreate }: CreateEventPageProps) {
             colors={colors}
             required
           />
+        </div>
+        
+        {/* Time Fields */}
+        <div style={{ marginBottom: 40 }}>
+          <label style={{ color: colors.text, fontWeight: 600, fontSize: 15, marginBottom: 12, display: 'block' }}>
+            EVENT TIMES
+          </label>
+          <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+            {/* Start Time */}
+            <div style={{ flex: 1, minWidth: '200px' }}>
+              <label style={{ color: colors.textSecondary, fontSize: 13, marginBottom: 6, display: 'block' }}>
+                Start Time
+              </label>
+              <input
+                type="time"
+                value={startTime}
+                onChange={e => setStartTime(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  borderRadius: '8px',
+                  border: `2px solid ${colors.border}`,
+                  background: colors.inputBg,
+                  color: colors.text,
+                  fontSize: '16px',
+                  minHeight: '48px',
+                  boxSizing: 'border-box',
+                  transition: 'all 0.2s',
+                  backdropFilter: 'blur(10px)'
+                }}
+                placeholder="--:--"
+              />
+            </div>
+            
+            {/* End Time */}
+            <div style={{ flex: 1, minWidth: '200px' }}>
+              <label style={{ color: colors.textSecondary, fontSize: 13, marginBottom: 6, display: 'block' }}>
+                End Time
+              </label>
+              <input
+                type="time"
+                value={endTime}
+                onChange={e => setEndTime(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  borderRadius: '8px',
+                  border: `2px solid ${colors.border}`,
+                  background: colors.inputBg,
+                  color: colors.text,
+                  fontSize: '16px',
+                  minHeight: '48px',
+                  boxSizing: 'border-box',
+                  transition: 'all 0.2s',
+                  backdropFilter: 'blur(10px)'
+                }}
+                placeholder="--:--"
+              />
+            </div>
+          </div>
         </div>
         <button 
           type="submit" 
