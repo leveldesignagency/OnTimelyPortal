@@ -11,18 +11,14 @@ import QuestionModal from '../components/QuestionModuleModal';
 import ModuleManagementModal from '../components/ModuleManagementModal';
 import { DraggableAction } from '../components/DraggableAction';
 
-import { createClient } from '@supabase/supabase-js';
+
 import { getCurrentUser } from '../lib/auth';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
-const SERVICE_ROLE_KEY = import.meta.env.VITE_SERVICE_ROLE_KEY || '';
 
 // Debug logging
-console.log('🔧 Admin Supabase Config:');
+console.log('🔧 Supabase Config:');
 console.log('SUPABASE_URL:', SUPABASE_URL);
-console.log('SERVICE_ROLE_KEY:', SERVICE_ROLE_KEY ? `${SERVICE_ROLE_KEY.substring(0, 20)}...` : 'NOT SET');
-
-const adminSupabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY); // Use your service role key
 
 // Add email validation helper functions
 const isValidEmail = (email: string): boolean => {
