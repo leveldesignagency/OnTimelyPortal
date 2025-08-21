@@ -20,6 +20,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import WelcomeScreen from './components/WelcomeScreen';
 import { ThemeProvider, ThemeContext } from './ThemeContext';
 import { getCurrentUser, getCompanyEvents, clearCachedAuth } from './lib/auth';
+import { supabase } from './lib/supabase';
 import { getEvents, createEvent, Event, getUserTeamEvents } from './lib/supabase';
 import LinkItinerariesPage from './pages/LinkItinerariesPage';
 import AssignOverviewPage from './pages/AssignOverviewPage';
@@ -53,31 +54,19 @@ const AppContent = () => {
   const isLoginPage = location.pathname === '/login';
   const isResetPasswordPage = location.pathname === '/reset-password';
   
-  // Check if this is the first time opening the desktop app
+  // TEMPORARILY DISABLED: Welcome screen to fix authentication issues
   useEffect(() => {
-    const hasSeenWelcome = localStorage.getItem('timely-desktop-welcome-seen');
-    if (hasSeenWelcome) {
-      setShowWelcome(false);
-    }
+    setShowWelcome(false);
   }, []);
   
-  // Clear cached authentication on app startup (especially important for Electron builds)
-  useEffect(() => {
-    const clearAuthOnStartup = async () => {
-      // Only clear auth if we're not already on the login or reset password page
-      if (!isLoginPage && !isResetPasswordPage) {
-        await clearCachedAuth();
-      }
-    };
-    
-    clearAuthOnStartup();
-  }, [isLoginPage, isResetPasswordPage]);
+  // REMOVED: clearCachedAuth on startup - this was breaking authentication
+  // Users should stay logged in unless they explicitly log out
   
-  // Check authentication status
+  // Simple authentication check
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const user = await getCurrentUser();
+        const { data: { user } } = await supabase.auth.getUser();
         setIsAuthenticated(!!user);
         setLoading(false);
       } catch (error) {

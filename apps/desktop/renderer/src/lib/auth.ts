@@ -100,32 +100,18 @@ export const logout = async (): Promise<void> => {
   }
 }
 
-// New async getCurrentUser implementation
+// Restored working getCurrentUser - check Supabase session
 export const getCurrentUser = async (): Promise<User | null> => {
   try {
-    // Check localStorage first for our custom session
-    const cachedUser = localStorage.getItem('currentUser');
-    if (cachedUser) {
-      try {
-        const user = JSON.parse(cachedUser);
-        // Validate the cached user has required fields
-        if (user && user.id && user.email && user.company_id) {
-          return user;
-        }
-      } catch (e) {
-        // Invalid JSON, clear it
-        localStorage.removeItem('currentUser');
-      }
-    }
-    
-    // If no valid cached user, check Supabase auth
+    // Check Supabase auth session
     const { data: { user: authUser } } = await supabase.auth.getUser();
     if (!authUser || !authUser.email) return null;
     
+    // If we have a Supabase user, fetch their profile
     const { data: userProfile, error } = await supabase
       .from('users')
       .select('*')
-      .eq('email', authUser.email)  // Match by email instead of ID
+      .eq('email', authUser.email)
       .single();
       
     if (error || !userProfile) {
