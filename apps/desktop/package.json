@@ -5,18 +5,15 @@
 
   "main": "dist-electron/main.js",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
-    "build:prod": "cd renderer && npm run build:electron && cd .. && tsc main.ts --outDir dist-electron --target es2020 --module commonjs",
+    "dev": "cd renderer && npm run dev:web",
+    "build": "npm run build:web",
+    "build:web": "cd renderer && npm run build:web",
+    "build:electron": "cd renderer && npm run build:electron && cd .. && tsc main.ts --outDir dist-electron --target es2020 --module commonjs",
+    "build:desktop": "npm run build:electron && electron-builder",
+    "dmg": "npm run build:electron && electron-builder --mac",
+    "clean": "rm -rf dist dist-electron node_modules package-lock.json && cd renderer && rm -rf dist node_modules package-lock.json",
     "lint": "eslint .",
-    "preview": "vite preview",
-    "electron": "electron .",
-    "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:5173 && electron .\"",
-    "electron:build": "npm run build:prod && electron-builder",
-    "electron:pack": "npm run build:prod && electron-builder --dir",
-    "electron:dist": "npm run build:prod && electron-builder",
-    "dmg": "npm run build:prod && electron-builder --mac",
-    "clean": "rm -rf dist dist-electron node_modules package-lock.json"
+    "preview": "cd renderer && npm run preview"
   },
   "build": {
     "appId": "com.timely.app",
