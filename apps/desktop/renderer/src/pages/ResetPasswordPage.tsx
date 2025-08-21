@@ -16,24 +16,28 @@ const ResetPasswordPage = () => {
   const { theme } = useContext(ThemeContext);
   const isDark = theme === 'dark';
 
-  // Check if we're in reset mode (have access token in URL)
+  // Check if we're in reset mode (have access token in URL or on confirm route)
   useEffect(() => {
     const hash = location.hash;
-    console.log('ResetPasswordPage - URL hash:', hash);
+    const pathname = location.pathname;
+    console.log('ResetPasswordPage - URL pathname:', pathname, 'hash:', hash);
     
-    if (hash && hash.includes('access_token')) {
-      console.log('ResetPasswordPage - Access token detected, switching to reset mode');
+    // Check if we're on the confirm route OR have access token
+    if (pathname === '/reset-password-confirm' || (hash && hash.includes('access_token'))) {
+      console.log('ResetPasswordPage - Password reset mode detected');
       setIsResetMode(true);
       
       // Extract access token and set it in Supabase session
-      const accessToken = hash.match(/access_token=([^&]+)/)?.[1];
-      if (accessToken) {
-        console.log('ResetPasswordPage - Setting access token in session');
-        // Set the session manually for password reset
-        supabase.auth.setSession({ access_token: accessToken, refresh_token: '' });
+      if (hash && hash.includes('access_token')) {
+        const accessToken = hash.match(/access_token=([^&]+)/)?.[1];
+        if (accessToken) {
+          console.log('ResetPasswordPage - Setting access token in session');
+          // Set the session manually for password reset
+          supabase.auth.setSession({ access_token: accessToken, refresh_token: '' });
+        }
       }
     } else {
-      console.log('ResetPasswordPage - No access token, staying in request mode');
+      console.log('ResetPasswordPage - Email request mode');
       setIsResetMode(false);
     }
   }, [location]);
@@ -57,7 +61,7 @@ const ResetPasswordPage = () => {
       console.log('ResetPasswordPage - Sending reset email to:', email);
       
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: 'https://dashboard.ontimely.co.uk/reset-password'
+        redirectTo: 'https://dashboard.ontimely.co.uk/reset-password-confirm'
       });
 
       if (error) {

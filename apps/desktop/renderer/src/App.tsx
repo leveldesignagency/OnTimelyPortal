@@ -383,6 +383,7 @@ const AppContent = () => {
           {/* Public routes */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/reset-password-confirm" element={<ResetPasswordPage />} />
           
           {/* Protected routes */}
           <Route path="/" element={<ProtectedRoute><Dashboard events={events} /></ProtectedRoute>} />
