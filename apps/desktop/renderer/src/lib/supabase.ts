@@ -1,4 +1,3 @@
-import { createClient } from '@supabase/supabase-js'
 import { getCurrentUser } from './auth'
 
 // Environment variables for Supabase configuration
@@ -10,38 +9,87 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing required environment variables: VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY')
 }
 
-// Create Supabase client with proper configuration for web environment
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    // Use browser storage for web builds
-    storage: typeof window !== 'undefined' ? window.localStorage : undefined,
-    // Use memory storage instead
-    storageKey: 'timely-auth',
-    // Auto refresh tokens
-    autoRefreshToken: true,
-    // Persist session across app restarts
-    persistSession: true,
-    // Detect session in URL
-    detectSessionInUrl: false
-  },
-  // Real-time configuration
-  realtime: {
-    params: {
-      eventsPerSecond: 10
-    }
-  },
-  // Global configuration for browser compatibility
-  global: {
-    headers: {
-      'X-Client-Info': 'timely-web-app'
-    }
-  }
-})
+// Determine if we're in Electron or web environment
+const isElectron = typeof process !== 'undefined' && process.versions && process.versions.electron;
 
-// Keep the getSupabase function for cases where we need async initialization
+let supabaseInstance: any = null;
+
 export async function getSupabase() {
-  return supabase;
+  if (supabaseInstance) {
+    return supabaseInstance;
+  }
+
+  if (isElectron) {
+    // In Electron, use the bundled npm package
+    try {
+      const { createClient } = await import('@supabase/supabase-js');
+      supabaseInstance = createClient(supabaseUrl, supabaseAnonKey, {
+        auth: {
+          storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+          storageKey: 'timely-auth',
+          autoRefreshToken: true,
+          persistSession: true,
+          detectSessionInUrl: false
+        },
+        realtime: {
+          params: {
+            eventsPerSecond: 10
+          }
+        },
+        global: {
+          headers: {
+            'X-Client-Info': 'timely-electron-app'
+          }
+        }
+      });
+    } catch (error) {
+      console.error('Failed to import Supabase in Electron:', error);
+      throw error;
+    }
+  } else {
+    // In web browser, wait for CDN to load
+    if (typeof window === 'undefined') {
+      throw new Error('Supabase client can only be used in browser environment');
+    }
+
+    // Wait for Supabase to be available
+    if ((window as any).supabaseLoadPromise) {
+      await (window as any).supabaseLoadPromise;
+    }
+
+    if (!(window as any).supabase || !(window as any).supabase.createClient) {
+      throw new Error('Supabase failed to load from CDN');
+    }
+
+    supabaseInstance = (window as any).supabase.createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        storage: window.localStorage,
+        storageKey: 'timely-auth',
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: false
+      },
+      realtime: {
+        params: {
+          eventsPerSecond: 10
+        }
+      },
+      global: {
+        headers: {
+          'X-Client-Info': 'timely-web-app'
+        }
+      }
+    });
+
+    // Expose supabase to window for debugging
+    (window as any).supabase = supabaseInstance;
+  }
+  
+  return supabaseInstance;
 }
+
+// For backward compatibility, export a promise that resolves to the client
+export const supabase = getSupabase();
 
 // Types for your database tables
 export type SupabaseEvent = {
