@@ -216,12 +216,15 @@ export default function CalendarPage() {
   const [showAddEvent, setShowAddEvent] = useState(false);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [externalEvents, setExternalEvents] = useState<CalendarEvent[]>([]);
+  const [databaseEvents, setDatabaseEvents] = useState<CalendarEvent[]>([]);
   const [activeFilter, setActiveFilter] = useState('Calendar');
   const [newEventTitle, setNewEventTitle] = useState('');
   const [newEventType, setNewEventType] = useState('Meeting');
+  const [newEventDate, setNewEventDate] = useState<Date | null>(null);
   const [newEventTime, setNewEventTime] = useState('');
   const [newEventEndTime, setNewEventEndTime] = useState('');
   const [showTypeDropdown, setShowTypeDropdown] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [isGoogleConnected, setIsGoogleConnected] = useState(false);
   const [isOutlookConnected, setIsOutlookConnected] = useState(false);
   const [showDisconnectConfirm, setShowDisconnectConfirm] = useState<'google' | 'outlook' | null>(null);
@@ -255,6 +258,7 @@ export default function CalendarPage() {
 
   useEffect(() => {
     loadExternalEvents();
+    loadDatabaseEvents();
   }, []);
 
   useEffect(() => {
@@ -369,6 +373,75 @@ export default function CalendarPage() {
       console.log(`Total external events loaded: ${allEvents.length}`);
     } catch (error) {
       console.error('Failed to load external events:', error);
+    }
+  };
+
+  const loadDatabaseEvents = async () => {
+    try {
+      console.log('Loading database events...');
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        console.log('No authenticated user found');
+        return;
+      }
+
+      // Get user profile to get company_id
+      const { data: userProfile } = await supabase
+        .from('user_profiles')
+        .select('company_id')
+        .eq('id', user.id)
+        .single();
+
+      if (!userProfile?.company_id) {
+        console.log('No company_id found for user');
+        return;
+      }
+
+      // Load events from the events table
+      const { data: eventsData, error } = await supabase
+        .from('events')
+        .select(`
+          id,
+          name,
+          from,
+          to,
+          start_time,
+          end_time,
+          status,
+          description,
+          location,
+          created_at
+        `)
+        .eq('company_id', userProfile.company_id)
+        .gte('from', new Date().toISOString().split('T')[0]) // Only future events
+        .order('from', { ascending: true });
+
+      if (error) {
+        console.error('Error loading database events:', error);
+        return;
+      }
+
+      console.log(`Loaded ${eventsData.length} database events`);
+
+      // Convert database events to CalendarEvent format
+      const convertedEvents: CalendarEvent[] = eventsData.map(event => ({
+        id: `db_${event.id}`,
+        title: event.name,
+        type: 'Event',
+        startDate: new Date(event.from),
+        endDate: new Date(event.to),
+        startTime: event.start_time,
+        endTime: event.end_time,
+        status: event.status,
+        color: '#10b981', // Green color for database events
+        attendees: []
+      }));
+
+      setDatabaseEvents(convertedEvents);
+      console.log(`Converted ${convertedEvents.length} database events`);
+    } catch (error) {
+      console.error('Failed to load database events:', error);
     }
   };
 
@@ -706,19 +779,19 @@ Check the browser console for detailed diagnostic information.`);
   const getEventsForDate = (date: Date) => {
     if (!date) return [];
     const dateStr = toYYYYMMDD(date);
-    return [...events, ...externalEvents].filter(event => 
+    return [...events, ...externalEvents, ...databaseEvents].filter(event => 
       toYYYYMMDD(event.startDate) === dateStr
     );
   };
 
   const filteredEvents = useMemo(() => {
-    const allEvents = [...events, ...externalEvents];
+    const allEvents = [...events, ...externalEvents, ...databaseEvents];
     if (activeFilter === 'Calendar') return allEvents;
     return allEvents.filter(event => event.type === activeFilter);
-  }, [events, externalEvents, activeFilter]);
+  }, [events, externalEvents, databaseEvents, activeFilter]);
 
   const todaysEvents = getEventsForDate(new Date());
-  const upcomingEvents = [...events, ...externalEvents]
+  const upcomingEvents = [...events, ...externalEvents, ...databaseEvents]
     .filter(event => event.startDate > new Date())
     .sort((a, b) => a.startDate.getTime() - b.startDate.getTime())
     .slice(0, 5);
@@ -789,7 +862,10 @@ Check the browser console for detailed diagnostic information.`);
         </div>
         
         <button
-          onClick={() => setShowAddEvent(true)}
+          onClick={() => {
+            setShowAddEvent(true);
+            setNewEventDate(null); // Clear date so date pickers are shown
+          }}
           style={{
             background: '#10b981',
             padding: '12px 16px',
@@ -1266,6 +1342,7 @@ Check the browser console for detailed diagnostic information.`);
                     onDoubleClick={() => {
                       if (date) {
                         setSelectedDate(date);
+                        setNewEventDate(date);
                         setShowAddEvent(true);
                       }
                     }}
@@ -1454,6 +1531,55 @@ Check the browser console for detailed diagnostic information.`);
               />
             </div>
 
+            {/* Event Date Selection */}
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ 
+                display: 'block', 
+                marginBottom: '8px', 
+                fontSize: '14px', 
+                fontWeight: '500',
+                color: colors.text 
+              }}>
+                Event Date
+              </label>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <input
+                  type="date"
+                  value={newEventDate ? newEventDate.toISOString().split('T')[0] : ''}
+                  onChange={(e) => {
+                    const date = e.target.value ? new Date(e.target.value) : null;
+                    setNewEventDate(date);
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '12px',
+                    borderRadius: '8px',
+                    border: `1px solid ${colors.border}`,
+                    background: colors.hover,
+                    color: colors.text,
+                    fontSize: '14px',
+                    outline: 'none'
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setNewEventDate(new Date())}
+                  style={{
+                    padding: '12px 16px',
+                    borderRadius: '8px',
+                    border: `1px solid ${colors.border}`,
+                    background: colors.hover,
+                    color: colors.text,
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  Today
+                </button>
+              </div>
+            </div>
+
             {/* Event Type */}
             <div style={{ marginBottom: '20px', position: 'relative' }}>
               <label style={{ 
@@ -1501,14 +1627,13 @@ Check the browser console for detailed diagnostic information.`);
                   left: 0,
                   right: 0,
                   zIndex: 1000,
-                  background: colors.hover,
+                  background: isDark ? '#2a2a2a' : '#ffffff',
                   border: `1px solid ${colors.border}`,
                   borderRadius: '8px',
                   marginTop: '4px',
                   boxShadow: isDark 
                     ? '0 8px 32px rgba(0, 0, 0, 0.3)' 
-                    : '0 8px 32px rgba(0, 0, 0, 0.1)',
-                  backdropFilter: 'blur(20px)'
+                    : '0 8px 32px rgba(0, 0, 0, 0.1)'
                 }}>
                   {eventTypes.map(type => (
                     <div
@@ -1527,7 +1652,7 @@ Check the browser console for detailed diagnostic information.`);
                         transition: 'background 0.2s ease'
                       }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.background = isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
+                        e.currentTarget.style.background = isDark ? '#3a3a3a' : '#f0f0f0';
                       }}
                       onMouseLeave={(e) => {
                         e.currentTarget.style.background = 'transparent';
@@ -1588,6 +1713,7 @@ Check the browser console for detailed diagnostic information.`);
                   setShowAddEvent(false);
                   setNewEventTitle('');
                   setNewEventType('Meeting');
+                  setNewEventDate(null);
                   setNewEventTime('');
                   setNewEventEndTime('');
                 }}
@@ -1607,13 +1733,14 @@ Check the browser console for detailed diagnostic information.`);
               
               <button
                 onClick={() => {
-                  if (newEventTitle && newEventTime && newEventEndTime) {
+                  if (newEventTitle && newEventTime && newEventEndTime && (newEventDate || selectedDate)) {
+                    const eventDate = newEventDate || selectedDate;
                     const newEvent: CalendarEvent = {
                       id: `local_${Date.now()}`,
                       title: newEventTitle,
                       type: newEventType as any,
-                      startDate: selectedDate,
-                      endDate: selectedDate,
+                      startDate: eventDate,
+                      endDate: eventDate,
                       startTime: newEventTime,
                       endTime: newEventEndTime,
                       status: 'Upcoming',
@@ -1623,6 +1750,7 @@ Check the browser console for detailed diagnostic information.`);
                     setShowAddEvent(false);
                     setNewEventTitle('');
                     setNewEventType('Meeting');
+                    setNewEventDate(null);
                     setNewEventTime('');
                     setNewEventEndTime('');
                   }
