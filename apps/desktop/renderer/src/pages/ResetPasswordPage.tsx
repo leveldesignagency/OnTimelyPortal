@@ -7,7 +7,8 @@ const ResetPasswordPage = () => {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  const [success, setSuccess] = useState(false);
+  const [countdown, setCountdown] = useState(30);
   const navigate = useNavigate();
   const { theme } = useContext(ThemeContext);
   const isDark = theme === 'dark';
@@ -16,6 +17,14 @@ const ResetPasswordPage = () => {
   useEffect(() => {
     console.log('ResetPasswordPage - Email request mode only');
   }, []);
+
+  // Countdown timer for resend
+  useEffect(() => {
+    if (success && countdown > 0) {
+      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [success, countdown]);
 
   // Shimmer effect for background
   useEffect(() => {
@@ -44,7 +53,8 @@ const ResetPasswordPage = () => {
         setError(error.message);
       } else {
         console.log('ResetPasswordPage - Reset email sent successfully');
-        setSuccess('Password reset link sent! Check your email and click the link to reset your password.');
+        setSuccess(true);
+        setCountdown(30);
         setEmail(''); // Clear email field after success
       }
     } catch (error) {
@@ -53,6 +63,36 @@ const ResetPasswordPage = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleResend = async () => {
+    if (countdown > 0) return;
+    
+    setLoading(true);
+    setError('');
+    
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: 'https://dashboard.ontimely.co.uk/reset-password-confirm'
+      });
+
+      if (error) {
+        setError(error.message);
+      } else {
+        setCountdown(30);
+        setError('');
+      }
+    } catch (error) {
+      setError('Failed to send reset link. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBackToForm = () => {
+    setSuccess(false);
+    setError('');
+    setCountdown(30);
   };
 
   return (
@@ -139,89 +179,157 @@ const ResetPasswordPage = () => {
           {success && (
             <div style={{
               background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.3)',
-              borderRadius: '8px', padding: '12px', marginBottom: '20px',
-              color: '#86efac', fontSize: '14px'
+              borderRadius: '8px', padding: '20px', marginBottom: '20px',
+              textAlign: 'center'
             }}>
-              {success}
+              {/* Tick Animation */}
+              <div style={{
+                width: '60px', height: '60px', margin: '0 auto 16px',
+                background: 'rgba(34, 197, 94, 0.2)', borderRadius: '50%',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                animation: 'tickPulse 2s ease-in-out infinite'
+              }}>
+                <div style={{
+                  width: '24px', height: '12px', border: '3px solid #22c55e',
+                  borderTop: 'none', borderRight: 'none', transform: 'rotate(-45deg)',
+                  marginTop: '-2px'
+                }} />
+              </div>
+              
+              <h3 style={{ color: '#22c55e', margin: '0 0 8px 0', fontSize: '18px' }}>
+                Email Sent Successfully!
+              </h3>
+              <p style={{ color: '#86efac', margin: '0 0 16px 0', fontSize: '14px' }}>
+                Check your email and click the reset link to continue.
+              </p>
+              
+              {/* Countdown and Resend */}
+              <div style={{ marginBottom: '16px' }}>
+                {countdown > 0 ? (
+                  <p style={{ color: '#9ca3af', fontSize: '13px' }}>
+                    Resend available in {countdown} seconds
+                  </p>
+                ) : (
+                  <button
+                    onClick={handleResend}
+                    disabled={loading}
+                    style={{
+                      background: 'rgba(34, 197, 94, 0.2)', border: '1px solid rgba(34, 197, 94, 0.4)',
+                      color: '#22c55e', padding: '8px 16px', borderRadius: '6px',
+                      fontSize: '13px', cursor: 'pointer', transition: 'all 0.2s ease'
+                    }}
+                  >
+                    {loading ? 'Sending...' : 'Resend Link'}
+                  </button>
+                )}
+              </div>
+              
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+                <button
+                  onClick={handleBackToForm}
+                  style={{
+                    background: 'transparent', border: '1px solid rgba(255, 255, 255, 0.2)',
+                    color: '#9ca3af', padding: '8px 16px', borderRadius: '6px',
+                    fontSize: '13px', cursor: 'pointer', transition: 'all 0.2s ease'
+                  }}
+                >
+                  Try Different Email
+                </button>
+                <button
+                  onClick={() => navigate('/login')}
+                  style={{
+                    background: 'rgba(34, 197, 94, 0.2)', border: '1px solid rgba(34, 197, 94, 0.4)',
+                    color: '#22c55e', padding: '8px 16px', borderRadius: '6px',
+                    fontSize: '13px', cursor: 'pointer', transition: 'all 0.2s ease'
+                  }}
+                >
+                  Back to Login
+                </button>
+              </div>
             </div>
           )}
           
-          <form onSubmit={handleRequestReset}>
-            
-            {/* Email Field */}
-            <div style={{ marginBottom: '30px' }}>
-              <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#cbd5e1', fontSize: '14px' }}>
-                Email Address
-              </label>
-              <input
-                type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-                placeholder="Enter your email address"
+          {!success && (
+            <form onSubmit={handleRequestReset}>
+              
+              {/* Email Field */}
+              <div style={{ marginBottom: '30px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#cbd5e1', fontSize: '14px' }}>
+                  Email Address
+                </label>
+                <input
+                  type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                  placeholder="Enter your email address"
+                  style={{
+                    width: '100%', padding: '16px 20px', fontSize: '16px',
+                    background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: '10px', color: '#e5e7eb', outline: 'none',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = '#22c55e';
+                    e.target.style.boxShadow = '0 0 0 3px rgba(34, 197, 94, 0.1)';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                    e.target.style.boxShadow = 'none';
+                  }}
+                  required
+                />
+              </div>
+              
+              {/* Submit Button - matching LoginPage submit-btn styling */}
+              <button
+                type="submit" disabled={loading}
                 style={{
-                  width: '100%', padding: '16px 20px', fontSize: '16px',
-                  background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)',
-                  borderRadius: '10px', color: '#e5e7eb', outline: 'none',
-                  transition: 'all 0.2s ease'
+                  background: loading ? 'rgba(255,255,255,0.1)' : 'linear-gradient(180deg, #22c55e, #16a34a)',
+                  color: loading ? 'rgba(255,255,255,0.6)' : '#0b1411',
+                  padding: '14px 28px', border: '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: '10px', fontSize: '16px', fontWeight: '700',
+                  cursor: loading ? 'not-allowed' : 'pointer', width: '100%',
+                  transition: 'transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease',
+                  boxShadow: loading ? 'none' : 'inset 0 1px 0 rgba(255,255,255,0.3), 0 10px 24px rgba(34,197,94,0.25)'
                 }}
-                onFocus={(e) => {
-                  e.target.style.borderColor = '#22c55e';
-                  e.target.style.boxShadow = '0 0 0 3px rgba(34, 197, 94, 0.1)';
+                onMouseEnter={(e) => {
+                  if (!loading) {
+                    e.currentTarget.style.transform = 'translateY(-1px)';
+                    e.currentTarget.style.filter = 'brightness(1.02)';
+                  }
                 }}
-                onBlur={(e) => {
-                  e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)';
-                  e.target.style.boxShadow = 'none';
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.filter = 'brightness(1)';
                 }}
-                required
-              />
-            </div>
-            
-            {/* Submit Button - matching LoginPage submit-btn styling */}
-            <button
-              type="submit" disabled={loading}
-              style={{
-                background: loading ? 'rgba(255,255,255,0.1)' : 'linear-gradient(180deg, #22c55e, #16a34a)',
-                color: loading ? 'rgba(255,255,255,0.6)' : '#0b1411',
-                padding: '14px 28px', border: '1px solid rgba(255,255,255,0.08)',
-                borderRadius: '10px', fontSize: '16px', fontWeight: '700',
-                cursor: loading ? 'not-allowed' : 'pointer', width: '100%',
-                transition: 'transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease',
-                boxShadow: loading ? 'none' : 'inset 0 1px 0 rgba(255,255,255,0.3), 0 10px 24px rgba(34,197,94,0.25)'
-              }}
-              onMouseEnter={(e) => {
-                if (!loading) {
-                  e.currentTarget.style.transform = 'translateY(-1px)';
-                  e.currentTarget.style.filter = 'brightness(1.02)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.filter = 'brightness(1)';
-              }}
-            >
-              {loading ? (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                  <div style={{
-                    width: '16px', height: '16px', border: '2px solid rgba(255,255,255,0.3)',
-                    borderTop: '2px solid #ffffff', borderRadius: '50%',
-                    animation: 'spin 1s linear infinite'
-                  }} />
-                  Sending Reset Link...
-                </div>
-              ) : 'Send Reset Link'}
-            </button>
-          </form>
+              >
+                {loading ? (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                    <div style={{
+                      width: '16px', height: '16px', border: '2px solid rgba(255,255,255,0.3)',
+                      borderTop: '2px solid #ffffff', borderRadius: '50%',
+                      animation: 'spin 1s linear infinite'
+                    }} />
+                    Sending Reset Link...
+                  </div>
+                ) : 'Send Reset Link'}
+              </button>
+            </form>
+          )}
           
-          {/* Back to Login Link */}
-          <div style={{ textAlign: 'center', marginTop: '24px' }}>
-            <button
-              onClick={() => navigate('/login')}
-              style={{
-                background: 'transparent', border: 'none', color: '#22c55e',
-                fontSize: '14px', cursor: 'pointer', textDecoration: 'underline'
-              }}
-            >
-              ← Back to Login
-            </button>
-          </div>
+          {/* Back to Login Link - only show when not in success state */}
+          {!success && (
+            <div style={{ textAlign: 'center', marginTop: '24px' }}>
+              <button
+                onClick={() => navigate('/login')}
+                style={{
+                  background: 'transparent', border: 'none', color: '#22c55e',
+                  fontSize: '14px', cursor: 'pointer', textDecoration: 'underline'
+                }}
+              >
+                ← Back to Login
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -249,6 +357,17 @@ const ResetPasswordPage = () => {
         @keyframes spin {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
+        }
+        
+        @keyframes tickPulse {
+          0%, 100% { 
+            transform: scale(1);
+            opacity: 1;
+          }
+          50% { 
+            transform: scale(1.05);
+            opacity: 0.8;
+          }
         }
       `}</style>
     </div>

@@ -79,6 +79,10 @@ const ResetPasswordConfirmPage = () => {
         // Sign out the user after password reset
         await supabase.auth.signOut();
         
+        // Clear any local storage or session data
+        localStorage.removeItem('supabase.auth.token');
+        sessionStorage.clear();
+        
         setTimeout(() => navigate('/login'), 2000);
       }
     } catch (error) {
