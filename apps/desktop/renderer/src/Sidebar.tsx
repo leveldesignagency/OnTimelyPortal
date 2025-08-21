@@ -1,7 +1,7 @@
 import React, { useState, useContext, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import styles from './Sidebar.module.css';
-import { EventType } from './types';
+import { Event } from './lib/supabase';
 import { ThemeContext } from './ThemeContext';
 import { supabase } from './lib/supabase';
 import { 
@@ -18,9 +18,9 @@ const PAGE_LINKS = [
   { label: 'Workspace', to: '/teams' },
 ];
 
-// Add EventType definition for Sidebar props
+// Add Event definition for Sidebar props
 interface SidebarProps {
-  events: EventType[];
+  events: Event[];
   isOverlay: boolean;
   isOpen: boolean;
   setOpen: (isOpen: boolean) => void;
@@ -33,7 +33,7 @@ interface QuickAction {
   action: () => void;
 }
 
-function getEventStatus(event: EventType, today: Date) {
+function getEventStatus(event: Event, today: Date) {
   // Create full datetime objects considering both date and time
   let eventStart = new Date(event.from);
   let eventEnd = new Date(event.to);
@@ -296,7 +296,7 @@ export default function Sidebar({ events = [], isOverlay, isOpen, setOpen }: Sid
         left: 0,
         top: 0,
         height: '100vh',
-        width: '250px',
+        width: isOverlay && !isOpen ? '50px' : '250px', // Reduce width when collapsed in overlay mode
         zIndex: 9998
       }}>
         <aside className={sidebarClasses} style={{ boxShadow: 'none' }}>
