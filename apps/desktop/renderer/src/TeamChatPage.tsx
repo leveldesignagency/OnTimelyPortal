@@ -2085,7 +2085,9 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
       zIndex: 2000,
       boxShadow: isDark ? '-4px 0 20px rgba(0,0,0,0.5)' : '-4px 0 20px rgba(0,0,0,0.15)',
       transform: isOpen ? 'translateX(0)' : 'translateX(100%)',
-      transition: 'transform 0.3s ease'
+      transition: 'transform 0.3s ease',
+      borderTopRightRadius: '20px',
+      borderBottomRightRadius: '20px'
     }}>
       {/* Profile/Group Info */}
       <div style={{ padding: '20px', borderBottom: `1px solid ${isDark ? '#2a2a2a' : '#e9ecef'}` }}>
@@ -2104,7 +2106,7 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
             margin: '0 auto 12px',
             boxShadow: isDark ? '0 4px 16px rgba(0,0,0,0.3)' : '0 4px 16px rgba(0,0,0,0.1)'
           }}>
-            {chat.avatar}
+            {chat.type === 'group' ? (chat.name ? chat.name.charAt(0).toUpperCase() : 'G') : chat.avatar}
           </div>
           <h3 style={{
             margin: '0 0 6px 0',
@@ -2143,137 +2145,67 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
             overflowY: 'auto'
           }}>
             {chat.participants.map((participant, idx) => {
-              // Debug logging to see what's in participant data
-              if (participant.avatar === 'DC') {
-                console.log('🐛 DEBUG - Participant with DC avatar:', {
-                  id: participant.id,
-                  name: participant.name,
-                  avatar: participant.avatar,
-                  rawParticipant: participant
-                });
-              }
-              
               // Generate correct initials for this participant
               const correctInitials = getUserInitials(participant.name || 'Unknown User');
               
               return (
-              <div 
-                key={idx} 
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-                  gap: '10px',
-                  padding: '6px 8px',
-                  borderRadius: '6px',
-                  transition: 'background 0.2s ease',
-                  position: 'relative'
-                }}
-                onMouseEnter={e => {
-                  if (participant.id !== CURRENT_USER?.id) {
-                    e.currentTarget.style.background = isDark ? '#2a2a2a' : '#f8f9fa';
-                  }
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.background = 'transparent';
-                }}
-              >
-                <div style={{ position: 'relative' }}>
+                <div 
+                  key={idx} 
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    transition: 'background 0.2s ease',
+                    position: 'relative',
+                    background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
+                  }}
+                >
                   <div style={{
                     width: '32px',
                     height: '32px',
                     borderRadius: '50%',
-                    background: isDark ? 'linear-gradient(135deg, #4a4a4a, #2a2a2a)' : 'linear-gradient(135deg, #e9ecef, #dee2e6)',
-                    color: isDark ? '#fff' : '#495057',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
+                    background: '#10b981',
+                    color: '#ffffff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
                     fontSize: '12px',
                     fontWeight: '600',
-                    overflow: 'hidden'
+                    flexShrink: 0
                   }}>
-                    {isAvatarUrl(participant.avatar) ? (
-                      <img
-                        src={participant.avatar}
-                        alt={participant.name}
-                        style={{
-                          width: '100%',
-                          height: '100%',
-                          objectFit: 'cover'
-                        }}
-                      />
-                    ) : (
-                      correctInitials
-                    )}
-          </div>
-                  <div style={{
-                    position: 'absolute',
-                    bottom: '-2px',
-                    right: '-2px',
-                    width: '12px',
-                    height: '12px',
-                    borderRadius: '50%',
-                    background: participant.status === 'online' ? '#10b981' : 
-                               participant.status === 'away' ? '#f59e0b' : 
-                               participant.status === 'busy' ? '#ef4444' : '#6b7280',
-                    border: `2px solid ${isDark ? '#1a1a1a' : '#ffffff'}`
-                  }} />
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{
-                    fontSize: '13px',
-                    fontWeight: '500',
-                    color: isDark ? '#ffffff' : '#1a1a1a',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis'
-                  }}>
-                    {participant.name} {participant.id === CURRENT_USER?.id && '(You)'}
+                    {correctInitials}
                   </div>
-                  <div style={{
-                    fontSize: '11px',
-                    color: isDark ? '#adb5bd' : '#6c757d',
-                    textTransform: 'capitalize'
-                  }}>
-                    {participant.status}
-                  </div>
-      </div>
-
-                {/* Remove User Button - Smaller and less intrusive */}
-                {participant.id !== CURRENT_USER?.id && (
-        <button
-                    onClick={() => handleRemoveUser(participant.id, participant.name)}
-                    title={`Remove ${participant.name} from group`}
-          style={{
-                      background: 'transparent',
-            border: 'none',
-                      color: '#ef4444',
-              cursor: 'pointer',
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      fontSize: '14px',
+                      fontWeight: '500',
+                      color: isDark ? '#ffffff' : '#1a1a1a',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis'
+                    }}>
+                      {participant.name || 'Unknown User'}
+                    </div>
+                    <div style={{
                       fontSize: '12px',
-                      padding: '2px 4px',
-                      borderRadius: '3px',
-                      opacity: 0.6,
-                      transition: 'all 0.2s ease',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      width: '20px',
-                      height: '20px'
-                    }}
-                    onMouseEnter={e => {
-                      e.currentTarget.style.opacity = '1';
-                      e.currentTarget.style.background = isDark ? '#2a1f1f' : '#fef2f2';
-                    }}
-                    onMouseLeave={e => {
-                      e.currentTarget.style.opacity = '0.6';
-                      e.currentTarget.style.background = 'transparent';
-                    }}
-                  >
-                    ✕
-                  </button>
-                )}
-            </div>
-            )})}
-            </div>
+                      color: isDark ? '#adb5bd' : '#6c757d'
+                    }}>
+                      {participant.email || 'No email'}
+                    </div>
+                  </div>
+                  <StatusIndicator status={participant.status} />
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -4832,16 +4764,13 @@ export default function TeamChatPage() {
   }
 
   return (
-    <div style={{ 
-      display: 'flex', 
-      height: '100vh', 
-      background: colors.bg,
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-      position: 'relative',
-      transition: 'background 0.2s ease',
-      margin: 0,
-      padding: 0,
-      overflow: 'hidden'
+    <div style={{
+      minHeight: '100vh',
+      background: isDark 
+        ? 'radial-gradient(1200px 800px at 20% -10%, rgba(34,197,94,0.12), transparent 40%), radial-gradient(1000px 700px at 120% 10%, rgba(34,197,94,0.08), transparent 45%), #0f1115'
+        : '#f7f8fa',
+      padding: '20px',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
     }}>
       {/* Notifications */}
       <div style={{
@@ -4880,10 +4809,16 @@ export default function TeamChatPage() {
       <div style={{ 
         flex: 1, 
         display: 'flex', 
-        height: '100%',
+        height: 'calc(100vh - 80px)',
         background: colors.bg,
         transition: 'background 0.2s, color 0.2s',
-        overflow: 'hidden'
+        overflow: 'hidden',
+        margin: '20px',
+        borderRadius: '20px',
+        boxShadow: isDark 
+          ? '0 8px 32px rgba(0,0,0,0.4)' 
+          : '0 8px 32px rgba(0,0,0,0.1)',
+        border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'}`
       }}>
         
         {/* Left Sidebar with Glass Effect */}
@@ -4897,7 +4832,9 @@ export default function TeamChatPage() {
             ? '2px 0 8px rgba(0,0,0,0.2)' 
             : '2px 0 8px rgba(0,0,0,0.08)',
           flexShrink: 0,
-          borderRight: `1px solid ${isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}`
+          borderRight: `1px solid ${isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}`,
+          borderTopLeftRadius: '20px',
+          borderBottomLeftRadius: '20px'
         }}>
           
           {/* User Profile */}
@@ -5568,7 +5505,9 @@ export default function TeamChatPage() {
           minWidth: 0,
           position: 'relative',
           margin: 0,
-          padding: 0
+          padding: 0,
+          borderTopRightRadius: '20px',
+          borderBottomRightRadius: '20px'
         }}>
           <ChatHeader
             chat={activeChat}
