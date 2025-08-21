@@ -6,6 +6,7 @@ import { outlookCalendarService } from './services/outlookCalendar';
 import { calendarConnectionService } from './services/calendarConnectionService';
 import { getCurrentUser } from './lib/auth';
 import { CalendarEvent as ExternalCalendarEvent } from './types/calendar';
+import { supabase } from './lib/supabase';
 
 // --- Types & Mock Data ---
 type CalendarEvent = {
@@ -666,13 +667,12 @@ Check the browser console for detailed diagnostic information.`);
     
     if (viewMode === 'Week') {
       // Generate current week view
-      const today = new Date();
-      const currentDay = today.getDay(); // 0 = Sunday, 1 = Monday, etc.
+      const currentDay = currentDate.getDay(); // 0 = Sunday, 1 = Monday, etc.
       const days = [];
       
       // Calculate the start of the week (Sunday)
-      const startOfWeek = new Date(today);
-      startOfWeek.setDate(today.getDate() - currentDay);
+      const startOfWeek = new Date(currentDate);
+      startOfWeek.setDate(currentDate.getDate() - currentDay);
       
       // Generate 7 days starting from Sunday
       for (let i = 0; i < 7; i++) {
@@ -1131,10 +1131,9 @@ Check the browser console for detailed diagnostic information.`);
               }}>
                 {viewMode === 'Week' ? (
                   (() => {
-                    const today = new Date();
-                    const currentDay = today.getDay();
-                    const startOfWeek = new Date(today);
-                    startOfWeek.setDate(today.getDate() - currentDay);
+                    const currentDay = currentDate.getDay();
+                    const startOfWeek = new Date(currentDate);
+                    startOfWeek.setDate(currentDate.getDate() - currentDay);
                     const endOfWeek = new Date(startOfWeek);
                     endOfWeek.setDate(startOfWeek.getDate() + 6);
                     

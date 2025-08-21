@@ -4016,7 +4016,7 @@ export default function TeamChatPage() {
     console.log('🔍 Searching with query:', searchQuery);
     console.log('👥 Available company users:', companyUsers);
     
-    // Search users - show all company users regardless of existing chats
+    // Search users - show ALL company users regardless of existing chats
     const userResults = companyUsers.filter(user =>
         user.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
@@ -4029,7 +4029,7 @@ export default function TeamChatPage() {
     );
     console.log('🔍 Team search results:', teamResults);
     setTeamSearchResults(teamResults);
-  }, [searchQuery, chats, companyUsers, companyTeams]);
+  }, [searchQuery, companyUsers, companyTeams]); // Removed 'chats' dependency
 
   const handleSelectChat = (chatId: string) => {
     setActiveChatId(chatId);
@@ -4125,10 +4125,10 @@ export default function TeamChatPage() {
         console.log('✅ Team chat created successfully:', newChat);
         const convertedChat = convertSupabaseChat(newChat);
         
-        // Ensure it's marked as a team chat with additional properties
+        // Convert team chat to group chat for better functionality
         const enhancedChat = {
           ...convertedChat,
-          type: 'team' as ChatType,
+          type: 'group' as ChatType, // Convert to group chat
           team_id: team.id,
           name: `${team.name} Team Chat`,
           avatar: getTeamInitials(team)

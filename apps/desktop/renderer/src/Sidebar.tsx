@@ -327,14 +327,6 @@ export default function Sidebar({ events = [], isOverlay, isOpen, setOpen }: Sid
           cursor: 'pointer'
         }} onClick={() => toggleSection('live')}>
           LIVE EVENTS
-          <span style={{ 
-            fontSize: '12px', 
-            color: theme === 'dark' ? '#888' : '#666',
-            transition: 'transform 0.2s ease',
-            transform: collapsedSections.live ? 'rotate(-90deg)' : 'rotate(0deg)'
-          }}>
-            ▼
-          </span>
         </div>
         {!collapsedSections.live && liveEvents.length > 0 && (
           <div className={styles.eventScrollContainer} style={{ 
@@ -361,22 +353,14 @@ export default function Sidebar({ events = [], isOverlay, isOpen, setOpen }: Sid
         {/* Add spacing and divider between Live and Upcoming events */}
         <div style={{ marginTop: '24px' }}>
           <hr className={styles.hr} />
-          <div className={styles.sectionTitle} style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'space-between',
-            cursor: 'pointer'
-          }} onClick={() => toggleSection('upcoming')}>
-            UPCOMING EVENTS
-            <span style={{ 
-              fontSize: '12px', 
-              color: theme === 'dark' ? '#888' : '#666',
-              transition: 'transform 0.2s ease',
-              transform: collapsedSections.upcoming ? 'rotate(-90deg)' : 'rotate(0deg)'
-            }}>
-              ▼
-            </span>
-          </div>
+                      <div className={styles.sectionTitle} style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'space-between',
+              cursor: 'pointer'
+            }} onClick={() => toggleSection('upcoming')}>
+              UPCOMING EVENTS
+            </div>
         </div>
         
         {!collapsedSections.upcoming && upcomingEvents.length > 0 && (
@@ -412,14 +396,6 @@ export default function Sidebar({ events = [], isOverlay, isOpen, setOpen }: Sid
               cursor: 'pointer'
             }} onClick={() => toggleSection('finished')}>
               FINISHED EVENTS
-              <span style={{ 
-                fontSize: '12px', 
-                color: theme === 'dark' ? '#888' : '#666',
-                transition: 'transform 0.2s ease',
-                transform: collapsedSections.finished ? 'rotate(-90deg)' : 'rotate(0deg)'
-              }}>
-                ▼
-              </span>
             </div>
           </div>
         )}
