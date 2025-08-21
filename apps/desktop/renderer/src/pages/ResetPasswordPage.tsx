@@ -20,10 +20,15 @@ const ResetPasswordPage = () => {
   useEffect(() => {
     const hash = location.hash;
     const pathname = location.pathname;
-    console.log('ResetPasswordPage - URL pathname:', pathname, 'hash:', hash);
+    const searchParams = new URLSearchParams(location.search);
     
-    // Check if we're on the confirm route OR have access token
-    if (pathname === '/reset-password-confirm' || (hash && hash.includes('access_token'))) {
+    console.log('ResetPasswordPage - URL pathname:', pathname, 'hash:', hash, 'search:', location.search);
+    
+    // Check if we're on the confirm route OR have access token OR have recovery params
+    if (pathname === '/reset-password-confirm' || 
+        (hash && hash.includes('access_token')) ||
+        searchParams.get('type') === 'recovery' ||
+        searchParams.get('recovery')) {
       console.log('ResetPasswordPage - Password reset mode detected');
       setIsResetMode(true);
       
