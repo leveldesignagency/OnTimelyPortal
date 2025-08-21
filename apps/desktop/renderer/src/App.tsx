@@ -62,11 +62,12 @@ const AppContent = () => {
   // REMOVED: clearCachedAuth on startup - this was breaking authentication
   // Users should stay logged in unless they explicitly log out
   
-  // Simple authentication check
+  // Authentication check and listener
   useEffect(() => {
     const checkAuth = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
+        console.log('Initial auth check - user:', !!user, user?.email);
         setIsAuthenticated(!!user);
         setLoading(false);
       } catch (error) {
@@ -76,7 +77,21 @@ const AppContent = () => {
       }
     };
     
+    // Initial auth check
     checkAuth();
+    
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        console.log('Auth state changed in App.tsx:', event, !!session?.user);
+        console.log('Session user:', session?.user?.email);
+        setIsAuthenticated(!!session?.user);
+        setLoading(false);
+      }
+    );
+    
+    // Cleanup subscription
+    return () => subscription.unsubscribe();
   }, []);
   
   // Ensure sidebar is open for non-teams pages
@@ -119,6 +134,11 @@ const AppContent = () => {
       setEvents([]);
     }
   };
+
+  // Debug authentication state
+  useEffect(() => {
+    console.log('Current auth state:', isAuthenticated, 'Loading:', loading);
+  }, [isAuthenticated, loading]);
 
   // Global styles useEffect must be before any early returns
   React.useEffect(() => {
