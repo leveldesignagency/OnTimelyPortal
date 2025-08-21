@@ -34,24 +34,43 @@
 
 /* Specific styles for the collapsed state trigger */
 .sidebarOverlay.sidebarClosed {
-    transform: translateX(calc(-100% + 50px)); /* Keep a small part visible */
+    transform: translateX(-100%); /* Completely hide the sidebar */
     box-shadow: none;
+    pointer-events: none; /* Disable mouse events when collapsed */
+}
+
+/* Hover trigger area for collapsed sidebar */
+.sidebarOverlay.sidebarClosed::before {
+    content: '';
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 8px; /* Very thin trigger area */
+    height: 100vh;
+    background: transparent;
+    pointer-events: auto; /* Enable mouse events for this area */
+    z-index: 9997;
+}
+
+/* Show sidebar on hover over trigger area */
+.sidebarOverlay.sidebarClosed:hover {
+    transform: translateX(0);
+    pointer-events: auto;
+}
+
+.sidebarOverlay.sidebarClosed:hover .logo {
+    display: block;
+}
+
+.sidebarOverlay.sidebarClosed:hover > * {
+    display: block;
 }
 
 .sidebarOverlay.sidebarClosed .logo {
-    writing-mode: vertical-rl;
-    text-orientation: mixed;
-    transform: rotate(180deg);
-    position: absolute;
-    right: 0;
-    top: 50%;
-    margin-top: -50px; /* Adjust based on logo height */
-    padding: 10px 5px;
-    border-radius: 0 8px 8px 0;
-    cursor: pointer;
+    display: none; /* Hide the logo when collapsed */
 }
 
-.sidebarOverlay.sidebarClosed > *:not(.logo) {
+.sidebarOverlay.sidebarClosed > * {
     display: none;
 }
 

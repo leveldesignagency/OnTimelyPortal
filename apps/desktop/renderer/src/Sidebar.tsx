@@ -34,20 +34,32 @@ interface QuickAction {
 }
 
 function getEventStatus(event: EventType, today: Date) {
-  const eventStart = new Date(event.from);
-  const eventEnd = new Date(event.to);
+  // Create full datetime objects considering both date and time
+  let eventStart = new Date(event.from);
+  let eventEnd = new Date(event.to);
   
-  // Event is live if today is between start and end dates (inclusive)
+  // If we have time fields, combine them with the dates
+  if (event.start_time) {
+    const [startHour, startMinute] = event.start_time.split(':').map(Number);
+    eventStart.setHours(startHour || 0, startMinute || 0, 0, 0);
+  }
+  
+  if (event.end_time) {
+    const [endHour, endMinute] = event.end_time.split(':').map(Number);
+    eventEnd.setHours(endHour || 23, endMinute || 59, 59, 999); // Default to end of day if no time
+  }
+  
+  // Event is live if today is between start and end datetime (inclusive)
   if (today >= eventStart && today <= eventEnd) {
     return 'live';
   }
   
-  // Event is upcoming if start date is in the future
+  // Event is upcoming if start datetime is in the future
   if (today < eventStart) {
     return 'upcoming';
   }
   
-  // Event is past if end date has passed
+  // Event is past if end datetime has passed
   return 'past';
 }
 

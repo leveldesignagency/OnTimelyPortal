@@ -4016,11 +4016,9 @@ export default function TeamChatPage() {
     console.log('🔍 Searching with query:', searchQuery);
     console.log('👥 Available company users:', companyUsers);
     
-    // Search users
-    const existingChatNames = chats.map(c => c.name.toLowerCase());
+    // Search users - show all company users regardless of existing chats
     const userResults = companyUsers.filter(user =>
-        user.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
-        !existingChatNames.includes(user.name.toLowerCase())
+        user.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
     console.log('🔍 User search results:', userResults);
     setSearchResults(userResults);

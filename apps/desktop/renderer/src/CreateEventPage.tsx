@@ -661,7 +661,7 @@ export default function CreateEventPage({ onCreate }: CreateEventPageProps) {
                 Start Time
               </label>
               <input
-                type="time"
+                type="text"
                 value={startTime}
                 onChange={e => setStartTime(e.target.value)}
                 style={{
