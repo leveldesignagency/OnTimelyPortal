@@ -16,6 +16,7 @@ import CanvasPage from './CanvasPage';
 import RealtimeTestPage from './pages/realtime-test';
 import LoginPage from './pages/LoginPage';
 import ProtectedRoute from './components/ProtectedRoute';
+import WelcomeScreen from './components/WelcomeScreen';
 import { ThemeProvider, ThemeContext } from './ThemeContext';
 import { getCurrentUser, getCompanyEvents, clearCachedAuth } from './lib/auth';
 import { getEvents, createEvent, Event, getUserTeamEvents } from './lib/supabase';
@@ -42,11 +43,21 @@ const AppContent = () => {
   const [events, setEvents] = useState<EventType[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showWelcome, setShowWelcome] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const location = useLocation();
 
   const [isSidebarOpen, setSidebarOpen] = useState(true);
   const isTeamsPage = location.pathname.startsWith('/teams');
   const isLoginPage = location.pathname === '/login';
+  
+  // Check if this is the first time opening the desktop app
+  useEffect(() => {
+    const hasSeenWelcome = localStorage.getItem('timely-desktop-welcome-seen');
+    if (hasSeenWelcome) {
+      setShowWelcome(false);
+    }
+  }, []);
   
   // Clear cached authentication on app startup (especially important for Electron builds)
   useEffect(() => {
@@ -59,6 +70,23 @@ const AppContent = () => {
     
     clearAuthOnStartup();
   }, [isLoginPage]);
+  
+  // Check authentication status
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const user = await getCurrentUser();
+        setIsAuthenticated(!!user);
+        setLoading(false);
+      } catch (error) {
+        console.error('Auth check failed:', error);
+        setIsAuthenticated(false);
+        setLoading(false);
+      }
+    };
+    
+    checkAuth();
+  }, []);
   
   // Ensure sidebar is open for non-teams pages
   useEffect(() => {
@@ -293,6 +321,25 @@ const AppContent = () => {
   if (loading && !isLoginPage) {
     return <div style={{ padding: 64, fontFamily: 'Roboto, Arial, system-ui, sans-serif', color: isDark ? '#fff' : '#222' }}>Loading events...</div>;
   }
+  
+  // Show welcome screen for first-time desktop app users (BEFORE login check)
+  if (showWelcome) {
+    return (
+      <WelcomeScreen
+        isDark={isDark}
+        onComplete={() => {
+          setShowWelcome(false);
+          localStorage.setItem('timely-desktop-welcome-seen', 'true');
+        }}
+      />
+    );
+  }
+  
+  // If not authenticated and not on login page, redirect to login
+  if (!isAuthenticated && !isLoginPage) {
+    return <Navigate to="/login" replace />;
+  }
+  
   if (error && !isLoginPage) {
     return <div style={{ padding: 64, color: isDark ? '#ff6b6b' : 'red', fontFamily: 'Roboto, Arial, system-ui, sans-serif' }}>{error}</div>;
   }

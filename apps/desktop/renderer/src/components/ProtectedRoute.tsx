@@ -38,7 +38,28 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
         color: '#fff',
         fontSize: '18px'
       }}>
-        Loading...
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 16
+        }}>
+          <div style={{
+            width: 40,
+            height: 40,
+            border: '4px solid rgba(255,255,255,0.2)',
+            borderTop: '4px solid #22c55e',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite'
+          }} />
+          <span>Loading...</span>
+        </div>
+        <style>{`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}</style>
       </div>
     );
   }
