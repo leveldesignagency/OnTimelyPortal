@@ -217,8 +217,6 @@ const getColors = (isDark: boolean) => ({
   buttonBg: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)'
 });
 
-console.log("THIS IS EVENT DASHBOARD PAGE");
-
 type EventType = {
   id: string;
   name: string;
