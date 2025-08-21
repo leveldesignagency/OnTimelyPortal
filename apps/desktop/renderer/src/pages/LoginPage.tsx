@@ -1,7 +1,7 @@
 import React, { useState, useContext, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ThemeContext } from '../ThemeContext';
-import { login } from '../lib/auth';
+import { supabase } from '../lib/supabase';
 
 const LoginPage = () => {
   const [email, setEmail] = useState('');
@@ -27,23 +27,20 @@ const LoginPage = () => {
     setLoading(true);
     setError('');
 
-    try {
-      const { user, error: loginError } = await login(email, password);
-      
-      if (loginError || !user) {
-        setError(loginError || 'Login failed');
-        setLoading(false);
-        return;
-      }
+    // Try Supabase Auth login
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    console.log('Supabase Auth login result:', data, error);
 
-      // Login successful - navigate to dashboard
-      navigate('/');
+    if (error || !data.session) {
+      setError(error?.message || 'Login failed');
       setLoading(false);
-    } catch (error) {
-      console.error('Login error:', error);
-      setError('An unexpected error occurred');
-      setLoading(false);
+      return;
     }
+
+    // Optionally: fetch your user profile from your users table here
+
+    navigate('/');
+    setLoading(false);
   };
 
   return (
