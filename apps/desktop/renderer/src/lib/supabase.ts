@@ -9,56 +9,30 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing required environment variables: VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY')
 }
 
-// Determine if we're in Electron or web environment
-const isElectron = typeof process !== 'undefined' && process.versions && process.versions.electron;
-
+// For web builds, we'll use the CDN approach
+// For Electron builds, we'll use the bundled package
 let supabaseInstance: any = null;
 
-export async function getSupabase() {
+const initializeSupabase = () => {
   if (supabaseInstance) {
     return supabaseInstance;
   }
 
+  // Check if we're in Electron
+  const isElectron = typeof process !== 'undefined' && process.versions && process.versions.electron;
+
   if (isElectron) {
-    // In Electron, use the bundled npm package
-    try {
-      const { createClient } = await import('@supabase/supabase-js');
-      supabaseInstance = createClient(supabaseUrl, supabaseAnonKey, {
-        auth: {
-          storage: typeof window !== 'undefined' ? window.localStorage : undefined,
-          storageKey: 'timely-auth',
-          autoRefreshToken: true,
-          persistSession: true,
-          detectSessionInUrl: false
-        },
-        realtime: {
-          params: {
-            eventsPerSecond: 10
-          }
-        },
-        global: {
-          headers: {
-            'X-Client-Info': 'timely-electron-app'
-          }
-        }
-      });
-    } catch (error) {
-      console.error('Failed to import Supabase in Electron:', error);
-      throw error;
-    }
+    // In Electron, we need to dynamically import
+    // This will be handled by the build process
+    throw new Error('Electron builds should use the bundled Supabase package');
   } else {
-    // In web browser, wait for CDN to load
+    // In web browser, check if CDN is loaded
     if (typeof window === 'undefined') {
       throw new Error('Supabase client can only be used in browser environment');
     }
 
-    // Wait for Supabase to be available
-    if ((window as any).supabaseLoadPromise) {
-      await (window as any).supabaseLoadPromise;
-    }
-
     if (!(window as any).supabase || !(window as any).supabase.createClient) {
-      throw new Error('Supabase failed to load from CDN');
+      throw new Error('Supabase CDN not loaded. Please ensure the CDN script is loaded before using Supabase.');
     }
 
     supabaseInstance = (window as any).supabase.createClient(supabaseUrl, supabaseAnonKey, {
@@ -86,10 +60,15 @@ export async function getSupabase() {
   }
   
   return supabaseInstance;
-}
+};
 
-// For backward compatibility, export a promise that resolves to the client
-export const supabase = getSupabase();
+// Export the supabase client
+export const supabase = initializeSupabase();
+
+// Keep the getSupabase function for cases where we need async initialization
+export async function getSupabase() {
+  return supabase;
+}
 
 // Types for your database tables
 export type SupabaseEvent = {
