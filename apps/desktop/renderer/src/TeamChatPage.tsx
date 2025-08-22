@@ -4031,56 +4031,141 @@ export default function TeamChatPage() {
     try {
       // Check if team chat already exists
       const existingChat = chats.find(chat => 
-        chat.type === 'team' && 
+        chat.type === 'group' && 
         chat.team_id === team.id
       );
 
       if (existingChat) {
-        console.log('✅ Team chat already exists, opening:', existingChat.name);
+        console.log('✅ Team group chat already exists, opening:', existingChat.name);
         setActiveChatId(existingChat.id);
         setSearchQuery('');
         addNotification(`Opened ${team.name} chat`, 'success');
         return;
       }
 
-      console.log('🔄 Creating new team chat...');
-      const newChat = await createTeamChat(
-        CURRENT_USER.id, 
-        authUser.company_id, 
-        team.id, 
-        `${team.name} Team Chat`
-      );
+      console.log('🔄 Creating new group chat for team...');
       
-      if (newChat) {
-        console.log('✅ Team chat created successfully:', newChat);
-        const convertedChat = convertSupabaseChat(newChat);
-        
-        // Convert team chat to group chat for better functionality
-        const enhancedChat = {
-          ...convertedChat,
-          type: 'group' as ChatType, // Convert to group chat
-          team_id: team.id,
-          name: `${team.name} Team Chat`,
-          avatar: getTeamInitials(team)
-        };
+      // Get team members from the team
+      const { data: teamMembers, error: teamError } = await supabase
+        .from('team_members')
+        .select('user_id')
+        .eq('team_id', team.id);
 
-        setChats(prev => {
-          const exists = prev.find(c => c.id === enhancedChat.id);
-          if (exists) return prev;
-          return [enhancedChat, ...prev];
-        });
-        
-        setActiveChatId(enhancedChat.id);
-        setSearchQuery('');
-        console.log(`🎉 Team chat for ${team.name} opened successfully!`);
-        addNotification(`${team.name} team chat created successfully`, 'success');
-      } else {
-        console.error('❌ Failed to create team chat - null response');
-        addNotification(`Failed to create team chat for ${team.name}`, 'error');
+      if (teamError) {
+        console.error('❌ Failed to fetch team members:', teamError);
+        addNotification(`Failed to fetch team members for ${team.name}`, 'error');
+        return;
       }
+
+      const participantIds = teamMembers?.map(member => member.user_id) || [];
+      
+      // Ensure creator is included in participants
+      if (!participantIds.includes(CURRENT_USER.id)) {
+        participantIds.push(CURRENT_USER.id);
+      }
+
+      console.log('👥 Team participants:', participantIds);
+
+      // Create the group chat directly
+      const chatInsert = {
+        company_id: authUser.company_id,
+        name: `${team.name} Team Chat`,
+        type: 'group' as const,
+        avatar: team.name.substring(0, 2).toUpperCase(),
+        created_by: CURRENT_USER.id,
+        team_id: team.id,
+        is_archived: false
+      };
+
+      console.log('📝 Chat insert data:', chatInsert);
+
+      const { data: chatData, error: chatError } = await supabase
+        .from('chats')
+        .insert(chatInsert)
+        .select()
+        .single();
+
+      if (chatError) {
+        console.error('❌ Failed to create chat:', chatError);
+        throw chatError;
+      }
+
+      console.log('✅ Chat created successfully:', chatData.id);
+
+      // Add all team members as chat participants
+      const participantInserts = participantIds.map(userId => ({
+        chat_id: chatData.id,
+        user_id: userId,
+        role: "member" as const,
+        joined_at: new Date().toISOString(),
+        is_muted: false,
+        is_pinned: false,
+        company_id: authUser.company_id
+      }));
+
+      console.log('👥 Adding participants:', participantInserts.length, 'participants');
+
+      const { error: participantsError } = await supabase
+        .from('chat_participants')
+        .insert(participantInserts);
+
+      if (participantsError) {
+        console.error('❌ Failed to add participants:', participantsError);
+        // Clean up chat if participants insertion fails
+        await supabase.from('chats').delete().eq('id', chatData.id);
+        throw participantsError;
+      }
+
+      console.log('✅ Participants added successfully');
+
+      // Fetch the complete chat data with participants
+      const { data: completeChat, error: fetchError } = await supabase
+        .from('chats')
+        .select(`
+          *,
+          chat_participants(
+            id,
+            user_id,
+            role,
+            joined_at,
+            is_muted,
+            is_pinned,
+            user:users!chat_participants_user_id_fkey(*)
+          )
+        `)
+        .eq('id', chatData.id)
+        .single();
+
+      if (fetchError) {
+        console.error('❌ Failed to fetch complete chat:', fetchError);
+        throw fetchError;
+      }
+
+      const convertedChat = convertSupabaseChat(completeChat);
+      
+      // Ensure it's marked as a group chat
+      const enhancedChat = {
+        ...convertedChat,
+        type: 'group' as ChatType,
+        team_id: team.id,
+        name: `${team.name} Team Chat`,
+        avatar: team.name.substring(0, 2).toUpperCase()
+      };
+
+      setChats(prev => {
+        const exists = prev.find(c => c.id === enhancedChat.id);
+        if (exists) return prev;
+        return [enhancedChat, ...prev];
+      });
+      
+      setActiveChatId(enhancedChat.id);
+      setSearchQuery('');
+      console.log(`🎉 Group chat for team ${team.name} created successfully!`);
+      addNotification(`${team.name} group chat created successfully`, 'success');
+      
     } catch (error) {
-      console.error('💥 Error creating team chat:', error);
-      addNotification(`Error creating team chat: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+      console.error('💥 Error creating group chat for team:', error);
+      addNotification(`Error creating group chat for ${team.name}: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
     }
   };
 
