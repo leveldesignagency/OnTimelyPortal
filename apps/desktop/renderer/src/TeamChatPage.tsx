@@ -2076,12 +2076,10 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
       borderLeft: `1px solid ${isDark ? '#2a2a2a' : '#e9ecef'}`,
       display: 'flex',
       flexDirection: 'column',
-      height: '100vh',
+      height: '100%',
       overflowY: 'auto',
       flexShrink: 0,
-      position: 'absolute',
-      right: 0,
-      top: 0,
+      position: 'relative',
       zIndex: 2000,
       boxShadow: isDark ? '-4px 0 20px rgba(0,0,0,0.5)' : '-4px 0 20px rgba(0,0,0,0.15)',
       transform: isOpen ? 'translateX(0)' : 'translateX(100%)',
@@ -5500,7 +5498,7 @@ export default function TeamChatPage() {
         <div style={{
           flex: 1,
           display: 'flex',
-          flexDirection: 'column',
+          flexDirection: 'row',
           background: isDark ? '#1a1a1a' : '#ffffff',
           minWidth: 0,
           position: 'relative',
@@ -5509,21 +5507,28 @@ export default function TeamChatPage() {
           borderTopRightRadius: '20px',
           borderBottomRightRadius: '20px'
         }}>
-          <ChatHeader
-            chat={activeChat}
-            isDark={isDark}
-            onToggleRightPanel={() => setShowRightPanel(!showRightPanel)}
-          />
-
-          {/* Messages Area */}
+          {/* Chat Content */}
           <div style={{
             flex: 1,
-            overflowY: 'auto',
-            padding: '16px 24px',
             display: 'flex',
             flexDirection: 'column',
-            gap: '8px'
+            minWidth: 0
           }}>
+            <ChatHeader
+              chat={activeChat}
+              isDark={isDark}
+              onToggleRightPanel={() => setShowRightPanel(!showRightPanel)}
+            />
+
+            {/* Messages Area */}
+            <div style={{
+              flex: 1,
+              overflowY: 'auto',
+              padding: '16px 24px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px'
+            }}>
               {activeChat ? (
                   activeChat.messages.map((message, index) => (
                     <div key={message.id} style={{ marginBottom: '8px' }}>
@@ -5597,109 +5602,106 @@ export default function TeamChatPage() {
               <div ref={messagesEndRef} />
             </div>
 
-
-
-
-
-          {/* Delete mode controls */}
-          {deleting && (
-            <div style={{
-              background: colors.hoverBg,
-              padding: '12px 16px',
-              borderRadius: '8px',
-              marginBottom: '12px',
-              border: `1px solid #ef4444`,
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center'
-            }}>
+            {/* Delete mode controls */}
+            {deleting && (
               <div style={{
-                fontSize: '14px',
-                color: colors.text,
-                fontWeight: '500'
-              }}>
-                Select messages to delete ({selectedMessages.size} selected)
-              </div>
-              <div style={{
+                background: colors.hoverBg,
+                padding: '12px 16px',
+                borderRadius: '8px',
+                marginBottom: '12px',
+                border: `1px solid #ef4444`,
                 display: 'flex',
-                gap: '8px'
+                justifyContent: 'space-between',
+                alignItems: 'center'
               }}>
-                <button
-                  onClick={handleDeleteSelected}
-                  disabled={selectedMessages.size === 0}
-                  style={{
-                    background: '#ef4444',
-                    color: '#ffffff',
-                    border: 'none',
-                    padding: '10px 36px',
-                    borderRadius: '4px',
-                    fontSize: '15px',
-                    minWidth: 160,
-                    cursor: selectedMessages.size > 0 ? 'pointer' : 'not-allowed',
-                    opacity: selectedMessages.size > 0 ? 1 : 0.5,
-                    fontWeight: 600,
-                    whiteSpace: 'nowrap',
-                    lineHeight: 1.2,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  Delete Selected
-                </button>
-                <button
-                  onClick={handleCancelDelete}
-                  style={{
-                    background: 'transparent',
-                    color: colors.textSecondary,
-                    border: `1px solid ${isDark ? '#404040' : '#e9ecef'}`,
-                    padding: '6px 28px',
-                    borderRadius: '4px',
-                    fontSize: '15px',
-                    minWidth: 120,
-                    cursor: 'pointer',
-                    fontWeight: 500,
-                    marginLeft: 0,
-                  }}
-                >
-                  Cancel
-                </button>
+                <div style={{
+                  fontSize: '14px',
+                  color: colors.text,
+                  fontWeight: '500'
+                }}>
+                  Select messages to delete ({selectedMessages.size} selected)
+                </div>
+                <div style={{
+                  display: 'flex',
+                  gap: '8px'
+                }}>
+                  <button
+                    onClick={handleDeleteSelected}
+                    disabled={selectedMessages.size === 0}
+                    style={{
+                      background: '#ef4444',
+                      color: '#ffffff',
+                      border: 'none',
+                      padding: '10px 36px',
+                      borderRadius: '4px',
+                      fontSize: '15px',
+                      minWidth: 160,
+                      cursor: selectedMessages.size > 0 ? 'pointer' : 'not-allowed',
+                      opacity: selectedMessages.size > 0 ? 1 : 0.5,
+                      fontWeight: 600,
+                      whiteSpace: 'nowrap',
+                      lineHeight: 1.2,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    Delete Selected
+                  </button>
+                  <button
+                    onClick={handleCancelDelete}
+                    style={{
+                      background: 'transparent',
+                      color: colors.textSecondary,
+                      border: `1px solid ${isDark ? '#404040' : '#e9ecef'}`,
+                      padding: '6px 28px',
+                      borderRadius: '4px',
+                      fontSize: '15px',
+                      minWidth: 120,
+                      cursor: 'pointer',
+                      fontWeight: 500,
+                      marginLeft: 0,
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Message Input */}
-          {activeChat && (
-            <MessageInput
-              onSendMessage={handleSendMessage}
-              onFileUpload={handleFileUpload}
-              isDark={isDark}
-              replyingTo={replyTo || undefined}
-              onCancelReply={() => setReplyTo(null)}
-              editingMessageId={editingMessageId}
-              editText={editText}
-              onSaveEdit={handleSaveEdit}
-              onCancelEdit={handleCancelEdit}
-            />
-          )}
+            {/* Message Input */}
+            {activeChat && (
+              <MessageInput
+                onSendMessage={handleSendMessage}
+                onFileUpload={handleFileUpload}
+                isDark={isDark}
+                replyingTo={replyTo || undefined}
+                onCancelReply={() => setReplyTo(null)}
+                editingMessageId={editingMessageId}
+                editText={editText}
+                onSaveEdit={handleSaveEdit}
+                onCancelEdit={handleCancelEdit}
+              />
+            )}
+          </div>
+
+          {/* Right Panel */}
+          <RightPanel
+            chat={activeChat}
+            isOpen={showRightPanel}
+            isDark={isDark}
+            onToggleMute={handleToggleMute}
+            onTogglePin={handleTogglePin}
+            onToggleArchive={handleToggleArchive}
+            onRemoveUser={handleRemoveUserFromGroup}
+            onShowConfirmation={setConfirmationModal}
+            onDeleteChat={deleteChat}
+            onUpdateChats={setChats}
+            onSetActiveChat={setActiveChatId}
+            onAddNotification={addNotification}
+          />
         </div>
       </div>
-
-      {/* Right Panel */}
-      <RightPanel
-        chat={activeChat}
-        isOpen={showRightPanel}
-        isDark={isDark}
-        onToggleMute={handleToggleMute}
-        onTogglePin={handleTogglePin}
-        onToggleArchive={handleToggleArchive}
-        onRemoveUser={handleRemoveUserFromGroup}
-        onShowConfirmation={setConfirmationModal}
-        onDeleteChat={deleteChat}
-        onUpdateChats={setChats}
-        onSetActiveChat={setActiveChatId}
-        onAddNotification={addNotification}
-      />
 
       <ConfirmationModal modal={confirmationModal} isDark={isDark} />
 
