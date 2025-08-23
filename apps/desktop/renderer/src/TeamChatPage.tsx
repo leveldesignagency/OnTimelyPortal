@@ -2329,26 +2329,27 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
               <div 
                 onClick={setting.action}
                 style={{
-                  width: '36px',
-                  height: '18px',
-                  borderRadius: '9px',
-                  background: setting.value ? '#007bff' : isDark ? '#404040' : '#dee2e6',
+                  width: '40px',
+                  height: '20px',
+                  borderRadius: '12px',
+                  background: setting.value ? '#10b981' : isDark ? '#404040' : '#dee2e6',
                   position: 'relative',
                   cursor: 'pointer',
                   transition: 'all 0.2s ease'
                 }}
               >
                 <div style={{
-                  width: '14px',
-                  height: '14px',
+                  width: '16px',
+                  height: '16px',
                   borderRadius: '50%',
                   background: '#ffffff',
                   position: 'absolute',
                   top: '2px',
-                  left: setting.value ? '20px' : '2px',
-                  transition: 'all 0.2s ease'
+                  left: setting.value ? '22px' : '2px',
+                  transition: 'all 0.2s ease',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
                 }} />
-            </div>
+              </div>
             </div>
           ))}
         </div>

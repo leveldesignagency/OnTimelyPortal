@@ -263,31 +263,29 @@ export default function NotificationSettingsPage() {
       <button
         onClick={onToggle}
         style={{
-          width: 52,
-          height: 28,
-          borderRadius: 14,
+          width: 40,
+          height: 20,
+          borderRadius: 12,
           border: 'none',
           cursor: 'pointer',
           position: 'relative',
-          transition: 'all 0.3s ease',
+          transition: 'all 0.2s ease',
           background: enabled 
-            ? (isDark ? '#10b981' : '#059669') 
-            : (isDark ? '#ef4444' : '#dc2626'),
-          boxShadow: enabled 
-            ? '0 2px 8px rgba(16, 185, 129, 0.4)' 
-            : '0 2px 8px rgba(239, 68, 68, 0.4)'
+            ? '#10b981' 
+            : (isDark ? '#404040' : '#dee2e6'),
+          boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
         }}
       >
         <div style={{
-          width: 20,
-          height: 20,
+          width: 16,
+          height: 16,
           borderRadius: '50%',
           background: '#ffffff',
           position: 'absolute',
-          top: 4,
-          left: enabled ? 28 : 4,
-          transition: 'all 0.3s ease',
-          boxShadow: '0 2px 6px rgba(0, 0, 0, 0.3)'
+          top: 2,
+          left: enabled ? 22 : 2,
+          transition: 'all 0.2s ease',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
         }} />
       </button>
     </div>

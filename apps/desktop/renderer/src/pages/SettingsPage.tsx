@@ -671,26 +671,26 @@ export default function SettingsPage() {
               {type === 'toggle' && (
           <button
             onClick={() => handleToggle(key)}
-                    style={{
-              width: '56px',
-              height: '28px',
-              borderRadius: '14px',
-              background: settings[key] ? '#00bfa5' : '#e5e7eb',
+            style={{
+              width: '40px',
+              height: '20px',
+              borderRadius: '12px',
+              background: settings[key] ? '#10b981' : (isDark ? '#404040' : '#dee2e6'),
               border: 'none',
               cursor: 'pointer',
               position: 'relative',
               transition: 'all 0.2s ease',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+              boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
             }}
           >
             <div style={{
-              width: '20px',
-              height: '20px',
+              width: '16px',
+              height: '16px',
               borderRadius: '50%',
               background: '#ffffff',
               position: 'absolute',
-              top: '4px',
-              left: settings[key] ? '32px' : '4px',
+              top: '2px',
+              left: settings[key] ? '22px' : '2px',
               transition: 'all 0.2s ease',
               boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
             }} />
