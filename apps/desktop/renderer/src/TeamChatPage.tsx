@@ -488,7 +488,8 @@ const ChatListItem = ({ chat, active, onClick, isDark }: { chat: Chat, active: b
         margin: active ? '4px 12px' : '0px',
         boxShadow: active ? (isDark 
           ? '0 4px 16px rgba(0,0,0,0.3)' 
-          : '0 4px 16px rgba(0,0,0,0.1)') : 'none'
+          : '0 4px 16px rgba(0,0,0,0.1)') : 'none',
+        borderLeft: chat.isPinned ? `3px solid ${colors.accent}` : 'none'
       }}
       onMouseEnter={e => {
         if (!active) {
@@ -545,10 +546,28 @@ const ChatListItem = ({ chat, active, onClick, isDark }: { chat: Chat, active: b
               {getChatDisplayName(chat)}
             </span>
             {chat.isPinned && (
-                              <span style={{ fontSize: '12px', color: colors.accent }}></span>
+              <img
+                src="/icons/pin.svg"
+                alt="Pinned"
+                style={{
+                  width: '14px',
+                  height: '14px',
+                  filter: isDark ? 'invert(1)' : 'none',
+                  opacity: 0.8
+                }}
+              />
             )}
             {chat.isMuted && (
-                              <span style={{ fontSize: '12px', color: colors.textSecondary }}></span>
+              <img
+                src="/icons/bell.svg"
+                alt="Muted"
+                style={{
+                  width: '14px',
+                  height: '14px',
+                  filter: isDark ? 'invert(1)' : 'none',
+                  opacity: 0.6
+                }}
+              />
             )}
           </div>
           <span style={{
@@ -721,55 +740,52 @@ const ChatHeader = ({ chat, isDark, onToggleRightPanel }: {
       {chat && (
         <>
           <div style={{
-            width: '40px',
-            height: '40px',
+            width: '80px',
+            height: '80px',
             borderRadius: '50%',
             background: isDark ? 'linear-gradient(135deg, #4a4a4a, #2a2a2a)' : 'linear-gradient(135deg, #e9ecef, #dee2e6)',
             color: isDark ? '#fff' : '#495057',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: '16px',
+            fontSize: '28px',
             fontWeight: '600',
-            boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.1)',
+            margin: '0 auto 12px',
+            boxShadow: isDark ? '0 4px 16px rgba(0,0,0,0.3)' : '0 4px 16px rgba(0,0,0,0.1)',
             overflow: 'hidden'
           }}>
-            {(() => {
-              if (chat.type === 'direct' && chat.participants && CURRENT_USER) {
-                // For direct chats, get the other participant
-                const otherParticipant = chat.participants.find(p => p.id !== CURRENT_USER!.id);
-                if (otherParticipant && isAvatarUrl(otherParticipant.avatar)) {
-                  return (
-                    <img
-                      src={otherParticipant.avatar}
-                      alt={otherParticipant.name}
-                      style={{
-                        width: '100%',
-                        height: '100%',
-                        objectFit: 'cover'
-                      }}
-                    />
-                  );
+            {chat.type === 'group' ? (
+              // Group chat - show first letter of group name
+              chat.name ? chat.name.charAt(0).toUpperCase() : 'G'
+            ) : (
+              // Direct chat - show other user's profile picture or initials
+              (() => {
+                if (chat.participants && chat.participants.length > 0) {
+                  const otherUser = chat.participants.find(p => p.id !== CURRENT_USER?.id);
+                  if (otherUser) {
+                    // Check if user has a profile picture
+                    if (otherUser.avatar && isAvatarUrl(otherUser.avatar)) {
+                      return (
+                        <img
+                          src={otherUser.avatar}
+                          alt={otherUser.name}
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover'
+                          }}
+                        />
+                      );
+                    } else {
+                      // Show user's initials
+                      return getUserInitials(otherUser.name || 'Unknown User');
+                    }
+                  }
                 }
-                return getUserInitials(getChatDisplayName(chat));
-              } else {
-                // For group chats
-                if (chat.avatar && isAvatarUrl(chat.avatar)) {
-                  return (
-                    <img
-                      src={chat.avatar}
-                      alt={chat.name}
-                      style={{
-                        width: '100%',
-                        height: '100%',
-                        objectFit: 'cover'
-                      }}
-                    />
-                  );
-                }
-                return chat.avatar && chat.avatar.length <= 3 ? chat.avatar : getUserInitials(getChatDisplayName(chat));
-              }
-            })()}
+                // Fallback to chat avatar or initials
+                return chat.avatar || getUserInitials(getChatDisplayName(chat));
+              })()
+            )}
           </div>
           <div>
             <div style={{
@@ -2102,9 +2118,41 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
             fontSize: '28px',
             fontWeight: '600',
             margin: '0 auto 12px',
-            boxShadow: isDark ? '0 4px 16px rgba(0,0,0,0.3)' : '0 4px 16px rgba(0,0,0,0.1)'
+            boxShadow: isDark ? '0 4px 16px rgba(0,0,0,0.3)' : '0 4px 16px rgba(0,0,0,0.1)',
+            overflow: 'hidden'
           }}>
-            {chat.type === 'group' ? (chat.name ? chat.name.charAt(0).toUpperCase() : 'G') : chat.avatar}
+            {chat.type === 'group' ? (
+              // Group chat - show first letter of group name
+              chat.name ? chat.name.charAt(0).toUpperCase() : 'G'
+            ) : (
+              // Direct chat - show other user's profile picture or initials
+              (() => {
+                if (chat.participants && chat.participants.length > 0) {
+                  const otherUser = chat.participants.find(p => p.id !== CURRENT_USER?.id);
+                  if (otherUser) {
+                    // Check if user has a profile picture
+                    if (otherUser.avatar && isAvatarUrl(otherUser.avatar)) {
+                      return (
+                        <img
+                          src={otherUser.avatar}
+                          alt={otherUser.name}
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover'
+                          }}
+                        />
+                      );
+                    } else {
+                      // Show user's initials
+                      return getUserInitials(otherUser.name || 'Unknown User');
+                    }
+                  }
+                }
+                // Fallback to chat avatar or initials
+                return chat.avatar || getUserInitials(getChatDisplayName(chat));
+              })()
+            )}
           </div>
           <h3 style={{
             margin: '0 0 6px 0',
@@ -4029,10 +4077,10 @@ export default function TeamChatPage() {
     console.log('🏢 Team details:', { id: team.id, name: team.name, members: team.member_count });
 
     try {
-      // Check if team chat already exists
+      // Check if team chat already exists by name
       const existingChat = chats.find(chat => 
         chat.type === 'group' && 
-        chat.team_id === team.id
+        chat.name === `${team.name} Team Chat`
       );
 
       if (existingChat) {
@@ -4073,7 +4121,6 @@ export default function TeamChatPage() {
         type: 'group' as const,
         avatar: team.name.substring(0, 2).toUpperCase(),
         created_by: CURRENT_USER.id,
-        team_id: team.id,
         is_archived: false
       };
 
@@ -4147,7 +4194,6 @@ export default function TeamChatPage() {
       const enhancedChat = {
         ...convertedChat,
         type: 'group' as ChatType,
-        team_id: team.id,
         name: `${team.name} Team Chat`,
         avatar: team.name.substring(0, 2).toUpperCase()
       };
