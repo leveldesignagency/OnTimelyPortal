@@ -167,7 +167,9 @@ const AppContent = () => {
         padding: 0;
         font-family: 'Roboto', Arial, system-ui, sans-serif !important;
         font-weight: 400;
-        background: ${isDark ? '#121212' : '#f7f8fa'};
+        background: ${isDark 
+          ? 'radial-gradient(1200px 800px at 20% -10%, rgba(34,197,94,0.12), transparent 40%), radial-gradient(1000px 700px at 120% 10%, rgba(34,197,94,0.08), transparent 45%), #0f1115'
+          : '#f7f8fa'};
         color: ${isDark ? '#ffffff' : '#222'};
         box-sizing: border-box;
       }
@@ -175,6 +177,36 @@ const AppContent = () => {
         box-sizing: inherit;
         font-family: inherit !important;
         font-weight: 400 !important;
+      }
+      
+      /* Remove default scrollbar styling and any unwanted arrows */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      
+      ::-webkit-scrollbar-thumb {
+        background: ${isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)'};
+        border-radius: 4px;
+      }
+      
+      ::-webkit-scrollbar-thumb:hover {
+        background: ${isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)'};
+      }
+      
+      /* Remove any default browser arrows */
+      ::-webkit-scrollbar-button {
+        display: none;
+      }
+      
+      /* Ensure no unwanted pseudo-elements */
+      *::before,
+      *::after {
+        content: none !important;
       }
       h1, h2, h3, h4, h5, h6, strong, b {
         font-weight: 400 !important;

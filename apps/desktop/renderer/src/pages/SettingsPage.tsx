@@ -4,6 +4,102 @@ import { ThemeContext } from '../ThemeContext';
 import { getCurrentUser } from '../lib/auth';
 import { supabase } from '../lib/supabase';
 
+// Custom Dropdown Component (same styling as CalendarPage)
+function CustomDropdown({ 
+  value, 
+  onChange, 
+  options, 
+  placeholder, 
+  isDark, 
+  colors 
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+  placeholder: string;
+  isDark: boolean;
+  colors: any;
+}) {
+  const [show, setShow] = useState(false);
+  
+  return (
+    <div style={{ position: 'relative', width: '100%' }}>
+      <div
+        onClick={() => setShow(!show)}
+        style={{
+          width: '100%',
+          padding: '8px 10px',
+          borderRadius: '8px',
+          border: `1px solid ${colors.border}`,
+          background: isDark ? 'rgba(42, 42, 42, 0.9)' : 'rgba(255, 255, 255, 0.9)',
+          color: colors.text,
+          fontSize: '13px',
+          cursor: 'pointer',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          position: 'relative',
+          height: '36px',
+          boxSizing: 'border-box'
+        }}
+      >
+        <span>{options.find(option => option.value === value)?.label || placeholder}</span>
+        <span style={{ 
+          transform: show ? 'rotate(180deg)' : 'rotate(0deg)',
+          transition: 'transform 0.2s ease'
+        }}>
+          ▼
+        </span>
+      </div>
+
+      {/* Dropdown Options */}
+      {show && (
+        <div style={{
+          position: 'absolute',
+          top: '100%',
+          left: 0,
+          right: 0,
+          zIndex: 1000,
+          background: isDark ? 'rgba(42, 42, 42, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+          border: `1px solid ${colors.border}`,
+          borderRadius: '8px',
+          marginTop: '4px',
+          boxShadow: isDark 
+            ? '0 8px 32px rgba(0, 0, 0, 0.3)' 
+            : '0 8px 32px rgba(0, 0, 0, 0.1)'
+        }}>
+          {options.map((option, index) => (
+            <div
+              key={option.value}
+              onClick={(e) => {
+                e.stopPropagation();
+                onChange(option.value);
+                setShow(false);
+              }}
+              style={{
+                padding: '8px 10px',
+                cursor: 'pointer',
+                color: colors.text,
+                fontSize: '13px',
+                borderBottom: index !== options.length - 1 ? `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}` : 'none',
+                transition: 'background 0.2s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'transparent';
+              }}
+            >
+              {option.label}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface UserSettings {
   // Profile Settings
   name: string;
@@ -588,52 +684,33 @@ export default function SettingsPage() {
       display: 'flex',
       justifyContent: 'space-between',
       alignItems: 'center',
-      padding: '10px 0',
+      padding: '16px 0',
       borderBottom: `1px solid ${isDark ? '#333' : '#e5e7eb'}`
     }}>
       <div style={{ flex: 1 }}>
         <div style={{ 
           fontWeight: '500', 
-          marginBottom: '6px',
+          marginBottom: '2px',
           fontSize: '13px',
           color: isDark ? '#fff' : '#000'
         }}>
           {label}
         </div>
         {type === 'select' && (
-          <div style={{ position: 'relative' }}>
-            <select
+          <div style={{ width: '200px' }}>
+            <CustomDropdown
               value={settings[key] as string}
-              onChange={(e) => setSettings(prev => ({ ...prev, [key]: e.target.value }))}
-          style={{ 
-                padding: '8px 10px',
-                borderRadius: '8px',
-                border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)'}`,
-                background: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.8)',
-                backdropFilter: 'blur(10px)',
-                color: isDark ? '#ffffff' : '#000000',
-                fontSize: '13px',
-                width: '200px',
-                appearance: 'none',
-            cursor: 'pointer', 
-                boxShadow: isDark ? '0 4px 6px rgba(0, 0, 0, 0.3)' : '0 4px 6px rgba(0, 0, 0, 0.1)'
+              onChange={(value) => setSettings(prev => ({ ...prev, [key]: value }))}
+              options={options || []}
+              placeholder="Select option"
+              isDark={isDark}
+              colors={{
+                text: isDark ? '#ffffff' : '#000000',
+                border: isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)',
+                hover: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.8)'
               }}
-            >
-              {options?.map(option => (
-                <option 
-                  key={option.value} 
-                  value={option.value}
-          style={{
-                    background: isDark ? '#2d2d2d' : '#ffffff',
-                    color: isDark ? '#ffffff' : '#000000',
-                    padding: '8px 10px'
-                  }}
-                >
-                  {option.label}
-                </option>
-              ))}
-            </select>
-      </div>
+            />
+          </div>
         )}
         {type === 'input' && (
                   <input
@@ -680,20 +757,27 @@ export default function SettingsPage() {
               cursor: 'pointer',
               position: 'relative',
               transition: 'all 0.2s ease',
-              boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+              boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+              padding: '0',
+              margin: '0',
+              outline: 'none',
+              appearance: 'none',
+              WebkitAppearance: 'none',
+              MozAppearance: 'none'
             }}
           >
-            <div style={{
-              width: '16px',
-              height: '16px',
-              borderRadius: '50%',
-              background: '#ffffff',
-              position: 'absolute',
-              top: '2px',
-              left: settings[key] ? '22px' : '2px',
-              transition: 'all 0.2s ease',
-              boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-            }} />
+
+                          <div style={{
+                width: '16px',
+                height: '16px',
+                borderRadius: '50%',
+                background: '#ffffff',
+                position: 'absolute',
+                top: '2px',
+                left: settings[key] ? '22px' : '2px',
+                transition: 'all 0.2s ease',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+              }} />
           </button>
         )}
     </div>
@@ -950,9 +1034,11 @@ export default function SettingsPage() {
       return (
             <div style={{
         minHeight: '100vh',
-        background: isDark ? '#1a1a1a' : '#f5f5f5',
+        background: isDark 
+          ? 'radial-gradient(1200px 800px at 20% -10%, rgba(34,197,94,0.12), transparent 40%), radial-gradient(1000px 700px at 120% 10%, rgba(34,197,94,0.08), transparent 45%), #0f1115'
+          : '#f7f8fa',
         color: isDark ? '#ffffff' : '#000000',
-        padding: '5% 2%',
+        padding: '2%',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center'
@@ -962,18 +1048,24 @@ export default function SettingsPage() {
           height: '90vh',
           width: '95%',
           maxWidth: '1400px',
-          background: isDark ? '#2d2d2d' : '#ffffff',
-          borderRadius: '12px',
-          boxShadow: isDark ? '0 8px 32px rgba(0, 0, 0, 0.4)' : '0 8px 32px rgba(0, 0, 0, 0.1)',
-          border: isDark ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid rgba(0, 0, 0, 0.1)',
-          overflow: 'hidden'
+          background: isDark ? 'rgba(30, 30, 30, 0.55)' : 'rgba(255, 255, 255, 0.9)',
+          borderRadius: '18px',
+          boxShadow: isDark 
+            ? 'inset 0 1px 0 rgba(255,255,255,0.04), 0 8px 30px rgba(0,0,0,0.45)'
+            : '0 4px 20px rgba(0,0,0,0.1)',
+          border: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(0, 0, 0, 0.1)',
+          overflow: 'hidden',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)'
         }}>
           {/* Sidebar */}
           <div style={{
             width: '250px',
-            background: isDark ? '#2d2d2d' : '#f8f9fa',
-            borderRight: isDark ? '1px solid #444' : '1px solid #e5e7eb',
-            padding: '20px'
+            background: isDark ? 'rgba(30, 30, 30, 0.55)' : 'rgba(255, 255, 255, 0.9)',
+            borderRight: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(0,0,0,0.1)',
+            padding: '20px',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)'
           }}>
           <h2 style={{ marginBottom: '20px', fontSize: '18px', fontWeight: '600', color: isDark ? '#fff' : '#000' }}>Settings</h2>
           <div style={{ 
@@ -994,8 +1086,8 @@ export default function SettingsPage() {
                       width: '100%',
                     border: 'none',
                     borderRadius: '0',
-                    borderTop: index > 0 ? `0.5px solid ${isDark ? '#fff' : '#000'}` : 'none',
-                    borderBottom: index < tabs.length - 1 ? `0.5px solid ${isDark ? '#fff' : '#000'}` : 'none',
+                    borderTop: index > 0 ? `0.5px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}` : 'none',
+                    borderBottom: index < tabs.length - 1 ? `0.5px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}` : 'none',
                     background: activeTab === tab.id 
                       ? (isDark ? '#fff' : '#000') 
                       : 'transparent',
@@ -1026,11 +1118,13 @@ export default function SettingsPage() {
                   {/* Main Content */}
             <div style={{
             flex: 1,
-            background: isDark ? '#2d2d2d' : '#ffffff',
+            background: isDark ? 'rgba(30, 30, 30, 0.55)' : 'rgba(255, 255, 255, 0.9)',
             padding: '20px 40px',
             overflowY: 'auto',
             marginLeft: '20px',
-            position: 'relative'
+            position: 'relative',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)'
           }}>
             <div style={{
             marginBottom: '20px'
@@ -1052,7 +1146,7 @@ export default function SettingsPage() {
               disabled={saving}
                     style={{
                 padding: '8px 16px',
-                background: '#00bfa5',
+                background: '#10b981',
                 color: '#ffffff',
                 border: 'none',
                 borderRadius: '6px',
@@ -1071,4 +1165,4 @@ export default function SettingsPage() {
       </div>
     </div>
   );
-} 
+}

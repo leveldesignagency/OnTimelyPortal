@@ -421,12 +421,19 @@ export default function EventLauncher() {
 
   return (
     <>
-      <div style={{ minHeight: '100vh', background: isDark ? '#121212' : '#f8f9fa', color: isDark ? '#fff' : '#222', padding: 0 }}>
+      <div style={{ 
+        minHeight: '100vh', 
+        background: isDark 
+          ? 'radial-gradient(1200px 800px at 20% -10%, rgba(34,197,94,0.12), transparent 40%), radial-gradient(1000px 700px at 120% 10%, rgba(34,197,94,0.08), transparent 45%), #0f1115'
+          : '#f7f8fa', 
+        color: isDark ? '#fff' : '#222', 
+        padding: 0 
+      }}>
         <div style={{ maxWidth: 1400, margin: '0 auto', padding: '48px 24px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 32 }}>
             <button
               onClick={() => navigate(`/event/${eventId}`)}
-              style={{ width: 140, fontSize: 16, background: 'none', color: isDark ? '#fff' : '#000', border: '1.5px solid', borderColor: isDark ? '#444' : '#bbb', borderRadius: 8, cursor: 'pointer', padding: '10px 0', fontWeight: 600 }}
+              style={{ width: 140, fontSize: 16, background: 'none', color: '#fff', border: '1.5px solid #bbb', borderRadius: 8, cursor: 'pointer', fontWeight: 600, padding: '10px 0' }}
             >
               Back
             </button>

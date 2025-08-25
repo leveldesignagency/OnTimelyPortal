@@ -225,7 +225,13 @@ export default function GuestFormPage() {
   const activeStage1Modules = formConfig?.modules.filter(m => stage1Modules.includes(m)) || [];
 
   return (
-    <div style={{ background: isDark ? '#121212' : '#f8f9fa', minHeight: '100vh', padding: '40px 20px' }}>
+    <div style={{ 
+      background: isDark 
+        ? 'radial-gradient(1200px 800px at 20% -10%, rgba(34,197,94,0.12), transparent 40%), radial-gradient(1000px 700px at 120% 10%, rgba(34,197,94,0.08), transparent 45%), #0f1115'
+        : '#f7f8fa', 
+      minHeight: '100vh', 
+      padding: '40px 20px' 
+    }}>
       <div style={{ 
         maxWidth: 700, 
         margin: '0 auto', 

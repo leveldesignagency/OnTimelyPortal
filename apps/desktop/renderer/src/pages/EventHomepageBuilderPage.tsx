@@ -1,7 +1,7 @@
 import React, { useState, useContext, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ThemeContext } from '../ThemeContext';
-import { supabase, getEvent, type SupabaseEvent, uploadImageToStorage, validateImageFile, insertActivityLog } from '../lib/supabase';
+import { supabase, getEvent, type Event, uploadImageToStorage, validateImageFile, insertActivityLog } from '../lib/supabase';
 import ImageCollageModal, { LAYOUTS } from '../components/ImageCollageModal';
 import TOSModal from '../components/TOSModal';
 import { getCurrentUser, getCurrentUserCompanyId } from '../lib/auth';
@@ -51,7 +51,7 @@ export default function EventHomepageBuilderPage() {
   const isDark = theme === 'dark';
   
   const eventId = location.state?.eventId;
-  const [event, setEvent] = useState<SupabaseEvent | null>(null);
+  const [event, setEvent] = useState<Event | null>(null);
   const [homepageData, setHomepageData] = useState<HomepageData>({
     eventImage: null,
     welcomeTitle: 'WELCOME TO THE EVENT',
@@ -337,7 +337,10 @@ export default function EventHomepageBuilderPage() {
   };
 
   // --- Styling helpers ---
-  const getMainBg = () => (isDark ? '#121212' : '#f8f9fa');
+  const getMainBg = () => (isDark 
+    ? 'radial-gradient(1200px 800px at 20% -10%, rgba(34,197,94,0.12), transparent 40%), radial-gradient(1000px 700px at 120% 10%, rgba(34,197,94,0.08), transparent 45%), #0f1115'
+    : '#f7f8fa'
+  );
   const getGlassStyles = (isDark: boolean) => ({
     background: isDark 
       ? 'rgba(255, 255, 255, 0.05)' 
@@ -1665,7 +1668,10 @@ export default function EventHomepageBuilderPage() {
                   borderRadius: 12,
                   margin: '20px 0'
                 }}>
-                  <div style={{ fontSize: 24, marginBottom: 12 }}>📋</div>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+          <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+        </svg>
                   <div style={{ fontWeight: 600, marginBottom: 8 }}>Start Building Your Homepage</div>
                   <div style={{ fontSize: 14, opacity: 0.8 }}>
                     Drag modules from the right panel or click to add

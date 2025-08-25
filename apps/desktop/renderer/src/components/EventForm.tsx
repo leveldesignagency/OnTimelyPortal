@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { CustomDatePicker as SharedDatePicker, CustomTimePicker as SharedTimePicker } from '../components/CustomPickers';
 import ThemedIcon from './ThemedIcon';
 import { getCurrentUser } from '../lib/auth';
 import { getCompanyTeams } from '../lib/chat';
@@ -510,15 +511,19 @@ export default function EventForm({
   const [loading, setLoading] = useState(false);
   const [teams, setTeams] = useState<any[]>([]);
   const [filteredTeams, setFilteredTeams] = useState<any[]>([]);
-  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>(initialValues.teamIds || []);
+  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>(Array.from(new Set(initialValues.teamIds || [])));
   const [teamSearch, setTeamSearch] = useState('');
   const [showTeamDropdown, setShowTeamDropdown] = useState(false);
 
   // Get selected team names for display
-  const selectedTeamNames = selectedTeamIds.map(id => {
-    const team = teams.find(t => t.id === id);
-    return team?.name || '';
-  }).filter(name => name);
+  const selectedTeamNames = Array.from(new Set(
+    selectedTeamIds
+      .map(id => {
+        const team = teams.find(t => t.id === id);
+        return team?.name || '';
+      })
+      .filter(name => name)
+  ));
   const teamDisplayValue = selectedTeamNames.length > 0 
     ? selectedTeamNames.join(', ') 
     : teamSearch;
@@ -531,8 +536,10 @@ export default function EventForm({
         const myTeams = companyTeams.filter(
           (team: any) => team.created_by === user.id || (team.members && team.members.some((m: any) => m.user_id === user.id))
         );
-        setTeams(myTeams);
-        setFilteredTeams(myTeams);
+        // De-duplicate by id to avoid repeated entries
+        const uniqueTeams = Array.from(new Map(myTeams.map((t: any) => [t.id, t])).values());
+        setTeams(uniqueTeams);
+        setFilteredTeams(uniqueTeams);
       }
     })();
   }, []);
@@ -565,7 +572,7 @@ export default function EventForm({
         endTime,
         location,
         timeZone,
-        teamIds: selectedTeamIds
+        teamIds: Array.from(new Set(selectedTeamIds))
       });
     } catch (error) {
       alert('Failed to save event. Please try again.');
@@ -636,112 +643,111 @@ export default function EventForm({
           required
         />
       </div>
-      {/* Time Zone field - use GlassTimeZoneDropdown */}
-      <div style={{ marginBottom: 20, width: '100%' }}>
-        <label style={{ color: colors.text, fontWeight: 600, fontSize: 16, marginBottom: 8, display: 'block' }}>Time Zone</label>
-        <GlassTimeZoneDropdown value={timeZone} onChange={setTimeZone} colors={colors} isDark={isDark} />
-      </div>
-      {/* Team Assignment field - styled like GlassTimeZoneDropdown */}
-      <div style={{ marginBottom: 20, width: '100%', position: 'relative' }}>
-        <label style={{ color: colors.text, fontWeight: 600, fontSize: 16, marginBottom: 4, display: 'block' }}>Assign Your Team</label>
-        <div style={{ color: colors.textSecondary, fontSize: 11, marginBottom: 6, marginTop: 0 }}>
-          If you are not ready to add your team, you can add them later inside of the Create A New Team page.
+      {/* Time Zone + Assign Team in one row (match CreateEventPage) */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, width: '100%', marginBottom: 20 }}>
+        <div>
+          <label style={{ color: colors.text, fontWeight: 600, fontSize: 16, marginBottom: 8, display: 'block' }}>Time Zone</label>
+          <GlassTimeZoneDropdown value={timeZone} onChange={setTimeZone} colors={colors} isDark={isDark} />
         </div>
-        <div style={{ position: 'relative', width: '100%' }}>
-          <input
-            type="text"
-            value={selectedTeamIds.length > 0 ? teamDisplayValue : teamSearch}
-            onChange={e => {
-              if (selectedTeamIds.length > 0) {
-                setSelectedTeamIds([]);
-                setTeamSearch(e.target.value);
-                setShowTeamDropdown(!!e.target.value);
-              } else {
-                setTeamSearch(e.target.value);
-                setShowTeamDropdown(!!e.target.value);
-              }
-            }}
-            onFocus={e => { if (teamSearch || selectedTeamIds.length > 0) setShowTeamDropdown(true); }}
-            placeholder="Search for a team..."
-            style={{
-              width: '100%',
-              padding: '16px 20px',
-              borderRadius: '12px',
-              border: `2px solid ${colors.border}`,
-              background: colors.inputBg,
-              color: colors.text,
-              fontSize: '20px',
-              minHeight: '56px',
-              boxSizing: 'border-box',
-              marginTop: 0,
-              transition: 'all 0.2s',
-              display: 'block',
-            }}
-            autoComplete="off"
-          />
-          {showTeamDropdown && teamSearch && (
-            <div
+        <div style={{ width: '100%', position: 'relative' }}>
+          <label style={{ color: colors.text, fontWeight: 600, fontSize: 16, marginBottom: 4, display: 'block' }}>Assign Your Team</label>
+          <div style={{ position: 'relative', width: '100%' }}>
+            <input
+              type="text"
+              value={selectedTeamIds.length > 0 ? teamDisplayValue : teamSearch}
+              onChange={e => {
+                if (selectedTeamIds.length > 0) {
+                  setSelectedTeamIds([]);
+                  setTeamSearch(e.target.value);
+                  setShowTeamDropdown(!!e.target.value);
+                } else {
+                  setTeamSearch(e.target.value);
+                  setShowTeamDropdown(!!e.target.value);
+                }
+              }}
+              onFocus={e => { if (teamSearch || selectedTeamIds.length > 0) setShowTeamDropdown(true); }}
+              placeholder="Search for a team..."
               style={{
                 width: '100%',
-                maxHeight: 220,
-                overflowY: 'auto',
-                background: `linear-gradient(to top, ${colors.inputBg} 75%, rgba(0,0,0,0) 100%)`,
-                border: `2px solid ${colors.border}`,
+                padding: '16px 20px',
                 borderRadius: '12px',
-                boxShadow: '0 8px 32px rgba(0,0,0,0.30)',
+                border: `2px solid ${colors.border}`,
+                background: colors.inputBg,
                 color: colors.text,
-                marginTop: 4,
-                position: 'relative',
-                zIndex: 10,
+                fontSize: '20px',
+                minHeight: '56px',
+                boxSizing: 'border-box',
+                marginTop: 0,
+                transition: 'all 0.2s',
+                display: 'block',
               }}
-            >
-              {filteredTeams.length === 0 && (
-                <div style={{ padding: 16, color: colors.textSecondary, fontSize: 15 }}>No results</div>
-              )}
-              {filteredTeams.map(team => (
-                <div
-                  key={team.id}
-                  onClick={() => {
-                    setSelectedTeamIds(prev => [...prev, team.id]);
-                    setTeamSearch('');
-                    setShowTeamDropdown(false);
-                  }}
-                  style={{
-                    padding: '12px 20px',
-                    cursor: 'pointer',
-                    color: colors.text,
-                    background: selectedTeamIds.includes(team.id) ? (isDark ? '#444' : '#e5e7eb') : 'transparent',
-                    fontWeight: selectedTeamIds.includes(team.id) ? 700 : 400,
-                    fontSize: 18,
-                    borderRadius: 8,
-                    margin: '4px 8px',
-                    transition: 'background 0.2s',
-                  }}
-                  onMouseDown={e => e.preventDefault()}
-                >
-                  {team.name}
-                </div>
-              ))}
-            </div>
-          )}
+              autoComplete="off"
+            />
+            {showTeamDropdown && teamSearch && (
+              <div
+                style={{
+                  width: '100%',
+                  maxHeight: 220,
+                  overflowY: 'auto',
+                  background: `linear-gradient(to top, ${colors.inputBg} 75%, rgba(0,0,0,0) 100%)`,
+                  border: `2px solid ${colors.border}`,
+                  borderRadius: '12px',
+                  boxShadow: '0 8px 32px rgba(0,0,0,0.30)',
+                  color: colors.text,
+                  marginTop: 4,
+                  position: 'relative',
+                  zIndex: 10,
+                }}
+              >
+                {filteredTeams.length === 0 && (
+                  <div style={{ padding: 16, color: colors.textSecondary, fontSize: 15 }}>No results</div>
+                )}
+                {filteredTeams.map(team => (
+                  <div
+                    key={team.id}
+                    onClick={() => {
+                      setSelectedTeamIds(prev => prev.includes(team.id) ? prev : [...prev, team.id]);
+                      setTeamSearch('');
+                      setShowTeamDropdown(false);
+                    }}
+                    style={{
+                      padding: '12px 20px',
+                      cursor: 'pointer',
+                      color: colors.text,
+                      background: selectedTeamIds.includes(team.id) ? (isDark ? '#444' : '#e5e7eb') : 'transparent',
+                      fontWeight: selectedTeamIds.includes(team.id) ? 700 : 400,
+                      fontSize: 18,
+                      borderRadius: 8,
+                      margin: '4px 8px',
+                      transition: 'background 0.2s',
+                    }}
+                    onMouseDown={e => e.preventDefault()}
+                  >
+                    {team.name}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div style={{ color: colors.textSecondary, fontSize: 11, marginTop: 6 }}>
+            You can also assign a team in the <a href="/teams/create" style={{ color: '#10b981', textDecoration: 'underline' }}>Create a Team</a> section.
+          </div>
         </div>
       </div>
       {/* Date fields */}
       <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
-        <CustomDatePicker
+        <SharedDatePicker
           value={from}
           onChange={setFrom}
           placeholder="Select start date"
-          isDark={isDark}
-          colors={colors}
+          placement="above"
           required
         />
-        <CustomDatePicker
+        <SharedDatePicker
           value={to}
           onChange={setTo}
           placeholder="Select end date"
-          isDark={isDark}
-          colors={colors}
+          placement="above"
           required
         />
       </div>
@@ -749,12 +755,11 @@ export default function EventForm({
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: 20, gap: 20, width: '100%' }}>
         <div style={{ flex: 1 }}>
           <label style={{ color: colors.text, fontWeight: 600, fontSize: 15, marginBottom: 8, display: 'block' }}>Start Time</label>
-          <TimePicker value={startTime} onChange={setStartTime} placeholder="Start time" colors={colors} />
+          <SharedTimePicker value={startTime} onChange={setStartTime} placeholder="HH:MM" placement="above" />
         </div>
-        <span style={{ fontSize: 32, color: colors.textSecondary, margin: '0 12px', userSelect: 'none' }}>&#9654;</span>
         <div style={{ flex: 1 }}>
           <label style={{ color: colors.text, fontWeight: 600, fontSize: 15, marginBottom: 8, display: 'block' }}>End Time</label>
-          <TimePicker value={endTime} onChange={setEndTime} placeholder="End time" colors={colors} />
+          <SharedTimePicker value={endTime} onChange={setEndTime} placeholder="HH:MM" placement="above" />
         </div>
       </div>
       {/* Submit/Cancel buttons */}

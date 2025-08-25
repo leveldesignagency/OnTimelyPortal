@@ -1,4 +1,5 @@
 import React, { useState, useContext, useEffect } from 'react';
+import { CustomTimePicker as SharedTimePicker } from '../components/CustomPickers';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ThemeContext } from '../ThemeContext';
 import { getCurrentUser } from '../lib/auth';
@@ -235,11 +236,11 @@ export default function NotificationSettingsPage() {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
-      padding: '16px 20px',
+      padding: '8px 16px',
       background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
       border: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(0,0,0,0.1)',
       borderRadius: 12,
-      marginBottom: 12,
+      marginBottom: 8,
       transition: 'all 0.2s ease'
     }}>
       <div style={{ flex: 1 }}>
@@ -263,9 +264,9 @@ export default function NotificationSettingsPage() {
       <button
         onClick={onToggle}
         style={{
-          width: 40,
-          height: 20,
-          borderRadius: 12,
+          width: '40px',
+          height: '20px',
+          borderRadius: '12px',
           border: 'none',
           cursor: 'pointer',
           position: 'relative',
@@ -273,17 +274,23 @@ export default function NotificationSettingsPage() {
           background: enabled 
             ? '#10b981' 
             : (isDark ? '#404040' : '#dee2e6'),
-          boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+          boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+          padding: '0',
+          margin: '0',
+          outline: 'none',
+          appearance: 'none',
+          WebkitAppearance: 'none',
+          MozAppearance: 'none'
         }}
       >
         <div style={{
-          width: 16,
-          height: 16,
+          width: '16px',
+          height: '16px',
           borderRadius: '50%',
           background: '#ffffff',
           position: 'absolute',
-          top: 2,
-          left: enabled ? 22 : 2,
+          top: '2px',
+          left: enabled ? '22px' : '2px',
           transition: 'all 0.2s ease',
           boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
         }} />
@@ -317,7 +324,9 @@ export default function NotificationSettingsPage() {
     return (
       <div style={{
         minHeight: '100vh',
-        background: isDark ? '#121212' : '#f7f8fa',
+        background: isDark 
+          ? 'radial-gradient(1200px 800px at 20% -10%, rgba(34,197,94,0.12), transparent 40%), radial-gradient(1000px 700px at 120% 10%, rgba(34,197,94,0.08), transparent 45%), #0f1115'
+          : '#f7f8fa',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center'
@@ -332,7 +341,9 @@ export default function NotificationSettingsPage() {
   return (
     <div style={{
       minHeight: '100vh',
-      background: isDark ? '#121212' : '#f7f8fa',
+      background: isDark 
+        ? 'radial-gradient(1200px 800px at 20% -10%, rgba(34,197,94,0.12), transparent 40%), radial-gradient(1000px 700px at 120% 10%, rgba(34,197,94,0.08), transparent 45%), #0f1115'
+        : '#f7f8fa',
       padding: 0
     }}>
       <div style={{
@@ -352,25 +363,19 @@ export default function NotificationSettingsPage() {
           <button
             onClick={() => navigate(`/event/${eventId}`)}
             style={{
-              width: 140,
-              fontSize: 16,
               background: 'none',
+              border: 'none',
               color: isDark ? '#fff' : '#1a1a1a',
-              border: '1.5px solid #bbb',
-              borderRadius: 8,
+              fontSize: 16,
               cursor: 'pointer',
-              fontWeight: 600,
-              padding: '10px 0',
-              transition: 'all 0.2s ease'
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)';
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.background = 'none';
+              padding: '8px 0',
+              marginBottom: '16px',
+              display: 'flex',
+              alignItems: 'center',
+              fontFamily: 'inherit',
             }}
           >
-            Back
+            ← Back
           </button>
           <div style={{ display: 'flex', gap: 16 }}>
             <button
@@ -444,11 +449,15 @@ export default function NotificationSettingsPage() {
           
           {/* Event Notifications */}
           <div style={{
-            background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.8)',
-            borderRadius: 16,
+            background: isDark ? 'rgba(30, 30, 30, 0.55)' : 'rgba(255, 255, 255, 0.9)',
+            borderRadius: 18,
             padding: 24,
-            border: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(0,0,0,0.1)',
-            backdropFilter: 'blur(10px)'
+            border: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(0, 0, 0, 0.1)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            boxShadow: isDark 
+              ? 'inset 0 1px 0 rgba(255,255,255,0.04), 0 8px 30px rgba(0,0,0,0.45)'
+              : '0 4px 20px rgba(0,0,0,0.1)'
           }}>
             <SectionHeader 
               title="Event Notifications" 
@@ -482,11 +491,15 @@ export default function NotificationSettingsPage() {
 
           {/* Chat Notifications */}
           <div style={{
-            background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.8)',
-            borderRadius: 16,
+            background: isDark ? 'rgba(30, 30, 30, 0.55)' : 'rgba(255, 255, 255, 0.9)',
+            borderRadius: 18,
             padding: 24,
-            border: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(0,0,0,0.1)',
-            backdropFilter: 'blur(10px)'
+            border: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(0, 0, 0, 0.1)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            boxShadow: isDark 
+              ? 'inset 0 1px 0 rgba(255,255,255,0.04), 0 8px 30px rgba(0,0,0,0.45)'
+              : '0 4px 20px rgba(0,0,0,0.1)'
           }}>
             <SectionHeader 
               title="Chat Notifications" 
@@ -514,11 +527,15 @@ export default function NotificationSettingsPage() {
 
           {/* System Notifications */}
           <div style={{
-            background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.8)',
-            borderRadius: 16,
+            background: isDark ? 'rgba(30, 30, 30, 0.55)' : 'rgba(255, 255, 255, 0.9)',
+            borderRadius: 18,
             padding: 24,
-            border: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(0,0,0,0.1)',
-            backdropFilter: 'blur(10px)'
+            border: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(0, 0, 0, 0.1)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            boxShadow: isDark 
+              ? 'inset 0 1px 0 rgba(255,255,255,0.04), 0 8px 30px rgba(0,0,0,0.45)'
+              : '0 4px 20px rgba(0,0,0,0.1)'
           }}>
             <SectionHeader 
               title="System Notifications" 
@@ -552,11 +569,15 @@ export default function NotificationSettingsPage() {
 
           {/* Email Notifications */}
           <div style={{
-            background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.8)',
-            borderRadius: 16,
+            background: isDark ? 'rgba(30, 30, 30, 0.55)' : 'rgba(255, 255, 255, 0.9)',
+            borderRadius: 18,
             padding: 24,
-            border: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(0,0,0,0.1)',
-            backdropFilter: 'blur(10px)'
+            border: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(0, 0, 0, 0.1)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            boxShadow: isDark 
+              ? 'inset 0 1px 0 rgba(255,255,255,0.04), 0 8px 30px rgba(0,0,0,0.45)'
+              : '0 4px 20px rgba(0,0,0,0.1)'
           }}>
             <SectionHeader 
               title="Email Notifications" 
@@ -584,11 +605,15 @@ export default function NotificationSettingsPage() {
 
           {/* Calendar Notifications */}
           <div style={{
-            background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.8)',
-            borderRadius: 16,
+            background: isDark ? 'rgba(30, 30, 30, 0.55)' : 'rgba(255, 255, 255, 0.9)',
+            borderRadius: 18,
             padding: 24,
-            border: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(0,0,0,0.1)',
-            backdropFilter: 'blur(10px)'
+            border: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(0, 0, 0, 0.1)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            boxShadow: isDark 
+              ? 'inset 0 1px 0 rgba(255,255,255,0.04), 0 8px 30px rgba(0,0,0,0.45)'
+              : '0 4px 20px rgba(0,0,0,0.1)'
           }}>
             <SectionHeader 
               title="Calendar Notifications" 
@@ -616,11 +641,15 @@ export default function NotificationSettingsPage() {
 
           {/* Activity Notifications */}
           <div style={{
-            background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.8)',
-            borderRadius: 16,
+            background: isDark ? 'rgba(30, 30, 30, 0.55)' : 'rgba(255, 255, 255, 0.9)',
+            borderRadius: 18,
             padding: 24,
-            border: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(0,0,0,0.1)',
-            backdropFilter: 'blur(10px)'
+            border: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(0, 0, 0, 0.1)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            boxShadow: isDark 
+              ? 'inset 0 1px 0 rgba(255,255,255,0.04), 0 8px 30px rgba(0,0,0,0.45)'
+              : '0 4px 20px rgba(0,0,0,0.1)'
           }}>
             <SectionHeader 
               title="Activity Notifications" 
@@ -648,11 +677,15 @@ export default function NotificationSettingsPage() {
 
           {/* Push Notifications */}
           <div style={{
-            background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.8)',
-            borderRadius: 16,
+            background: isDark ? 'rgba(30, 30, 30, 0.55)' : 'rgba(255, 255, 255, 0.9)',
+            borderRadius: 18,
             padding: 24,
-            border: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(0,0,0,0.1)',
-            backdropFilter: 'blur(10px)'
+            border: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(0, 0, 0, 0.1)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            boxShadow: isDark 
+              ? 'inset 0 1px 0 rgba(255,255,255,0.04), 0 8px 30px rgba(0,0,0,0.45)'
+              : '0 4px 20px rgba(0,0,0,0.1)'
           }}>
             <SectionHeader 
               title="Push Notifications" 
@@ -680,11 +713,15 @@ export default function NotificationSettingsPage() {
 
           {/* Advanced Settings */}
           <div style={{
-            background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.8)',
-            borderRadius: 16,
+            background: isDark ? 'rgba(30, 30, 30, 0.55)' : 'rgba(255, 255, 255, 0.9)',
+            borderRadius: 18,
             padding: 24,
-            border: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(0,0,0,0.1)',
-            backdropFilter: 'blur(10px)'
+            border: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(0, 0, 0, 0.1)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            boxShadow: isDark 
+              ? 'inset 0 1px 0 rgba(255,255,255,0.04), 0 8px 30px rgba(0,0,0,0.45)'
+              : '0 4px 20px rgba(0,0,0,0.1)'
           }}>
             <SectionHeader 
               title="Advanced Settings" 
@@ -728,22 +765,10 @@ export default function NotificationSettingsPage() {
                   }}>
                     Start Time
                   </label>
-                  <input
-                    type="time"
+                  <SharedTimePicker
                     value={settings.quietHoursStart}
-                    onChange={(e) => setSettings(prev => ({
-                      ...prev,
-                      quietHoursStart: e.target.value
-                    }))}
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      borderRadius: 6,
-                      border: isDark ? '1px solid rgba(255,255,255,0.2)' : '1px solid rgba(0,0,0,0.2)',
-                      background: isDark ? 'rgba(0,0,0,0.3)' : '#fff',
-                      color: isDark ? '#fff' : '#1a1a1a',
-                      fontSize: 14
-                    }}
+                    onChange={(v) => setSettings(prev => ({ ...prev, quietHoursStart: v }))}
+                    placeholder="HH:MM"
                   />
                 </div>
                 <div style={{ flex: 1 }}>
@@ -756,22 +781,10 @@ export default function NotificationSettingsPage() {
                   }}>
                     End Time
                   </label>
-                  <input
-                    type="time"
+                  <SharedTimePicker
                     value={settings.quietHoursEnd}
-                    onChange={(e) => setSettings(prev => ({
-                      ...prev,
-                      quietHoursEnd: e.target.value
-                    }))}
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      borderRadius: 6,
-                      border: isDark ? '1px solid rgba(255,255,255,0.2)' : '1px solid rgba(0,0,0,0.2)',
-                      background: isDark ? 'rgba(0,0,0,0.3)' : '#fff',
-                      color: isDark ? '#fff' : '#1a1a1a',
-                      fontSize: 14
-                    }}
+                    onChange={(v) => setSettings(prev => ({ ...prev, quietHoursEnd: v }))}
+                    placeholder="HH:MM"
                   />
                 </div>
               </div>

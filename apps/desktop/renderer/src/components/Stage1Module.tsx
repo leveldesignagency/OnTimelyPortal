@@ -29,6 +29,9 @@ export default function Stage1Module({
   const [hotelAddress, setHotelAddress] = useState(initialData.hotelAddress || '');
   const [hotelReservationNumber, setHotelReservationNumber] = useState('');
   const [hotelCheckInTime, setHotelCheckInTime] = useState('');
+  const [hotelCheckOutTime, setHotelCheckOutTime] = useState('');
+  const [hotelCheckInDate, setHotelCheckInDate] = useState('');
+  const [hotelCheckOutDate, setHotelCheckOutDate] = useState('');
   // Combined hotel search (name + address) with suggestions
   const [hotelQuery, setHotelQuery] = useState<string>((initialData.hotelName || initialData.hotelAddress) || '');
   const [hotelSuggestions, setHotelSuggestions] = useState<Array<{ display_name: string; lat: string; lon: string }>>([]);
@@ -63,7 +66,12 @@ export default function Stage1Module({
     hotelAddress: '',
     flightDate: '',
     isActive: false,
-    flightData: null
+    flightData: null,
+    hotelCheckInTime: '',
+    hotelCheckOutTime: '',
+    hotelCheckInDate: '',
+    hotelCheckOutDate: '',
+    hotelReservationNumber: ''
   });
 
   // Update parent component when data changes - with additional safety checks
@@ -79,7 +87,12 @@ export default function Stage1Module({
       hotelAddress,
       flightDate,
       isActive,
-      flightData
+      flightData,
+      hotelCheckInTime,
+      hotelCheckOutTime,
+      hotelCheckInDate,
+      hotelCheckOutDate,
+      hotelReservationNumber
     };
 
     // Only call onModuleDataChange if data has actually changed
@@ -93,7 +106,7 @@ export default function Stage1Module({
         console.error('Error in onModuleDataChange:', error);
       }
     }
-  }, [flightNumber, hotelName, hotelAddress, flightDate, isActive, flightData, onModuleDataChange]);
+  }, [flightNumber, hotelName, hotelAddress, flightDate, isActive, flightData, hotelCheckInTime, hotelCheckOutTime, hotelCheckInDate, hotelCheckOutDate, hotelReservationNumber, onModuleDataChange]);
 
   // Debounced hotel location search using OpenStreetMap Nominatim (no API key, CORS-enabled)
   useEffect(() => {
@@ -144,7 +157,7 @@ export default function Stage1Module({
 
     try {
       const data = await Stage1TravelService.fetchFlightData(flightNumber, flightDate);
-      console.log('🔍 Flight search result:', data);
+              console.log('Flight search result:', data);
       setFlightData(data);
       setError(null);
     } catch (err) {
@@ -257,7 +270,7 @@ export default function Stage1Module({
     const loadExistingProfile = async () => {
       if (!guestId || !eventId) return;
       
-      console.log('🔍 Loading existing travel profile for guest:', guestId, 'event:', eventId);
+              console.log('Loading existing travel profile for guest:', guestId, 'event:', eventId);
       
       try {
         // First, clean up any duplicate entries
@@ -361,7 +374,7 @@ export default function Stage1Module({
         setExistingProfile(updated);
         setError(null); // Clear any previous errors
       }
-      console.log('🏨 Hotel information updated');
+              console.log('Hotel information updated');
     } catch (e) {
       console.error('Failed to save hotel info', e);
       setError('Failed to save hotel info. Try again.');
@@ -434,7 +447,7 @@ export default function Stage1Module({
           fontWeight: 600,
           color: colors.text
         }}>
-          ✈️ Flight Information
+          Flight Information
         </h4>
         
         <div style={{
@@ -578,7 +591,7 @@ export default function Stage1Module({
           }}>
             {/* DEBUG: Show raw flight data */}
             <details style={{ marginBottom: 16, fontSize: 11, color: '#666' }}>
-              <summary>🐛 Debug: Raw Flight Data</summary>
+              <summary>Debug: Raw Flight Data</summary>
               <pre style={{ fontSize: 10, overflow: 'auto', maxHeight: 200 }}>
                 {JSON.stringify(flightData, null, 2)}
               </pre>
@@ -830,7 +843,7 @@ export default function Stage1Module({
                   width: '100%'
                 }}
               >
-                ✈️ Activate Stage 1 with this Flight
+                Activate Stage 1 with this Flight
               </button>
             )}
           </div>
@@ -845,7 +858,7 @@ export default function Stage1Module({
           fontWeight: 600,
           color: colors.text
         }}>
-          🏨 Hotel Information
+          Hotel Information
         </h4>
         
         {/* Combined hotel finder (name + address) */}
@@ -948,31 +961,144 @@ export default function Stage1Module({
           />
         </div>
 
-        {/* Hotel Check-in Time */}
-        <div style={{ marginBottom: 16 }}>
-          <label style={{
-            display: 'block',
-            marginBottom: 6,
-            fontSize: 14,
-            color: colors.textSecondary
-          }}>
-            Check-in Time (optional)
-          </label>
-          <input
-            type="text"
-            value={hotelCheckInTime}
-            onChange={(e) => setHotelCheckInTime(e.target.value)}
-            placeholder="dd/mm/yyyy, --:--"
-            style={{
-              width: '100%',
-              padding: '10px 12px',
-              borderRadius: 8,
-              border: `1px solid ${colors.border}`,
-              background: colors.background,
-              color: colors.text,
-              fontSize: 14
-            }}
-          />
+        {/* Hotel Check-in and Check-out Times */}
+        <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
+          <div style={{ flex: 1 }}>
+            <label style={{
+              display: 'block',
+              marginBottom: 6,
+              fontSize: 14,
+              color: colors.textSecondary
+            }}>
+              Check-in Time
+            </label>
+            <input
+              type="text"
+              value={hotelCheckInTime}
+              onChange={(e) => {
+                const val = e.target.value;
+                // Auto-format with : separator
+                const formatted = val.replace(/[^0-9]/g, '').replace(/(\d{2})(\d{2})/, '$1:$2');
+                setHotelCheckInTime(formatted);
+              }}
+              placeholder="HH:MM"
+              maxLength={5}
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                borderRadius: 8,
+                border: `1px solid ${colors.border}`,
+                background: colors.background,
+                color: colors.text,
+                fontSize: 14,
+                height: 48,
+                boxSizing: 'border-box'
+              }}
+            />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={{
+              display: 'block',
+              marginBottom: 6,
+              fontSize: 14,
+              color: colors.textSecondary
+            }}>
+              Check-out Time
+            </label>
+            <input
+              type="text"
+              value={hotelCheckOutTime || ''}
+              onChange={(e) => {
+                const val = e.target.value;
+                // Auto-format with : separator
+                const formatted = val.replace(/[^0-9]/g, '').replace(/(\d{2})(\d{2})/, '$1:$2');
+                setHotelCheckOutTime(formatted);
+              }}
+              placeholder="HH:MM"
+              maxLength={5}
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                borderRadius: 8,
+                border: `1px solid ${colors.border}`,
+                background: colors.background,
+                color: colors.text,
+                fontSize: 14,
+                height: 48,
+                boxSizing: 'border-box'
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Hotel Check-in and Check-out Dates */}
+        <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
+          <div style={{ flex: 1 }}>
+            <label style={{
+              display: 'block',
+              marginBottom: 6,
+              fontSize: 14,
+              color: colors.textSecondary
+            }}>
+              Check-in Date
+            </label>
+            <input
+              type="text"
+              value={hotelCheckInDate || ''}
+              onChange={(e) => {
+                const val = e.target.value;
+                // Auto-format with / separators
+                const formatted = val.replace(/[^0-9]/g, '').replace(/(\d{2})(\d{2})(\d{4})/, '$1/$2/$3');
+                setHotelCheckInDate(formatted);
+              }}
+              placeholder="DD/MM/YYYY"
+              maxLength={10}
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                borderRadius: 8,
+                border: `1px solid ${colors.border}`,
+                background: colors.background,
+                color: colors.text,
+                fontSize: 14,
+                height: 48,
+                boxSizing: 'border-box'
+              }}
+            />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={{
+              display: 'block',
+              marginBottom: 6,
+              fontSize: 14,
+              color: colors.textSecondary
+            }}>
+              Check-out Date
+            </label>
+            <input
+              type="text"
+              value={hotelCheckOutDate || ''}
+              onChange={(e) => {
+                const val = e.target.value;
+                // Auto-format with / separators
+                const formatted = val.replace(/[^0-9]/g, '').replace(/(\d{2})(\d{2})(\d{4})/, '$1/$2/$3');
+                setHotelCheckOutDate(formatted);
+              }}
+              placeholder="DD/MM/YYYY"
+              maxLength={10}
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                borderRadius: 8,
+                border: `1px solid ${colors.border}`,
+                background: colors.background,
+                color: colors.text,
+                fontSize: 14,
+                height: 48,
+                                boxSizing: 'border-box'
+              }}
+            />
+          </div>
         </div>
 
         <button

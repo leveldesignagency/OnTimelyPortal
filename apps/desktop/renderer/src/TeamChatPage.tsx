@@ -2290,7 +2290,10 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
                 e.currentTarget.style.transform = 'scale(1)';
               }}
             >
-              📷
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                <circle cx="12" cy="13" r="4"/>
+              </svg>
                 </div>
               ))}
         </div>
@@ -2335,7 +2338,8 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
                   background: setting.value ? '#10b981' : isDark ? '#404040' : '#dee2e6',
                   position: 'relative',
                   cursor: 'pointer',
-                  transition: 'all 0.2s ease'
+                  transition: 'all 0.2s ease',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
                 }}
               >
                 <div style={{
@@ -2389,7 +2393,11 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
                   e.currentTarget.style.background = isDark ? '#2a2a2a' : '#f8f9fa';
                 }}
               >
-                <span>🚪</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                  <polyline points="16,12 9,12 9,9"/>
+                  <path d="M21 12H9"/>
+                </svg>
                 Leave Group
               </button>
               {/* Only show Delete button to admins */}

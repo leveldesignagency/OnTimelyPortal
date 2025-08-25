@@ -1648,7 +1648,9 @@ export default function ExportReportPage() {
       <div style={{ 
         minHeight: '100vh', 
         padding: 48, 
-        background: isDark ? '#121212' : '#f8f9fa', 
+        background: isDark 
+          ? 'radial-gradient(1200px 800px at 20% -10%, rgba(34,197,94,0.12), transparent 40%), radial-gradient(1000px 700px at 120% 10%, rgba(34,197,94,0.08), transparent 45%), #0f1115'
+          : '#f7f8fa', 
         color: isDark ? '#fff' : '#222',
         display: 'flex',
         flexDirection: 'column',
@@ -1732,7 +1734,9 @@ export default function ExportReportPage() {
     <div style={{ 
       minHeight: '100vh', 
       padding: 48, 
-      background: isDark ? '#121212' : '#f8f9fa', 
+      background: isDark 
+        ? 'radial-gradient(1200px 800px at 20% -10%, rgba(34,197,94,0.12), transparent 40%), radial-gradient(1000px 700px at 120% 10%, rgba(34,197,94,0.08), transparent 45%), #0f1115'
+        : '#f7f8fa', 
       color: isDark ? '#fff' : '#222' 
     }}>
       {/* Header */}
@@ -1960,20 +1964,7 @@ export default function ExportReportPage() {
                     )}
                   </div>
                   
-                  {/* Checkbox - Only visible when selected */}
-                  {selectedBundles.includes(bundle.id) && (
-                    <input
-                      type="checkbox"
-                      checked={selectedBundles.includes(bundle.id)}
-                      onChange={() => handleBundleToggle(bundle.id)}
-                      style={{
-                        width: 18,
-                        height: 18,
-                        accentColor: isDark ? '#fff' : '#000',
-                        cursor: 'pointer'
-                      }}
-                    />
-                  )}
+
                 </div>
 
                 {/* Bundle Info */}

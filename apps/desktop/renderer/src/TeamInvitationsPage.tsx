@@ -182,7 +182,13 @@ export default function TeamInvitationsPage() {
   }
 
   return (
-    <div style={{ background: isDark ? '#121212' : '#f7f8fa', minHeight: '100vh', padding: '40px 20px' }}>
+    <div style={{ 
+      background: isDark 
+        ? 'radial-gradient(1200px 800px at 20% -10%, rgba(34,197,94,0.12), transparent 40%), radial-gradient(1000px 700px at 120% 10%, rgba(34,197,94,0.08), transparent 45%), #0f1115'
+        : '#f7f8fa', 
+      minHeight: '100vh', 
+      padding: '40px 20px' 
+    }}>
       {errorMessage && <CustomErrorModal message={errorMessage} onClose={() => setErrorMessage('')} />}
       {successMessage && <CustomSuccessModal message={successMessage} onClose={() => setSuccessMessage('')} />}
       

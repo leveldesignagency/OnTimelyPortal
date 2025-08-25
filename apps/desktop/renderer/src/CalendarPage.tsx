@@ -6,7 +6,8 @@ import { outlookCalendarService } from './services/outlookCalendar';
 import { calendarConnectionService } from './services/calendarConnectionService';
 import { getCurrentUser } from './lib/auth';
 import { CalendarEvent as ExternalCalendarEvent } from './types/calendar';
-import { supabase } from './lib/supabase';
+import { supabase, getEvents, getUserTeamEvents, getEventsCreatedByUser } from './lib/supabase';
+import { CustomDatePicker as SharedDatePicker, CustomTimePicker as SharedTimePicker } from './components/CustomPickers';
 
 // --- Types & Mock Data ---
 type CalendarEvent = {
@@ -58,128 +59,6 @@ const monthNames = [
 ];
 
 const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-
-// Custom Glass Time Picker Component (from CreateItinerary)
-function CustomGlassTimePicker({ value, onChange, placeholder, isDark, colors }) {
-  const [open, setOpen] = React.useState(false);
-  const [hour, setHour] = React.useState('');
-  const [minute, setMinute] = React.useState('');
-  React.useEffect(() => {
-    if (value && /^\d{2}:\d{2}$/.test(value)) {
-      const [h, m] = value.split(':');
-      setHour(h);
-      setMinute(m);
-    }
-  }, [value]);
-  const handleSelect = (h, m) => {
-    setHour(h);
-    setMinute(m);
-    onChange(`${h}:${m}`);
-    setOpen(false);
-  };
-  const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
-  const minutes = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'));
-  return (
-    <div style={{ position: 'relative', width: '100%' }}>
-      <input
-        type="text"
-        value={value}
-        onFocus={() => setOpen(true)}
-        onBlur={() => setTimeout(() => setOpen(false), 150)}
-        onChange={e => {
-          const val = e.target.value;
-          if (/^\d{2}:\d{2}$/.test(val)) {
-            const [h, m] = val.split(':');
-            setHour(h);
-            setMinute(m);
-            onChange(val);
-          } else {
-            setHour('');
-            setMinute('');
-            onChange(val);
-          }
-        }}
-        placeholder={placeholder}
-        style={{
-          background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.9)',
-          backdropFilter: 'blur(10px)',
-          WebkitBackdropFilter: 'blur(10px)',
-          border: `1px solid ${colors.border}`,
-          borderRadius: '8px',
-          color: colors.text,
-          width: '100%',
-          fontSize: '14px',
-          height: '44px',
-          padding: '12px',
-          outline: 'none',
-          transition: 'all 0.2s',
-        }}
-        maxLength={5}
-      />
-      {open && (
-        <div style={{
-          position: 'absolute',
-          left: 0,
-          top: '100%',
-          marginTop: 4,
-          width: '100%',
-          display: 'flex',
-          gap: 8,
-          background: colors.hover,
-          border: `1px solid ${colors.border}`,
-          borderRadius: '8px',
-          boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.3)' : '0 8px 32px rgba(0,0,0,0.1)',
-          zIndex: 1000,
-          maxHeight: 220,
-          overflow: 'hidden',
-        }}>
-          <div style={{ flex: 1, overflowY: 'auto', maxHeight: 220 }}>
-            {hours.map(h => (
-              <div
-                key={h}
-                onMouseDown={() => handleSelect(h, minute || '00')}
-                style={{
-                  padding: '8px 0',
-                  textAlign: 'center',
-                  background: h === hour ? colors.text : 'transparent',
-                  color: h === hour ? (isDark ? '#000' : '#fff') : colors.text,
-                  fontWeight: h === hour ? 700 : 400,
-                  borderRadius: 4,
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                  transition: 'all 0.2s',
-                }}
-              >
-                {h}
-              </div>
-            ))}
-          </div>
-          <div style={{ flex: 1, overflowY: 'auto', maxHeight: 220 }}>
-            {minutes.map(m => (
-              <div
-                key={m}
-                onMouseDown={() => handleSelect(hour || '00', m)}
-                style={{
-                  padding: '8px 0',
-                  textAlign: 'center',
-                  background: m === minute ? colors.text : 'transparent',
-                  color: m === minute ? (isDark ? '#000' : '#fff') : colors.text,
-                  fontWeight: m === minute ? 700 : 400,
-                  borderRadius: 4,
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                  transition: 'all 0.2s',
-                }}
-              >
-                {m}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
 
 export default function CalendarPage() {
   const { theme } = useContext(ThemeContext);
@@ -246,6 +125,7 @@ export default function CalendarPage() {
     { label: 'Call Back', value: 'Call Back' },
     { label: 'Task', value: 'Task' },
     { label: 'Projects', value: 'Project' },
+    { label: 'Events', value: 'Event' },
   ];
 
   const eventTypes = [
@@ -259,6 +139,37 @@ export default function CalendarPage() {
   useEffect(() => {
     loadExternalEvents();
     loadDatabaseEvents();
+    
+    // Set up real-time subscription for events
+    const eventsSubscription = supabase
+      .channel('events_changes')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'events'
+      }, () => {
+        console.log('Events table changed, reloading...');
+        loadDatabaseEvents();
+      })
+      .subscribe();
+    
+    // Set up real-time subscription for team events
+    const teamEventsSubscription = supabase
+      .channel('team_events_changes')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'team_events'
+      }, () => {
+        console.log('Team events table changed, reloading...');
+        loadDatabaseEvents();
+      })
+      .subscribe();
+
+    return () => {
+      eventsSubscription.unsubscribe();
+      teamEventsSubscription.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
@@ -378,68 +289,106 @@ export default function CalendarPage() {
 
   const loadDatabaseEvents = async () => {
     try {
-      console.log('Loading database events...');
       const { data: { user } } = await supabase.auth.getUser();
       
       if (!user) {
-        console.log('No authenticated user found');
         return;
       }
 
       // Get user profile to get company_id
-      const { data: userProfile } = await supabase
+      const { data: userProfile, error: profileError } = await supabase
         .from('user_profiles')
         .select('company_id')
         .eq('id', user.id)
         .single();
 
-      if (!userProfile?.company_id) {
-        console.log('No company_id found for user');
+      let companyId = userProfile?.company_id;
+      
+      // Fallback: try to get company_id from user metadata
+      if (!companyId && user.user_metadata?.company_id) {
+        companyId = user.user_metadata.company_id;
+      }
+
+      if (!companyId) {
+        // Try to get company_id from companies table by user's email
+        const { data: companies, error: companiesError } = await supabase
+          .from('companies')
+          .select('id')
+          .eq('owner_email', user.email)
+          .single();
+        
+        if (companies && !companiesError) {
+          companyId = companies.id;
+        }
+      }
+
+      if (!companyId) {
         return;
       }
 
-      // Load events from the events table
-      const { data: eventsData, error } = await supabase
-        .from('events')
-        .select(`
-          id,
-          name,
-          from,
-          to,
-          start_time,
-          end_time,
-          status,
-          description,
-          location,
-          created_at
-        `)
-        .eq('company_id', userProfile.company_id)
-        .gte('from', new Date().toISOString().split('T')[0]) // Only future events
-        .order('from', { ascending: true });
+      // Use the same approach as App.tsx
+      // 1. Fetch team events
+      const teamEvents = await getUserTeamEvents(user.id);
+      
+      // 2. Fetch events created by the user
+      const userCreatedEvents = await getEventsCreatedByUser(user.id, companyId);
+      
+      // 3. Merge and deduplicate
+      const allEvents = [...(teamEvents || []), ...(userCreatedEvents || [])];
+      
+      const dedupedEvents = Object.values(
+        allEvents.reduce((acc, event: any) => {
+          acc[event.id] = event;
+          return acc;
+        }, {} as Record<string, any>)
+      );
 
-      if (error) {
-        console.error('Error loading database events:', error);
-        return;
+      if (dedupedEvents.length > 0) {
+        // Convert to CalendarEvent format
+        const convertedEvents: CalendarEvent[] = dedupedEvents.map((event: any) => {
+          // Parse the varchar date strings properly
+          const fromDate = new Date(event.from + 'T00:00:00');
+          const toDate = new Date(event.to + 'T00:00:00');
+          
+          return {
+            id: `db_${event.id}`,
+            title: event.name,
+            type: 'Event' as const,
+            startDate: fromDate,
+            endDate: toDate,
+            startTime: event.start_time,
+            endTime: event.end_time,
+            status: event.status,
+            color: '#10b981', // Green color for database events
+            attendees: []
+          };
+        });
+        setDatabaseEvents(convertedEvents);
+      } else {
+        // Fallback: show all company events if user is not in any team and has not created any events
+        const companyEvents = await getEvents(companyId);
+        if (companyEvents) {
+          const convertedEvents: CalendarEvent[] = companyEvents.map((event: any) => {
+            // Parse the varchar date strings properly
+            const fromDate = new Date(event.from + 'T00:00:00');
+            const toDate = new Date(event.to + 'T00:00:00');
+            
+            return {
+              id: `db_${event.id}`,
+              title: event.name,
+              type: 'Event' as const,
+              startDate: fromDate,
+              endDate: toDate,
+              startTime: event.start_time,
+              endTime: event.end_time,
+              status: event.status,
+              color: '#10b981', // Green color for database events
+              attendees: []
+            };
+          });
+          setDatabaseEvents(convertedEvents);
+        }
       }
-
-      console.log(`Loaded ${eventsData.length} database events`);
-
-      // Convert database events to CalendarEvent format
-      const convertedEvents: CalendarEvent[] = eventsData.map(event => ({
-        id: `db_${event.id}`,
-        title: event.name,
-        type: 'Event',
-        startDate: new Date(event.from),
-        endDate: new Date(event.to),
-        startTime: event.start_time,
-        endTime: event.end_time,
-        status: event.status,
-        color: '#10b981', // Green color for database events
-        attendees: []
-      }));
-
-      setDatabaseEvents(convertedEvents);
-      console.log(`Converted ${convertedEvents.length} database events`);
     } catch (error) {
       console.error('Failed to load database events:', error);
     }
@@ -779,9 +728,21 @@ Check the browser console for detailed diagnostic information.`);
   const getEventsForDate = (date: Date) => {
     if (!date) return [];
     const dateStr = toYYYYMMDD(date);
-    return [...events, ...externalEvents, ...databaseEvents].filter(event => 
-      toYYYYMMDD(event.startDate) === dateStr
-    );
+    
+    // Get all events from different sources
+    const allEvents = [...events, ...externalEvents, ...databaseEvents];
+    
+    // Filter events for the specific date
+    const filteredEvents = allEvents.filter(event => {
+      const eventStartDate = toYYYYMMDD(event.startDate);
+      const eventEndDate = event.endDate ? toYYYYMMDD(event.endDate) : eventStartDate;
+      
+      const isInRange = dateStr >= eventStartDate && dateStr <= eventEndDate;
+      
+      return isInRange;
+    });
+    
+    return filteredEvents;
   };
 
   const filteredEvents = useMemo(() => {
@@ -898,10 +859,12 @@ Check the browser console for detailed diagnostic information.`);
           <span style={{ fontSize: '16px' }}>+</span>
           Add New
         </button>
+        
+
       </div>
 
       {/* Main Layout */}
-      <div style={{ display: 'flex', gap: '24px', height: 'calc(100vh - 120px)' }}>
+      <div style={{ display: 'flex', gap: '24px', height: 'calc(100vh - 100px)' }}>
         
         {/* Left Panel */}
         <div style={{ 
@@ -1005,7 +968,7 @@ Check the browser console for detailed diagnostic information.`);
                 marginBottom: '8px',
                 borderRadius: '8px', 
                 border: 'none', 
-                background: isGoogleConnected ? '#10b981' : '#4285f4', 
+                background: isGoogleConnected ? '#10b981' : '#10b981', 
                 color: '#fff', 
                 cursor: 'pointer', 
                 fontWeight: '500',
@@ -1057,7 +1020,7 @@ Check the browser console for detailed diagnostic information.`);
                 marginBottom: '8px',
                 borderRadius: '8px', 
                 border: 'none', 
-                background: isOutlookConnected ? '#10b981' : '#0078d4', 
+                background: isOutlookConnected ? '#10b981' : '#10b981', 
                 color: '#fff', 
                 cursor: 'pointer', 
                 fontWeight: '500',
@@ -1162,7 +1125,9 @@ Check the browser console for detailed diagnostic information.`);
           ...glassStyle, 
           padding: '24px',
           display: 'flex',
-          flexDirection: 'column'
+          flexDirection: 'column',
+          minHeight: 0,
+          overflow: 'hidden'
         }}>
           
           {/* Calendar Header */}
@@ -1192,7 +1157,14 @@ Check the browser console for detailed diagnostic information.`);
                   background: colors.hover,
                   color: colors.text,
                   cursor: 'pointer',
-                  fontSize: '14px'
+                  fontSize: '14px',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = colors.hover;
                 }}
               >
                 ←
@@ -1250,7 +1222,14 @@ Check the browser console for detailed diagnostic information.`);
                   background: colors.hover,
                   color: colors.text,
                   cursor: 'pointer',
-                  fontSize: '14px'
+                  fontSize: '14px',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = colors.hover;
                 }}
               >
                 →
@@ -1288,14 +1267,14 @@ Check the browser console for detailed diagnostic information.`);
           </div>
 
           {/* Calendar Grid */}
-          <div style={{ flex: '1', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ flex: '1', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
             
             {/* Days of Week Header */}
             <div style={{ 
               display: 'grid', 
               gridTemplateColumns: 'repeat(7, 1fr)', 
               marginBottom: '16px',
-              padding: '16px 20px',
+              padding: '8px 16px',
               background: 'rgba(255,255,255,0.02)',
               borderRadius: '16px',
               border: '1px solid rgba(255,255,255,0.1)',
@@ -1304,7 +1283,7 @@ Check the browser console for detailed diagnostic information.`);
             }}>
               {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
                 <div key={day} style={{
-                  padding: '8px',
+                  padding: '6px',
                   textAlign: 'center',
                   fontSize: '12px',
                   fontWeight: '700',
@@ -1321,19 +1300,24 @@ Check the browser console for detailed diagnostic information.`);
             <div style={{ 
               display: 'grid', 
               gridTemplateColumns: 'repeat(7, 1fr)', 
-              gap: '8px',
+              gridTemplateRows: 'repeat(6, 1fr)',
+              gap: '6px',
               flex: '1',
-              padding: '20px',
+              padding: '12px',
               background: 'rgba(255,255,255,0.02)',
               borderRadius: '16px',
               border: '1px solid rgba(255,255,255,0.1)',
               backdropFilter: 'blur(10px)',
-              boxShadow: '0 8px 32px rgba(0,0,0,0.1)'
+              boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
+              overflow: 'hidden',
+              minHeight: '0'
             }}>
               {generateCalendarDays().map((date, index) => {
                 const dayEvents = date ? getEventsForDate(date) : [];
                 const isToday = date && toYYYYMMDD(date) === toYYYYMMDD(new Date());
                 const isSelected = date && toYYYYMMDD(date) === toYYYYMMDD(selectedDate);
+                
+
                 
                 return (
                   <div
@@ -1371,17 +1355,16 @@ Check the browser console for detailed diagnostic information.`);
                       }
                     }}
                     style={{
-                      padding: '8px',
+                      padding: '6px',
                       borderRadius: '12px',
-                      background: date ? (isSelected ? '#10b981' : 'rgba(255, 255, 255, 0.05)') : 'transparent',
-                      border: isToday ? `2px solid #10b981` : `1px solid rgba(255, 255, 255, 0.1)`,
+                      background: date ? (isSelected ? '#10b981' : (isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(255, 255, 255, 0.9)')) : 'transparent',
+                      border: isToday ? (isDark ? `2px solid #ffffff` : `2px solid #10b981`) : (isDark ? `1px solid rgba(255, 255, 255, 0.1)` : `1px solid rgba(0, 0, 0, 0.2)`),
                       cursor: date ? 'pointer' : 'default',
-                      minHeight: '100px',
+                      height: '100%',
                       display: 'flex',
                       flexDirection: 'column',
                       transition: 'all 0.2s ease',
-                      overflow: 'hidden',
-                      margin: '2px'
+                      overflow: 'hidden'
                     }}
                   >
                     {date && (
@@ -1390,7 +1373,7 @@ Check the browser console for detailed diagnostic information.`);
                           fontSize: '14px',
                           fontWeight: isToday ? '700' : '500',
                           color: isSelected ? '#fff' : (isToday ? '#10b981' : colors.text),
-                          marginBottom: '6px',
+                          marginBottom: '4px',
                           flexShrink: 0
                         }}>
                           {date.getDate()}
@@ -1400,15 +1383,15 @@ Check the browser console for detailed diagnostic information.`);
                         <div style={{ 
                           display: 'flex', 
                           flexDirection: 'column',
-                          gap: '2px',
-                          flex: 1,
+                          gap: '1px',
+                          flex: '1',
                           overflow: 'hidden'
                         }}>
-                          {dayEvents.slice(0, 3).map((event, i) => (
+                          {dayEvents.slice(0, 2).map((event, i) => (
                             <div
                               key={i}
                               style={{
-                                fontSize: '10px',
+                                fontSize: '9px',
                                 padding: '2px 4px',
                                 borderRadius: '3px',
                                 background: event.color || '#ffffff',
@@ -1416,8 +1399,10 @@ Check the browser console for detailed diagnostic information.`);
                                 whiteSpace: 'nowrap',
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis',
-                                fontWeight: '500',
-                                border: event.color === '#ffffff' ? `1px solid ${colors.border}` : 'none'
+                                fontWeight: '600',
+                                border: event.color === '#ffffff' ? `1px solid ${colors.border}` : 'none',
+                                boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                                marginBottom: '1px'
                               }}
                               title={event.title} // Tooltip for full title
                             >
@@ -1425,16 +1410,16 @@ Check the browser console for detailed diagnostic information.`);
                             </div>
                           ))}
                           
-                          {/* Show remaining count if more than 3 events */}
-                          {dayEvents.length > 3 && (
+                          {/* Show remaining count if more than 2 events */}
+                          {dayEvents.length > 2 && (
                             <div style={{
-                              fontSize: '9px',
+                              fontSize: '8px',
                               color: colors.textSecondary,
                               textAlign: 'center',
-                              marginTop: '2px',
+                              marginTop: '1px',
                               fontWeight: '500'
                             }}>
-                              +{dayEvents.length - 3} more
+                              +{dayEvents.length - 2} more
                             </div>
                           )}
                           
@@ -1443,17 +1428,17 @@ Check the browser console for detailed diagnostic information.`);
                             <div style={{ 
                               display: 'flex', 
                               flexWrap: 'wrap', 
-                              gap: '2px',
+                              gap: '1px',
                               marginTop: 'auto',
                               justifyContent: 'center',
-                              paddingTop: '2px'
+                              paddingTop: '1px'
                             }}>
-                              {dayEvents.slice(0, 4).map((event, i) => (
+                              {dayEvents.slice(0, 3).map((event, i) => (
                                 <div
                                   key={`dot-${i}`}
                                   style={{
-                                    width: '3px',
-                                    height: '3px',
+                                    width: '2px',
+                                    height: '2px',
                                     borderRadius: '50%',
                                     background: '#ffffff',
                                     opacity: 0.8
@@ -1543,45 +1528,46 @@ Check the browser console for detailed diagnostic information.`);
                 Event Date
               </label>
               <div style={{ display: 'flex', gap: '12px' }}>
-                <input
-                  type="date"
-                  value={newEventDate ? newEventDate.toISOString().split('T')[0] : ''}
-                  onChange={(e) => {
-                    const date = e.target.value ? new Date(e.target.value) : null;
-                    setNewEventDate(date);
-                  }}
-                  style={{
-                    flex: 1,
-                    padding: '12px',
-                    borderRadius: '8px',
-                    border: `1px solid ${colors.border}`,
-                    background: colors.hover,
-                    color: colors.text,
-                    fontSize: '14px',
-                    outline: 'none'
-                  }}
-                />
+                <div style={{ flex: '0.9' }}>
+                  <SharedDatePicker
+                    value={newEventDate ? newEventDate.toISOString().split('T')[0] : ''}
+                    onChange={(value) => {
+                      const date = value ? new Date(value) : null;
+                      setNewEventDate(date);
+                    }}
+                    placeholder="dd/mm/yyyy"
+                  />
+                </div>
                 <button
                   type="button"
                   onClick={() => setNewEventDate(new Date())}
                   style={{
-                    padding: '12px 16px',
+                    flex: '0.1',
+                    padding: '12px 8px',
                     borderRadius: '8px',
                     border: `1px solid ${colors.border}`,
                     background: colors.hover,
                     color: colors.text,
                     fontSize: '14px',
                     cursor: 'pointer',
-                    whiteSpace: 'nowrap'
+                    whiteSpace: 'nowrap',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    height: '44px',
+                    minWidth: '44px'
                   }}
+                  title="Today"
                 >
-                  Today
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M8 2V5M16 2V5M3.5 4.09C2.67 4.09 2 4.76 2 5.59V19.5C2 20.33 2.67 21 3.5 21H20.5C21.33 21 22 20.33 22 19.5V5.59C22 4.76 21.33 4.09 20.5 4.09H3.5ZM3 10H21M7 14H9M11 14H13M15 14H17M7 17H9M11 17H13M15 17H17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
                 </button>
               </div>
             </div>
 
             {/* Event Type */}
-            <div style={{ marginBottom: '20px', position: 'relative' }}>
+            <div style={{ marginBottom: '20px' }}>
               <label style={{ 
                 display: 'block', 
                 marginBottom: '8px', 
@@ -1592,77 +1578,80 @@ Check the browser console for detailed diagnostic information.`);
                 Event Type
               </label>
               
-              {/* Custom Dropdown */}
-              <div
-                onClick={() => setShowTypeDropdown(!showTypeDropdown)}
-                style={{
-                  width: '100%',
-                  padding: '12px',
-                  borderRadius: '8px',
-                  border: `1px solid ${colors.border}`,
-                  background: colors.hover,
-                  color: colors.text,
-                  fontSize: '14px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  position: 'relative'
-                }}
-              >
-                <span>{eventTypes.find(type => type.value === newEventType)?.label || 'Select Type'}</span>
-                <span style={{ 
-                  transform: showTypeDropdown ? 'rotate(180deg)' : 'rotate(0deg)',
-                  transition: 'transform 0.2s ease'
-                }}>
-                  ▼
-                </span>
-              </div>
+                              <div style={{ position: 'relative', width: '100%' }}>
+                  <div
+                    onClick={() => setShowTypeDropdown(!showTypeDropdown)}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      borderRadius: '8px',
+                      border: `1px solid ${colors.border}`,
+                      background: isDark ? 'rgba(42, 42, 42, 0.9)' : 'rgba(255, 255, 255, 0.9)',
+                      color: colors.text,
+                      fontSize: '14px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      position: 'relative',
+                      height: '44px',
+                      boxSizing: 'border-box'
+                    }}
+                  >
+                    <span>{eventTypes.find(option => option.value === newEventType)?.label || 'Select Type'}</span>
+                    <span style={{ 
+                      transform: showTypeDropdown ? 'rotate(180deg)' : 'rotate(0deg)',
+                      transition: 'transform 0.2s ease'
+                    }}>
+                      ▼
+                    </span>
+                  </div>
 
-              {/* Dropdown Options */}
-              {showTypeDropdown && (
-                <div style={{
-                  position: 'absolute',
-                  top: '100%',
-                  left: 0,
-                  right: 0,
-                  zIndex: 1000,
-                  background: isDark ? '#2a2a2a' : '#ffffff',
-                  border: `1px solid ${colors.border}`,
-                  borderRadius: '8px',
-                  marginTop: '4px',
-                  boxShadow: isDark 
-                    ? '0 8px 32px rgba(0, 0, 0, 0.3)' 
-                    : '0 8px 32px rgba(0, 0, 0, 0.1)'
-                }}>
-                  {eventTypes.map(type => (
-                    <div
-                      key={type.value}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setNewEventType(type.value);
-                        setShowTypeDropdown(false);
-                      }}
-                      style={{
-                        padding: '12px',
-                        cursor: 'pointer',
-                        color: colors.text,
-                        fontSize: '14px',
-                        borderBottom: type.value !== eventTypes[eventTypes.length - 1].value ? `1px solid ${colors.border}` : 'none',
-                        transition: 'background 0.2s ease'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.background = isDark ? '#3a3a3a' : '#f0f0f0';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = 'transparent';
-                      }}
-                    >
-                      {type.label}
+                  {/* Dropdown Options */}
+                  {showTypeDropdown && (
+                    <div style={{
+                      position: 'absolute',
+                      top: '100%',
+                      left: 0,
+                      right: 0,
+                      zIndex: 1000,
+                      background: isDark ? 'rgba(42, 42, 42, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+                      border: `1px solid ${colors.border}`,
+                      borderRadius: '8px',
+                      marginTop: '4px',
+                      boxShadow: isDark 
+                        ? '0 8px 32px rgba(0, 0, 0, 0.3)' 
+                        : '0 8px 32px rgba(0, 0, 0, 0.1)'
+                    }}>
+                      {eventTypes.map((option, index) => (
+                        <div
+                          key={option.value}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setNewEventType(option.value);
+                            setShowTypeDropdown(false);
+                          }}
+                          style={{
+                            padding: '12px',
+                            cursor: 'pointer',
+                            color: colors.text,
+                            fontSize: '14px',
+                            borderBottom: index !== eventTypes.length - 1 ? `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}` : 'none',
+                            transition: 'background 0.2s ease'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'transparent';
+                          }}
+                        >
+                          {option.label}
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
                 </div>
-              )}
             </div>
 
             {/* Time Selection */}
@@ -1677,12 +1666,10 @@ Check the browser console for detailed diagnostic information.`);
                 }}>
                   Start Time
                 </label>
-                <CustomGlassTimePicker
+                <SharedTimePicker
                   value={newEventTime}
                   onChange={setNewEventTime}
                   placeholder="Start Time"
-                  isDark={isDark}
-                  colors={colors}
                 />
               </div>
               
@@ -1696,12 +1683,10 @@ Check the browser console for detailed diagnostic information.`);
                 }}>
                   End Time
                 </label>
-                <CustomGlassTimePicker
+                <SharedTimePicker
                   value={newEventEndTime}
                   onChange={setNewEventEndTime}
                   placeholder="End Time"
-                  isDark={isDark}
-                  colors={colors}
                 />
               </div>
             </div>

@@ -1,7 +1,15 @@
 import React, { useState, useContext, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import styles from './Sidebar.module.css';
-import { Event } from './lib/supabase';
+// Use a minimal event shape so Sidebar works with both Event and EventType
+type SidebarEvent = {
+  id: string;
+  name: string;
+  from: string;
+  to: string;
+  start_time?: string | null;
+  end_time?: string | null;
+};
 import { ThemeContext } from './ThemeContext';
 import { supabase } from './lib/supabase';
 import { 
@@ -20,7 +28,7 @@ const PAGE_LINKS = [
 
 // Add Event definition for Sidebar props
 interface SidebarProps {
-  events: Event[];
+  events: SidebarEvent[];
   isOverlay: boolean;
   isOpen: boolean;
   setOpen: (isOpen: boolean) => void;
@@ -33,7 +41,7 @@ interface QuickAction {
   action: () => void;
 }
 
-function getEventStatus(event: Event, today: Date) {
+function getEventStatus(event: SidebarEvent, today: Date) {
   // Create full datetime objects considering both date and time
   let eventStart = new Date(event.from);
   let eventEnd = new Date(event.to);

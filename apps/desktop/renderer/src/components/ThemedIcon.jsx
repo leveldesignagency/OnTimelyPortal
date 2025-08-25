@@ -5,17 +5,16 @@ export default function ThemedIcon({ name, size = 28, alt = '', style = {}, clas
   const { theme } = useContext(ThemeContext);
   const isDark = theme === 'dark';
   
-  // Check if we're running in Electron (desktop app) or web
-  const isElectron = window.electron || process.env.VITE_TARGET === 'electron';
-  
-  // Use relative path for Electron builds, absolute for web
-  const src = isElectron ? `./icons/${name}.svg` : `/icons/${name}.svg`;
+  // Runtime detection: prefer actual runtime over build-time env flags
+  const isElectronRuntime = typeof window !== 'undefined' && (window.electron || window.location.protocol === 'file:');
+  // Use relative path for Electron packaged runtime, absolute for web/dev server
+  const src = isElectronRuntime ? `./icons/${name}.svg` : `/icons/${name}.svg`;
   
   const filter = isDark ? 'invert(1) brightness(1.2)' : 'none';
   return (
     <img
       src={src}
-      alt={size}
+      alt={alt || name}
       width={size}
       height={size}
       style={{ filter, display: 'block', ...style }}

@@ -1,11 +1,109 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import Tesseract from 'tesseract.js';
-import countryList from 'country-list';
-import { codes as countryCallingCodes } from 'country-calling-code';
+import React, { useState, useEffect, useRef, useMemo, useContext, useCallback } from 'react';
+import { useParams, useLocation, useNavigate } from 'react-router-dom';
+import { ThemeContext } from './ThemeContext';
+import { Guest, Draft, Module, ModuleResponse } from './types/guest';
+import { supabase } from './lib/supabase';
 import { getCurrentUser } from './lib/auth';
-import { addMultipleGuests, deleteGuest, deleteGuestsByGroupId, insertActivityLog } from './lib/supabase';
-import { v4 as uuidv4 } from 'uuid';
+import { insertActivityLog } from './lib/supabase';
+import { codes as countryCallingCodes } from 'country-calling-code';
+import Tesseract from 'tesseract.js';
+import airportsRaw from '../../../../airports.json';
+
+// Custom Dropdown Component (same styling as CalendarPage)
+function CustomDropdown({ 
+  value, 
+  onChange, 
+  options, 
+  placeholder, 
+  isDark, 
+  colors 
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+  placeholder: string;
+  isDark: boolean;
+  colors: any;
+}) {
+  const [show, setShow] = useState(false);
+  
+  return (
+    <div style={{ position: 'relative', width: '100%' }}>
+      <div
+        onClick={() => setShow(!show)}
+        style={{
+          width: '100%',
+          padding: '8px 12px',
+          borderRadius: '8px',
+          border: `1px solid ${colors.border}`,
+          background: colors.hover,
+          color: colors.text,
+          fontSize: '16px',
+          cursor: 'pointer',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          position: 'relative',
+          height: '48px',
+          boxSizing: 'border-box'
+        }}
+      >
+        <span>{options.find(option => option.value === value)?.label || placeholder}</span>
+        <span style={{ 
+          transform: show ? 'rotate(180deg)' : 'rotate(0deg)',
+          transition: 'transform 0.2s ease'
+        }}>
+          ▼
+        </span>
+      </div>
+
+      {/* Dropdown Options */}
+      {show && (
+        <div style={{
+          position: 'absolute',
+          top: '100%',
+          left: 0,
+          right: 0,
+          zIndex: 1000,
+          background: isDark ? '#2a2a2a' : '#ffffff',
+          border: `1px solid ${colors.border}`,
+          borderRadius: '8px',
+          marginTop: '4px',
+          boxShadow: isDark 
+            ? '0 8px 32px rgba(0, 0, 0, 0.3)' 
+            : '0 8px 32px rgba(0, 0, 0, 0.1)'
+        }}>
+          {options.map((option, index) => (
+            <div
+              key={option.value}
+              onClick={(e) => {
+                e.stopPropagation();
+                onChange(option.value);
+                setShow(false);
+              }}
+              style={{
+                padding: '12px',
+                cursor: 'pointer',
+                color: colors.text,
+                fontSize: '16px',
+                borderBottom: index !== options.length - 1 ? `1px solid ${colors.border}` : 'none',
+                transition: 'background 0.2s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = isDark ? '#3a3a3a' : '#f0f0f0';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'transparent';
+              }}
+            >
+              {option.label}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 const AVIATIONSTACK_API_KEY = '8b8117fd5f6f048d0904c8e884939449'; // 🚨 PASTE YOUR NEW AVIATIONSTACK API KEY HERE 🚨
 
@@ -181,13 +279,23 @@ const COUNTRY_CODES = Array.from(
   ).values()
 );
 
-function countryCodeSelector(value: string, onChange: (val: string) => void) {
+function countryCodeSelector(value: string, onChange: (val: string) => void, isDark: boolean, colors: any) {
+  const options = COUNTRY_CODES.map(c => ({
+    value: c.code,
+    label: `${c.flag} ${c.code}`
+  }));
+  
   return (
-    <select value={value} onChange={e => onChange(e.target.value)} style={{ width: 120, minWidth: 90, borderRadius: 8, background: '#f7f8fa', border: '1px solid #d1d5db', padding: '0 8px', fontSize: 18, height: 48, lineHeight: '48px' }}>
-      {COUNTRY_CODES.map(c => (
-        <option key={c.code} value={c.code}>{c.flag} {c.code}</option>
-      ))}
-    </select>
+    <div style={{ width: 120, minWidth: 90 }}>
+      <CustomDropdown
+        value={value}
+        onChange={onChange}
+        options={options}
+        placeholder="Select Country"
+        isDark={isDark}
+        colors={colors}
+      />
+    </div>
   );
 }
 
@@ -999,6 +1107,114 @@ export default function GuestFormCreationForSend() {
   function handleGuestModuleRemove(guestIdx: number, moduleKey: string, instanceIndex: number) {
     setGuests(guests.map((guest, i) => {
         if (i !== guestIdx) return guest;
+        
+        const newModules = { ...guest.modules };
+        const newModuleValues = { ...guest.moduleValues };
+  
+        if (Array.isArray(newModules[moduleKey])) {
+          newModules[moduleKey] = newModules[moduleKey].filter((_, i) => i !== instanceIndex);
+          if (newModules[moduleKey].length === 0) {
+            delete newModules[moduleKey];
+          }
+        }
+  
+        if (Array.isArray(newModuleValues[moduleKey])) {
+          newModuleValues[moduleKey] = newModuleValues[moduleKey].filter((_, i) => i !== instanceIndex);
+          if (newModuleValues[moduleKey].length === 0) {
+            delete newModuleValues[moduleKey];
+          }
+        }
+  
+        const newModuleFlightData = { ...guest.moduleFlightData };
+        if (Array.isArray(newModuleFlightData[moduleKey])) {
+          newModuleFlightData[moduleKey] = newModuleFlightData[moduleKey].filter((_, i) => i !== instanceIndex);
+          if (newModuleFlightData[moduleKey].length === 0) {
+            delete newModuleFlightData[moduleKey];
+          }
+        }
+  
+        return { ...guest, modules: newModules, moduleValues: newModuleValues, moduleFlightData: newModuleFlightData };
+    }));
+  }
+  
+  async function handleGuestFlightData(guestIdx: number, moduleKey: string, instanceIndex: number, flightNumber: string, flightDate: string) {
+    setGuests(guests => guests.map((g, i) => {
+        if (i !== guestIdx) return g;
+        const newModuleFlightData = { ...g.moduleFlightData };
+        if (!Array.isArray(newModuleFlightData[moduleKey])) newModuleFlightData[moduleKey] = new Array(g.modules[moduleKey].length).fill(null);
+        newModuleFlightData[moduleKey][instanceIndex] = { status: 'loading', data: null };
+        return { ...g, moduleFlightData: newModuleFlightData };
+    }));
+
+    const data = await fetchFlightData(flightNumber, flightDate);
+
+    setGuests(guests => guests.map((g, i) => {
+        if (i !== guestIdx) return g;
+        const newModuleFlightData = { ...g.moduleFlightData };
+        if (data) {
+            newModuleFlightData[moduleKey][instanceIndex] = { status: 'found', data };
+        } else {
+            newModuleFlightData[moduleKey][instanceIndex] = { status: 'not_found', data: null };
+        }
+        return { ...g, moduleFlightData: newModuleFlightData };
+    }));
+  }
+
+  return (
+    <div className="flex bg-white dark:bg-gray-900 min-h-screen">
+      {/* Main Content */}
+      <div className="flex-1 max-w-6xl mx-auto p-10 font-sans text-gray-900 dark:text-gray-100 relative h-screen overflow-y-auto">
+        <div className="text-4xl font-medium mb-0">{eventName}</div>
+        <hr className="my-3 border-none border-t-2 border-gray-400 dark:border-gray-600" />
+        <div className="text-2xl font-medium mb-6 mt-0 text-left">Add Guests</div>
+
+        {/* Action Buttons */}
+        {!editGuestIdx ? (
+          <div className="max-w-1100 mx-auto mb-24">
+            <div className="flex gap-16 items-center">
+                <button
+                    onClick={() => setIsGroup(!isGroup)}
+                    className={`${
+                        isGroup 
+                            ? 'bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900' 
+                            : 'bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100'
+                    } border-2 border-gray-900 dark:border-gray-100 px-6 py-2 rounded-lg text-base font-medium cursor-pointer w-auto`}
+                >
+                    {isGroup ? '✓ Group' : 'Create Group'}
+                </button>
+                {isGroup && (
+                    <div className="flex items-center flex-grow">
+                        <input
+                            type="text"
+                            value={groupName}
+                            onChange={(e) => setGroupName(e.target.value)}
+                            placeholder="Enter Group Name"
+                            disabled={groupNameConfirmed}
+                            className="h-11 flex-grow rounded-l-lg border-r-0 border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3"
+                        />
+                        <button
+                            onClick={handleConfirmGroupName}
+                            disabled={groupNameConfirmed || !groupName.trim()}
+                            className={`h-11 bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 border-2 border-gray-900 dark:border-gray-100 rounded-r-lg px-6 text-base ${
+                                (groupNameConfirmed || !groupName.trim()) 
+                                    ? 'cursor-not-allowed opacity-60' 
+                                    : 'cursor-pointer opacity-100'
+                            }`}
+                        >
+                            Confirm
+                        </button>
+                    </div>
+                )}
+            </div>
+            <hr className="my-24 border-none border-t-1.5 border-gray-400 dark:border-gray-600" />
+          </div>
+        ) : null}
+
+        {/* Rest of the component code */}
+      </div>
+    </div>
+  );
+} 
         
         const newModules = { ...guest.modules };
         const newModuleValues = { ...guest.moduleValues };

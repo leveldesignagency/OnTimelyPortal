@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Event, insertActivityLog, assignTeamToEvent } from './lib/supabase';
 import { ThemeContext } from './ThemeContext';
 import ThemedIcon from './components/ThemedIcon';
+import { CustomDatePicker as SharedDatePicker, CustomTimePicker as SharedTimePicker } from './components/CustomPickers';
 import { getCurrentUser } from './lib/auth';
 import { getCompanyTeams } from './lib/chat';
 
@@ -30,153 +31,6 @@ const getColors = (isDark: boolean) => ({
   hover: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)',
   inputBg: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)'
 });
-
-// Custom Date Picker
-function CustomDatePicker({ value, onChange, placeholder, isDark, colors, required }: {
-  value: string;
-  onChange: (value: string) => void;
-  placeholder: string;
-  isDark: boolean;
-  colors: any;
-  required?: boolean;
-}) {
-  const [show, setShow] = useState(false);
-  const [month, setMonth] = useState(() => new Date().getMonth());
-  const [year, setYear] = useState(() => new Date().getFullYear());
-  const today = new Date();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const firstDay = new Date(year, month, 1).getDay();
-  const monthNames = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
-  ];
-  function selectDate(day: number) {
-    const mm = String(month + 1).padStart(2, '0');
-    const dd = String(day).padStart(2, '0');
-    onChange(`${year}-${mm}-${dd}`);
-    setShow(false);
-  }
-  // Generate a 6-row calendar grid for consistent height
-  const calendarCells = [];
-  let dayCounter = 1;
-  for (let week = 0; week < 6; week++) {
-    for (let day = 0; day < 7; day++) {
-      const cellIndex = week * 7 + day;
-      if (cellIndex < firstDay || dayCounter > daysInMonth) {
-        calendarCells.push(null);
-      } else {
-        calendarCells.push(dayCounter);
-        dayCounter++;
-      }
-    }
-  }
-  function handlePrev() {
-    if (month === 0) {
-      setMonth(11);
-      setYear(y => y - 1);
-    } else {
-      setMonth(m => m - 1);
-    }
-  }
-  function handleNext() {
-    if (month === 11) {
-      setMonth(0);
-      setYear(y => y + 1);
-    } else {
-      setMonth(m => m + 1);
-    }
-  }
-  return (
-    <div style={{ position: 'relative', width: '100%' }}>
-      <div
-        onClick={() => setShow(!show)}
-        style={{
-          width: '100%',
-          padding: '16px 20px',
-          borderRadius: '12px',
-          border: `2px solid ${colors.border}`,
-          background: colors.inputBg,
-          color: value ? colors.text : colors.textSecondary,
-          fontSize: '16px',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          transition: 'all 0.2s ease',
-          minHeight: '56px',
-          boxSizing: 'border-box',
-          marginBottom: 0
-        }}
-      >
-        <span>{value ? (() => {
-          const date = new Date(value);
-          const day = String(date.getDate()).padStart(2, '0');
-          const month = String(date.getMonth() + 1).padStart(2, '0');
-          const year = date.getFullYear();
-          return `${day}/${month}/${year}`;
-        })() : placeholder}</span>
-        <ThemedIcon name="calendar" size={24} style={{ marginLeft: 8, background: 'transparent', color: '#fff' }} />
-      </div>
-      {show && (
-        <div style={{
-          position: 'absolute',
-          left: '50%',
-          bottom: '100%',
-          transform: 'translate(-50%, -24px)',
-          zIndex: 1000,
-          width: 340,
-          minWidth: 340,
-          maxWidth: 340,
-          height: 390, // fixed height for 6 weeks
-          ...getGlassStyles(isDark),
-          padding: 20,
-          boxSizing: 'border-box',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-        }}>
-          {/* Single navigation row */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16, width: '100%' }}>
-            <button type="button" onClick={handlePrev} style={{ flex: '0 0 48px', height: 40, background: colors.hover, border: 'none', borderRadius: 8, color: colors.text, fontSize: 22, cursor: 'pointer', marginRight: 12, fontWeight: 700, transition: 'background 0.2s' }}>←</button>
-            <span style={{ flex: '1 1 auto', fontWeight: 700, fontSize: 18, textAlign: 'center', letterSpacing: 1, color: colors.text, background: 'none', height: 40, lineHeight: '40px', borderRadius: 8 }}>{monthNames[month]} {year}</span>
-            <button type="button" onClick={handleNext} style={{ flex: '0 0 48px', height: 40, background: colors.hover, border: 'none', borderRadius: 8, color: colors.text, fontSize: 22, cursor: 'pointer', marginLeft: 12, fontWeight: 700, transition: 'background 0.2s' }}>→</button>
-          </div>
-          {/* Days of week header */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, marginBottom: 8, width: '100%' }}>
-            {[...Array(7)].map((_, i) => (
-              <div key={i} style={{ textAlign: 'center', fontWeight: 600, color: colors.textSecondary, fontSize: 13 }}>{['S','M','T','W','T','F','S'][i]}</div>
-            ))}
-          </div>
-          {/* Calendar grid (6 rows, 7 columns) */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, width: '100%', flex: 1 }}>
-            {calendarCells.map((day, idx) => {
-              if (!day) {
-                return <div key={idx} style={{ width: 36, height: 36 }} />;
-              }
-              const isToday = year === today.getFullYear() && month === today.getMonth() && day === today.getDate();
-              return (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => selectDate(day)}
-                  style={{
-                    width: 36, height: 36, borderRadius: '50%', border: 'none',
-                    background: value && new Date(value).getDate() === day && new Date(value).getMonth() === month && new Date(value).getFullYear() === year ? colors.accent : isToday ? colors.hover : 'transparent',
-                    color: colors.text,
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                    transition: 'all 0.2s',
-                    margin: 0, padding: 0
-                  }}
-                >{day}</button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
 
 // Utility to get current offset for a time zone
 function getTimeZoneOffsetLabel(tz: string): string {
@@ -289,7 +143,7 @@ function GlassTimeZoneDropdown({ value, onChange, colors, isDark }: GlassTimeZon
             background: `linear-gradient(to top, ${colors.inputBg} 75%, rgba(0,0,0,0) 100%)`,
             border: `2px solid ${colors.border}`,
             borderRadius: '12px',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.30)',
+            boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.30)' : '0 8px 32px rgba(0,0,0,0.08)',
             color: colors.text,
             marginTop: 4,
             position: 'relative',
@@ -315,6 +169,97 @@ function GlassTimeZoneDropdown({ value, onChange, colors, isDark }: GlassTimeZon
                 transition: 'background 0.2s',
               }}
               onMouseDown={e => e.preventDefault()}
+            >
+              {opt.label}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Settings-style dropdown (matches SettingsPage look & feel)
+function SettingsStyleDropdown({
+  value,
+  onChange,
+  options,
+  placeholder,
+  isDark,
+  colors,
+}: {
+  value: string;
+  onChange: (val: string) => void;
+  options: { value: string; label: string }[];
+  placeholder: string;
+  isDark: boolean;
+  colors: any;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = options.find(o => o.value === value)?.label || '';
+
+  return (
+    <div style={{ position: 'relative', width: '100%' }}>
+      <div
+        onClick={() => setOpen(!open)}
+        style={{
+          width: '100%',
+          padding: '16px 20px',
+          borderRadius: '12px',
+          border: `2px solid ${colors.border}`,
+          background: colors.inputBg,
+          color: selected ? colors.text : colors.textSecondary,
+          fontSize: '20px',
+          minHeight: '56px',
+          boxSizing: 'border-box',
+          marginTop: 4,
+          transition: 'all 0.2s',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          cursor: 'pointer',
+        }}
+      >
+        <span>{selected || placeholder}</span>
+        <span style={{ opacity: 0.6 }}>▼</span>
+      </div>
+      {open && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            right: 0,
+            zIndex: 1000,
+            background: isDark ? '#2a2a2a' : '#ffffff',
+            border: `2px solid ${colors.border}`,
+            borderRadius: '12px',
+            marginTop: 4,
+            boxShadow: isDark
+              ? '0 8px 32px rgba(0,0,0,0.30)'
+              : '0 8px 32px rgba(0,0,0,0.08)',
+            maxHeight: 260,
+            overflowY: 'auto',
+          }}
+        >
+          {options.map(opt => (
+            <div
+              key={opt.value}
+              onClick={() => {
+                onChange(opt.value);
+                setOpen(false);
+              }}
+              style={{
+                padding: '12px 20px',
+                cursor: 'pointer',
+                color: colors.text,
+                fontSize: 18,
+                borderBottom: `1px solid ${colors.border}`,
+                background: opt.value === value ? (isDark ? '#3a3a3a' : '#f3f4f6') : 'transparent',
+                transition: 'background 0.2s',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = isDark ? '#3a3a3a' : '#f0f0f0')}
+              onMouseLeave={e => (e.currentTarget.style.background = opt.value === value ? (isDark ? '#3a3a3a' : '#f3f4f6') : 'transparent')}
             >
               {opt.label}
             </div>
@@ -455,11 +400,13 @@ export default function CreateEventPage({ onCreate }: CreateEventPageProps) {
   return (
     <div style={{
       minHeight: '100vh',
-      background: colors.bg,
-      padding: '60px 20px 40px 20px', // more top padding
+      background: isDark
+        ? 'radial-gradient(1200px 800px at 20% -10%, rgba(34,197,94,0.12), transparent 40%), radial-gradient(1000px 700px at 120% 10%, rgba(34,197,94,0.08), transparent 45%), #0f1115'
+        : colors.bg,
+      padding: '40px 16px',
       display: 'flex',
       justifyContent: 'center',
-      alignItems: 'flex-start',
+      alignItems: 'center',
       boxSizing: 'border-box',
       position: 'relative',
     }}>
@@ -488,6 +435,7 @@ export default function CreateEventPage({ onCreate }: CreateEventPageProps) {
               style={{
                 width: '100%',
                 padding: '16px 20px',
+                paddingRight: '64px',
                 borderRadius: '12px',
                 border: `2px solid ${colors.border}`,
                 background: colors.inputBg,
@@ -504,7 +452,7 @@ export default function CreateEventPage({ onCreate }: CreateEventPageProps) {
               required
             />
             {/* Character count, far right */}
-            <div style={{ position: 'absolute', right: 12, top: 18, fontSize: 13, color: colors.textSecondary }}>
+            <div style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', fontSize: 13, color: colors.textSecondary, pointerEvents: 'none' }}>
               {name.length}/20
             </div>
           </div>
@@ -534,117 +482,127 @@ export default function CreateEventPage({ onCreate }: CreateEventPageProps) {
               required
             />
           </div>
-          {/* Time Zone field - match location field UI */}
-          <div style={{ marginBottom: 20, width: '100%' }}>
-            <label style={{ color: colors.text, fontWeight: 600, fontSize: 16, marginBottom: 8, display: 'block' }}>Time Zone</label>
-            <GlassTimeZoneDropdown value={timeZone} onChange={setTimeZone} colors={colors} isDark={isDark} />
-          </div>
-          {/* Team Assignment field - styled like GlassTimeZoneDropdown */}
-          <div style={{ marginBottom: 20, width: '100%', position: 'relative' }}>
-            <label style={{ color: colors.text, fontWeight: 600, fontSize: 16, marginBottom: 4, display: 'block' }}>Assign Your Team</label>
-            <div style={{ color: colors.textSecondary, fontSize: 11, marginBottom: 6, marginTop: 0 }}>
-              If you are not ready to add your team, you can add them later inside of the Create A New Team page.
-            </div>
-            {/* --- Assign Your Team Dropdown --- */}
-            <div style={{ position: 'relative', width: '100%' }}>
-              <input
-                type="text"
-                value={selectedTeamIds.length > 0 ? teamDisplayValue : teamSearch}
-                onChange={e => {
-                  if (selectedTeamIds.length > 0) {
-                    setSelectedTeamIds([]);
-                    setTeamSearch(e.target.value);
-                    setShowTeamDropdown(!!e.target.value);
-                  } else {
-                    setTeamSearch(e.target.value);
-                    setShowTeamDropdown(!!e.target.value);
-                  }
-                }}
-                onFocus={e => { if (teamSearch || selectedTeamIds.length > 0) setShowTeamDropdown(true); }}
-                placeholder="Search for a team..."
-                style={{
-                  width: '100%',
-                  padding: '16px 20px',
-                  borderRadius: '12px',
-                  border: `2px solid ${colors.border}`,
-                  background: colors.inputBg,
-                  color: colors.text,
-                  fontSize: '20px',
-                  minHeight: '56px',
-                  boxSizing: 'border-box',
-                  marginTop: 0,
-                  transition: 'all 0.2s',
-                  display: 'block',
-                }}
-                autoComplete="off"
+          {/* Time Zone + Assign Team in one row */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, width: '100%', marginBottom: 20 }}>
+            <div>
+              <label style={{ color: colors.text, fontWeight: 600, fontSize: 16, marginBottom: 8, display: 'block' }}>Time Zone</label>
+              <SettingsStyleDropdown
+                value={timeZone}
+                onChange={setTimeZone}
+                options={timeZoneOptions}
+                placeholder="Select time zone"
+                isDark={isDark}
+                colors={colors}
               />
-              {showTeamDropdown && teamSearch && (
-                <div
+            </div>
+            <div style={{ width: '100%', position: 'relative' }}>
+              <label style={{ color: colors.text, fontWeight: 600, fontSize: 16, marginBottom: 4, display: 'block' }}>Assign Your Team</label>
+              {/* --- Assign Your Team Dropdown --- */}
+              <div style={{ position: 'relative', width: '100%', marginBottom: 4 }}>
+                <input
+                  type="text"
+                  value={selectedTeamIds.length > 0 ? teamDisplayValue : teamSearch}
+                  onChange={e => {
+                    if (selectedTeamIds.length > 0) {
+                      setSelectedTeamIds([]);
+                      setTeamSearch(e.target.value);
+                      setShowTeamDropdown(!!e.target.value);
+                    } else {
+                      setTeamSearch(e.target.value);
+                      setShowTeamDropdown(!!e.target.value);
+                    }
+                  }}
+                  onFocus={e => { if (teamSearch || selectedTeamIds.length > 0) setShowTeamDropdown(true); }}
+                  placeholder="Search for a team..."
                   style={{
                     width: '100%',
-                    maxHeight: 220,
-                    overflowY: 'auto',
-                    background: `linear-gradient(to top, ${colors.inputBg} 75%, rgba(0,0,0,0) 100%)`,
-                    border: `2px solid ${colors.border}`,
+                    padding: '16px 20px',
                     borderRadius: '12px',
-                    boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.30)' : '0 8px 32px rgba(0,0,0,0.08)',
+                    border: `2px solid ${colors.border}`,
+                    background: colors.inputBg,
                     color: colors.text,
-                    marginTop: 4,
-                    position: 'relative',
-                    zIndex: 10,
+                    fontSize: '20px',
+                    minHeight: '56px',
+                    boxSizing: 'border-box',
+                    marginTop: 0,
+                    transition: 'all 0.2s',
+                    display: 'block',
                   }}
+                  autoComplete="off"
+                />
+                {showTeamDropdown && teamSearch && (
+                  <div
+                    style={{
+                      width: '100%',
+                      maxHeight: 220,
+                      overflowY: 'auto',
+                      background: `linear-gradient(to top, ${colors.inputBg} 75%, rgba(0,0,0,0) 100%)`,
+                      border: `2px solid ${colors.border}`,
+                      borderRadius: '12px',
+                      boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.30)' : '0 8px 32px rgba(0,0,0,0.08)',
+                      color: colors.text,
+                      marginTop: 4,
+                      position: 'relative',
+                      zIndex: 10,
+                    }}
+                  >
+                    {filteredTeams.length === 0 && (
+                      <div style={{ padding: 16, color: colors.textSecondary, fontSize: 15 }}>No teams found</div>
+                    )}
+                    {filteredTeams.map(team => (
+                      <div
+                        key={team.id}
+                        onClick={() => {
+                          if (!selectedTeamIds.includes(team.id)) {
+                            setSelectedTeamIds([team.id]);
+                          }
+                          setShowTeamDropdown(false);
+                          setTeamSearch('');
+                        }}
+                        style={{
+                          padding: '12px 20px',
+                          cursor: 'pointer',
+                          color: colors.text,
+                          background: selectedTeamIds.includes(team.id) ? (isDark ? '#444' : '#e5e7eb') : 'transparent',
+                          fontWeight: selectedTeamIds.includes(team.id) ? 700 : 400,
+                          fontSize: 18,
+                          borderRadius: 8,
+                          margin: '4px 8px',
+                          transition: 'background 0.2s',
+                        }}
+                        onMouseDown={e => e.preventDefault()}
+                      >
+                        {team.name}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div style={{ color: colors.textSecondary, fontSize: 11, marginTop: 6 }}>
+                You can also assign a team in the{' '}
+                <a
+                  href="/teams/create"
+                  onClick={(e) => { e.preventDefault(); navigate('/teams/create'); }}
+                  style={{ color: isDark ? '#10b981' : '#0f766e', textDecoration: 'underline', cursor: 'pointer' }}
                 >
-                  {filteredTeams.length === 0 && (
-                    <div style={{ padding: 16, color: colors.textSecondary, fontSize: 15 }}>No teams found</div>
-                  )}
-                  {filteredTeams.map(team => (
-                    <div
-                      key={team.id}
-                      onClick={() => {
-                        if (!selectedTeamIds.includes(team.id)) {
-                          setSelectedTeamIds([team.id]);
-                        }
-                        setShowTeamDropdown(false);
-                        setTeamSearch('');
-                      }}
-                      style={{
-                        padding: '12px 20px',
-                        cursor: 'pointer',
-                        color: colors.text,
-                        background: selectedTeamIds.includes(team.id) ? (isDark ? '#444' : '#e5e7eb') : 'transparent',
-                        fontWeight: selectedTeamIds.includes(team.id) ? 700 : 400,
-                        fontSize: 18,
-                        borderRadius: 8,
-                        margin: '4px 8px',
-                        transition: 'background 0.2s',
-                      }}
-                      onMouseDown={e => e.preventDefault()}
-                    >
-                      {team.name}
-                    </div>
-                  ))}
-                </div>
-              )}
+                  Create a Team
+                </a>{' '}section.
+              </div>
             </div>
           </div>
           {/* DATES/DURATION label - white, no asterisk */}
           <label style={{ color: colors.text, fontWeight: 600, fontSize: 15, marginBottom: 8, display: 'block', marginTop: 12, alignSelf: 'flex-start' }} htmlFor="event-from">DATES/DURATION</label>
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 20, gap: 20, width: '100%' }}>
-          <CustomDatePicker
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20, width: '100%' }}>
+          <SharedDatePicker
             value={from}
             onChange={setFrom}
-            placeholder="Start date"
-            isDark={isDark}
-            colors={colors}
+            placeholder="Start date (dd/mm/yyyy)"
             required
           />
-          <span style={{ fontSize: 32, color: colors.textSecondary, margin: '0 12px', userSelect: 'none' }}>&#9654;</span>
-          <CustomDatePicker
+          <SharedDatePicker
             value={to}
             onChange={setTo}
-            placeholder="End date"
-            isDark={isDark}
-            colors={colors}
+            placeholder="End date (dd/mm/yyyy)"
             required
           />
         </div>
@@ -660,25 +618,7 @@ export default function CreateEventPage({ onCreate }: CreateEventPageProps) {
               <label style={{ color: colors.textSecondary, fontSize: 13, marginBottom: 6, display: 'block' }}>
                 Start Time
               </label>
-              <input
-                type="time"
-                value={startTime}
-                onChange={e => setStartTime(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '12px 16px',
-                  borderRadius: '8px',
-                  border: `2px solid ${colors.border}`,
-                  background: colors.inputBg,
-                  color: colors.text,
-                  fontSize: '16px',
-                  minHeight: '48px',
-                  boxSizing: 'border-box',
-                  transition: 'all 0.2s',
-                  backdropFilter: 'blur(10px)'
-                }}
-                placeholder="--:--"
-              />
+              <SharedTimePicker value={startTime} onChange={setStartTime} placeholder="--:--" />
             </div>
             
             {/* End Time */}
@@ -686,25 +626,7 @@ export default function CreateEventPage({ onCreate }: CreateEventPageProps) {
               <label style={{ color: colors.textSecondary, fontSize: 13, marginBottom: 6, display: 'block' }}>
                 End Time
               </label>
-              <input
-                type="time"
-                value={endTime}
-                onChange={e => setEndTime(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '12px 16px',
-                  borderRadius: '8px',
-                  border: `2px solid ${colors.border}`,
-                  background: colors.inputBg,
-                  color: colors.text,
-                  fontSize: '16px',
-                  minHeight: '48px',
-                  boxSizing: 'border-box',
-                  transition: 'all 0.2s',
-                  backdropFilter: 'blur(10px)'
-                }}
-                placeholder="--:--"
-              />
+              <SharedTimePicker value={endTime} onChange={setEndTime} placeholder="--:--" />
             </div>
           </div>
         </div>

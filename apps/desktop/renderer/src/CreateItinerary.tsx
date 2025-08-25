@@ -1095,7 +1095,7 @@ export default function CreateItinerary() {
   return (
     <div style={{ 
       display: 'flex', 
-      background: colors.bg, 
+      background: 'transparent', 
       minHeight: '100vh',
       color: colors.text,
       transition: 'background 0.3s, color 0.3s'
@@ -1109,7 +1109,9 @@ export default function CreateItinerary() {
         fontFamily: 'Roboto, Arial, system-ui, sans-serif', 
         position: 'relative', 
         height: '100vh', 
-        overflowY: 'auto' 
+        overflowY: 'auto',
+        scrollbarWidth: 'none', // Firefox
+        msOverflowStyle: 'none' // IE/Edge 
       }}>
         {/* Header with Glass Effect */}
         <div style={{
@@ -2596,37 +2598,52 @@ const ModuleSidebar = ({ isCollapsed, onToggle }: { isCollapsed: boolean, onTogg
         ? '0 8px 32px rgba(0,0,0,0.3)'
         : '0 8px 32px rgba(0,0,0,0.08)'
       }}>
-      <button onClick={onToggle} style={{ background: 'none', border: 'none', color: colors.text, fontSize: 22, cursor: 'pointer', alignSelf: isCollapsed ? 'center' : 'flex-end', marginBottom: 24 }} title={isCollapsed ? 'Show Modules' : 'Hide Modules'}>
-          {isCollapsed ? '←' : '→'}
+      <button onClick={onToggle} style={{ background: 'none', border: 'none', color: colors.text, cursor: 'pointer', alignSelf: isCollapsed ? 'center' : 'flex-end', marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', outline: 'none', boxShadow: 'none' }} title={isCollapsed ? 'Show Modules' : 'Hide Modules'}>
+          {isCollapsed ? (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polyline points="9,18 15,12 9,6"></polyline>
+            </svg>
+          ) : (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polyline points="15,18 9,12 15,6"></polyline>
+            </svg>
+          )}
         </button>
         {!isCollapsed && (
           <>
           <div style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 24, letterSpacing: 1, textTransform: 'uppercase' }}>Itinerary Modules</div>
             <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {ITINERARY_MODULES.map(module => (
-                <div
-                  key={module.key}
-                  draggable
-                onDragStart={e => e.dataTransfer.setData('text/plain', module.key)}
-                  style={{
-                  background: isDark ? 'rgba(40,40,40,0.45)' : 'rgba(255,255,255,0.85)',
-                  border: isDark ? '1.5px solid rgba(255,255,255,0.13)' : '1px solid #bbb',
-                  borderRadius: 12,
-                  padding: '14px 18px',
-                    cursor: 'grab',
-                    userSelect: 'none',
-                  boxShadow: isDark ? '0 2px 12px #0004' : '0 1px 4px #0001',
-                  width: '100%',
-                  color: isDark ? '#fff' : '#222',
-                  backdropFilter: 'blur(12px)',
-                  WebkitBackdropFilter: 'blur(12px)',
-                  transition: 'background 0.2s, color 0.2s',
-                }}
-              >
-                <div style={{ color: isDark ? '#fff' : '#222', fontWeight: 600, fontSize: 16 }}>{module.label}</div>
-        </div>
-      ))}
-      </div>
+              {ITINERARY_MODULES.map(module => {
+                // Check if this module has been added to any draft
+                const isModuleAdded = drafts.some(draft => draft.modules?.[module.key] === true);
+                
+                return (
+                  <div
+                    key={module.key}
+                    draggable
+                    onDragStart={e => e.dataTransfer.setData('text/plain', module.key)}
+                    style={{
+                      background: isDark ? 'rgba(40,40,40,0.45)' : 'rgba(255,255,255,0.85)',
+                      border: isModuleAdded 
+                        ? '2px solid #10b981' 
+                        : isDark ? '1.5px solid rgba(255,255,255,0.13)' : '1px solid #bbb',
+                      borderRadius: 12,
+                      padding: '14px 18px',
+                      cursor: 'grab',
+                      userSelect: 'none',
+                      boxShadow: isDark ? '0 2px 12px #0004' : '0 1px 4px #0001',
+                      width: '100%',
+                      color: isDark ? '#fff' : '#222',
+                      backdropFilter: 'blur(12px)',
+                      WebkitBackdropFilter: 'blur(12px)',
+                      transition: 'background 0.2s, color 0.2s, border 0.2s',
+                    }}
+                  >
+                  <div style={{ color: isDark ? '#fff' : '#222', fontWeight: 600, fontSize: 16 }}>{module.label}</div>
+                  </div>
+                );
+              })}
+            </div>
           </>
         )}
     </div>

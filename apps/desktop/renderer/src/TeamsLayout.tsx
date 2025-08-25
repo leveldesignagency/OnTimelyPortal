@@ -1,13 +1,46 @@
 import React, { useContext, useState } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { ThemeContext } from './ThemeContext';
-import ThemedIcon from './components/ThemedIcon';
 
 const teamNavLinks = [
-  { to: '/teams/create', label: 'Create Team', icon: <ThemedIcon name="plus" alt="Create Team" size={32} /> },
-  { to: '/teams/chat', label: 'Chat', icon: <ThemedIcon name="chat" alt="Chat" size={32} /> },
-  { to: '/teams/calendar', label: 'Calendar', icon: <ThemedIcon name="calendar" alt="Calendar" size={32} /> },
-  { to: '/teams/canvas', label: 'Canvas', icon: <ThemedIcon name="canvas" alt="Canvas" size={32} /> },
+  { 
+    to: '/teams/create', 
+    label: 'Create Team', 
+    icon: (
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="8" x2="12" y2="16"/>
+        <line x1="8" y1="12" x2="16" y2="12"/>
+      </svg>
+    )
+  },
+  { 
+    to: '/teams/chat', 
+    label: 'Chat', 
+    icon: (
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+      </svg>
+    )
+  },
+  { 
+    to: '/teams/calendar', 
+    label: 'Calendar', 
+    icon: (
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <path d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z"/>
+      </svg>
+    )
+  },
+  { 
+    to: '/teams/canvas', 
+    label: 'Canvas', 
+    icon: (
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/>
+      </svg>
+    )
+  },
   // Future links can be added here
 ];
 
@@ -31,37 +64,7 @@ export default function TeamsLayout() {
     zIndex: 1000,
   };
 
-  const navLinkStyle: React.CSSProperties = {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '8px 4px',
-    borderRadius: '8px',
-    textDecoration: 'none',
-    color: isDark ? '#a0a0a0' : '#333',
-    fontWeight: 500,
-    fontSize: '12px',
-    marginBottom: '16px',
-    transition: 'background 0.2s, color 0.2s',
-    width: '64px !important',
-    height: '64px !important',
-    cursor: 'pointer',
-    userSelect: 'none',
-    // Override global button styles
-    background: 'transparent !important',
-    border: 'none !important',
-    boxShadow: 'none !important',
-    letterSpacing: 'normal !important'
-  };
 
-  const activeNavLinkStyle: React.CSSProperties = {
-    // No container styling - just transparent
-  };
-
-  const hoverNavLinkStyle: React.CSSProperties = {
-    background: isDark ? '#2a2a2a' : '#f0f0f0',
-  };
   
   const titleStyle: React.CSSProperties = {
       fontSize: '14px',
@@ -108,21 +111,22 @@ export default function TeamsLayout() {
                 navigate(to);
               }}
               style={{
-                width: '56px', // Smaller container
-                height: '56px', // Smaller container
                 background: 'transparent',
-                border: location.pathname === to ? '1px solid rgba(255, 255, 255, 0.6)' : 'none', // Lighter, thinner border
+                border: 'none',
                 cursor: 'pointer',
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
                 marginBottom: '16px',
-                padding: '8px 4px', // Reduced padding for smaller size
-                borderRadius: '8px'
+                padding: '8px',
+                color: isDark ? '#ffffff' : '#333333',
+                boxShadow: 'none',
+                outline: 'none',
+                borderRadius: '0'
               }}
             >
-              {React.cloneElement(icon, { size: 32 })} {/* Adjusted for smaller container */}
+              {icon}
             </button>
           ))}
         </nav>

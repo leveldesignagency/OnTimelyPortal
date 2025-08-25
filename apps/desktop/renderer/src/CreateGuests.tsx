@@ -2104,30 +2104,43 @@ export default function CreateGuests() {
   );
 
   return (
-    <div style={{ 
-      display: 'flex', 
-      background: colors.bg, 
-      minHeight: '100vh',
-      height: '100vh',
-      color: colors.text,
-      transition: 'background 0.3s, color 0.3s',
-      overflow: 'hidden'
-    }}>
-      {/* Main Content */}
+    <>
+      <style>
+        {`
+          .create-guests-scroll::-webkit-scrollbar {
+            display: none;
+          }
+        `}
+      </style>
       <div style={{ 
-        flex: 1, 
-        maxWidth: 1200, 
-        margin: '0 auto', 
-        padding: 40, 
-        fontFamily: 'Roboto, Arial, system-ui, sans-serif', 
-        position: 'relative', 
+        display: 'flex', 
+        background: 'transparent',
         minHeight: '100vh',
         height: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        overflowY: 'auto',
-        paddingBottom: 120 // Add extra bottom padding for dropdowns
+        color: colors.text,
+        transition: 'background 0.3s, color 0.3s',
+        overflow: 'hidden'
       }}>
+      {/* Main Content */}
+              <div 
+          className="create-guests-scroll"
+          style={{ 
+            flex: 1, 
+            maxWidth: 1200, 
+            margin: '0 auto', 
+            padding: 40, 
+            fontFamily: 'Roboto, Arial, system-ui, sans-serif', 
+            position: 'relative', 
+            minHeight: '100vh',
+            height: '100vh',
+            display: 'flex',
+            flexDirection: 'column',
+            overflowY: 'auto',
+            paddingBottom: 120, // Add extra bottom padding for dropdowns
+            // Hide scrollbar but keep functionality
+            scrollbarWidth: 'none', // Firefox
+            msOverflowStyle: 'none' // IE/Edge
+          }}>
         {/* Header with Glass Effect */}
         <div style={{
           ...getGlassStyles(isDark),
@@ -2372,34 +2385,34 @@ export default function CreateGuests() {
                       </div>
                       <div style={{ flex: 2 }}>
                         <label style={labelStyle(isDark)}>First Name</label>
-                        <input value={draft.firstName} onChange={e => handleDraftChange(idx, 'firstName', e.target.value)} style={{...inputStyle(isDark), height: 40, fontSize: 15, padding: '8px 12px'}} placeholder="First Name" />
+                                                      <input value={draft.firstName} onChange={e => handleDraftChange(idx, 'firstName', e.target.value)} style={inputStyle(isDark)} placeholder="" />
                       </div>
                       <div style={{ flex: 2 }}>
                         <label style={labelStyle(isDark)}>Middle Name</label>
-                        <input value={draft.middleName} onChange={e => handleDraftChange(idx, 'middleName', e.target.value)} style={{...inputStyle(isDark), height: 40, fontSize: 15, padding: '8px 12px'}} placeholder="Middle Name" />
+                                                      <input value={draft.middleName} onChange={e => handleDraftChange(idx, 'middleName', e.target.value)} style={inputStyle(isDark)} placeholder="" />
                       </div>
                       <div style={{ flex: 2 }}>
                         <label style={labelStyle(isDark)}>Last Name</label>
-                        <input value={draft.lastName} onChange={e => handleDraftChange(idx, 'lastName', e.target.value)} style={{...inputStyle(isDark), height: 40, fontSize: 15, padding: '8px 12px'}} placeholder="Last Name" />
+                                                      <input value={draft.lastName} onChange={e => handleDraftChange(idx, 'lastName', e.target.value)} style={inputStyle(isDark)} placeholder="" />
                       </div>
                     </div>
                     {/* Row 2: Country Code, Contact Number, Email */}
                     <div style={{ display: 'flex', gap: 10 }}>
                       <div style={{ flex: 1 }}>
                         <label style={labelStyle(isDark)}>Country Code</label>
-                        <input value={draft.countryCode} onChange={e => handleDraftChange(idx, 'countryCode', e.target.value)} style={{...inputStyle(isDark), height: 40, fontSize: 15, padding: '8px 12px'}} placeholder="+44" />
+                                                      <input value={draft.countryCode} onChange={e => handleDraftChange(idx, 'countryCode', e.target.value)} style={inputStyle(isDark)} placeholder="+44" />
                       </div>
-                      <div style={{ flex: 2 }}>
-                        <label style={labelStyle(isDark)}>Contact Number</label>
-                        <input value={draft.contactNumber} onChange={e => handleDraftChange(idx, 'contactNumber', e.target.value)} style={{...inputStyle(isDark), height: 40, fontSize: 15, padding: '8px 12px'}} placeholder="Contact Number" />
-                      </div>
+                                              <div style={{ flex: 2 }}>
+                          <label style={labelStyle(isDark)}>Contact Number</label>
+                                                        <input value={draft.contactNumber} onChange={e => handleDraftChange(idx, 'contactNumber', e.target.value)} style={inputStyle(isDark)} placeholder="" />
+                        </div>
                       <div style={{ flex: 3 }}>
                         <label style={labelStyle(isDark)}>Email</label>
-                        <input value={draft.email} onChange={e => handleDraftChange(idx, 'email', e.target.value)} style={{...inputStyle(isDark), height: 40, fontSize: 15, padding: '8px 12px'}} placeholder="Email" />
+                                                      <input value={draft.email} onChange={e => handleDraftChange(idx, 'email', e.target.value)} style={inputStyle(isDark)} placeholder="" />
                       </div>
                       <div style={{ flex: 2 }}>
                         <label style={labelStyle(isDark)}>D.O.B. (dd/mm/yyyy)</label>
-                        <input value={draft.dob} onChange={e => handleDraftChange(idx, 'dob', e.target.value)} style={{...inputStyle(isDark), height: 40, fontSize: 15, padding: '8px 12px'}} placeholder="dd/mm/yyyy" />
+                                                      <input value={draft.dob} onChange={e => handleDraftChange(idx, 'dob', e.target.value)} style={inputStyle(isDark)} placeholder="dd/mm/yyyy" />
                       </div>
                     </div>
                     {/* Row 3: ID Type (custom dropdown), ID Number, Country of Origin (dropdown) */}
@@ -2427,7 +2440,7 @@ export default function CreateGuests() {
                       </div>
                       <div style={{ flex: 2 }}>
                         <label style={labelStyle(isDark)}>ID Number</label>
-                        <input value={draft.idNumber} onChange={e => handleDraftChange(idx, 'idNumber', e.target.value)} style={{...inputStyle(isDark), height: 40, fontSize: 15, padding: '8px 12px'}} placeholder="ID Number" />
+                                                      <input value={draft.idNumber} onChange={e => handleDraftChange(idx, 'idNumber', e.target.value)} style={inputStyle(isDark)} placeholder="" />
                       </div>
                       <div style={{ flex: 3 }}>
                         <label style={labelStyle(isDark)}>Country of Origin</label>
@@ -2511,20 +2524,20 @@ export default function CreateGuests() {
                     <div style={{ display: 'flex', gap: 10 }}>
                       <div style={{ flex: 2 }}>
                         <label style={labelStyle(isDark)}>Next of Kin Name</label>
-                        <input value={draft.nextOfKinName} onChange={e => handleDraftChange(idx, 'nextOfKinName', e.target.value)} style={{...inputStyle(isDark), height: 40, fontSize: 15, padding: '8px 12px'}} placeholder="Next of Kin Name" />
+                                                      <input value={draft.nextOfKinName} onChange={e => handleDraftChange(idx, 'nextOfKinName', e.target.value)} style={inputStyle(isDark)} placeholder="" />
                       </div>
                       <div style={{ flex: 3 }}>
                         <label style={labelStyle(isDark)}>Next of Kin Email</label>
-                        <input value={draft.nextOfKinEmail} onChange={e => handleDraftChange(idx, 'nextOfKinEmail', e.target.value)} style={{...inputStyle(isDark), height: 40, fontSize: 15, padding: '8px 12px'}} placeholder="Next of Kin Email" />
+                                                      <input value={draft.nextOfKinEmail} onChange={e => handleDraftChange(idx, 'nextOfKinEmail', e.target.value)} style={inputStyle(isDark)} placeholder="" />
                       </div>
                       <div style={{ flex: 3, display: 'flex', gap: 6 }}>
                         <div style={{ flex: 1 }}>
                           <label style={labelStyle(isDark)}>N.O.K Country Code</label>
-                          <input value={draft.nextOfKinPhoneCountry} onChange={e => handleDraftChange(idx, 'nextOfKinPhoneCountry', e.target.value)} style={{...inputStyle(isDark), height: 40, fontSize: 15, padding: '8px 12px'}} placeholder="+44" />
+                                                        <input value={draft.nextOfKinPhoneCountry} onChange={e => handleDraftChange(idx, 'nextOfKinPhoneCountry', e.target.value)} style={inputStyle(isDark)} placeholder="+44" />
                         </div>
                         <div style={{ flex: 2 }}>
                           <label style={labelStyle(isDark)}>N.O.K Contact Number</label>
-                          <input value={draft.nextOfKinPhone} onChange={e => handleDraftChange(idx, 'nextOfKinPhone', e.target.value)} style={{...inputStyle(isDark), height: 40, fontSize: 15, padding: '8px 12px'}} placeholder="Contact Number" />
+                                                        <input value={draft.nextOfKinPhone} onChange={e => handleDraftChange(idx, 'nextOfKinPhone', e.target.value)} style={inputStyle(isDark)} placeholder="" />
                         </div>
                       </div>
                     </div>
@@ -2532,7 +2545,7 @@ export default function CreateGuests() {
                     <div style={{ display: 'flex', gap: 10 }}>
                       <div style={{ flex: 1 }}>
                         <label style={labelStyle(isDark)}>Dietary</label>
-                        <input value={draft.dietaryInput || ''} onChange={e => handleTagInput(idx, 'dietaryInput', e.target.value)} style={{...inputStyle(isDark), height: 40, fontSize: 15, padding: '8px 12px'}} placeholder="Add dietary requirement and press Enter" onKeyDown={e => { if (e.key === 'Enter' && draft.dietaryInput?.trim()) { handleAddTag(idx, 'dietary', draft.dietaryInput.trim()); e.preventDefault(); } }} />
+                              <input value={draft.dietaryInput || ''} onChange={e => handleTagInput(idx, 'dietaryInput', e.target.value)} style={inputStyle(isDark)} placeholder="Add dietary requirement and press Enter" onKeyDown={e => { if (e.key === 'Enter' && draft.dietaryInput?.trim()) { handleAddTag(idx, 'dietary', draft.dietaryInput.trim()); e.preventDefault(); } }} />
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
                           {(draft.dietary || []).map((tag, tagIdx) => (
                             <span key={tagIdx} style={{
@@ -2575,7 +2588,7 @@ export default function CreateGuests() {
                       </div>
                       <div style={{ flex: 1 }}>
                         <label style={labelStyle(isDark)}>Medical</label>
-                        <input value={draft.medicalInput || ''} onChange={e => handleTagInput(idx, 'medicalInput', e.target.value)} style={{...inputStyle(isDark), height: 40, fontSize: 15, padding: '8px 12px'}} placeholder="Add medical/accessibility need and press Enter" onKeyDown={e => { if (e.key === 'Enter' && draft.medicalInput?.trim()) { handleAddTag(idx, 'medical', draft.medicalInput.trim()); e.preventDefault(); } }} />
+                              <input value={draft.medicalInput || ''} onChange={e => handleTagInput(idx, 'medicalInput', e.target.value)} style={inputStyle(isDark)} placeholder="Add medical/accessibility need and press Enter" onKeyDown={e => { if (e.key === 'Enter' && draft.medicalInput?.trim()) { handleAddTag(idx, 'medical', draft.medicalInput.trim()); e.preventDefault(); } }} />
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
                           {(draft.medical || []).map((tag, tagIdx) => (
                             <span key={tagIdx} style={{
@@ -2726,17 +2739,7 @@ export default function CreateGuests() {
                                 newVals[index] = e.target.value;
                                 handleDraftChange(idx, 'moduleValues', { ...draft.moduleValues, [key]: newVals });
                               }}
-                              style={{
-                                width: '100%',
-                                borderRadius: 8,
-                                background: isDark ? 'rgba(255,255,255,0.07)' : '#f9fafb',
-                                border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.13)' : '#d1d5db'}`,
-                                color: isDark ? '#fff' : '#111',
-                                padding: '10px 12px',
-                                fontSize: 14,
-                                outline: 'none',
-                                marginBottom: 4
-                              }}
+                              style={inputStyle(isDark)}
                               placeholder="e.g. BA2490"
                             />
                               </div>
@@ -2764,17 +2767,7 @@ export default function CreateGuests() {
                               }}
                                   onFocus={() => setShowAirportDropdown(true)}
                                   onBlur={() => setTimeout(() => setShowAirportDropdown(false), 150)}
-                              style={{
-                                width: '100%',
-                                borderRadius: 8,
-                                background: isDark ? 'rgba(255,255,255,0.07)' : '#f9fafb',
-                                border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.13)' : '#d1d5db'}`,
-                                color: isDark ? '#fff' : '#111',
-                                padding: '10px 12px',
-                                fontSize: 14,
-                                outline: 'none',
-                                marginBottom: 4
-                              }}
+                              style={inputStyle(isDark)}
                               placeholder="Search for arrival airport (e.g. LHR, Heathrow)"
                             />
                                 {showAirportDropdown && airportSearch && airportResults.length > 0 && (
@@ -2830,7 +2823,7 @@ export default function CreateGuests() {
                                       newVals[index] = val;
                                       handleDraftChange(idx, 'moduleValues', { ...draft.moduleValues, [key + '_departureDate']: newVals });
                                     }}
-                                    placeholder="Departure Date"
+                                    placeholder=""
                                     isDark={isDark}
                                     colors={colors}
                                   />
@@ -2844,7 +2837,7 @@ export default function CreateGuests() {
                                       newVals[index] = val;
                                       handleDraftChange(idx, 'moduleValues', { ...draft.moduleValues, [key + '_arrivalDate']: newVals });
                                     }}
-                                    placeholder="Arrival Date"
+                                    placeholder=""
                                     isDark={isDark}
                                     colors={colors}
                                   />
@@ -2862,7 +2855,7 @@ export default function CreateGuests() {
                                     newVals[index] = val;
                                     handleDraftChange(idx, 'moduleValues', { ...draft.moduleValues, [key + '_departureTime']: newVals });
                                   }}
-                                  placeholder="Departure Time"
+                                  placeholder=""
                                   isDark={isDark}
                                   colors={colors}
                                 />
@@ -2876,7 +2869,7 @@ export default function CreateGuests() {
                                     newVals[index] = val;
                                     handleDraftChange(idx, 'moduleValues', { ...draft.moduleValues, [key + '_arrivalTime']: newVals });
                                   }}
-                                  placeholder="Arrival Time"
+                                  placeholder=""
                                   isDark={isDark}
                                   colors={colors}
                                 />
@@ -2896,17 +2889,7 @@ export default function CreateGuests() {
                                 newVals[index] = e.target.value;
                                 handleDraftChange(idx, 'moduleValues', { ...draft.moduleValues, [key]: newVals });
                               }}
-                              style={{
-                                width: '100%',
-                                borderRadius: 8,
-                                background: isDark ? 'rgba(255,255,255,0.07)' : '#f9fafb',
-                                border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.13)' : '#d1d5db'}`,
-                                color: isDark ? '#fff' : '#111',
-                                padding: '10px 12px',
-                                fontSize: 14,
-                                outline: 'none',
-                                marginBottom: 4
-                              }}
+                              style={inputStyle(isDark)}
                               placeholder="e.g. 14A"
                             />
                           </div>
@@ -2922,17 +2905,7 @@ export default function CreateGuests() {
                                 newVals[index] = e.target.value;
                                 handleDraftChange(idx, 'moduleValues', { ...draft.moduleValues, [key]: newVals });
                               }}
-                              style={{
-                                width: '100%',
-                                borderRadius: 8,
-                                background: isDark ? 'rgba(255,255,255,0.07)' : '#f9fafb',
-                                border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.13)' : '#d1d5db'}`,
-                                color: isDark ? '#fff' : '#111',
-                                padding: '10px 12px',
-                                fontSize: 14,
-                                outline: 'none',
-                                marginBottom: 4
-                              }}
+                              style={inputStyle(isDark)}
                               placeholder="Enter reference number"
                             />
                           </div>
@@ -2951,19 +2924,7 @@ export default function CreateGuests() {
                                     newVals[index] = { ...newVals[index], location: e.target.value };
                                     handleDraftChange(idx, 'moduleValues', { ...draft.moduleValues, [key]: newVals });
                                   }}
-                                  style={{
-                                    width: '100%',
-                                    borderRadius: 8,
-                                    background: isDark ? 'rgba(255,255,255,0.07)' : '#f9fafb',
-                                    border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.13)' : '#d1d5db'}`,
-                                    color: isDark ? '#fff' : '#111',
-                                    padding: '10px 12px',
-                                    fontSize: 14,
-                                    outline: 'none',
-                                    height: 48,
-                                    marginBottom: 0,
-                                    boxSizing: 'border-box',
-                                  }}
+                                  style={inputStyle(isDark)}
                                   placeholder="Enter hotel location (search supported)"
                                 />
                               </div>
@@ -2980,9 +2941,9 @@ export default function CreateGuests() {
                                   isDark={isDark}
                                   colors={colors}
                                   inputStyle={{
-                                    height: 48,
-                                    padding: '10px 12px',
-                                    fontSize: 14,
+                                    height: 38,
+                                    padding: 10,
+                                    fontSize: 15,
                                     boxSizing: 'border-box',
                                     marginBottom: 0,
                                   }}
@@ -3037,17 +2998,7 @@ export default function CreateGuests() {
                                 newVals[index] = e.target.value;
                                 handleDraftChange(idx, 'moduleValues', { ...draft.moduleValues, [key]: newVals });
                               }}
-                              style={{
-                                width: '100%',
-                                borderRadius: 8,
-                                background: isDark ? 'rgba(255,255,255,0.07)' : '#f9fafb',
-                                border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.13)' : '#d1d5db'}`,
-                                color: isDark ? '#fff' : '#111',
-                                padding: '10px 12px',
-                                fontSize: 14,
-                                outline: 'none',
-                                marginBottom: 4
-                              }}
+                              style={inputStyle(isDark)}
                               placeholder="Enter train booking number"
                             />
                             </div>
@@ -3064,19 +3015,7 @@ export default function CreateGuests() {
                                 newVals[index] = e.target.value;
                                 handleDraftChange(idx, 'moduleValues', { ...draft.moduleValues, [key + '_station']: newVals });
                               }}
-                              style={{
-                                width: '100%',
-                                borderRadius: 8,
-                                background: isDark ? 'rgba(255,255,255,0.07)' : '#f9fafb',
-                                border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.13)' : '#d1d5db'}`,
-                                color: isDark ? '#fff' : '#111',
-                                padding: '10px 12px',
-                                fontSize: 14,
-                                outline: 'none',
-                                    height: 48,
-                                    boxSizing: 'border-box',
-                                    marginBottom: 0
-                              }}
+                              style={inputStyle(isDark)}
                               placeholder="Search for train station"
                             />
                               </div>
@@ -3089,7 +3028,7 @@ export default function CreateGuests() {
                                     newVals[index] = val;
                                     handleDraftChange(idx, 'moduleValues', { ...draft.moduleValues, [key + '_departureDate']: newVals });
                                   }}
-                                  placeholder="Departure Date"
+                                  placeholder=""
                                   isDark={isDark}
                                   colors={colors}
                                 />
@@ -3170,17 +3109,7 @@ export default function CreateGuests() {
                                 newVals[index] = e.target.value;
                                 handleDraftChange(idx, 'moduleValues', { ...draft.moduleValues, [key]: newVals });
                               }}
-                              style={{
-                                width: '100%',
-                                borderRadius: 8,
-                                background: isDark ? 'rgba(255,255,255,0.07)' : '#f9fafb',
-                                border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.13)' : '#d1d5db'}`,
-                                color: isDark ? '#fff' : '#111',
-                                padding: '10px 12px',
-                                fontSize: 14,
-                                outline: 'none',
-                                marginBottom: 4
-                              }}
+                              style={{...inputStyle(isDark), height: 40, fontSize: 15, padding: '8px 12px'}}
                               placeholder="Enter coach booking number"
                             />
                             </div>
@@ -3197,19 +3126,7 @@ export default function CreateGuests() {
                                 newVals[index] = e.target.value;
                                 handleDraftChange(idx, 'moduleValues', { ...draft.moduleValues, [key + '_station']: newVals });
                               }}
-                              style={{
-                                width: '100%',
-                                borderRadius: 8,
-                                background: isDark ? 'rgba(255,255,255,0.07)' : '#f9fafb',
-                                border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.13)' : '#d1d5db'}`,
-                                color: isDark ? '#fff' : '#111',
-                                padding: '10px 12px',
-                                fontSize: 14,
-                                outline: 'none',
-                                    height: 48,
-                                    boxSizing: 'border-box',
-                                    marginBottom: 0
-                              }}
+                              style={{...inputStyle(isDark), height: 40, fontSize: 15, padding: '8px 12px'}}
                               placeholder="Search for coach station"
                             />
                               </div>
@@ -3463,8 +3380,8 @@ export default function CreateGuests() {
           minHeight: '100vh',
         height: '100vh',
           background: isDark
-            ? 'rgba(0, 0, 0, 0.35)'
-            : 'rgba(255, 255, 255, 0.9)',
+            ? '#1a1a1a'
+            : '#ffffff',
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',
           border: isDark
@@ -3474,39 +3391,56 @@ export default function CreateGuests() {
             ? '0 8px 32px rgba(0,0,0,0.3)'
             : '0 8px 32px rgba(0,0,0,0.08)'
         }}>
-          <button onClick={() => setShowModules(v => !v)} style={{ background: 'none', border: 'none', color: colors.text, fontSize: 22, cursor: 'pointer', alignSelf: showModules ? 'flex-end' : 'center', marginBottom: 24 }} title={showModules ? 'Hide Modules' : 'Show Modules'}>
-            {showModules ? '→' : '←'}
+          <button onClick={() => setShowModules(v => !v)} style={{ background: 'none', border: 'none', color: colors.text, cursor: 'pointer', alignSelf: showModules ? 'flex-end' : 'center', marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', outline: 'none', boxShadow: 'none' }} title={showModules ? 'Hide Modules' : 'Show Modules'}>
+            {showModules ? (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="15,18 9,12 15,6"></polyline>
+              </svg>
+            ) : (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="9,18 15,12 9,6"></polyline>
+              </svg>
+            )}
           </button>
           {showModules && (
             <>
               <div style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 24, letterSpacing: 1, textTransform: 'uppercase' }}>Guest Modules</div>
               <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {GUEST_MODULES.map(module => (
-                  <div
-                    key={module.key}
-                    draggable
-                    onDragStart={e => e.dataTransfer.setData('moduleKey', module.key)}
-                    style={{
-                      background: isDark ? 'rgba(40,40,40,0.45)' : 'rgba(255,255,255,0.85)',
-                      border: isDark ? '1.5px solid rgba(255,255,255,0.13)' : '1px solid #bbb',
-                      borderRadius: 12,
-                      padding: '14px 18px',
-                      cursor: 'grab',
-                      userSelect: 'none',
-                      boxShadow: isDark ? '0 2px 12px #0004' : '0 1px 4px #0001',
-                      width: '100%',
-                      color: isDark ? '#fff' : '#222',
-                      backdropFilter: 'blur(12px)',
-                      WebkitBackdropFilter: 'blur(12px)',
-                      transition: 'background 0.2s, color 0.2s',
-                    }}
-                  >
+                {GUEST_MODULES.map(module => {
+                  // Check if this module has been added to any draft
+                  const isModuleAdded = drafts.some(draft => 
+                    draft.modules?.[module.key] && Array.isArray(draft.modules[module.key]) && draft.modules[module.key].length > 0
+                  );
+                  
+                  return (
+                    <div
+                      key={module.key}
+                      draggable
+                      onDragStart={e => e.dataTransfer.setData('moduleKey', module.key)}
+                      style={{
+                        background: isDark ? 'rgba(40,40,40,0.45)' : 'rgba(255,255,255,0.85)',
+                        border: isModuleAdded 
+                          ? '2px solid #10b981' 
+                          : isDark ? '1.5px solid rgba(255,255,255,0.13)' : '1px solid #bbb',
+                        borderRadius: 12,
+                        padding: '14px 18px',
+                        cursor: 'grab',
+                        userSelect: 'none',
+                        boxShadow: isDark ? '0 2px 12px #0004' : '0 1px 4px #0001',
+                        width: '100%',
+                        color: isDark ? '#fff' : '#222',
+                        backdropFilter: 'blur(12px)',
+                        WebkitBackdropFilter: 'blur(12px)',
+                        transition: 'background 0.2s, color 0.2s, border 0.2s',
+                      }}
+                    >
                     <div style={{ color: isDark ? '#fff' : '#222', fontWeight: 700, fontSize: 16, marginBottom: module.description ? 4 : 0 }}>{module.label}</div>
                     {module.description && (
                       <div style={{ color: isDark ? '#cbd5e1' : '#666', fontSize: 12 }}>{module.description}</div>
                     )}
-                  </div>
-                ))}
+                    </div>
+                  );
+                })}
               </div>
             </>
           )}
@@ -3542,6 +3476,7 @@ export default function CreateGuests() {
             {successMessage}
           </div>
         )}
-    </div>
+      </div>
+    </>
   );
 }

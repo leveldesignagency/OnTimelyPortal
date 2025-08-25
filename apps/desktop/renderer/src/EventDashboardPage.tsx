@@ -723,6 +723,9 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
     safety: [],
     addons: []
   });
+  
+
+  
   const [draggedModule, setDraggedModule] = useState<string | null>(null);
   const [dragOverCategory, setDragOverCategory] = useState<string | null>(null);
   
@@ -815,6 +818,7 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
   });
   const [editEventLoading, setEditEventLoading] = useState(false);
   const [showAnnouncementModal, setShowAnnouncementModal] = useState(false);
+  const [guestTravelProfiles, setGuestTravelProfiles] = useState<any[]>([]);
 
   // Success message function
   const showSuccess = (message: string) => {
@@ -925,9 +929,46 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
     loadAddOns();
   }, [event?.id]);
 
+  // Load guest travel profiles for this event
   useEffect(() => {
-    console.log('DEBUG: activeModules changed', activeModules);
-  }, [activeModules]);
+    if (!event?.id) return;
+    const loadGuestTravelProfiles = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('guest_travel_profiles')
+          .select('*')
+          .eq('event_id', event.id);
+        
+        if (error) {
+          console.error('Error loading guest travel profiles:', error);
+          setGuestTravelProfiles([]);
+        } else {
+          setGuestTravelProfiles(data || []);
+        }
+      } catch (error) {
+        console.error('Error loading guest travel profiles:', error);
+        setGuestTravelProfiles([]);
+      }
+    };
+    loadGuestTravelProfiles();
+  }, [event?.id]);
+
+  // Load activity feed
+  useEffect(() => {
+    const fetchActivity = async () => {
+      if (!currentUser || !id) return;
+      try {
+        setActivityLoading(true);
+        const data = await getEventActivityFeed(id, currentUser.company_id, 30, 0);
+        setActivityFeed(data || []);
+      } catch (e) {
+        console.error('Error loading event activity feed:', e);
+      } finally {
+        setActivityLoading(false);
+      }
+    };
+    fetchActivity();
+  }, [currentUser, id]);
 
   // Update local guests state when real-time data changes
   useEffect(() => {
@@ -1022,6 +1063,11 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
     if (!event) return;
     localStorage.setItem(`event_modules_${event.id}`, JSON.stringify(activeModules));
   }, [activeModules, event]);
+
+  // Only show Guest Journey Checkpoints if there are guest travel profiles for this event
+  const hasAnyStage1Guest = useMemo(() => {
+    return guestTravelProfiles && guestTravelProfiles.length > 0;
+  }, [guestTravelProfiles]);
 
   const shareSearchResults = useMemo(() => {
     if (!shareSearchQuery) {
@@ -1198,16 +1244,36 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
         fontWeight: 600,
         fontSize: '16px',
         borderRadius: '8px',
-        border: `2px solid ${isDark ? '#ffffff' : '#000000'}`,
+        border: activeTab === id && !isDark
+          ? '1px solid #10b981'
+          : `1px solid ${isDark ? 'rgba(255,255,255,0.2)' : '#e5e7eb'}`,
         background: activeTab === id 
-          ? (isDark ? '#ffffff' : '#ffffff') 
-          : 'transparent',
+          ? (isDark ? '#ffffff' : '#10b981') 
+          : (isDark ? 'transparent' : '#ffffff'),
         color: activeTab === id 
-          ? '#000000' 
-          : (isDark ? '#ffffff' : '#000000'),
+          ? (isDark ? '#000000' : '#ffffff') 
+          : (isDark ? '#ffffff' : '#111827'),
         cursor: 'pointer',
         transition: 'all 0.2s ease',
-        whiteSpace: 'nowrap' as const
+        whiteSpace: 'nowrap' as const,
+        boxShadow: activeTab === id ? (isDark ? '0 2px 8px rgba(0,0,0,0.4)' : '0 2px 8px rgba(0,0,0,0.06)') : 'none',
+        flex: 1,
+        textAlign: 'center'
+      }}
+      onMouseEnter={(e) => {
+        if (activeTab !== id) {
+          e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.08)' : '#e8f7f1';
+        } else if (!isDark) {
+          // Active in light mode – slightly darker green on hover
+          e.currentTarget.style.background = '#0ea371';
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (activeTab !== id) {
+          e.currentTarget.style.background = isDark ? 'transparent' : '#ffffff';
+        } else if (!isDark) {
+          e.currentTarget.style.background = '#10b981';
+        }
       }}
     >
       {label}
@@ -1893,7 +1959,9 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
         alignItems: 'center', 
         justifyContent: 'center', 
         fontFamily: 'Roboto, Arial, system-ui, sans-serif', 
-        background: isDark ? '#1a1a1a' : '#fff',
+        background: isDark 
+          ? 'radial-gradient(1200px 800px at 20% -10%, rgba(34,197,94,0.12), transparent 40%), radial-gradient(1000px 700px at 120% 10%, rgba(34,197,94,0.08), transparent 45%), #0f1115'
+          : '#fff',
         padding: '40px 20px'
       }}>
         <div style={{ 
@@ -2011,6 +2079,7 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
     border: isDark ? '1px solid #444' : '1px solid #e2e8f0',
     boxShadow: isDark ? '0 2px 8px #0003' : '0 2px 8px #0001',
     marginBottom: 8,
+    transition: 'background 0.2s ease, transform 0.15s ease',
   };
 
   // 3. Glassmorphic style for Quick Actions
@@ -2170,25 +2239,17 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
     return dateStr;
   }
 
-  useEffect(() => {
-    const fetchActivity = async () => {
-      if (!currentUser || !id) return;
-      try {
-        setActivityLoading(true);
-        const data = await getEventActivityFeed(id, currentUser.company_id, 30, 0);
-        setActivityFeed(data || []);
-      } catch (e) {
-        console.error('Error loading event activity feed:', e);
-      } finally {
-        setActivityLoading(false);
-      }
-    };
-    fetchActivity();
-  }, [currentUser, id]);
+
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: isDark ? '#121212' : '#f8f9fa' }}>
-      <div style={{ position: 'fixed', top: 0, left: 0, width: 260, height: '100vh', background: isDark ? '#1a1a1a' : '#222', color: '#fff', zIndex: 100, display: 'flex', flexDirection: 'column' }}>
+    <div style={{ 
+      display: 'flex', 
+      minHeight: '100vh', 
+      background: isDark 
+        ? 'radial-gradient(1200px 800px at 20% -10%, rgba(34,197,94,0.12), transparent 40%), radial-gradient(1000px 700px at 120% 10%, rgba(34,197,94,0.08), transparent 45%), #0f1115' 
+        : '#f7f8fa' 
+    }}>
+      <div style={{ position: 'fixed', top: 0, left: 0, width: 260, height: '100vh', background: 'transparent', color: '#fff', zIndex: 100, display: 'flex', flexDirection: 'column' }}>
         <Sidebar 
           events={events} 
           isOverlay={false} 
@@ -2205,8 +2266,8 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
           width: showModules ? 320 : 32, 
           height: '100vh',
           background: isDark
-            ? 'rgba(0, 0, 0, 0.35)'
-            : 'rgba(255, 255, 255, 0.9)',
+            ? '#1a1a1a'
+            : '#ffffff',
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',
           border: isDark
@@ -2229,14 +2290,24 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
               background: 'none',
               border: 'none',
               color: '#fff',
-              fontSize: 22,
               cursor: 'pointer',
               alignSelf: showModules ? 'flex-end' : 'center',
               marginBottom: 32,
-              padding: '8px'
+              padding: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
             }}
           >
-            {showModules ? '→' : '←'}
+            {showModules ? (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="15,18 9,12 15,6"></polyline>
+              </svg>
+            ) : (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="9,18 15,12 9,6"></polyline>
+              </svg>
+            )}
           </button>
 
           {showModules && (
@@ -2262,9 +2333,7 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                         padding: '14px 18px',
                         cursor: isActive ? 'not-allowed' : 'grab',
                         userSelect: 'none',
-                        boxShadow: isActive
-                          ? '0 0 12px 2px #22c55e99'
-                          : isDark ? '0 2px 12px #0004' : '0 1px 4px #0001',
+                        boxShadow: isDark ? '0 2px 12px #0004' : '0 1px 4px #0001',
                         width: '100%',
                         color: isDark ? '#fff' : '#222',
                         backdropFilter: 'blur(12px)',
@@ -2307,7 +2376,7 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
         right: activeTab === 'addons' ? (showModules ? 320 : 32) : 0,
         height: '100vh',
         overflowY: 'auto',
-        background: isDark ? '#121212' : '#fff',
+        background: 'transparent',
         padding: 0, // Remove side padding from outer container
         transition: 'right 0.3s ease'
       }}>
@@ -2327,11 +2396,23 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
           </div>
           <div style={{ height: 32 }} />
           <hr style={{ margin: '7px 0 16px 0', border: 'none', borderTop: isDark ? '2px solid #444' : '2px solid #bbb' }} />
-          <div style={{ display: 'flex', gap: 16, marginBottom: 32 }}>
-            <TabButton id="settings" label="Event Dashboard" />
-            <TabButton id="itineraries" label="Itineraries" />
-            <TabButton id="guests" label="Guests" />
-            <TabButton id="addons" label="Add Ons" />
+          <div style={{ display: 'flex', gap: 16, marginBottom: 32, width: '100%' }}>
+            <div style={{ flex: 1 }} onMouseEnter={(e) => ((e.target as HTMLElement).closest('button') as HTMLButtonElement | null)?.dispatchEvent(new Event('mouseenter'))}
+                 onMouseLeave={(e) => ((e.target as HTMLElement).closest('button') as HTMLButtonElement | null)?.dispatchEvent(new Event('mouseleave'))}>
+              <TabButton id="settings" label="Event Dashboard" />
+            </div>
+            <div style={{ flex: 1 }} onMouseEnter={(e) => ((e.target as HTMLElement).closest('button') as HTMLButtonElement | null)?.dispatchEvent(new Event('mouseenter'))}
+                 onMouseLeave={(e) => ((e.target as HTMLElement).closest('button') as HTMLButtonElement | null)?.dispatchEvent(new Event('mouseleave'))}>
+              <TabButton id="itineraries" label="Itineraries" />
+            </div>
+            <div style={{ flex: 1 }} onMouseEnter={(e) => ((e.target as HTMLElement).closest('button') as HTMLButtonElement | null)?.dispatchEvent(new Event('mouseenter'))}
+                 onMouseLeave={(e) => ((e.target as HTMLElement).closest('button') as HTMLButtonElement | null)?.dispatchEvent(new Event('mouseleave'))}>
+              <TabButton id="guests" label="Guests" />
+            </div>
+            <div style={{ flex: 1 }} onMouseEnter={(e) => ((e.target as HTMLElement).closest('button') as HTMLButtonElement | null)?.dispatchEvent(new Event('mouseenter'))}
+                 onMouseLeave={(e) => ((e.target as HTMLElement).closest('button') as HTMLButtonElement | null)?.dispatchEvent(new Event('mouseleave'))}>
+              <TabButton id="addons" label="Add Ons" />
+            </div>
           </div>
 
           {activeTab === 'settings' && (
@@ -2351,13 +2432,13 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                       onClick={() => navigate(`/link-itineraries/${currentEvent?.id}`)}
                       style={{
                         background: event?.status === 'launched' 
-                          ? '#4CAF50' 
+                          ? '#10b981' 
                           : (isDark 
                             ? 'rgba(255, 255, 255, 0.1)' 
                             : 'rgba(255, 255, 255, 0.2)'),
                         backdropFilter: 'blur(10px)',
                         border: event?.status === 'launched'
-                          ? '1px solid #4CAF50'
+                          ? '1px solid #10b981'
                           : (isDark 
                             ? '1px solid rgba(255, 255, 255, 0.2)' 
                             : '1px solid rgba(0, 0, 0, 0.1)'),
@@ -2384,7 +2465,7 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                       }}
                       onMouseEnter={(e) => {
                         if (event?.status === 'launched') {
-                          e.currentTarget.style.background = '#45a049';
+                          e.currentTarget.style.background = '#0ea371';
                         } else {
                           e.currentTarget.style.background = isDark 
                             ? 'rgba(255, 255, 255, 0.15)' 
@@ -2394,7 +2475,7 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                       }}
                       onMouseLeave={(e) => {
                         if (event?.status === 'launched') {
-                          e.currentTarget.style.background = '#4CAF50';
+                          e.currentTarget.style.background = '#10b981';
                         } else {
                           e.currentTarget.style.background = isDark 
                             ? 'rgba(255, 255, 255, 0.1)' 
@@ -2471,12 +2552,12 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                 
                 {/* Total Guests Card */}
                 <div style={{ 
-                  background: isDark ? '#1e1e1e' : '#000', 
+                  background: isDark ? '#1e1e1e' : '#ffffff', 
                   borderRadius: 16, 
                   padding: 32, 
-                  color: '#fff',
-                  boxShadow: isDark ? '0 8px 32px rgba(0, 0, 0, 0.3)' : '0 8px 32px rgba(0, 0, 0, 0.15)',
-                  border: isDark ? '1px solid #333' : 'none'
+                  color: isDark ? '#ffffff' : '#111827',
+                  boxShadow: isDark ? '0 8px 32px rgba(0, 0, 0, 0.3)' : '0 8px 32px rgba(0, 0, 0, 0.08)',
+                  border: isDark ? '1px solid #333' : '1px solid #e5e7eb'
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                     <Icon name="person" style={{ fontSize: 48, color: isDark ? '#60A5FA' : '#3B82F6' }} />
@@ -2485,30 +2566,32 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                       <div style={{ fontSize: 14, opacity: 0.8 }}>Total Guests</div>
                     </div>
                   </div>
-                  <div style={{ display: 'flex', gap: 16, fontSize: 14 }}>
-                    <div>
-                      <div style={{ fontWeight: 600 }}>{guests.filter(g => g.gender === 'Male').length}</div>
-                      <div style={{ opacity: 0.8 }}>Male</div>
-                    </div>
-                    <div>
-                      <div style={{ fontWeight: 600 }}>{guests.filter(g => g.gender === 'Female').length}</div>
-                      <div style={{ opacity: 0.8 }}>Female</div>
-                    </div>
-                    <div>
-                      <div style={{ fontWeight: 600 }}>{new Set(guests.map(g => g.groupId).filter(Boolean)).size}</div>
-                      <div style={{ opacity: 0.8 }}>Groups</div>
+                  <div style={{ background: isDark ? 'rgba(255,255,255,0.1)' : '#f9fafb', borderRadius: 12, padding: 16 }}>
+                    <div style={{ display: 'flex', gap: 16, fontSize: 14 }}>
+                      <div>
+                        <div style={{ fontWeight: 600 }}>{guests.filter(g => g.gender === 'Male').length}</div>
+                        <div style={{ opacity: 0.8 }}>Male</div>
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 600 }}>{guests.filter(g => g.gender === 'Female').length}</div>
+                        <div style={{ opacity: 0.8 }}>Female</div>
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 600 }}>{new Set(guests.map(g => g.groupId).filter(Boolean)).size}</div>
+                        <div style={{ opacity: 0.8 }}>Groups</div>
+                      </div>
                     </div>
                   </div>
                 </div>
 
                 {/* Itinerary Progress Card */}
                 <div style={{ 
-                  background: isDark ? '#2a2a2a' : '#333', 
+                  background: isDark ? '#2a2a2a' : '#ffffff', 
                   borderRadius: 16, 
                   padding: 32, 
-                  color: '#fff',
-                  boxShadow: isDark ? '0 8px 32px rgba(0, 0, 0, 0.3)' : '0 8px 32px rgba(0, 0, 0, 0.15)',
-                  border: isDark ? '1px solid #444' : 'none'
+                  color: isDark ? '#ffffff' : '#111827',
+                  boxShadow: isDark ? '0 8px 32px rgba(0, 0, 0, 0.3)' : '0 8px 32px rgba(0, 0, 0, 0.08)',
+                  border: isDark ? '1px solid #444' : '1px solid #e5e7eb'
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                     <Icon name="clipboard" style={{ fontSize: 48, color: isDark ? '#34D399' : '#10B981' }} />
@@ -2517,25 +2600,25 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                       <div style={{ fontSize: 14, opacity: 0.8 }}>Active Itineraries</div>
                     </div>
                   </div>
-                  <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 12, padding: 16 }}>
+                  <div style={{ background: isDark ? 'rgba(255,255,255,0.1)' : '#f9fafb', borderRadius: 12, padding: 16 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                       <span>Completion Rate</span>
                       <span>75%</span>
                     </div>
-                    <div style={{ background: 'rgba(255,255,255,0.2)', borderRadius: 8, height: 8 }}>
-                      <div style={{ background: '#fff', borderRadius: 8, height: 8, width: '75%' }}></div>
+                    <div style={{ background: isDark ? 'rgba(255,255,255,0.2)' : '#e5e7eb', borderRadius: 8, height: 8 }}>
+                      <div style={{ background: isDark ? '#fff' : '#10b981', borderRadius: 8, height: 8, width: '75%' }}></div>
                     </div>
                   </div>
                 </div>
 
                 {/* Event Status Card */}
                 <div style={{ 
-                  background: isDark ? '#3a3a3a' : '#666', 
+                  background: isDark ? '#3a3a3a' : '#ffffff', 
                   borderRadius: 16, 
                   padding: 32, 
-                  color: '#fff',
-                  boxShadow: isDark ? '0 8px 32px rgba(0, 0, 0, 0.3)' : '0 8px 32px rgba(0, 0, 0, 0.15)',
-                  border: isDark ? '1px solid #555' : 'none'
+                  color: isDark ? '#ffffff' : '#111827',
+                  boxShadow: isDark ? '0 8px 32px rgba(0, 0, 0, 0.3)' : '0 8px 32px rgba(0, 0, 0, 0.08)',
+                  border: isDark ? '1px solid #555' : '1px solid #e5e7eb'
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                     <Icon name="satellite" style={{ fontSize: 48, color: isDark ? '#A78BFA' : '#8B5CF6' }} />
@@ -2544,9 +2627,11 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                       <div style={{ fontSize: 14, opacity: 0.8 }}>Event Status</div>
                     </div>
                   </div>
-                  <div style={{ fontSize: 14 }}>
-                    <div style={{ marginBottom: 8 }}>Start: {event?.from}</div>
-                    <div>End: {event?.to}</div>
+                  <div style={{ background: isDark ? 'rgba(255,255,255,0.1)' : '#f9fafb', borderRadius: 12, padding: 16 }}>
+                    <div style={{ fontSize: 14 }}>
+                      <div style={{ marginBottom: 8 }}>Start: {event?.from}</div>
+                      <div>End: {event?.to}</div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2558,7 +2643,7 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                   <button 
                     onClick={() => navigate(`/export-report/${event?.id}`)}
                     style={{
-                      ...getButtonStyles(isDark, 'primary'),
+                      ...getButtonStyles(isDark, 'secondary'),
                       padding: '16px 20px',
                       fontSize: 15,
                       fontWeight: 500,
@@ -2567,6 +2652,19 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                       justifyContent: 'center',
                       gap: 8,
                       textAlign: 'center'
+                    }}
+                    onMouseEnter={(e) => { 
+                      if (isDark) {
+                        e.currentTarget.style.background = 'rgba(255,255,255,0.12)';
+                        e.currentTarget.style.color = '#ffffff';
+                      } else {
+                        e.currentTarget.style.background = '#10b981';
+                        e.currentTarget.style.color = '#ffffff';
+                      }
+                    }}
+                    onMouseLeave={(e) => { 
+                      e.currentTarget.style.background = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.03)';
+                      e.currentTarget.style.color = isDark ? '#ffffff' : '#000000';
                     }}
                   >
                     Export Report
@@ -2584,6 +2682,19 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                       gap: 8,
                       textAlign: 'center'
                     }}
+                    onMouseEnter={(e) => { 
+                      if (isDark) {
+                        e.currentTarget.style.background = 'rgba(255,255,255,0.12)';
+                        e.currentTarget.style.color = '#ffffff';
+                      } else {
+                        e.currentTarget.style.background = '#10b981';
+                        e.currentTarget.style.color = '#ffffff';
+                      }
+                    }}
+                    onMouseLeave={(e) => { 
+                      e.currentTarget.style.background = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.03)';
+                      e.currentTarget.style.color = isDark ? '#ffffff' : '#000000';
+                    }}
                   >
                     Send Announcement
                   </button>
@@ -2599,6 +2710,19 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                       justifyContent: 'center',
                       gap: 8,
                       textAlign: 'center'
+                    }}
+                    onMouseEnter={(e) => { 
+                      if (isDark) {
+                        e.currentTarget.style.background = 'rgba(255,255,255,0.12)';
+                        e.currentTarget.style.color = '#ffffff';
+                      } else {
+                        e.currentTarget.style.background = '#10b981';
+                        e.currentTarget.style.color = '#ffffff';
+                      }
+                    }}
+                    onMouseLeave={(e) => { 
+                      e.currentTarget.style.background = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.03)';
+                      e.currentTarget.style.color = isDark ? '#ffffff' : '#000000';
                     }}
                   >
                     Guest Form Responses
@@ -2616,7 +2740,7 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                       }
                     }}
                     style={{
-                      ...getButtonStyles(isDark, event?.status === 'launched' ? 'primary' : 'secondary'),
+                      ...getButtonStyles(isDark, 'secondary'),
                       padding: '16px 20px',
                       fontSize: 15,
                       fontWeight: 500,
@@ -2626,8 +2750,25 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                       gap: 8,
                       textAlign: 'center',
                       cursor: event?.status === 'launched' ? 'pointer' : 'not-allowed',
-                      opacity: event?.status === 'launched' ? 1 : 0.5,
+                      opacity: event?.status === 'launched' ? 1 : 0.6,
                       pointerEvents: event?.status === 'launched' ? 'auto' : 'none'
+                    }}
+                    onMouseEnter={(e) => { 
+                      if (event?.status === 'launched') {
+                        if (isDark) {
+                          e.currentTarget.style.background = 'rgba(255,255,255,0.12)';
+                          e.currentTarget.style.color = '#ffffff';
+                        } else {
+                          e.currentTarget.style.background = '#10b981';
+                          e.currentTarget.style.color = '#ffffff';
+                        }
+                      }
+                    }}
+                    onMouseLeave={(e) => { 
+                      if (event?.status === 'launched') {
+                        e.currentTarget.style.background = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.03)';
+                        e.currentTarget.style.color = isDark ? '#ffffff' : '#000000';
+                      }
                     }}
                   >
                     Event Portal
@@ -2636,6 +2777,7 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
               </div>
 
               {/* 3. Guest Journey Tracking (now above Live Activity Feed) */}
+              {hasAnyStage1Guest && (
               <div style={{ 
                 background: isDark ? '#1e1e1e' : '#fff', 
                 borderRadius: 16, 
@@ -2819,6 +2961,7 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                   </div>
                 </div>
               </div>
+              )}
 
               {/* 4. Live Activity Feed (now below Guest Journey Checkpoints) */}
               <div style={{ ...getGlassStyles(isDark), marginBottom: 32, padding: 32 }}>
@@ -2830,7 +2973,7 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                     aria-label="View all activity"
                     style={{ width: 36, height: 36, borderRadius: '50%', border: 'none', background: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.06)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                   >
-                    <Icon name="bell" style={{ fontSize: 18, color: isDark ? '#fff' : '#000' }} />
+                    <Icon name="bell" style={{ fontSize: 18, color: '#10b981' }} />
                   </button>
                 </div>
                 <div>
@@ -2862,6 +3005,14 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                     })();
                     return (
                       <div key={`${item.item_type}-${item.source_id}-${idx}`} style={{ ...activityCardStyle, position: 'relative' }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.10)' : '#f3f4f6';
+                          e.currentTarget.style.transform = 'translateY(-2px)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = isDark ? 'rgba(40,40,40,0.7)' : 'rgba(255,255,255,0.85)';
+                          e.currentTarget.style.transform = 'translateY(0)';
+                        }}
                         onClick={() => {
                           const t = item.item_type;
                           if (t === 'message' || t === 'module_answer') navigate('/guest-chat', { state: { eventId: id } });
@@ -2880,7 +3031,7 @@ export default function EventDashboardPage({ events, onDeleteEvent }: { events: 
                             item.item_type === 'module_answer' ? 'clipboard' : 
                             item.item_type === 'form_submission' ? 'description' : 
                             'pin'
-                          } style={{ fontSize: 18, color: '#fff' }} />
+                          } style={{ fontSize: 18, color: isDark ? '#ffffff' : '#111827', filter: isDark ? 'none' : 'invert(0)' }} />
                         </div>
                       </div>
                     );

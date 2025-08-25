@@ -695,7 +695,7 @@ const Dashboard = ({ events: propEvents }: DashboardProps) => {
             <DraggableAction
               action={{
                 name: 'Create Event',
-                icon: '📅',
+        icon: '📅',
                 type: 'navigate',
                 to: '/create-event'
               }}

@@ -25,6 +25,9 @@ export interface TravelProfile {
   hotel_name?: string;
   hotel_address?: string;
   hotel_check_in_time?: string;
+  hotel_check_out_time?: string;
+  hotel_check_in_date?: string;
+  hotel_check_out_date?: string;
   
   // Driver Information
   driver_verification_code?: string;
