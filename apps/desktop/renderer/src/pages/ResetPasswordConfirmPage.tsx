@@ -167,10 +167,33 @@ const ResetPasswordConfirmPage = () => {
           {error && (
             <div style={{
               background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)',
-              borderRadius: '8px', padding: '12px', marginBottom: '20px',
+              borderRadius: '8px', padding: '16px', marginBottom: '20px',
               color: '#fca5a5', fontSize: '14px'
             }}>
-              {error}
+              <div style={{ marginBottom: '12px' }}>{error}</div>
+              <button
+                onClick={() => navigate('/reset-password')}
+                style={{
+                  background: 'rgba(239, 68, 68, 0.2)',
+                  border: '1px solid rgba(239, 68, 68, 0.4)',
+                  borderRadius: '6px',
+                  padding: '8px 16px',
+                  color: '#fca5a5',
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(239, 68, 68, 0.3)';
+                  e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.6)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
+                  e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+                }}
+              >
+                Request New Link
+              </button>
             </div>
           )}
 

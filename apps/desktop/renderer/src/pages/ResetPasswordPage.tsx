@@ -45,7 +45,7 @@ const ResetPasswordPage = () => {
       console.log('ResetPasswordPage - Sending reset email to:', email);
       
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: 'https://dashboard.ontimely.co.uk/reset-password-confirm'
+        redirectTo: `${window.location.origin}/reset-password-confirm`
       });
 
       if (error) {
@@ -73,7 +73,7 @@ const ResetPasswordPage = () => {
     
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: 'https://dashboard.ontimely.co.uk/reset-password-confirm'
+        redirectTo: `${window.location.origin}/reset-password-confirm`
       });
 
       if (error) {

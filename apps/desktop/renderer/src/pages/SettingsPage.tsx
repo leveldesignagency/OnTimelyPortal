@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ThemeContext } from '../ThemeContext';
 import { getCurrentUser } from '../lib/auth';
 import { supabase } from '../lib/supabase';
+import UpdateManager from '../components/UpdateManager';
 
 // Custom Dropdown Component (same styling as CalendarPage)
 function CustomDropdown({ 
@@ -386,8 +387,17 @@ export default function SettingsPage() {
           <circle cx="9" cy="7" r="4"/>
           <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
           <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-          <circle cx="9" cy="7" r="4"/>
+        </svg>
+      )
+    },
+    { 
+      id: 'updates', 
+      label: 'Update', 
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2z"/>
+          <path d="M13 8H7"/>
+          <path d="M17 12H7"/>
         </svg>
       )
     },
@@ -1011,6 +1021,9 @@ export default function SettingsPage() {
               </div>
         );
 
+      case 'updates':
+        return <UpdateManager isDark={isDark} />;
+
       default:
         return <div>Select a tab to view settings</div>;
     }
@@ -1018,16 +1031,53 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-            <div style={{
+      <div style={{
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center',
         height: '100vh',
-        background: isDark ? '#1f2937' : '#ffffff',
+        background: isDark 
+          ? 'radial-gradient(1200px 800px at 20% -10%, rgba(34,197,94,0.12), transparent 40%), radial-gradient(1000px 700px at 120% 10%, rgba(34,197,94,0.08), transparent 45%), #0f1115'
+          : '#f7f8fa',
         color: isDark ? '#ffffff' : '#000000'
       }}>
-        Loading settings...
-                </div>
+        <div style={{
+          background: isDark ? 'rgba(30, 30, 30, 0.8)' : 'rgba(255, 255, 255, 0.9)',
+          padding: '24px 32px',
+          borderRadius: '16px',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          border: isDark ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid rgba(0, 0, 0, 0.1)',
+          boxShadow: isDark 
+            ? '0 25px 50px rgba(0, 0, 0, 0.3)' 
+            : '0 25px 50px rgba(0, 0, 0, 0.1)'
+        }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '16px'
+          }}>
+            <div style={{
+              width: '24px',
+              height: '24px',
+              border: '2px solid rgba(16, 185, 129, 0.3)',
+              borderTop: '2px solid #10b981',
+              borderRadius: '50%',
+              animation: 'spin 1s linear infinite'
+            }} />
+            <span style={{ fontSize: '16px', fontWeight: '500' }}>
+              Loading settings...
+            </span>
+          </div>
+        </div>
+        
+        <style>{`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
     );
   }
 

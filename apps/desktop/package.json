@@ -2,6 +2,17 @@
   "name": "desktop",
   "private": true,
   "version": "1.0.1",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/leveldesignagency/OnTimely.git"
+  },
+  "publish": [
+    {
+      "provider": "github",
+      "owner": "leveldesignagency",
+      "repo": "OnTimely"
+    }
+  ],
 
   "main": "dist-electron/main.js",
   "scripts": {
