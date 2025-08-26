@@ -6,10 +6,15 @@ import { getCurrentUser } from './auth'
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
+console.log('🔧 Supabase Config:');
+console.log('SUPABASE_URL:', supabaseUrl);
+console.log('SUPABASE_ANON_KEY:', supabaseAnonKey ? '***SET***' : '***MISSING***');
+
 if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing Supabase environment variables');
 }
 
+console.log('🔧 Creating Supabase client...');
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     autoRefreshToken: true,
@@ -19,9 +24,15 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   }
 })
 
+console.log('🔧 Supabase client created:', supabase);
+console.log('🔧 Supabase auth methods:', Object.keys(supabase.auth || {}));
+console.log('🔧 Supabase auth object:', supabase.auth);
+
 // Expose supabase to window for debugging
 if (typeof window !== 'undefined') {
   (window as any).supabase = supabase;
+  console.log('🔧 Supabase exposed to window:', (window as any).supabase);
+  console.log('🔧 Window supabase auth methods:', Object.keys((window as any).supabase?.auth || {}));
 }
 
 // Types for your database tables

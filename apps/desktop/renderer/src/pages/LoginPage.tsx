@@ -22,25 +22,37 @@ const LoginPage = () => {
     });
   }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
-    // Try Supabase Auth login
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    console.log('Supabase Auth login result:', data, error);
+    console.log('🔐 LoginPage - Login attempt started');
+    console.log('🔐 LoginPage - Email:', email);
+    console.log('🔐 LoginPage - Supabase available:', !!supabase);
+    console.log('🔐 LoginPage - Supabase auth methods:', Object.keys(supabase?.auth || {}));
 
-    if (error || !data.session) {
-      setError(error?.message || 'Login failed');
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+
+      console.log('🔐 LoginPage - Supabase response:', { data, error });
+
+      if (error) {
+        console.error('🔐 LoginPage - Login error:', error);
+        setError(error.message);
+      } else {
+        console.log('🔐 LoginPage - Login successful:', data);
+        navigate('/dashboard');
+      }
+    } catch (error) {
+      console.error('🔐 LoginPage - Unexpected error:', error);
+      setError('An unexpected error occurred. Please try again.');
+    } finally {
       setLoading(false);
-      return;
     }
-
-    // Optionally: fetch your user profile from your users table here
-
-    navigate('/');
-    setLoading(false);
   };
 
   return (
@@ -178,7 +190,7 @@ const LoginPage = () => {
             </div>
           )}
           
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={handleLogin}>
             
             {/* Email Field */}
             <div style={{ marginBottom: '25px' }}>

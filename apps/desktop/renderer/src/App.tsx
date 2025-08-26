@@ -40,6 +40,10 @@ export type EventType = Event;
 
 const PublicFormPage = React.lazy(() => import('./pages/PublicFormPage'));
 
+console.log('🚀 App.tsx - Component loading...');
+console.log('🚀 App.tsx - Supabase import check:', supabase);
+console.log('🚀 App.tsx - Supabase auth methods:', Object.keys(supabase?.auth || {}));
+
 const AppContent = () => {
   const { theme } = useContext(ThemeContext);
   const isDark = theme === 'dark';
