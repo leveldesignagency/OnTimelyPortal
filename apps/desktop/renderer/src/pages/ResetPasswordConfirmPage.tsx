@@ -200,30 +200,27 @@ const ResetPasswordConfirmPage = () => {
           {error && (
             <div style={{
               background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)',
-              borderRadius: '8px', padding: '16px', marginBottom: '20px',
-              color: '#fca5a5', fontSize: '14px'
+              borderRadius: '8px', padding: '20px', marginBottom: '20px',
+              textAlign: 'center'
             }}>
-              <div style={{ marginBottom: '12px' }}>{error}</div>
+              <div style={{ color: '#fca5a5', marginBottom: '16px' }}>
+                {error}
+              </div>
               <button
                 onClick={() => navigate('/reset-password')}
                 style={{
-                  background: 'rgba(239, 68, 68, 0.2)',
-                  border: '1px solid rgba(239, 68, 68, 0.4)',
-                  borderRadius: '6px',
-                  padding: '8px 16px',
-                  color: '#fca5a5',
-                  fontSize: '13px',
+                  background: '#dc2626',
+                  color: 'white',
+                  border: 'none',
+                  padding: '10px 20px',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  fontWeight: '600',
                   cursor: 'pointer',
-                  transition: 'all 0.2s ease'
+                  transition: 'background 0.2s ease'
                 }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(239, 68, 68, 0.3)';
-                  e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.6)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
-                  e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.4)';
-                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = '#b91c1c'}
+                onMouseLeave={(e) => e.currentTarget.style.background = '#dc2626'}
               >
                 Request New Link
               </button>

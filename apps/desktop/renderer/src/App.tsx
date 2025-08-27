@@ -398,6 +398,7 @@ const AppContent = () => {
     minHeight: '100vh',
     background: 'none',
     transition: 'margin-left 0.3s ease',
+    // For password reset and login pages: no margin (full width)
     // For teams pages: small margin for collapsed overlay sidebar
     // For other pages: account for fixed sidebar width
     marginLeft: (isLoginPage || isResetPasswordPage) ? '0' : (isTeamsPage ? '50px' : '250px'),
@@ -407,6 +408,7 @@ const AppContent = () => {
 
   return (
     <div style={{ display: 'flex', position: 'relative', height: '100vh', overflow: 'hidden' }}>
+      {/* Only show sidebar if NOT on login or password reset pages */}
       {!isLoginPage && !isResetPasswordPage && (
         <Sidebar 
           events={events}
@@ -417,12 +419,12 @@ const AppContent = () => {
       )}
       <main style={mainContentStyle}>
         <Routes>
-          {/* Public routes */}
+          {/* Public routes - NO SIDEBAR */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
-        <Route path="/reset-password-confirm" element={<ResetPasswordConfirmPage />} />
+          <Route path="/reset-password-confirm" element={<ResetPasswordConfirmPage />} />
           
-          {/* Protected routes */}
+          {/* Protected routes - WITH SIDEBAR */}
           <Route path="/" element={<ProtectedRoute><Navigate to="/dashboard" replace /></ProtectedRoute>} />
           <Route path="/dashboard" element={<ProtectedRoute><Dashboard events={events} /></ProtectedRoute>} />
           <Route path="/create-event" element={<ProtectedRoute><CreateEventPage onCreate={handleCreateEvent} /></ProtectedRoute>} />
