@@ -14,27 +14,74 @@ const ResetPasswordConfirmPage = () => {
   const { theme } = useContext(ThemeContext);
   const isDark = theme === 'dark';
 
-  // Check if we have access token in URL
+  // Check if we have access token in URL and handle Supabase auth flow
   useEffect(() => {
     const hash = location.hash;
     const searchParams = new URLSearchParams(location.search);
+    console.log('ResetPasswordConfirmPage - Full URL:', window.location.href);
     console.log('ResetPasswordConfirmPage - URL hash:', hash);
-    console.log('ResetPasswordConfirmPage - URL search params:', location.search);
+    console.log('ResetPasswordConfirmPage - URL search:', location.search);
     
-    // For Supabase password reset, the link should contain the reset token
-    // We need to let Supabase handle the authentication flow automatically
-    // and then we can update the password
+    // Check for Supabase error responses first
+    const error = searchParams.get('error');
+    const errorCode = searchParams.get('error_code');
+    const errorDescription = searchParams.get('error_description');
     
-    // Check if this looks like a valid password reset link
-    if (searchParams.get('type') === 'recovery' || 
-        hash.includes('access_token') ||
-        searchParams.has('access_token')) {
-      console.log('ResetPasswordConfirmPage - Valid password reset link detected');
-      // Let Supabase handle the auth flow automatically
-      // Don't show error, let the component render
+    if (error || errorCode) {
+      console.log('ResetPasswordConfirmPage - Supabase error detected:', { error, errorCode, errorDescription });
+      
+      if (errorCode === 'otp_expired') {
+        setError('This password reset link has expired. Please request a new one.');
+      } else if (error === 'access_denied') {
+        setError('Access denied. This reset link is invalid or has expired.');
+      } else {
+        setError(`Reset link error: ${errorDescription || error || 'Unknown error'}`);
+      }
+      return; // Don't proceed with token extraction
+    }
+    
+    // Extract access token from hash (Supabase format: #access_token=...)
+    if (hash.includes('access_token=')) {
+      const accessToken = hash.split('access_token=')[1]?.split('&')[0];
+      console.log('ResetPasswordConfirmPage - Access token extracted:', accessToken ? accessToken.substring(0, 20) + '...' : 'No token');
+      
+      if (accessToken) {
+        console.log('ResetPasswordConfirmPage - Attempting to set Supabase session...');
+        
+        // Set the access token in Supabase auth
+        supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: ''
+        }).then(({ data, error }) => {
+          if (error) {
+            console.error('ResetPasswordConfirmPage - Session error:', error);
+            setError('Invalid or expired reset link. Please request a new one.');
+          } else {
+            console.log('ResetPasswordConfirmPage - Session established successfully:', data);
+            setError(''); // Clear any previous errors
+          }
+        }).catch((catchError) => {
+          console.error('ResetPasswordConfirmPage - Session creation failed:', catchError);
+          setError('Failed to establish session. Please try again.');
+        });
+      } else {
+        console.error('ResetPasswordConfirmPage - Could not extract access token from hash');
+        setError('Invalid reset link format. Please request a new one.');
+      }
     } else {
-      console.log('ResetPasswordConfirmPage - Invalid reset link format');
-      setError('Invalid password reset link format. Please request a new one.');
+      console.log('ResetPasswordConfirmPage - No access_token found in hash. Hash contents:', hash);
+      
+      // Check if this might be a different format
+      if (hash.includes('token=')) {
+        const token = hash.split('token=')[1]?.split('&')[0];
+        console.log('ResetPasswordConfirmPage - Found token instead of access_token:', token ? 'Yes' : 'No');
+        if (token) {
+          // Try to handle as a regular token
+          setError(''); // Clear error to allow form to work
+        }
+      } else {
+        setError('Invalid password reset link. Please request a new one.');
+      }
     }
   }, [location]);
 
@@ -173,8 +220,11 @@ const ResetPasswordConfirmPage = () => {
               borderRadius: '8px', padding: '20px', marginBottom: '20px',
               textAlign: 'center'
             }}>
-              <div style={{ color: '#fca5a5', marginBottom: '16px' }}>
+              <div style={{ color: '#fca5a5', marginBottom: '16px', fontSize: '16px' }}>
                 {error}
+              </div>
+              <div style={{ color: '#fca5a5', marginBottom: '16px', fontSize: '14px' }}>
+                Password reset links expire after 1 hour for security reasons.
               </div>
               <button
                 onClick={() => navigate('/reset-password')}
@@ -182,7 +232,7 @@ const ResetPasswordConfirmPage = () => {
                   background: '#dc2626',
                   color: 'white',
                   border: 'none',
-                  padding: '10px 20px',
+                  padding: '12px 24px',
                   borderRadius: '8px',
                   fontSize: '14px',
                   fontWeight: '600',
@@ -192,7 +242,7 @@ const ResetPasswordConfirmPage = () => {
                 onMouseEnter={(e) => e.currentTarget.style.background = '#b91c1c'}
                 onMouseLeave={(e) => e.currentTarget.style.background = '#dc2626'}
               >
-                Request New Link
+                Request New Reset Link
               </button>
             </div>
           )}
