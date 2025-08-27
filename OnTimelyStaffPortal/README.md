@@ -1,218 +1,229 @@
 # OnTimely Staff Portal
 
-A comprehensive management portal for OnTimely staff to manage users, companies, desktop app support, analytics, and system administration.
+A comprehensive management portal for OnTimely staff to manage companies, users, support tickets, and monitor system health.
 
-## 🚀 Features
+## Features
 
-### 📱 Desktop App Support
-- **Installation Guides**: Step-by-step guides for Windows, macOS, and Linux
-- **Troubleshooting**: Common issues and solutions database
-- **Update Management**: Version tracking and release management
-- **Feature Tutorials**: Comprehensive documentation and video guides
+- **Company Management**: Create, view, and manage company accounts
+- **User Management**: Add users to companies, manage roles and permissions
+- **Support System**: Track and manage support tickets
+- **Analytics Dashboard**: Real-time metrics and system health monitoring
+- **Desktop App Support**: Manage app versions and provide support resources
+- **Admin Tools**: Bulk operations and system administration
 
-### 👥 User Management
-- **Company User Onboarding**: Streamlined user creation and setup
-- **Role Management**: Admin, user, and moderator role assignments
-- **Access Controls**: Permission management and security settings
-- **Team Setup**: Company team organization and management
-
-### 📊 Analytics & Monitoring
-- **App Usage Statistics**: User activity and engagement metrics
-- **User Activity Tracking**: Real-time user behavior monitoring
-- **Performance Metrics**: System health and performance indicators
-- **Error Reporting**: Incident tracking and resolution management
-
-### 🛠️ Admin Tools
-- **Bulk User Creation**: CSV import/export for user management
-- **Company Management**: Company account administration
-- **System Health Monitoring**: Real-time system status and alerts
-- **Support Ticket System**: Help desk and issue resolution tracking
-
-## 🏗️ Architecture
-
-```
-/management
-├── /dashboard          # Overview & metrics
-├── /users             # User management
-├── /companies         # Company management  
-├── /desktop-app       # Desktop app support
-├── /analytics         # Usage analytics
-├── /support           # Help & support
-└── /admin             # Admin tools
-```
-
-## 🛠️ Tech Stack
+## Tech Stack
 
 - **Frontend**: React 18 + TypeScript
 - **Styling**: Tailwind CSS
 - **Icons**: Lucide React
 - **Charts**: Recharts
 - **Build Tool**: Vite
+- **Backend**: Supabase (PostgreSQL + Real-time)
 - **Routing**: React Router DOM
 
-## 📦 Installation
+## Quick Start
 
-1. **Clone the repository**
+### 1. Prerequisites
+
+- Node.js 18+ 
+- npm or yarn
+- Supabase account and project
+
+### 2. Setup Supabase
+
+1. Go to [supabase.com](https://supabase.com) and create a new project
+2. Once your project is created, go to **Settings > API**
+3. Copy your **Project URL** and **anon/public key**
+4. Go to **SQL Editor** and run the contents of `database-schema.sql`
+
+### 3. Environment Configuration
+
+1. Copy `env.example` to `.env`:
    ```bash
-   cd OnTimelyStaffPortal
+   cp env.example .env
    ```
 
-2. **Install dependencies**
-   ```bash
-   npm install
+2. Update `.env` with your Supabase credentials:
+   ```env
+   VITE_SUPABASE_URL=https://your-project-id.supabase.co
+   VITE_SUPABASE_ANON_KEY=your-anon-key-here
    ```
 
-3. **Start development server**
-   ```bash
-   npm run dev
-   ```
+### 4. Install Dependencies
 
-4. **Build for production**
-   ```bash
-   npm run build
-   ```
-
-## 🚀 Usage
-
-### Dashboard
-- View system overview and key metrics
-- Monitor recent activity and system health
-- Access quick actions for common tasks
-
-### User Management
-- Search and filter users by various criteria
-- Manage user roles and permissions
-- Bulk user operations (import/export)
-
-### Company Management
-- Manage company accounts and settings
-- View company statistics and user counts
-- Handle company onboarding and support
-
-### Desktop App Support
-- Provide installation guides for all platforms
-- Troubleshoot common user issues
-- Manage app updates and documentation
-
-### Analytics
-- Monitor user engagement and system performance
-- Track feature usage and adoption rates
-- Generate reports and export data
-
-### Support System
-- Manage support tickets and user requests
-- Maintain knowledge base and help articles
-- Track support metrics and response times
-
-### Admin Tools
-- Monitor system health and performance
-- Manage security settings and access controls
-- Handle system backups and recovery
-
-## 🔧 Configuration
-
-### Environment Variables
-Create a `.env` file in the root directory:
-
-```env
-VITE_SUPABASE_URL=your_supabase_url
-VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+```bash
+npm install
 ```
 
-### Tailwind CSS
-The portal uses Tailwind CSS with custom color schemes and components. Custom styles are defined in `src/index.css`.
+### 5. Start Development Server
 
-## 📱 Responsive Design
-
-The portal is fully responsive and works on:
-- Desktop (1200px+)
-- Tablet (768px - 1199px)
-- Mobile (320px - 767px)
-
-## 🎨 Customization
-
-### Colors
-Primary colors can be customized in `tailwind.config.js`:
-
-```javascript
-colors: {
-  primary: {
-    50: '#eff6ff',
-    100: '#dbeafe',
-    // ... more shades
-  }
-}
+```bash
+npm run dev
 ```
 
-### Components
-All components are built with Tailwind CSS classes and can be easily customized by modifying the CSS classes.
+The portal will open at `http://localhost:3001`
 
-## 🔒 Security Features
+## Database Schema
 
-- Role-based access control
-- Secure authentication integration
-- API key management
-- Security audit logging
-- Incident monitoring and alerting
+The portal uses the following main tables:
 
-## 📊 Data Management
+- **companies**: Company information, plans, and status
+- **users**: User accounts with roles and company associations
+- **support_tickets**: Support requests and tracking
+- **system_metrics**: System health and performance data
+- **desktop_app_versions**: App version management
+- **knowledge_articles**: Support documentation
+- **user_activity_logs**: User activity tracking
 
-- Real-time data updates
-- Export functionality for reports
-- Bulk import/export operations
-- Data backup and recovery
+## API Services
 
-## 🚀 Deployment
+The portal includes comprehensive database services:
 
-### Vercel
-1. Connect your GitHub repository
+- **Company Service**: CRUD operations for companies
+- **User Service**: User management with bulk operations
+- **Support Service**: Ticket management and statistics
+- **Analytics Service**: System metrics and activity tracking
+
+## Usage
+
+### Creating a Company
+
+1. Navigate to **Companies** page
+2. Click **Add Company**
+3. Fill in company details (name, domain, plan, admin email)
+4. Click **Create Company**
+
+### Adding Users
+
+1. Navigate to **Users** page
+2. Click **Add User**
+3. Select company, enter user details
+4. Assign role and status
+5. Click **Create User**
+
+### Managing Support Tickets
+
+1. Navigate to **Support** page
+2. View all tickets with filtering options
+3. Update ticket status and priority
+4. Assign tickets to staff members
+
+### Monitoring System Health
+
+1. Check **Dashboard** for overview metrics
+2. View **Analytics** for detailed performance data
+3. Monitor system metrics in real-time
+
+## Development
+
+### Project Structure
+
+```
+src/
+├── components/          # Reusable UI components
+├── pages/              # Page components
+│   ├── Dashboard.tsx   # Main dashboard
+│   ├── Companies.tsx   # Company management
+│   ├── Users.tsx       # User management
+│   ├── Support.tsx     # Support system
+│   ├── Analytics.tsx   # Analytics and monitoring
+│   ├── Admin.tsx       # Admin tools
+│   └── DesktopApp.tsx  # Desktop app support
+├── lib/                # Utilities and services
+│   ├── supabase.ts     # Supabase client
+│   └── database.ts     # Database service functions
+└── App.tsx             # Main app component
+```
+
+### Adding New Features
+
+1. Create new database tables in Supabase
+2. Add types to `supabase.ts`
+3. Create service functions in `database.ts`
+4. Build UI components in the appropriate page
+5. Update navigation if needed
+
+### Database Operations
+
+All database operations go through the service layer in `database.ts`:
+
+```typescript
+// Example: Creating a company
+import { db } from '@/lib/database'
+
+const newCompany = await db.companies.createCompany({
+  name: 'New Company',
+  domain: 'newcompany.com',
+  plan: 'Professional',
+  admin_email: 'admin@newcompany.com'
+})
+```
+
+## Deployment
+
+### Build for Production
+
+```bash
+npm run build
+```
+
+### Deploy to Vercel/Netlify
+
+1. Connect your repository
 2. Set environment variables
 3. Deploy automatically on push
 
-### Netlify
-1. Build the project: `npm run build`
-2. Upload the `dist` folder
-3. Configure redirects for SPA routing
+### Environment Variables for Production
 
-### Docker
-```dockerfile
-FROM node:18-alpine
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci --only=production
-COPY . .
-RUN npm run build
-EXPOSE 3000
-CMD ["npm", "start"]
-```
+Ensure these are set in your production environment:
 
-## 🤝 Contributing
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+
+## Security
+
+- Row Level Security (RLS) is enabled on all tables
+- API keys are restricted to necessary operations
+- User authentication and authorization handled by Supabase
+- Input validation on all forms
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Supabase Connection Error**
+   - Verify environment variables are correct
+   - Check Supabase project status
+   - Ensure database schema is created
+
+2. **Build Errors**
+   - Clear `node_modules` and reinstall
+   - Check TypeScript compilation
+   - Verify all dependencies are installed
+
+3. **Database Errors**
+   - Check Supabase logs
+   - Verify table permissions
+   - Ensure RLS policies are correct
+
+### Getting Help
+
+- Check Supabase documentation
+- Review browser console for errors
+- Check network tab for API failures
+
+## Contributing
 
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
-4. Add tests if applicable
+4. Test thoroughly
 5. Submit a pull request
 
-## 📝 License
+## License
 
-This project is proprietary software for OnTimely staff use only.
+This project is proprietary to OnTimely.
 
-## 🆘 Support
+## Support
 
-For technical support or questions about the staff portal:
-- Create an issue in the repository
-- Contact the development team
-- Check the internal documentation
-
-## 🔄 Updates
-
-The portal is regularly updated with:
-- New features and improvements
-- Security patches and updates
-- Performance optimizations
-- Bug fixes and stability improvements
-
----
-
-**Built with ❤️ for the OnTimely team**
+For technical support or questions about the portal, contact the development team.

@@ -1,242 +1,330 @@
-import React from 'react'
-import { 
-  Users, 
-  Building2, 
-  Monitor, 
-  TrendingUp, 
-  Activity, 
-  AlertCircle,
-  CheckCircle,
-  Clock,
-  Download
-} from 'lucide-react'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts'
+import React, { useState, useEffect } from 'react'
+import { Users, Building2, Activity, TrendingUp, AlertTriangle, CheckCircle, Clock } from 'lucide-react'
+import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
+import { db } from '@/lib/database'
 
 const Dashboard: React.FC = () => {
-  // Mock data - replace with real data from your backend
-  const stats = [
-    {
-      title: 'Total Users',
-      value: '2,847',
-      change: '+12%',
-      changeType: 'positive',
-      icon: Users,
-      color: 'bg-blue-500'
-    },
-    {
-      title: 'Active Companies',
-      value: '156',
-      change: '+5%',
-      changeType: 'positive',
-      icon: Building2,
-      color: 'bg-green-500'
-    },
-    {
-      title: 'Desktop App Installs',
-      value: '1,892',
-      change: '+8%',
-      changeType: 'positive',
-      icon: Monitor,
-      color: 'bg-purple-500'
-    },
-    {
-      title: 'System Health',
-      value: '98.5%',
-      change: '+0.5%',
-      changeType: 'positive',
-      icon: Activity,
-      color: 'bg-emerald-500'
-    }
-  ]
+  const [stats, setStats] = useState({
+    totalUsers: 0,
+    totalCompanies: 0,
+    activeUsers: 0,
+    activeCompanies: 0
+  })
+  const [userActivity, setUserActivity] = useState<any[]>([])
+  const [companyGrowth, setCompanyGrowth] = useState<any[]>([])
+  const [systemMetrics, setSystemMetrics] = useState<any[]>([])
+  const [recentTickets, setRecentTickets] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const recentActivity = [
-    {
-      id: 1,
-      type: 'user_signup',
-      message: 'New user registered: john.doe@company.com',
-      time: '2 minutes ago',
-      status: 'success'
-    },
-    {
-      id: 2,
-      type: 'company_created',
-      message: 'New company created: TechCorp Solutions',
-      time: '15 minutes ago',
-      status: 'success'
-    },
-    {
-      id: 3,
-      type: 'app_update',
-      message: 'Desktop app v2.1.0 released',
-      time: '1 hour ago',
-      status: 'info'
-    },
-    {
-      id: 4,
-      type: 'error_report',
-      message: 'Error reported in chat module',
-      time: '2 hours ago',
-      status: 'warning'
-    }
-  ]
+  useEffect(() => {
+    loadDashboardData()
+  }, [])
 
-  const chartData = [
-    { name: 'Jan', users: 400, companies: 24 },
-    { name: 'Feb', users: 300, companies: 13 },
-    { name: 'Mar', users: 200, companies: 98 },
-    { name: 'Apr', users: 278, companies: 39 },
-    { name: 'May', users: 189, companies: 48 },
-    { name: 'Jun', users: 239, companies: 38 },
-    { name: 'Jul', users: 349, companies: 43 }
-  ]
+  const loadDashboardData = async () => {
+    try {
+      setLoading(true)
+      
+      // Load all data in parallel
+      const [users, companies, tickets, metrics, activity, growth] = await Promise.all([
+        db.users.getUsers(),
+        db.companies.getCompanies(),
+        db.support.getTickets(),
+        db.analytics.getSystemMetrics(),
+        db.analytics.getUserActivity(30),
+        db.analytics.getCompanyGrowth(30)
+      ])
 
-  const quickActions = [
-    {
-      title: 'Add New User',
-      description: 'Create a new user account',
-      icon: Users,
-      action: () => console.log('Add user'),
-      color: 'bg-blue-500'
-    },
-    {
-      title: 'Create Company',
-      description: 'Set up a new company',
-      icon: Building2,
-      action: () => console.log('Create company'),
-      color: 'bg-green-500'
-    },
-    {
-      title: 'System Check',
-      description: 'Run system diagnostics',
-      icon: Activity,
-      action: () => console.log('System check'),
-      color: 'bg-purple-500'
-    },
-    {
-      title: 'Download Report',
-      description: 'Export system report',
-      icon: Download,
-      action: () => console.log('Download report'),
-      color: 'bg-orange-500'
+      // Calculate stats
+      const totalUsers = users.length
+      const totalCompanies = companies.length
+      const activeUsers = users.filter(u => u.status === 'active').length
+      const activeCompanies = companies.filter(c => c.status === 'active').length
+
+      setStats({ totalUsers, totalCompanies, activeUsers, activeCompanies })
+      setUserActivity(activity)
+      setCompanyGrowth(growth)
+      setSystemMetrics(metrics)
+
+      // Get recent tickets
+      const recent = tickets.slice(0, 5).map(ticket => ({
+        id: ticket.id,
+        title: ticket.title,
+        priority: ticket.priority,
+        status: ticket.status,
+        company: ticket.companies?.name || 'Unknown',
+        created_at: ticket.created_at
+      }))
+      setRecentTickets(recent)
+
+    } catch (error) {
+      console.error('Error loading dashboard data:', error)
+    } finally {
+      setLoading(false)
     }
-  ]
+  }
+
+  const getPriorityColor = (priority: string) => {
+    const colors = {
+      low: 'text-green-600',
+      medium: 'text-yellow-600',
+      high: 'text-orange-600',
+      critical: 'text-red-600'
+    }
+    return colors[priority as keyof typeof colors] || colors.medium
+  }
+
+  const getStatusColor = (status: string) => {
+    const colors = {
+      open: 'text-red-600',
+      'in-progress': 'text-yellow-600',
+      resolved: 'text-green-600',
+      closed: 'text-gray-600'
+    }
+    return colors[status as keyof typeof colors] || colors.open
+  }
+
+  const getMetricStatusColor = (status: string) => {
+    const colors = {
+      excellent: 'text-green-600',
+      good: 'text-blue-600',
+      warning: 'text-yellow-600',
+      critical: 'text-red-600'
+    }
+    return colors[status as keyof typeof colors] || colors.good
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
+      {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-gray-600 mt-2">Welcome to the OnTimely Staff Portal. Here's an overview of your system.</p>
+        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+        <p className="text-gray-600">Overview of your OnTimely platform</p>
       </div>
 
-      {/* Stats Grid */}
+      {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat, index) => {
-          const Icon = stat.icon
-          return (
-            <div key={index} className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">{stat.title}</p>
-                  <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
-                </div>
-                <div className={`p-3 rounded-lg ${stat.color}`}>
-                  <Icon className="h-6 w-6 text-white" />
-                </div>
-              </div>
-              <div className="mt-4 flex items-center">
-                <span className={`text-sm font-medium ${
-                  stat.changeType === 'positive' ? 'text-green-600' : 'text-red-600'
-                }`}>
-                  {stat.change}
-                </span>
-                <span className="text-sm text-gray-600 ml-2">from last month</span>
-              </div>
+        <div className="bg-white p-6 rounded-lg border">
+          <div className="flex items-center">
+            <div className="p-2 bg-blue-100 rounded-lg">
+              <Users className="w-6 h-6 text-blue-600" />
             </div>
-          )
-        })}
-      </div>
-
-      {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* User Growth Chart */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">User Growth</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis />
-              <Tooltip />
-              <Line type="monotone" dataKey="users" stroke="#3b82f6" strokeWidth={2} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Company Growth Chart */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Company Growth</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis />
-              <Tooltip />
-              <Bar dataKey="companies" fill="#10b981" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* Quick Actions & Recent Activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Quick Actions */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {quickActions.map((action, index) => {
-              const Icon = action.icon
-              return (
-                <button
-                  key={index}
-                  onClick={action.action}
-                  className="flex items-center gap-3 p-4 rounded-lg border border-gray-200 hover:border-gray-300 hover:shadow-sm transition-all text-left"
-                >
-                  <div className={`p-2 rounded-lg ${action.color}`}>
-                    <Icon className="h-5 w-5 text-white" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-gray-900">{action.title}</p>
-                    <p className="text-sm text-gray-600">{action.description}</p>
-                  </div>
-                </button>
-              )
-            })}
+            <div className="ml-4">
+              <p className="text-sm font-medium text-gray-600">Total Users</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.totalUsers}</p>
+            </div>
+          </div>
+          <div className="mt-4">
+            <span className="text-sm text-green-600 font-medium">
+              +{stats.activeUsers} active
+            </span>
           </div>
         </div>
 
-        {/* Recent Activity */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Activity</h3>
+        <div className="bg-white p-6 rounded-lg border">
+          <div className="flex items-center">
+            <div className="p-2 bg-green-100 rounded-lg">
+              <Building2 className="w-6 h-6 text-green-600" />
+            </div>
+            <div className="ml-4">
+              <p className="text-sm font-medium text-gray-600">Total Companies</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.totalCompanies}</p>
+            </div>
+          </div>
+          <div className="mt-4">
+            <span className="text-sm text-green-600 font-medium">
+              +{stats.activeCompanies} active
+            </span>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-lg border">
+          <div className="flex items-center">
+            <div className="p-2 bg-purple-100 rounded-lg">
+              <Activity className="w-6 h-6 text-purple-600" />
+            </div>
+            <div className="ml-4">
+              <p className="text-sm font-medium text-gray-600">Active Users</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.activeUsers}</p>
+            </div>
+          </div>
+          <div className="mt-4">
+            <span className="text-sm text-gray-600 font-medium">
+              {Math.round((stats.activeUsers / stats.totalUsers) * 100)}% of total
+            </span>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-lg border">
+          <div className="flex items-center">
+            <div className="p-2 bg-orange-100 rounded-lg">
+              <TrendingUp className="w-6 h-6 text-orange-600" />
+            </div>
+            <div className="ml-4">
+              <p className="text-sm font-medium text-gray-600">Growth Rate</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {companyGrowth.length > 0 ? companyGrowth[companyGrowth.length - 1]?.total || 0 : 0}
+              </p>
+            </div>
+          </div>
+          <div className="mt-4">
+            <span className="text-sm text-green-600 font-medium">
+              This month
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Charts Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* User Activity Chart */}
+        <div className="bg-white p-6 rounded-lg border">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">User Activity (30 days)</h3>
+          <ResponsiveContainer width="100%" height={300}>
+            <AreaChart data={userActivity}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="date" />
+              <YAxis />
+              <Tooltip />
+              <Area type="monotone" dataKey="newUsers" stackId="1" stroke="#3B82F6" fill="#3B82F6" fillOpacity={0.6} />
+              <Area type="monotone" dataKey="activeUsers" stackId="2" stroke="#10B981" fill="#10B981" fillOpacity={0.6} />
+            </AreaChart>
+          </ResponsiveContainer>
+          <div className="mt-4 flex items-center justify-center space-x-6">
+            <div className="flex items-center">
+              <div className="w-3 h-3 bg-blue-500 rounded-full mr-2"></div>
+              <span className="text-sm text-gray-600">New Users</span>
+            </div>
+            <div className="flex items-center">
+              <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
+              <span className="text-sm text-gray-600">Active Users</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Company Growth Chart */}
+        <div className="bg-white p-6 rounded-lg border">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Company Growth (30 days)</h3>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={companyGrowth}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="date" />
+              <YAxis />
+              <Tooltip />
+              <Bar dataKey="basic" stackId="a" fill="#3B82F6" />
+              <Bar dataKey="professional" stackId="a" fill="#8B5CF6" />
+              <Bar dataKey="enterprise" stackId="a" fill="#6366F1" />
+            </BarChart>
+          </ResponsiveContainer>
+          <div className="mt-4 flex items-center justify-center space-x-6">
+            <div className="flex items-center">
+              <div className="w-3 h-3 bg-blue-500 rounded-full mr-2"></div>
+              <span className="text-sm text-gray-600">Basic</span>
+            </div>
+            <div className="flex items-center">
+              <div className="w-3 h-3 bg-purple-500 rounded-full mr-2"></div>
+              <span className="text-sm text-gray-600">Professional</span>
+            </div>
+            <div className="flex items-center">
+              <div className="w-3 h-3 bg-indigo-500 rounded-full mr-2"></div>
+              <span className="text-sm text-gray-600">Enterprise</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* System Health & Recent Activity */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* System Health */}
+        <div className="bg-white p-6 rounded-lg border">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">System Health</h3>
           <div className="space-y-4">
-            {recentActivity.map((activity) => (
-              <div key={activity.id} className="flex items-start gap-3 p-3 rounded-lg hover:bg-gray-50">
-                <div className={`p-1 rounded-full ${
-                  activity.status === 'success' ? 'bg-green-100' :
-                  activity.status === 'warning' ? 'bg-yellow-100' :
-                  'bg-blue-100'
-                }`}>
-                  {activity.status === 'success' && <CheckCircle className="h-4 w-4 text-green-600" />}
-                  {activity.status === 'warning' && <AlertCircle className="h-4 w-4 text-yellow-600" />}
-                  {activity.status === 'info' && <Clock className="h-4 w-4 text-blue-600" />}
+            {systemMetrics.map((metric) => (
+              <div key={metric.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div className="flex items-center">
+                  <div className={`w-3 h-3 rounded-full mr-3 ${
+                    metric.status === 'excellent' ? 'bg-green-500' :
+                    metric.status === 'good' ? 'bg-blue-500' :
+                    metric.status === 'warning' ? 'bg-yellow-500' :
+                    'bg-red-500'
+                  }`}></div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">{metric.metric_name}</p>
+                    <p className="text-xs text-gray-500">Target: {metric.target}</p>
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-gray-900">{activity.message}</p>
-                  <p className="text-xs text-gray-500 mt-1">{activity.time}</p>
+                <div className="text-right">
+                  <p className={`text-sm font-semibold ${getMetricStatusColor(metric.status)}`}>
+                    {metric.metric_value}
+                  </p>
+                  <p className="text-xs text-gray-500 capitalize">{metric.status}</p>
                 </div>
               </div>
             ))}
           </div>
+        </div>
+
+        {/* Recent Support Tickets */}
+        <div className="bg-white p-6 rounded-lg border">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Support Tickets</h3>
+          <div className="space-y-3">
+            {recentTickets.map((ticket) => (
+              <div key={ticket.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-900 truncate">{ticket.title}</p>
+                  <p className="text-xs text-gray-500">{ticket.company}</p>
+                </div>
+                <div className="flex items-center space-x-2 ml-4">
+                  <span className={`text-xs font-medium ${getPriorityColor(ticket.priority)}`}>
+                    {ticket.priority}
+                  </span>
+                  <span className={`text-xs font-medium ${getStatusColor(ticket.status)}`}>
+                    {ticket.status}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 text-center">
+            <button className="text-sm text-primary-600 hover:text-primary-700 font-medium">
+              View All Tickets →
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Quick Actions */}
+      <div className="bg-white p-6 rounded-lg border">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <button className="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-primary-400 hover:bg-primary-50 transition-colors">
+            <div className="text-center">
+              <Users className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+              <p className="text-sm font-medium text-gray-900">Add New User</p>
+              <p className="text-xs text-gray-500">Create user account</p>
+            </div>
+          </button>
+          <button className="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-primary-400 hover:bg-primary-50 transition-colors">
+            <div className="text-center">
+              <Building2 className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+              <p className="text-sm font-medium text-gray-900">Add Company</p>
+              <p className="text-xs text-gray-500">Onboard new company</p>
+            </div>
+          </button>
+          <button className="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-primary-400 hover:bg-primary-50 transition-colors">
+            <div className="text-center">
+              <Activity className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+              <p className="text-sm font-medium text-gray-900">View Reports</p>
+              <p className="text-xs text-gray-500">Generate analytics</p>
+            </div>
+          </button>
         </div>
       </div>
     </div>

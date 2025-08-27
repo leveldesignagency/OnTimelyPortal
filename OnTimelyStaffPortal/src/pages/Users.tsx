@@ -1,198 +1,262 @@
-import React, { useState } from 'react'
-import { 
-  Search, 
-  Filter, 
-  Plus, 
-  MoreVertical, 
-  Edit, 
-  Trash2, 
-  UserPlus,
-  Building2,
-  Mail,
-  Calendar,
-  Shield
-} from 'lucide-react'
+import React, { useState, useEffect } from 'react'
+import { Search, Plus, Filter, MoreVertical, User, Mail, Building2, Calendar } from 'lucide-react'
+import { db } from '@/lib/database'
+import { User as UserType, Company } from '@/lib/supabase'
 
 const Users: React.FC = () => {
+  const [users, setUsers] = useState<UserType[]>([])
+  const [filteredUsers, setFilteredUsers] = useState<UserType[]>([])
+  const [companies, setCompanies] = useState<Company[]>([])
   const [searchTerm, setSearchTerm] = useState('')
-  const [selectedRole, setSelectedRole] = useState('all')
-  const [selectedStatus, setSelectedStatus] = useState('all')
-
-  // Mock user data - replace with real data from your backend
-  const users = [
-    {
-      id: 1,
-      name: 'John Doe',
-      email: 'john.doe@company.com',
-      company: 'TechCorp Solutions',
-      role: 'admin',
-      status: 'active',
-      lastActive: '2024-01-15T10:30:00Z',
-      joinDate: '2023-06-15'
-    },
-    {
-      id: 2,
-      name: 'Jane Smith',
-      email: 'jane.smith@company.com',
-      company: 'TechCorp Solutions',
-      role: 'user',
-      status: 'active',
-      lastActive: '2024-01-15T09:15:00Z',
-      joinDate: '2023-08-20'
-    },
-    {
-      id: 3,
-      name: 'Mike Johnson',
-      email: 'mike.johnson@startup.io',
-      company: 'Startup.io',
-      role: 'admin',
-      status: 'inactive',
-      lastActive: '2024-01-10T14:20:00Z',
-      joinDate: '2023-09-10'
-    },
-    {
-      id: 4,
-      name: 'Sarah Wilson',
-      email: 'sarah.wilson@enterprise.com',
-      company: 'Enterprise Corp',
-      role: 'user',
-      status: 'active',
-      lastActive: '2024-01-15T11:45:00Z',
-      joinDate: '2023-07-05'
-    }
-  ]
-
-  const roles = [
-    { value: 'all', label: 'All Roles' },
-    { value: 'admin', label: 'Admin' },
-    { value: 'user', label: 'User' },
-    { value: 'moderator', label: 'Moderator' }
-  ]
-
-  const statuses = [
-    { value: 'all', label: 'All Status' },
-    { value: 'active', label: 'Active' },
-    { value: 'inactive', label: 'Inactive' },
-    { value: 'suspended', label: 'Suspended' }
-  ]
-
-  const filteredUsers = users.filter(user => {
-    const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         user.company.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesRole = selectedRole === 'all' || user.role === selectedRole
-    const matchesStatus = selectedStatus === 'all' || user.status === selectedStatus
-    
-    return matchesSearch && matchesRole && matchesStatus
+  const [roleFilter, setRoleFilter] = useState<string>('all')
+  const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [companyFilter, setCompanyFilter] = useState<string>('all')
+  const [loading, setLoading] = useState(true)
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [newUser, setNewUser] = useState({
+    email: '',
+    full_name: '',
+    company_id: '',
+    role: 'user' as UserType['role'],
+    status: 'active' as UserType['status']
   })
 
-  const getRoleBadge = (role: string) => {
-    const roleConfig = {
-      admin: { color: 'bg-red-100 text-red-800', label: 'Admin' },
-      user: { color: 'bg-blue-100 text-blue-800', label: 'User' },
-      moderator: { color: 'bg-yellow-100 text-yellow-800', label: 'Moderator' }
+  useEffect(() => {
+    loadData()
+  }, [])
+
+  useEffect(() => {
+    filterUsers()
+  }, [users, searchTerm, roleFilter, statusFilter, companyFilter])
+
+  const loadData = async () => {
+    try {
+      setLoading(true)
+      const [usersData, companiesData] = await Promise.all([
+        db.users.getUsers(),
+        db.companies.getCompanies()
+      ])
+      setUsers(usersData)
+      setCompanies(companiesData)
+    } catch (error) {
+      console.error('Error loading data:', error)
+    } finally {
+      setLoading(false)
     }
-    const config = roleConfig[role as keyof typeof roleConfig] || roleConfig.user
+  }
+
+  const filterUsers = () => {
+    let filtered = users
+
+    if (searchTerm) {
+      filtered = filtered.filter(user =>
+        user.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        user.email.toLowerCase().includes(searchTerm.toLowerCase())
+      )
+    }
+
+    if (roleFilter !== 'all') {
+      filtered = filtered.filter(user => user.role === roleFilter)
+    }
+
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(user => user.status === statusFilter)
+    }
+
+    if (companyFilter !== 'all') {
+      filtered = filtered.filter(user => user.company_id === companyFilter)
+    }
+
+    setFilteredUsers(filtered)
+  }
+
+  const handleCreateUser = async () => {
+    try {
+      await db.users.createUser(newUser)
+      setShowCreateModal(false)
+      setNewUser({
+        email: '',
+        full_name: '',
+        company_id: '',
+        role: 'user',
+        status: 'active'
+      })
+      loadData() // Reload the list
+    } catch (error) {
+      console.error('Error creating user:', error)
+    }
+  }
+
+  const handleDeleteUser = async (id: string) => {
+    if (window.confirm('Are you sure you want to delete this user? This action cannot be undone.')) {
+      try {
+        await db.users.deleteUser(id)
+        loadData() // Reload the list
+      } catch (error) {
+        console.error('Error deleting user:', error)
+      }
+    }
+  }
+
+  const handleStatusChange = async (userId: string, newStatus: UserType['status']) => {
+    try {
+      await db.users.updateUserStatus(userId, newStatus)
+      loadData() // Reload the list
+    } catch (error) {
+      console.error('Error updating user status:', error)
+    }
+  }
+
+  const getRoleBadge = (role: string) => {
+    const roleClasses = {
+      admin: 'bg-red-100 text-red-800',
+      moderator: 'bg-yellow-100 text-yellow-800',
+      user: 'bg-blue-100 text-blue-800'
+    }
     return (
-      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${config.color}`}>
-        {config.label}
+      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${roleClasses[role as keyof typeof roleClasses] || roleClasses.user}`}>
+        {role}
       </span>
     )
   }
 
   const getStatusBadge = (status: string) => {
-    const statusConfig = {
-      active: { color: 'bg-green-100 text-green-800', label: 'Active' },
-      inactive: { color: 'bg-gray-100 text-gray-800', label: 'Inactive' },
-      suspended: { color: 'bg-red-100 text-red-800', label: 'Suspended' }
+    const statusClasses = {
+      active: 'bg-green-100 text-green-800',
+      inactive: 'bg-gray-100 text-gray-800',
+      suspended: 'bg-red-100 text-red-800'
     }
-    const config = statusConfig[status as keyof typeof statusConfig] || statusConfig.inactive
     return (
-      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${config.color}`}>
-        {config.label}
+      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusClasses[status as keyof typeof statusClasses] || statusClasses.inactive}`}>
+        {status}
       </span>
     )
   }
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    })
+  const getCompanyName = (companyId: string) => {
+    const company = companies.find(c => c.id === companyId)
+    return company?.name || 'Unknown Company'
   }
 
-  const formatLastActive = (dateString: string) => {
-    const date = new Date(dateString)
-    const now = new Date()
-    const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60))
-    
-    if (diffInHours < 1) return 'Just now'
-    if (diffInHours < 24) return `${diffInHours}h ago`
-    return formatDate(dateString)
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+      </div>
+    )
   }
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">User Management</h1>
-          <p className="text-gray-600 mt-2">Manage user accounts, roles, and permissions</p>
+          <h1 className="text-2xl font-bold text-gray-900">Users</h1>
+          <p className="text-gray-600">Manage user accounts and permissions</p>
         </div>
-        <button className="btn-primary flex items-center gap-2">
-          <UserPlus className="h-4 w-4" />
-          Add New User
+        <button
+          onClick={() => setShowCreateModal(true)}
+          className="btn-primary"
+        >
+          <Plus className="w-4 h-4 mr-2" />
+          Add User
         </button>
       </div>
 
-      {/* Filters and Search */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
-        <div className="flex flex-col sm:flex-row gap-4">
-          {/* Search */}
-          <div className="flex-1">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search users by name, email, or company..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="input pl-10 w-full"
-              />
+      {/* Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-white p-4 rounded-lg border">
+          <div className="flex items-center">
+            <User className="w-8 h-8 text-blue-600" />
+            <div className="ml-3">
+              <p className="text-sm font-medium text-gray-600">Total Users</p>
+              <p className="text-2xl font-bold text-gray-900">{users.length}</p>
             </div>
           </div>
-
-          {/* Role Filter */}
-          <div className="sm:w-48">
-            <select
-              value={selectedRole}
-              onChange={(e) => setSelectedRole(e.target.value)}
-              className="input"
-            >
-              {roles.map(role => (
-                <option key={role.value} value={role.value}>{role.label}</option>
-              ))}
-            </select>
+        </div>
+        <div className="bg-white p-4 rounded-lg border">
+          <div className="flex items-center">
+            <User className="w-8 h-8 text-green-600" />
+            <div className="ml-3">
+              <p className="text-sm font-medium text-gray-600">Active Users</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {users.filter(u => u.status === 'active').length}
+              </p>
+            </div>
           </div>
-
-          {/* Status Filter */}
-          <div className="sm:w-48">
-            <select
-              value={selectedStatus}
-              onChange={(e) => setSelectedStatus(e.target.value)}
-              className="input"
-            >
-              {statuses.map(status => (
-                <option key={status.value} value={status.value}>{status.label}</option>
-              ))}
-            </select>
+        </div>
+        <div className="bg-white p-4 rounded-lg border">
+          <div className="flex items-center">
+            <User className="w-8 h-8 text-red-600" />
+            <div className="ml-3">
+              <p className="text-sm font-medium text-gray-600">Admins</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {users.filter(u => u.role === 'admin').length}
+              </p>
+            </div>
           </div>
+        </div>
+        <div className="bg-white p-4 rounded-lg border">
+          <div className="flex items-center">
+            <Building2 className="w-8 h-8 text-purple-600" />
+            <div className="ml-3">
+              <p className="text-sm font-medium text-gray-600">Companies</p>
+              <p className="text-2xl font-bold text-gray-900">{companies.length}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="bg-white p-4 rounded-lg border">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+            <input
+              type="text"
+              placeholder="Search users..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="input pl-10 w-full"
+            />
+          </div>
+          <select
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value)}
+            className="input"
+          >
+            <option value="all">All Roles</option>
+            <option value="admin">Admin</option>
+            <option value="moderator">Moderator</option>
+            <option value="user">User</option>
+          </select>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="input"
+          >
+            <option value="all">All Statuses</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+            <option value="suspended">Suspended</option>
+          </select>
+          <select
+            value={companyFilter}
+            onChange={(e) => setCompanyFilter(e.target.value)}
+            className="input"
+          >
+            <option value="all">All Companies</option>
+            {companies.map(company => (
+              <option key={company.id} value={company.id}>
+                {company.name}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
       {/* Users Table */}
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-lg border overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
@@ -213,9 +277,6 @@ const Users: React.FC = () => {
                   Last Active
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Join Date
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
@@ -227,48 +288,48 @@ const Users: React.FC = () => {
                     <div className="flex items-center">
                       <div className="flex-shrink-0 h-10 w-10">
                         <div className="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center">
-                          <span className="text-sm font-medium text-gray-700">
-                            {user.name.split(' ').map(n => n[0]).join('')}
-                          </span>
+                          <User className="h-6 w-6 text-gray-600" />
                         </div>
                       </div>
                       <div className="ml-4">
-                        <div className="text-sm font-medium text-gray-900">{user.name}</div>
-                        <div className="text-sm text-gray-500 flex items-center gap-1">
-                          <Mail className="h-3 w-3" />
-                          {user.email}
-                        </div>
+                        <div className="text-sm font-medium text-gray-900">{user.full_name}</div>
+                        <div className="text-sm text-gray-500">{user.email}</div>
                       </div>
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center text-sm text-gray-900">
-                      <Building2 className="h-4 w-4 mr-2 text-gray-400" />
-                      {user.company}
-                    </div>
+                    <div className="text-sm text-gray-900">{getCompanyName(user.company_id)}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     {getRoleBadge(user.role)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    {getStatusBadge(user.status)}
+                    <select
+                      value={user.status}
+                      onChange={(e) => handleStatusChange(user.id, e.target.value as UserType['status'])}
+                      className="text-sm border-0 bg-transparent focus:ring-0"
+                    >
+                      <option value="active">Active</option>
+                      <option value="inactive">Inactive</option>
+                      <option value="suspended">Suspended</option>
+                    </select>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {formatLastActive(user.lastActive)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {formatDate(user.joinDate)}
+                    {user.last_active 
+                      ? new Date(user.last_active).toLocaleDateString()
+                      : 'Never'
+                    }
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <div className="flex items-center gap-2">
-                      <button className="text-blue-600 hover:text-blue-900 p-1 rounded hover:bg-blue-50">
-                        <Edit className="h-4 w-4" />
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => handleDeleteUser(user.id)}
+                        className="text-red-600 hover:text-red-900"
+                      >
+                        Delete
                       </button>
-                      <button className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50">
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                      <button className="text-gray-600 hover:text-gray-900 p-1 rounded hover:bg-gray-50">
-                        <MoreVertical className="h-4 w-4" />
+                      <button className="text-gray-400 hover:text-gray-600">
+                        <MoreVertical className="w-4 h-4" />
                       </button>
                     </div>
                   </td>
@@ -277,29 +338,84 @@ const Users: React.FC = () => {
             </tbody>
           </table>
         </div>
+      </div>
 
-        {/* Pagination */}
-        <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
-          <div className="flex-1 flex justify-between sm:hidden">
-            <button className="btn-outline">Previous</button>
-            <button className="btn-outline">Next</button>
-          </div>
-          <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm text-gray-700">
-                Showing <span className="font-medium">1</span> to <span className="font-medium">{filteredUsers.length}</span> of{' '}
-                <span className="font-medium">{users.length}</span> results
-              </p>
+      {filteredUsers.length === 0 && !loading && (
+        <div className="text-center py-12">
+          <User className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No users found</h3>
+          <p className="text-gray-600">Try adjusting your search or filters.</p>
+        </div>
+      )}
+
+      {/* Create User Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+            <h2 className="text-xl font-bold mb-4">Create New User</h2>
+            <div className="space-y-4">
+              <input
+                type="text"
+                placeholder="Full Name"
+                value={newUser.full_name}
+                onChange={(e) => setNewUser({ ...newUser, full_name: e.target.value })}
+                className="input w-full"
+              />
+              <input
+                type="email"
+                placeholder="Email"
+                value={newUser.email}
+                onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                className="input w-full"
+              />
+              <select
+                value={newUser.company_id}
+                onChange={(e) => setNewUser({ ...newUser, company_id: e.target.value })}
+                className="input w-full"
+              >
+                <option value="">Select Company</option>
+                {companies.map(company => (
+                  <option key={company.id} value={company.id}>
+                    {company.name}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={newUser.role}
+                onChange={(e) => setNewUser({ ...newUser, role: e.target.value as UserType['role'] })}
+                className="input w-full"
+              >
+                <option value="user">User</option>
+                <option value="moderator">Moderator</option>
+                <option value="admin">Admin</option>
+              </select>
+              <select
+                value={newUser.status}
+                onChange={(e) => setNewUser({ ...newUser, status: e.target.value as UserType['status'] })}
+                className="input w-full"
+              >
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+                <option value="suspended">Suspended</option>
+              </select>
             </div>
-            <div>
-              <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
-                <button className="btn-outline rounded-l-md">Previous</button>
-                <button className="btn-outline rounded-r-md">Next</button>
-              </nav>
+            <div className="flex space-x-3 mt-6">
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="btn-secondary flex-1"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateUser}
+                className="btn-primary flex-1"
+              >
+                Create User
+              </button>
             </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }

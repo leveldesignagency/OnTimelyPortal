@@ -59,6 +59,8 @@ const AppContent = () => {
   const isLoginPage = location.pathname === '/login';
   const isResetPasswordPage = location.pathname === '/reset-password' || location.pathname === '/reset-password-confirm';
   
+  // Force new deployment to clear stuck queue
+  
   // TEMPORARILY DISABLED: Welcome screen to fix authentication issues
   useEffect(() => {
     setShowWelcome(false);
