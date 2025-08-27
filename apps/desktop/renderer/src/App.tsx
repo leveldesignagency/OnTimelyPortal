@@ -57,7 +57,7 @@ const AppContent = () => {
   const [isSidebarOpen, setSidebarOpen] = useState(true);
   const isTeamsPage = location.pathname.startsWith('/teams');
   const isLoginPage = location.pathname === '/login';
-  const isResetPasswordPage = location.pathname === '/reset-password';
+  const isResetPasswordPage = location.pathname === '/reset-password' || location.pathname === '/reset-password-confirm';
   
   // TEMPORARILY DISABLED: Welcome screen to fix authentication issues
   useEffect(() => {
