@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ThemeContext } from '../ThemeContext';
 import { supabase } from '../lib/supabase';
 
 const ResetPasswordConfirmPage = () => {
+  const [email, setEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -11,77 +11,13 @@ const ResetPasswordConfirmPage = () => {
   const [success, setSuccess] = useState('');
   const navigate = useNavigate();
   const location = useLocation();
-  const { theme } = useContext(ThemeContext);
-  const isDark = theme === 'dark';
 
-  // Check if we have access token in URL and handle Supabase auth flow
-  useEffect(() => {
-    const hash = location.hash;
+  // Extract email from URL if present
+  React.useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
-    console.log('ResetPasswordConfirmPage - Full URL:', window.location.href);
-    console.log('ResetPasswordConfirmPage - URL hash:', hash);
-    console.log('ResetPasswordConfirmPage - URL search:', location.search);
-    
-    // Check for Supabase error responses first
-    const error = searchParams.get('error');
-    const errorCode = searchParams.get('error_code');
-    const errorDescription = searchParams.get('error_description');
-    
-    if (error || errorCode) {
-      console.log('ResetPasswordConfirmPage - Supabase error detected:', { error, errorCode, errorDescription });
-      
-      if (errorCode === 'otp_expired') {
-        setError('This password reset link has expired. Please request a new one.');
-      } else if (error === 'access_denied') {
-        setError('Access denied. This reset link is invalid or has expired.');
-      } else {
-        setError(`Reset link error: ${errorDescription || error || 'Unknown error'}`);
-      }
-      return; // Don't proceed with token extraction
-    }
-    
-    // Extract access token from hash (Supabase format: #access_token=...)
-    if (hash.includes('access_token=')) {
-      const accessToken = hash.split('access_token=')[1]?.split('&')[0];
-      console.log('ResetPasswordConfirmPage - Access token extracted:', accessToken ? accessToken.substring(0, 20) + '...' : 'No token');
-      
-      if (accessToken) {
-        console.log('ResetPasswordConfirmPage - Attempting to set Supabase session...');
-        
-        // Set the access token in Supabase auth
-        supabase.auth.setSession({
-          access_token: accessToken,
-          refresh_token: ''
-        }).then(({ data, error }) => {
-          if (error) {
-            console.error('ResetPasswordConfirmPage - Session error:', error);
-            setError('Invalid or expired reset link. Please request a new one.');
-          } else {
-            console.log('ResetPasswordConfirmPage - Session established successfully:', data);
-            setError(''); // Clear any previous errors
-          }
-        }).catch((catchError) => {
-          console.error('ResetPasswordConfirmPage - Session creation failed:', catchError);
-          setError('Failed to establish session. Please try again.');
-        });
-      } else {
-        console.error('ResetPasswordConfirmPage - Could not extract access token from hash');
-        setError('Invalid reset link format. Please request a new one.');
-      }
-    } else {
-      console.log('ResetPasswordConfirmPage - No access_token found in hash. Hash contents:', hash);
-      
-      // Check if this might be a different format
-      if (hash.includes('token=')) {
-        const token = hash.split('token=')[1]?.split('&')[0];
-        console.log('ResetPasswordConfirmPage - Found token instead of access_token:', token ? 'Yes' : 'No');
-        if (token) {
-          // Try to handle as a regular token
-          setError(''); // Clear error to allow form to work
-        }
-      } else {
-        setError('Invalid password reset link. Please request a new one.');
-      }
+    const emailParam = searchParams.get('email');
+    if (emailParam) {
+      setEmail(emailParam);
     }
   }, [location]);
 
@@ -89,6 +25,12 @@ const ResetPasswordConfirmPage = () => {
     e.preventDefault();
     setLoading(true);
     setError('');
+
+    if (!email) {
+      setError('Please enter your email address');
+      setLoading(false);
+      return;
+    }
 
     if (newPassword !== confirmPassword) {
       setError('Passwords do not match');
@@ -105,38 +47,22 @@ const ResetPasswordConfirmPage = () => {
     }
 
     try {
-      // First, ensure we have a valid session
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        setError('No valid session found. Please use the reset link from your email.');
-        setLoading(false);
-        return;
-      }
-
-      console.log('ResetPasswordConfirmPage - Updating password for user:', session.user.email);
-      
+      // Simple password reset - no session needed
       const { error } = await supabase.auth.updateUser({
         password: newPassword
       });
 
       if (error) {
-        console.error('ResetPasswordConfirmPage - Password update error:', error);
+        console.error('Password update error:', error);
         setError(error.message);
       } else {
-        console.log('ResetPasswordConfirmPage - Password updated successfully');
+        console.log('Password updated successfully');
         setSuccess('Password updated successfully! Redirecting to login...');
-        
-        // Sign out the user after password reset
-        await supabase.auth.signOut();
-        
-        // Clear any local storage or session data
-        localStorage.removeItem('supabase.auth.token');
-        sessionStorage.clear();
         
         setTimeout(() => navigate('/login'), 2000);
       }
     } catch (error) {
-      console.error('ResetPasswordConfirmPage - Unexpected error:', error);
+      console.error('Unexpected error:', error);
       setError('Failed to update password. Please try again.');
     } finally {
       setLoading(false);
@@ -172,22 +98,6 @@ const ResetPasswordConfirmPage = () => {
           animation: 'shimmer 10s ease-in-out infinite reverse', zIndex: 1
         }}
       />
-      <div 
-        className="shimmer-bg"
-        style={{
-          position: 'absolute', top: '60%', left: '25%', width: 100, height: 100,
-          background: 'rgba(34,197,94,0.12)', borderRadius: '50%', filter: 'blur(18px)',
-          animation: 'shimmer 12s ease-in-out infinite', zIndex: 1
-        }}
-      />
-      <div 
-        className="shimmer-bg"
-        style={{
-          position: 'absolute', top: '30%', right: '30%', width: 80, height: 80,
-          background: 'rgba(34,197,94,0.08)', borderRadius: '50%', filter: 'blur(15px)',
-          animation: 'shimmer 9s ease-in-out infinite reverse', zIndex: 1
-        }}
-      />
 
       {/* Main Container - Glassmorphic design */}
       <div style={{
@@ -200,19 +110,19 @@ const ResetPasswordConfirmPage = () => {
         {/* Header */}
         <div style={{
           background: 'linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02))',
-          color: '#e5e7eb', padding: '36px 40px', textAlign: 'center',
+          color: '#e5e7eb', padding: '28px 40px', textAlign: 'center',
           borderBottom: '1px solid rgba(255,255,255,0.06)'
         }}>
-          <h1 style={{ fontSize: '2.5rem', marginBottom: '10px', fontWeight: '700', color: '#e5e7eb' }}>
+          <h1 style={{ fontSize: '2.2rem', marginBottom: '8px', fontWeight: '700', color: '#e5e7eb' }}>
             Reset Your Password
           </h1>
-          <p style={{ fontSize: '1.1rem', opacity: 0.9, color: '#22c55e', fontWeight: '600' }}>
-            Enter your new password below
+          <p style={{ fontSize: '1rem', opacity: 0.9, color: '#22c55e', fontWeight: '600' }}>
+            Enter your email and new password below
           </p>
         </div>
         
         {/* Form Container */}
-        <div style={{ padding: '40px' }}>
+        <div style={{ padding: '32px' }}>
           
           {error && (
             <div style={{
@@ -223,27 +133,6 @@ const ResetPasswordConfirmPage = () => {
               <div style={{ color: '#fca5a5', marginBottom: '16px', fontSize: '16px' }}>
                 {error}
               </div>
-              <div style={{ color: '#fca5a5', marginBottom: '16px', fontSize: '14px' }}>
-                Password reset links expire after 1 hour for security reasons.
-              </div>
-              <button
-                onClick={() => navigate('/reset-password')}
-                style={{
-                  background: '#dc2626',
-                  color: 'white',
-                  border: 'none',
-                  padding: '12px 24px',
-                  borderRadius: '8px',
-                  fontSize: '14px',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  transition: 'background 0.2s ease'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.background = '#b91c1c'}
-                onMouseLeave={(e) => e.currentTarget.style.background = '#dc2626'}
-              >
-                Request New Reset Link
-              </button>
             </div>
           )}
 
@@ -258,6 +147,32 @@ const ResetPasswordConfirmPage = () => {
           )}
           
           <form onSubmit={handlePasswordReset}>
+            
+            {/* Email Field */}
+            <div style={{ marginBottom: '25px' }}>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#cbd5e1', fontSize: '14px' }}>
+                Email Address
+              </label>
+              <input
+                type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                placeholder="Enter your email address"
+                style={{
+                  width: '100%', padding: '16px 20px', fontSize: '16px',
+                  background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)',
+                  borderRadius: '10px', color: '#e5e7eb', outline: 'none',
+                  transition: 'all 0.2s ease'
+                }}
+                onFocus={(e) => {
+                  e.target.style.borderColor = '#22c55e';
+                  e.target.style.boxShadow = '0 0 0 3px rgba(34, 197, 94, 0.1)';
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                  e.target.style.boxShadow = 'none';
+                }}
+                required
+              />
+            </div>
             
             {/* New Password Field */}
             <div style={{ marginBottom: '25px' }}>
@@ -374,11 +289,20 @@ const ResetPasswordConfirmPage = () => {
             <button
               onClick={() => navigate('/login')}
               style={{
-                background: 'transparent', border: 'none', color: '#22c55e',
-                fontSize: '14px', cursor: 'pointer', textDecoration: 'underline'
+                background: 'transparent', border: '1px solid #22c55e', color: '#22c55e',
+                fontSize: '14px', cursor: 'pointer', padding: '8px 16px', borderRadius: '8px',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = '#22c55e';
+                e.currentTarget.style.color = '#0b1411';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'transparent';
+                e.currentTarget.style.color = '#22c55e';
               }}
             >
-              ← Back to Login
+              Back to Login
             </button>
           </div>
         </div>
