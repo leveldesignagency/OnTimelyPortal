@@ -3171,272 +3171,7 @@ const GlobalHoverPopup = ({
   );
 };
 
-const MessageNotificationToast = ({ notification, onRemove, onMarkRead, onOpenChat, isDark }: { 
-  notification: MessageNotification, 
-  onRemove: (id: string) => void,
-  onMarkRead: (id: string) => void,
-  onOpenChat: (chatId: string) => void,
-  isDark: boolean 
-}) => {
-  const [isVisible, setIsVisible] = useState(false);
-  const [isExiting, setIsExiting] = useState(false);
 
-  useEffect(() => {
-    // Smooth entrance animation
-    const timer = setTimeout(() => setIsVisible(true), 100);
-    
-    // Auto-dismiss after 6 seconds
-    const dismissTimer = setTimeout(() => {
-      handleDismiss();
-    }, 6000);
-
-    return () => {
-      clearTimeout(timer);
-      clearTimeout(dismissTimer);
-    };
-  }, []);
-
-  const handleDismiss = () => {
-    setIsExiting(true);
-    setTimeout(() => {
-      onRemove(notification.id);
-    }, 400);
-  };
-
-  const handleClick = () => {
-    onMarkRead(notification.id);
-    onOpenChat(notification.chatId);
-    handleDismiss();
-  };
-
-  const truncateMessage = (text: string, maxLength: number = 60) => {
-    if (text.length <= maxLength) return text;
-    return text.substring(0, maxLength) + '...';
-  };
-
-  const getChatIcon = () => {
-    switch (notification.chatType) {
-      case 'direct':
-        return '';
-      case 'group':
-        return '';
-      case 'team':
-        return '';
-      default:
-        return '';
-    }
-  };
-
-  const getChatTypeColor = () => {
-    switch (notification.chatType) {
-      case 'direct':
-        return isDark ? '#ffffff' : '#000000'; // White for dark mode, black for light mode
-      case 'group':
-        return '#10b981'; // Green
-      case 'team':
-        return '#8b5cf6'; // Purple
-      default:
-        return '#6b7280'; // Gray
-    }
-  };
-
-  const chatColor = getChatTypeColor();
-
-  return (
-    <div 
-      style={{
-        position: 'fixed',
-        top: '20px',
-        right: '20px',
-        width: '380px',
-        background: isDark 
-          ? `linear-gradient(135deg, rgba(26, 26, 26, 0.95) 0%, rgba(42, 42, 42, 0.95) 100%)`
-          : `linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.95) 100%)`,
-        backdropFilter: 'blur(20px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-        borderRadius: '16px',
-        padding: '16px 20px',
-        boxShadow: isDark 
-          ? `0 20px 40px rgba(0, 0, 0, 0.4), 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 0 0 1px ${chatColor}40`
-          : `0 20px 40px rgba(0, 0, 0, 0.1), 0 1px 0 rgba(255, 255, 255, 0.8) inset, 0 0 0 1px ${chatColor}40`,
-        border: `1px solid ${chatColor}30`,
-        cursor: 'pointer',
-        transition: 'all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)',
-        transform: isVisible && !isExiting 
-          ? 'translateX(0) scale(1) rotateY(0deg)' 
-          : 'translateX(100%) scale(0.9) rotateY(10deg)',
-        opacity: isVisible && !isExiting ? 1 : 0,
-        zIndex: 1001,
-        overflow: 'hidden'
-      }}
-      onClick={handleClick}
-      onMouseEnter={e => {
-        e.currentTarget.style.transform = 'translateX(0) scale(1.02) rotateY(0deg)';
-        e.currentTarget.style.boxShadow = isDark 
-          ? `0 24px 48px rgba(0, 0, 0, 0.5), 0 1px 0 rgba(255, 255, 255, 0.1) inset, 0 0 0 1px ${chatColor}60`
-          : `0 24px 48px rgba(0, 0, 0, 0.15), 0 1px 0 rgba(255, 255, 255, 1) inset, 0 0 0 1px ${chatColor}60`;
-      }}
-      onMouseLeave={e => {
-        e.currentTarget.style.transform = 'translateX(0) scale(1) rotateY(0deg)';
-        e.currentTarget.style.boxShadow = isDark 
-          ? `0 20px 40px rgba(0, 0, 0, 0.4), 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 0 0 1px ${chatColor}40`
-          : `0 20px 40px rgba(0, 0, 0, 0.1), 0 1px 0 rgba(255, 255, 255, 0.8) inset, 0 0 0 1px ${chatColor}40`;
-      }}
-    >
-      {/* Background gradient overlay */}
-      <div
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: `linear-gradient(135deg, ${chatColor}10 0%, transparent 100%)`,
-          borderRadius: '16px',
-          opacity: 0.6
-        }}
-      />
-
-      {/* Close button with modern styling */}
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          handleDismiss();
-        }}
-        style={{
-          position: 'absolute',
-          top: '12px',
-          right: '12px',
-          background: 'transparent',
-          border: 'none',
-          color: isDark ? '#9ca3af' : '#6b7280',
-          cursor: 'pointer',
-          fontSize: '18px',
-          width: '28px',
-          height: '28px',
-          borderRadius: '8px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-          zIndex: 2
-        }}
-        onMouseEnter={e => {
-          e.currentTarget.style.background = isDark ? 'rgba(239, 68, 68, 0.1)' : 'rgba(239, 68, 68, 0.05)';
-          e.currentTarget.style.color = '#ef4444';
-          e.currentTarget.style.transform = 'scale(1.1)';
-        }}
-        onMouseLeave={e => {
-          e.currentTarget.style.background = 'transparent';
-          e.currentTarget.style.color = isDark ? '#9ca3af' : '#6b7280';
-          e.currentTarget.style.transform = 'scale(1)';
-        }}
-      >
-        ×
-      </button>
-
-      {/* Header with sender info */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '12px',
-        marginBottom: '12px',
-        position: 'relative',
-        zIndex: 1
-      }}>
-        <div style={{
-          width: '44px',
-          height: '44px',
-          borderRadius: '50%',
-          background: `linear-gradient(135deg, ${chatColor} 0%, ${chatColor}dd 100%)`,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: '18px',
-          boxShadow: `0 4px 12px ${chatColor}40, 0 0 0 3px ${chatColor}20`,
-          flexShrink: 0,
-          animation: 'pulse 2s infinite'
-        }}>
-          {getChatIcon()}
-              </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{
-            fontSize: '15px',
-            fontWeight: '600',
-            color: isDark ? '#ffffff' : '#1f2937',
-            marginBottom: '2px',
-            letterSpacing: '-0.01em'
-          }}>
-            {notification.senderName}
-            </div>
-          <div style={{
-            fontSize: '13px',
-            color: isDark ? '#9ca3af' : '#6b7280',
-            fontWeight: '500'
-          }}>
-            in {notification.chatName}
-          </div>
-        </div>
-        <div style={{
-          fontSize: '11px',
-          color: isDark ? '#9ca3af' : '#6b7280',
-          fontWeight: '500'
-        }}>
-          {new Date(notification.timestamp).toLocaleTimeString([], { 
-            hour: '2-digit', 
-            minute: '2-digit' 
-          })}
-        </div>
-      </div>
-
-      {/* Message content */}
-      <div style={{
-        fontSize: '14px',
-        lineHeight: '1.5',
-        color: isDark ? '#d1d5db' : '#4b5563',
-        background: isDark ? 'rgba(55, 65, 81, 0.3)' : 'rgba(243, 244, 246, 0.5)',
-        borderRadius: '12px',
-        padding: '12px 16px',
-        border: `1px solid ${isDark ? 'rgba(75, 85, 99, 0.2)' : 'rgba(209, 213, 219, 0.3)'}`,
-        backdropFilter: 'blur(10px)',
-        WebkitBackdropFilter: 'blur(10px)',
-        position: 'relative',
-        zIndex: 1
-      }}>
-        {truncateMessage(notification.messageText)}
-            </div>
-
-      {/* Progress bar */}
-      <div
-        style={{
-          position: 'absolute',
-          bottom: 0,
-          left: 0,
-          height: '3px',
-          background: `linear-gradient(90deg, ${chatColor} 0%, ${chatColor}80 100%)`,
-          borderRadius: '0 0 16px 16px',
-          animation: 'messageProgress 6s linear',
-          transformOrigin: 'left',
-          zIndex: 1
-        }}
-      />
-
-      {/* Add keyframes for animations */}
-      <style>
-        {`
-          @keyframes pulse {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.05); }
-          }
-          @keyframes messageProgress {
-            0% { width: 100%; }
-            100% { width: 0%; }
-          }
-        `}
-      </style>
-                  </div>
-  );
-};
 
 // Main component for the enhanced Teams Chat page
 export default function TeamChatPage() {
@@ -3460,7 +3195,7 @@ export default function TeamChatPage() {
   const [groupUserSearch, setGroupUserSearch] = useState(''); // New search field for group creation
   const [recentUsers, setRecentUsers] = useState<User[]>([]); // Track recent/frequent users
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [messageNotifications, setMessageNotifications] = useState<MessageNotification[]>([]);
+
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [currentUserRefresh, setCurrentUserRefresh] = useState(0); // Force re-render when user profile changes
   const [confirmationModal, setConfirmationModal] = useState<ConfirmationModal>({
@@ -3914,44 +3649,19 @@ export default function TeamChatPage() {
       shouldNotify: chat && sender && (message.chat_id !== activeChatId || !document.hasFocus())
     });
     
-    // Create message notification if chat is not currently active or app is not focused
-    if (chat && sender && (message.chat_id !== activeChatId || !document.hasFocus())) {
-      console.log('✅ Creating notification for message');
-      
-      const messageNotification: MessageNotification = {
-        id: `msg_notification_${Date.now()}_${Math.random()}`,
-        senderId: message.sender_id,
-        senderName: sender.name,
-        senderAvatar: sender.avatar,
-        chatId: message.chat_id,
-        chatName: chat.name,
-        chatType: chat.type,
-        messageText: message.content,
-        timestamp: Date.now(),
-        isRead: false
-      };
-      
-      setMessageNotifications(prev => {
-        console.log('📬 Adding notification to state:', messageNotification);
-        return [...prev, messageNotification];
-      });
+    // Only show browser notification if app is not focused (no in-app notifications)
+    if (chat && sender && !document.hasFocus()) {
+      console.log('✅ Showing browser notification - app not focused');
       
       // Play notification sound
       console.log('🔊 Playing notification sound');
       playNotificationSound();
       
-      // Show browser notification if app is not focused
-      if (!document.hasFocus()) {
-        console.log('🌐 Showing browser notification');
-        showBrowserNotification(sender.name, message.content, chat.name, chat.type);
-      }
-      
-      // Auto-remove after 5 seconds if not interacted with
-      setTimeout(() => {
-        setMessageNotifications(prev => prev.filter(n => n.id !== messageNotification.id));
-      }, 5000);
+      // Show browser notification only when app is not focused
+      console.log('🌐 Showing browser notification');
+      showBrowserNotification(sender.name, message.content, chat.name, chat.type);
     } else {
-      console.log('❌ Not creating notification - conditions not met');
+      console.log('❌ Not showing notification - app is focused or conditions not met');
     }
     
     setChats(prevChats => 
@@ -4811,24 +4521,7 @@ export default function TeamChatPage() {
     });
   };
 
-  const removeMessageNotification = (id: string) => {
-    setMessageNotifications(prev => prev.filter(n => n.id !== id));
-  };
 
-  const markMessageNotificationRead = (id: string) => {
-    setMessageNotifications(prev => 
-      prev.map(n => 
-        n.id === id ? { ...n, isRead: true } : n
-      )
-    );
-  };
-
-  const openChatFromNotification = (chatId: string) => {
-    setActiveChatId(chatId);
-    setSearchQuery('');
-    setShowRightPanel(false);
-    selectChat(chatId);
-  };
 
   // Global hover popup management functions
   const showHoverPopup = (message: Message, event: React.MouseEvent) => {
@@ -4930,17 +4623,7 @@ export default function TeamChatPage() {
             />
                 </div>
               ))}
-        {messageNotifications.map(notification => (
-          <div key={notification.id} style={{ pointerEvents: 'auto' }}>
-            <MessageNotificationToast
-              notification={notification}
-              onRemove={removeMessageNotification}
-              onMarkRead={markMessageNotificationRead}
-              onOpenChat={openChatFromNotification}
-              isDark={isDark}
-            />
-                </div>
-              ))}
+
             </div>
 
       {/* Main Content with Glass Effect */}
@@ -4984,7 +4667,7 @@ export default function TeamChatPage() {
               status: 'online' as UserStatus 
             }} 
             isDark={isDark} 
-            notificationCount={messageNotifications.length}
+            notificationCount={0}
             onClick={() => setIsProfileModalOpen(true)}
           />
 

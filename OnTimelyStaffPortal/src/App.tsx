@@ -7,7 +7,6 @@ import Users from './pages/Users'
 import Companies from './pages/Companies'
 import DesktopApp from './pages/DesktopApp'
 import Analytics from './pages/Analytics'
-import Support from './pages/Support'
 import Admin from './pages/Admin'
 import Sidebar from './components/Sidebar'
 

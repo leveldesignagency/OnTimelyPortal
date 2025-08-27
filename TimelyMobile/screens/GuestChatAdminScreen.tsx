@@ -1973,17 +1973,18 @@ const GuestChatAdminScreen: React.FC<GuestChatAdminScreenProps> = ({ route, navi
         {/* Avatar for sent messages (right side) */}
         {isCurrentUser && (
           <View style={styles.avatar}>
-            {message.avatar_url && message.avatar_url.startsWith('http') ? (
+            {/* For sent messages, show current user's avatar or initials */}
+            {currentUser?.avatar_url && currentUser.avatar_url.startsWith('http') ? (
               <Image 
-                source={{ uri: message.avatar_url }} 
+                source={{ uri: currentUser.avatar_url }} 
                 style={styles.avatarImage}
                 onError={(error) => {
-                  console.log('[AVATAR ERROR] Failed to load image:', message.avatar_url, error);
+                  console.log('[AVATAR ERROR] Failed to load image:', currentUser.avatar_url, error);
                 }}
               />
             ) : (
               <Text style={styles.avatarText}>
-                {(message.sender_name || '?')?.charAt(0)?.toUpperCase() || '?'}
+                {currentUser?.name ? currentUser.name.split(' ').map(name => name.charAt(0)).join('').toUpperCase() : 'A'}
               </Text>
             )}
           </View>

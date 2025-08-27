@@ -1757,17 +1757,21 @@ const GuestChatScreen: React.FC<GuestChatScreenProps> = ({ route, navigation }) 
         {/* Avatar for sent messages (right side) */}
         {ownMessage && (
           <View style={styles.avatarRight}>
-            {message.sender_type === 'admin' && message.avatar_url && message.avatar_url.startsWith('http') ? (
+            {/* For sent messages, show current user's avatar or initials */}
+            {guest?.avatar_url && guest.avatar_url.startsWith('http') ? (
               <Image 
-                source={{ uri: message.avatar_url }} 
+                source={{ uri: guest.avatar_url }} 
                 style={styles.avatarImage}
                 onError={(error) => {
-                  // console.log('[AVATAR ERROR] Failed to load image:', message.avatar_url, error);
+                  // console.log('[AVATAR ERROR] Failed to load image:', guest.avatar_url, error);
                 }}
               />
             ) : (
               <Text style={styles.avatarText}>
-                {message.sender_name ? message.sender_name.split(' ').map(name => name.charAt(0)).join('').toUpperCase() : 'U'}
+                {guest?.first_name && guest?.last_name 
+                  ? (guest.first_name.charAt(0) + guest.last_name.charAt(0)).toUpperCase()
+                  : guest?.first_name?.charAt(0)?.toUpperCase() || 'G'
+                }
               </Text>
             )}
           </View>
