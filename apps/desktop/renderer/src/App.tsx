@@ -423,7 +423,8 @@ const AppContent = () => {
         <Route path="/reset-password-confirm" element={<ResetPasswordConfirmPage />} />
           
           {/* Protected routes */}
-          <Route path="/" element={<ProtectedRoute><Dashboard events={events} /></ProtectedRoute>} />
+          <Route path="/" element={<ProtectedRoute><Navigate to="/dashboard" replace /></ProtectedRoute>} />
+          <Route path="/dashboard" element={<ProtectedRoute><Dashboard events={events} /></ProtectedRoute>} />
           <Route path="/create-event" element={<ProtectedRoute><CreateEventPage onCreate={handleCreateEvent} /></ProtectedRoute>} />
           <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
           <Route path="/event/:id" element={<ProtectedRoute><EventDashboardPage events={events} onDeleteEvent={handleDeleteEvent} /></ProtectedRoute>} />

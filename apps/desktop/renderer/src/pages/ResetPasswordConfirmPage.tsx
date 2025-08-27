@@ -17,10 +17,13 @@ const ResetPasswordConfirmPage = () => {
   // Check if we have access token in URL
   useEffect(() => {
     const hash = location.hash;
+    const searchParams = new URLSearchParams(location.search);
     console.log('ResetPasswordConfirmPage - URL hash:', hash);
+    console.log('ResetPasswordConfirmPage - URL search params:', location.search);
     
+    // Check for access token in hash (Supabase default)
     if (hash && hash.includes('access_token')) {
-      console.log('ResetPasswordConfirmPage - Access token detected');
+      console.log('ResetPasswordConfirmPage - Access token detected in hash');
       
       // Extract access token and set it in Supabase session
       const accessToken = hash.match(/access_token=([^&]+)/)?.[1];
@@ -29,9 +32,39 @@ const ResetPasswordConfirmPage = () => {
         // Set the session manually for password reset
         supabase.auth.setSession({ access_token: accessToken, refresh_token: '' });
       }
-    } else {
-      console.log('ResetPasswordConfirmPage - No access token found, redirecting to login');
-      navigate('/login');
+    } 
+    // Check for access token in search params (alternative format)
+    else if (searchParams.has('access_token')) {
+      console.log('ResetPasswordConfirmPage - Access token detected in search params');
+      const accessToken = searchParams.get('access_token');
+      if (accessToken) {
+        console.log('ResetPasswordConfirmPage - Setting access token in session from search params');
+        supabase.auth.setSession({ access_token: accessToken, refresh_token: '' });
+      }
+    }
+    // Check for type parameter (Supabase password reset indicator)
+    else if (searchParams.get('type') === 'recovery') {
+      console.log('ResetPasswordConfirmPage - Recovery type detected, checking for token');
+      // This is a password reset link, but we need to extract the token differently
+      // The token might be in the hash or we need to handle it differently
+      if (hash) {
+        const accessToken = hash.match(/access_token=([^&]+)/)?.[1];
+        if (accessToken) {
+          console.log('ResetPasswordConfirmPage - Setting access token from recovery hash');
+          supabase.auth.setSession({ access_token: accessToken, refresh_token: '' });
+        }
+      }
+    }
+    // Check for Supabase password reset flow
+    else if (searchParams.get('type') === 'recovery' || searchParams.get('type') === 'signup') {
+      console.log('ResetPasswordConfirmPage - Supabase auth flow detected:', searchParams.get('type'));
+      // Let Supabase handle the auth flow automatically
+      // Don't redirect to login, let the component render
+    }
+    else {
+      console.log('ResetPasswordConfirmPage - No access token found, showing error message');
+      setError('Invalid or expired password reset link. Please request a new one.');
+      // Don't redirect immediately, let user see the error
     }
   }, [location, navigate]);
 
