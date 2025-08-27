@@ -1,113 +1,146 @@
-# OnTimely Staff Portal - Setup Guide
+# OnTimely Staff Portal Setup Guide
 
-## 🚀 Quick Setup (5 minutes)
+## 🚀 **Quick Start**
 
-### Step 1: Create Supabase Project
-1. Go to [supabase.com](https://supabase.com) and sign up/login
-2. Click "New Project"
-3. Choose your organization
-4. Enter project name: `OnTimely Staff Portal`
-5. Enter database password (save this!)
-6. Choose region closest to you
-7. Click "Create new project"
+This portal integrates with your **existing OnTimely Supabase database** to manage companies, users, and provide staff support.
 
-### Step 2: Get Your Credentials
-1. Wait for project to finish setting up (2-3 minutes)
-2. Go to **Settings** → **API**
-3. Copy these values:
-   - **Project URL** (looks like: `https://abcdefghijklmnop.supabase.co`)
-   - **anon public** key (starts with: `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...`)
+## 📋 **Prerequisites**
 
-### Step 3: Set Up Database
-1. Go to **SQL Editor** in your Supabase dashboard
-2. Copy the entire contents of `database-schema.sql`
-3. Paste it into the SQL editor
-4. Click "Run" to create all tables and sample data
+- Node.js 18+ installed
+- Access to your existing OnTimely Supabase project
+- **No additional services needed** - uses your existing Supabase setup!
 
-### Step 4: Configure Environment
-1. In your `OnTimelyStaffPortal` folder, copy `env.example` to `.env`:
-   ```bash
-   cp env.example .env
-   ```
+## ⚙️ **Configuration**
 
-2. Edit `.env` and add your Supabase credentials:
-   ```env
-   VITE_SUPABASE_URL=https://your-project-id.supabase.co
-   VITE_SUPABASE_ANON_KEY=your-anon-key-here
-   ```
+### 1. **Environment Variables**
 
-### Step 5: Start the Portal
+Copy `.env.example` to `.env` and fill in your credentials:
+
 ```bash
+cp env.example .env
+```
+
+**Required Variables:**
+```env
+# Your existing OnTimely Supabase project
+VITE_SUPABASE_URL=https://ijsktwmevnqgzwwuggkf.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+**That's it!** No additional API keys needed - we use your existing Supabase setup.
+
+### 2. **Get Your Credentials**
+
+#### **Supabase (Already have these):**
+- Go to your existing OnTimely Supabase project
+- Navigate to Settings → API
+- Copy the Project URL and anon public key
+
+## 🛠️ **Installation**
+
+```bash
+# Install dependencies
+npm install
+
+# Start development server
 npm run dev
 ```
 
-🎉 **You're done!** The portal will open with real data from Supabase.
+## 🎯 **Features**
 
-## 🔍 Verify Everything is Working
+### **Company Management**
+- ✅ Create companies with subscription plans
+- ✅ Set user limits
+- ✅ View company statistics
 
-### Check Database Tables
-1. Go to **Table Editor** in Supabase
-2. You should see these tables:
-   - `companies` (with 3 sample companies)
-   - `users` (with 2 sample users)
-   - `support_tickets`
-   - `system_metrics` (with 5 sample metrics)
-   - `desktop_app_versions` (with 3 sample versions)
+### **User Management**
+- ✅ Create individual users
+- ✅ **Bulk user creation** (CSV upload or manual input)
+- ✅ **Automatic welcome emails** with temporary passwords
+- ✅ Password reset functionality
+- ✅ Role and status management
 
-### Test the Portal
-1. **Dashboard**: Should show real counts from your database
-2. **Companies**: Should display the 3 sample companies
-3. **Users**: Should show the 2 sample users
-4. **Create Test**: Try adding a new company or user
+### **Email Integration (via Supabase Auth)**
+- ✅ **Welcome emails** sent automatically when users are created
+- ✅ **Temporary passwords** generated securely
+- ✅ **Login links** to dashboard.ontimely.co.uk
+- ✅ **Password reset emails** using your existing Supabase setup
+- ✅ **No additional services** - leverages your current infrastructure
 
-## 🛠️ Troubleshooting
+## 📧 **How Emails Work**
 
-### "Missing Supabase environment variables"
-- Make sure you copied `env.example` to `.env`
-- Check that your `.env` file has the correct values
-- Restart the dev server after changing `.env`
+The portal uses **Supabase Auth** (your existing setup) to:
+1. **Create users** with temporary passwords
+2. **Send welcome emails** through Supabase's built-in email service
+3. **Handle password resets** using your existing password reset flow
+4. **Integrate seamlessly** with your current authentication system
 
-### "Table doesn't exist" errors
-- Go to Supabase SQL Editor
-- Run the `database-schema.sql` script again
-- Check that all tables were created successfully
+## 🔐 **Password Security**
 
-### "Permission denied" errors
-- In Supabase, go to **Authentication** → **Policies**
-- Make sure RLS policies are enabled
-- Check that the "Allow all operations for staff portal" policy exists
+- **12-character temporary passwords** with mixed case, numbers, and symbols
+- **Supabase Auth integration** for secure password management
+- **Automatic password reset** functionality
+- **Email delivery** through your existing Supabase email service
 
-### Charts not showing data
-- This is normal for new databases - charts need time-series data
-- The sample data includes some metrics, but activity charts will be empty initially
-- Data will populate as you use the system
+## 🚨 **Important Notes**
 
-## 📊 Sample Data Included
+### **Database Integration**
+- ✅ **Uses your existing OnTimely tables** (`companies`, `users`, `teams`, `chats`, `messages`)
+- ✅ **No new database creation** required
+- ✅ **Respects existing triggers** and constraints
+- ✅ **Foreign key relationships** maintained
+- ✅ **Uses your existing Supabase Auth** for user management
 
-The setup script creates:
+### **Optional Tables**
+If you want support ticket functionality, run the optional SQL:
+```sql
+-- Run this in your existing Supabase SQL editor
+\i add-support-tickets.sql
+```
 
-- **3 Companies**: TechCorp Solutions, Startup.io, Enterprise Corp
-- **2 Users**: John Doe (TechCorp), Jane Smith (Startup.io)
-- **5 System Metrics**: CPU, Memory, Disk, Network, Database
-- **3 App Versions**: Windows, macOS, Linux versions
+## 🧪 **Testing**
 
-## 🔐 Security Notes
+1. **Create a company** - should appear in your `companies` table
+2. **Create a user** - should appear in your `users` table + receive welcome email via Supabase
+3. **Bulk create users** - upload CSV or type multiple users
+4. **Reset passwords** - generates new temporary passwords + sends emails via Supabase
 
-- The current setup allows all operations for development
-- For production, you'll want to implement proper authentication
-- Consider adding user roles and permissions
-- Review RLS policies for your security requirements
+## 🔧 **Troubleshooting**
 
-## 🚀 Next Steps
+### **Emails not sending?**
+- Check that your Supabase project has email enabled
+- Verify your Supabase email settings in the dashboard
+- Check browser console for errors
 
-1. **Customize**: Modify company plans, user roles, etc.
-2. **Add Real Data**: Create your actual companies and users
-3. **Configure Auth**: Set up proper user authentication
-4. **Deploy**: Build and deploy to production
+### **Database errors?**
+- Ensure Supabase URL and key are correct
+- Check that your existing tables match the expected schema
+- Verify RLS policies allow the operations
 
-## 📞 Need Help?
+### **Build errors?**
+- Clear `node_modules` and reinstall: `rm -rf node_modules && npm install`
+- Check Node.js version: `node --version` (should be 18+)
 
-- Check the browser console for error messages
-- Verify your Supabase project is active
-- Ensure all environment variables are set correctly
-- The database schema should create everything automatically
+## 🚀 **Production Deployment**
+
+Before going live:
+1. **Verify Supabase Auth settings** in your production environment
+2. **Test email functionality** in your production Supabase project
+3. **Implement staff authentication** (OnTimelyStaff table)
+4. **Set up proper RLS policies** for staff access
+5. **Configure production Supabase** environment
+
+## 📞 **Support**
+
+The portal is designed to work seamlessly with your existing OnTimely infrastructure. All user and company data will be available in your desktop app immediately after creation.
+
+**Benefits of using Supabase Auth:**
+- ✅ **No additional services** to manage
+- ✅ **Uses your existing** email infrastructure
+- ✅ **Same security model** as your current app
+- ✅ **Integrated user management** with your existing system
+- ✅ **Password reset flow** matches your current setup
+
+---
+
+**Ready to manage your OnTimely users like a pro! 🎉**

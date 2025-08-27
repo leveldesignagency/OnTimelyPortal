@@ -7,18 +7,13 @@ const Companies: React.FC = () => {
   const [companies, setCompanies] = useState<Company[]>([])
   const [filteredCompanies, setFilteredCompanies] = useState<Company[]>([])
   const [searchTerm, setSearchTerm] = useState('')
-  const [statusFilter, setStatusFilter] = useState<string>('all')
   const [planFilter, setPlanFilter] = useState<string>('all')
   const [loading, setLoading] = useState(true)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [newCompany, setNewCompany] = useState({
     name: '',
-    domain: '',
-    plan: 'Basic' as Company['plan'],
-    admin_email: '',
-    phone: '',
-    address: '',
-    max_users: 10
+    subscription_plan: 'basic' as string,
+    max_users: 5
   })
 
   useEffect(() => {
@@ -27,7 +22,7 @@ const Companies: React.FC = () => {
 
   useEffect(() => {
     filterCompanies()
-  }, [companies, searchTerm, statusFilter, planFilter])
+  }, [companies, searchTerm, planFilter])
 
   const loadCompanies = async () => {
     try {
@@ -47,18 +42,12 @@ const Companies: React.FC = () => {
 
     if (searchTerm) {
       filtered = filtered.filter(company =>
-        company.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        company.domain.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        company.admin_email.toLowerCase().includes(searchTerm.toLowerCase())
+        company.name.toLowerCase().includes(searchTerm.toLowerCase())
       )
     }
 
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter(company => company.status === statusFilter)
-    }
-
     if (planFilter !== 'all') {
-      filtered = filtered.filter(company => company.plan === planFilter)
+      filtered = filtered.filter(company => company.subscription_plan === planFilter)
     }
 
     setFilteredCompanies(filtered)
@@ -66,16 +55,23 @@ const Companies: React.FC = () => {
 
   const handleCreateCompany = async () => {
     try {
-      await db.companies.createCompany(newCompany)
+      // Only send the fields that are provided, let Supabase handle defaults
+      const companyData: any = { name: newCompany.name }
+      
+      if (newCompany.subscription_plan && newCompany.subscription_plan !== 'basic') {
+        companyData.subscription_plan = newCompany.subscription_plan
+      }
+      
+      if (newCompany.max_users && newCompany.max_users !== 5) {
+        companyData.max_users = newCompany.max_users
+      }
+
+      await db.companies.createCompany(companyData)
       setShowCreateModal(false)
       setNewCompany({
         name: '',
-        domain: '',
-        plan: 'Basic',
-        admin_email: '',
-        phone: '',
-        address: '',
-        max_users: 10
+        subscription_plan: 'basic',
+        max_users: 5
       })
       loadCompanies() // Reload the list
     } catch (error) {
@@ -96,28 +92,15 @@ const Companies: React.FC = () => {
     }
   }
 
-  const getStatusBadge = (status: string) => {
-    const statusClasses = {
-      active: 'bg-green-100 text-green-800',
-      inactive: 'bg-gray-100 text-gray-800',
-      suspended: 'bg-red-100 text-red-800'
-    }
-    return (
-      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusClasses[status as keyof typeof statusClasses] || statusClasses.inactive}`}>
-        {status}
-      </span>
-    )
-  }
-
   const getPlanBadge = (plan: string) => {
     const planClasses = {
-      Basic: 'bg-blue-100 text-blue-800',
-      Professional: 'bg-purple-100 text-purple-800',
-      Enterprise: 'bg-indigo-100 text-indigo-800'
+      basic: 'bg-blue-100 text-blue-800',
+      premium: 'bg-purple-100 text-purple-800',
+      enterprise: 'bg-indigo-100 text-indigo-800'
     }
     return (
-      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${planClasses[plan as keyof typeof planClasses] || planClasses.Basic}`}>
-        {plan}
+      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${planClasses[plan as keyof typeof planClasses] || planClasses.basic}`}>
+        {plan || 'basic'}
       </span>
     )
   }
@@ -162,9 +145,9 @@ const Companies: React.FC = () => {
           <div className="flex items-center">
             <Users className="w-8 h-8 text-green-600" />
             <div className="ml-3">
-              <p className="text-sm font-medium text-gray-600">Active Companies</p>
+              <p className="text-sm font-medium text-gray-600">Total Users</p>
               <p className="text-2xl font-bold text-gray-900">
-                {companies.filter(c => c.status === 'active').length}
+                {companies.reduce((sum, c) => sum + (c.max_users || 5), 0)}
               </p>
             </div>
           </div>
@@ -173,9 +156,9 @@ const Companies: React.FC = () => {
           <div className="flex items-center">
             <Building2 className="w-8 h-8 text-purple-600" />
             <div className="ml-3">
-              <p className="text-sm font-medium text-gray-600">Enterprise Plans</p>
+              <p className="text-sm font-medium text-gray-600">Premium Plans</p>
               <p className="text-2xl font-bold text-gray-900">
-                {companies.filter(c => c.plan === 'Enterprise').length}
+                {companies.filter(c => c.subscription_plan === 'premium').length}
               </p>
             </div>
           </div>
@@ -184,9 +167,9 @@ const Companies: React.FC = () => {
           <div className="flex items-center">
             <Users className="w-8 h-8 text-orange-600" />
             <div className="ml-3">
-              <p className="text-sm font-medium text-gray-600">Total Users</p>
+              <p className="text-sm font-medium text-gray-600">Enterprise Plans</p>
               <p className="text-2xl font-bold text-gray-900">
-                {companies.reduce((sum, c) => sum + c.max_users, 0)}
+                {companies.filter(c => c.subscription_plan === 'enterprise').length}
               </p>
             </div>
           </div>
@@ -209,24 +192,14 @@ const Companies: React.FC = () => {
             </div>
           </div>
           <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="input"
-          >
-            <option value="all">All Statuses</option>
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-            <option value="suspended">Suspended</option>
-          </select>
-          <select
             value={planFilter}
             onChange={(e) => setPlanFilter(e.target.value)}
             className="input"
           >
             <option value="all">All Plans</option>
-            <option value="Basic">Basic</option>
-            <option value="Professional">Professional</option>
-            <option value="Enterprise">Enterprise</option>
+            <option value="basic">Basic</option>
+            <option value="premium">Premium</option>
+            <option value="enterprise">Enterprise</option>
           </select>
         </div>
       </div>
@@ -241,35 +214,22 @@ const Companies: React.FC = () => {
                   <Building2 className="w-8 h-8 text-blue-600 mr-3" />
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900">{company.name}</h3>
-                    <p className="text-sm text-gray-500">{company.domain}</p>
+                    <p className="text-sm text-gray-500">ID: {company.id.slice(0, 8)}...</p>
                   </div>
                 </div>
                 <div className="flex items-center space-x-2">
-                  {getStatusBadge(company.status)}
-                  {getPlanBadge(company.plan)}
+                  {getPlanBadge(company.subscription_plan || 'basic')}
                 </div>
               </div>
 
               <div className="space-y-3 mb-4">
                 <div className="flex items-center text-sm text-gray-600">
-                  <Mail className="w-4 h-4 mr-2" />
-                  {company.admin_email}
-                </div>
-                {company.phone && (
-                  <div className="flex items-center text-sm text-gray-600">
-                    <Phone className="w-4 h-4 mr-2" />
-                    {company.phone}
-                  </div>
-                )}
-                {company.address && (
-                  <div className="flex items-center text-sm text-gray-600">
-                    <MapPin className="w-4 h-4 mr-2" />
-                    {company.address}
-                  </div>
-                )}
-                <div className="flex items-center text-sm text-gray-600">
                   <Users className="w-4 h-4 mr-2" />
-                  Max Users: {company.max_users}
+                  Max Users: {company.max_users || 5}
+                </div>
+                <div className="flex items-center text-sm text-gray-600">
+                  <Building2 className="w-4 h-4 mr-2" />
+                  Plan: {company.subscription_plan || 'basic'}
                 </div>
               </div>
 
@@ -310,56 +270,32 @@ const Companies: React.FC = () => {
             <div className="space-y-4">
               <input
                 type="text"
-                placeholder="Company Name"
+                placeholder="Company Name *"
                 value={newCompany.name}
                 onChange={(e) => setNewCompany({ ...newCompany, name: e.target.value })}
                 className="input w-full"
-              />
-              <input
-                type="text"
-                placeholder="Domain"
-                value={newCompany.domain}
-                onChange={(e) => setNewCompany({ ...newCompany, domain: e.target.value })}
-                className="input w-full"
+                required
               />
               <select
-                value={newCompany.plan}
-                onChange={(e) => setNewCompany({ ...newCompany, plan: e.target.value as Company['plan'] })}
+                value={newCompany.subscription_plan}
+                onChange={(e) => setNewCompany({ ...newCompany, subscription_plan: e.target.value })}
                 className="input w-full"
               >
-                <option value="Basic">Basic</option>
-                <option value="Professional">Professional</option>
-                <option value="Enterprise">Enterprise</option>
+                <option value="basic">Basic (default)</option>
+                <option value="premium">Premium</option>
+                <option value="enterprise">Enterprise</option>
               </select>
               <input
-                type="email"
-                placeholder="Admin Email"
-                value={newCompany.admin_email}
-                onChange={(e) => setNewCompany({ ...newCompany, admin_email: e.target.value })}
-                className="input w-full"
-              />
-              <input
-                type="tel"
-                placeholder="Phone (optional)"
-                value={newCompany.phone}
-                onChange={(e) => setNewCompany({ ...newCompany, phone: e.target.value })}
-                className="input w-full"
-              />
-              <textarea
-                placeholder="Address (optional)"
-                value={newCompany.address}
-                onChange={(e) => setNewCompany({ ...newCompany, address: e.target.value })}
-                className="input w-full"
-                rows={3}
-              />
-              <input
                 type="number"
-                placeholder="Max Users"
+                placeholder="Max Users (default: 5)"
                 value={newCompany.max_users}
-                onChange={(e) => setNewCompany({ ...newCompany, max_users: parseInt(e.target.value) })}
+                onChange={(e) => setNewCompany({ ...newCompany, max_users: parseInt(e.target.value) || 5 })}
                 className="input w-full"
                 min="1"
               />
+              <p className="text-xs text-gray-500">
+                * Company name is required. Subscription plan and max users will use defaults if not specified.
+              </p>
             </div>
             <div className="flex space-x-3 mt-6">
               <button
@@ -370,7 +306,8 @@ const Companies: React.FC = () => {
               </button>
               <button
                 onClick={handleCreateCompany}
-                className="btn-primary flex-1"
+                disabled={!newCompany.name.trim()}
+                className="btn-primary flex-1 disabled:opacity-50"
               >
                 Create Company
               </button>

@@ -1,19 +1,28 @@
 import React, { useState, useEffect } from 'react'
-import { Users, Building2, Activity, TrendingUp, AlertTriangle, CheckCircle, Clock } from 'lucide-react'
-import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
-import { db } from '@/lib/database'
+import { 
+  Users, 
+  Building2, 
+  TrendingUp, 
+  Activity, 
+  UserPlus, 
+  Building,
+  Clock,
+  CheckCircle,
+  AlertCircle
+} from 'lucide-react'
+import { db } from '../lib/database'
+import { Company, User } from '../lib/supabase'
 
 const Dashboard: React.FC = () => {
   const [stats, setStats] = useState({
-    totalUsers: 0,
     totalCompanies: 0,
-    activeUsers: 0,
-    activeCompanies: 0
+    totalUsers: 0,
+    onlineUsers: 0,
+    newUsersThisMonth: 0,
+    newCompaniesThisMonth: 0
   })
-  const [userActivity, setUserActivity] = useState<any[]>([])
-  const [companyGrowth, setCompanyGrowth] = useState<any[]>([])
-  const [systemMetrics, setSystemMetrics] = useState<any[]>([])
-  const [recentTickets, setRecentTickets] = useState<any[]>([])
+  const [recentCompanies, setRecentCompanies] = useState<Company[]>([])
+  const [recentUsers, setRecentUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -25,36 +34,36 @@ const Dashboard: React.FC = () => {
       setLoading(true)
       
       // Load all data in parallel
-      const [users, companies, tickets, metrics, activity, growth] = await Promise.all([
-        db.users.getUsers(),
+      const [companies, users] = await Promise.all([
         db.companies.getCompanies(),
-        db.support.getTickets(),
-        db.analytics.getSystemMetrics(),
-        db.analytics.getUserActivity(30),
-        db.analytics.getCompanyGrowth(30)
+        db.users.getUsers()
       ])
 
-      // Calculate stats
-      const totalUsers = users.length
-      const totalCompanies = companies.length
-      const activeUsers = users.filter(u => u.status === 'active').length
-      const activeCompanies = companies.filter(c => c.status === 'active').length
+      // Calculate statistics
+      const now = new Date()
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+      
+      const newUsersThisMonth = users.filter(user => 
+        new Date(user.created_at) >= startOfMonth
+      ).length
+      
+      const newCompaniesThisMonth = companies.filter(company => 
+        new Date(company.created_at) >= startOfMonth
+      ).length
 
-      setStats({ totalUsers, totalCompanies, activeUsers, activeCompanies })
-      setUserActivity(activity)
-      setCompanyGrowth(growth)
-      setSystemMetrics(metrics)
+      const onlineUsers = users.filter(user => user.status === 'online').length
 
-      // Get recent tickets
-      const recent = tickets.slice(0, 5).map(ticket => ({
-        id: ticket.id,
-        title: ticket.title,
-        priority: ticket.priority,
-        status: ticket.status,
-        company: ticket.companies?.name || 'Unknown',
-        created_at: ticket.created_at
-      }))
-      setRecentTickets(recent)
+      setStats({
+        totalCompanies: companies.length,
+        totalUsers: users.length,
+        onlineUsers,
+        newUsersThisMonth,
+        newCompaniesThisMonth
+      })
+
+      // Get recent companies and users
+      setRecentCompanies(companies.slice(0, 5))
+      setRecentUsers(users.slice(0, 5))
 
     } catch (error) {
       console.error('Error loading dashboard data:', error)
@@ -63,34 +72,22 @@ const Dashboard: React.FC = () => {
     }
   }
 
-  const getPriorityColor = (priority: string) => {
-    const colors = {
-      low: 'text-green-600',
-      medium: 'text-yellow-600',
-      high: 'text-orange-600',
-      critical: 'text-red-600'
+  const getCompanyGrowthData = () => {
+    const now = new Date()
+    const months = []
+    
+    for (let i = 5; i >= 0; i--) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      months.push({
+        month: date.toLocaleDateString('en-US', { month: 'short' }),
+        companies: 0,
+        users: 0
+      })
     }
-    return colors[priority as keyof typeof colors] || colors.medium
-  }
 
-  const getStatusColor = (status: string) => {
-    const colors = {
-      open: 'text-red-600',
-      'in-progress': 'text-yellow-600',
-      resolved: 'text-green-600',
-      closed: 'text-gray-600'
-    }
-    return colors[status as keyof typeof colors] || colors.open
-  }
-
-  const getMetricStatusColor = (status: string) => {
-    const colors = {
-      excellent: 'text-green-600',
-      good: 'text-blue-600',
-      warning: 'text-yellow-600',
-      critical: 'text-red-600'
-    }
-    return colors[status as keyof typeof colors] || colors.good
+    // This would be more efficient with a proper analytics query
+    // For now, we'll use the data we already have
+    return months
   }
 
   if (loading) {
@@ -102,67 +99,64 @@ const Dashboard: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="p-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-gray-600">Overview of your OnTimely platform</p>
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+        <p className="text-gray-600">Overview of your OnTimely application</p>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white p-6 rounded-lg border">
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="bg-white rounded-lg shadow-sm border p-6">
           <div className="flex items-center">
             <div className="p-2 bg-blue-100 rounded-lg">
-              <Users className="w-6 h-6 text-blue-600" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Total Users</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.totalUsers}</p>
-            </div>
-          </div>
-          <div className="mt-4">
-            <span className="text-sm text-green-600 font-medium">
-              +{stats.activeUsers} active
-            </span>
-          </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-lg border">
-          <div className="flex items-center">
-            <div className="p-2 bg-green-100 rounded-lg">
-              <Building2 className="w-6 h-6 text-green-600" />
+              <Building2 className="w-6 h-6 text-blue-600" />
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">Total Companies</p>
               <p className="text-2xl font-bold text-gray-900">{stats.totalCompanies}</p>
             </div>
           </div>
-          <div className="mt-4">
-            <span className="text-sm text-green-600 font-medium">
-              +{stats.activeCompanies} active
-            </span>
+          <div className="mt-4 flex items-center text-sm text-gray-600">
+            <TrendingUp className="w-4 h-4 text-green-500 mr-1" />
+            <span className="text-green-600">+{stats.newCompaniesThisMonth} this month</span>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-lg border">
+        <div className="bg-white rounded-lg shadow-sm border p-6">
+          <div className="flex items-center">
+            <div className="p-2 bg-green-100 rounded-lg">
+              <Users className="w-6 h-6 text-green-600" />
+            </div>
+            <div className="ml-4">
+              <p className="text-sm font-medium text-gray-600">Total Users</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.totalUsers}</p>
+            </div>
+          </div>
+          <div className="mt-4 flex items-center text-sm text-gray-600">
+            <UserPlus className="w-4 h-4 text-green-500 mr-1" />
+            <span className="text-green-600">+{stats.newUsersThisMonth} this month</span>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg shadow-sm border p-6">
           <div className="flex items-center">
             <div className="p-2 bg-purple-100 rounded-lg">
               <Activity className="w-6 h-6 text-purple-600" />
             </div>
             <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Active Users</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.activeUsers}</p>
+              <p className="text-sm font-medium text-gray-600">Online Users</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.onlineUsers}</p>
             </div>
           </div>
-          <div className="mt-4">
-            <span className="text-sm text-gray-600 font-medium">
-              {Math.round((stats.activeUsers / stats.totalUsers) * 100)}% of total
-            </span>
+          <div className="mt-4 flex items-center text-sm text-gray-600">
+            <CheckCircle className="w-4 h-4 text-green-500 mr-1" />
+            <span className="text-green-600">Active now</span>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-lg border">
+        <div className="bg-white rounded-lg shadow-sm border p-6">
           <div className="flex items-center">
             <div className="p-2 bg-orange-100 rounded-lg">
               <TrendingUp className="w-6 h-6 text-orange-600" />
@@ -170,159 +164,119 @@ const Dashboard: React.FC = () => {
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">Growth Rate</p>
               <p className="text-2xl font-bold text-gray-900">
-                {companyGrowth.length > 0 ? companyGrowth[companyGrowth.length - 1]?.total || 0 : 0}
+                {stats.totalCompanies > 0 ? Math.round((stats.newCompaniesThisMonth / stats.totalCompanies) * 100) : 0}%
               </p>
             </div>
           </div>
-          <div className="mt-4">
-            <span className="text-sm text-green-600 font-medium">
-              This month
-            </span>
+          <div className="mt-4 flex items-center text-sm text-gray-600">
+            <Clock className="w-4 h-4 text-orange-500 mr-1" />
+            <span className="text-orange-600">Monthly</span>
           </div>
         </div>
       </div>
 
-      {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* User Activity Chart */}
-        <div className="bg-white p-6 rounded-lg border">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">User Activity (30 days)</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <AreaChart data={userActivity}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" />
-              <YAxis />
-              <Tooltip />
-              <Area type="monotone" dataKey="newUsers" stackId="1" stroke="#3B82F6" fill="#3B82F6" fillOpacity={0.6} />
-              <Area type="monotone" dataKey="activeUsers" stackId="2" stroke="#10B981" fill="#10B981" fillOpacity={0.6} />
-            </AreaChart>
-          </ResponsiveContainer>
-          <div className="mt-4 flex items-center justify-center space-x-6">
-            <div className="flex items-center">
-              <div className="w-3 h-3 bg-blue-500 rounded-full mr-2"></div>
-              <span className="text-sm text-gray-600">New Users</span>
-            </div>
-            <div className="flex items-center">
-              <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
-              <span className="text-sm text-gray-600">Active Users</span>
-            </div>
+      {/* Recent Activity */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        {/* Recent Companies */}
+        <div className="bg-white rounded-lg shadow-sm border">
+          <div className="p-6 border-b">
+            <h2 className="text-lg font-semibold text-gray-900">Recent Companies</h2>
+            <p className="text-sm text-gray-600">Latest companies added to the platform</p>
           </div>
-        </div>
-
-        {/* Company Growth Chart */}
-        <div className="bg-white p-6 rounded-lg border">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Company Growth (30 days)</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={companyGrowth}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" />
-              <YAxis />
-              <Tooltip />
-              <Bar dataKey="basic" stackId="a" fill="#3B82F6" />
-              <Bar dataKey="professional" stackId="a" fill="#8B5CF6" />
-              <Bar dataKey="enterprise" stackId="a" fill="#6366F1" />
-            </BarChart>
-          </ResponsiveContainer>
-          <div className="mt-4 flex items-center justify-center space-x-6">
-            <div className="flex items-center">
-              <div className="w-3 h-3 bg-blue-500 rounded-full mr-2"></div>
-              <span className="text-sm text-gray-600">Basic</span>
-            </div>
-            <div className="flex items-center">
-              <div className="w-3 h-3 bg-purple-500 rounded-full mr-2"></div>
-              <span className="text-sm text-gray-600">Professional</span>
-            </div>
-            <div className="flex items-center">
-              <div className="w-3 h-3 bg-indigo-500 rounded-full mr-2"></div>
-              <span className="text-sm text-gray-600">Enterprise</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* System Health & Recent Activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* System Health */}
-        <div className="bg-white p-6 rounded-lg border">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">System Health</h3>
-          <div className="space-y-4">
-            {systemMetrics.map((metric) => (
-              <div key={metric.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <div className="flex items-center">
-                  <div className={`w-3 h-3 rounded-full mr-3 ${
-                    metric.status === 'excellent' ? 'bg-green-500' :
-                    metric.status === 'good' ? 'bg-blue-500' :
-                    metric.status === 'warning' ? 'bg-yellow-500' :
-                    'bg-red-500'
-                  }`}></div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">{metric.metric_name}</p>
-                    <p className="text-xs text-gray-500">Target: {metric.target}</p>
+          <div className="p-6">
+            {recentCompanies.length > 0 ? (
+              <div className="space-y-4">
+                {recentCompanies.map((company) => (
+                  <div key={company.id} className="flex items-center justify-between">
+                    <div className="flex items-center">
+                      <div className="p-2 bg-blue-100 rounded-lg">
+                        <Building className="w-4 h-4 text-blue-600" />
+                      </div>
+                      <div className="ml-3">
+                        <p className="text-sm font-medium text-gray-900">{company.name}</p>
+                        <p className="text-xs text-gray-500">
+                          {company.subscription_plan || 'basic'} plan • {company.max_users || 5} users max
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {new Date(company.created_at).toLocaleDateString()}
+                    </div>
                   </div>
-                </div>
-                <div className="text-right">
-                  <p className={`text-sm font-semibold ${getMetricStatusColor(metric.status)}`}>
-                    {metric.metric_value}
-                  </p>
-                  <p className="text-xs text-gray-500 capitalize">{metric.status}</p>
-                </div>
+                ))}
               </div>
-            ))}
+            ) : (
+              <div className="text-center py-8">
+                <Building className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+                <p className="text-gray-500">No companies yet</p>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Recent Support Tickets */}
-        <div className="bg-white p-6 rounded-lg border">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Support Tickets</h3>
-          <div className="space-y-3">
-            {recentTickets.map((ticket) => (
-              <div key={ticket.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-900 truncate">{ticket.title}</p>
-                  <p className="text-xs text-gray-500">{ticket.company}</p>
-                </div>
-                <div className="flex items-center space-x-2 ml-4">
-                  <span className={`text-xs font-medium ${getPriorityColor(ticket.priority)}`}>
-                    {ticket.priority}
-                  </span>
-                  <span className={`text-xs font-medium ${getStatusColor(ticket.status)}`}>
-                    {ticket.status}
-                  </span>
-                </div>
-              </div>
-            ))}
+        {/* Recent Users */}
+        <div className="bg-white rounded-lg shadow-sm border">
+          <div className="p-6 border-b">
+            <h2 className="text-lg font-semibold text-gray-900">Recent Users</h2>
+            <p className="text-sm text-gray-600">Latest users who joined the platform</p>
           </div>
-          <div className="mt-4 text-center">
-            <button className="text-sm text-primary-600 hover:text-primary-700 font-medium">
-              View All Tickets →
-            </button>
+          <div className="p-6">
+            {recentUsers.length > 0 ? (
+              <div className="space-y-4">
+                {recentUsers.map((user) => (
+                  <div key={user.id} className="flex items-center justify-between">
+                    <div className="flex items-center">
+                      <div className="p-2 bg-green-100 rounded-lg">
+                        <Users className="w-4 h-4 text-green-600" />
+                      </div>
+                      <div className="ml-3">
+                        <p className="text-sm font-medium text-gray-900">{user.name}</p>
+                        <p className="text-xs text-gray-500">
+                          {user.role || 'user'} • {user.status || 'offline'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {new Date(user.created_at).toLocaleDateString()}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <Users className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+                <p className="text-gray-500">No users yet</p>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
       {/* Quick Actions */}
-      <div className="bg-white p-6 rounded-lg border">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
+      <div className="bg-white rounded-lg shadow-sm border p-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <button className="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-primary-400 hover:bg-primary-50 transition-colors">
-            <div className="text-center">
-              <Users className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-              <p className="text-sm font-medium text-gray-900">Add New User</p>
-              <p className="text-xs text-gray-500">Create user account</p>
-            </div>
-          </button>
-          <button className="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-primary-400 hover:bg-primary-50 transition-colors">
+          <button className="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-colors">
             <div className="text-center">
               <Building2 className="w-8 h-8 text-gray-400 mx-auto mb-2" />
               <p className="text-sm font-medium text-gray-900">Add Company</p>
-              <p className="text-xs text-gray-500">Onboard new company</p>
+              <p className="text-xs text-gray-500">Create a new company</p>
             </div>
           </button>
-          <button className="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-primary-400 hover:bg-primary-50 transition-colors">
+          
+          <button className="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-colors">
+            <div className="text-center">
+              <UserPlus className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+              <p className="text-sm font-medium text-gray-900">Add User</p>
+              <p className="text-xs text-gray-500">Create a new user</p>
+            </div>
+          </button>
+          
+          <button className="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-colors">
             <div className="text-center">
               <Activity className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-              <p className="text-sm font-medium text-gray-900">View Reports</p>
-              <p className="text-xs text-gray-500">Generate analytics</p>
+              <p className="text-sm font-medium text-gray-900">View Analytics</p>
+              <p className="text-xs text-gray-500">Check detailed metrics</p>
             </div>
           </button>
         </div>

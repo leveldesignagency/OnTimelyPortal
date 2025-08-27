@@ -1,6 +1,8 @@
-import { supabase, Company, User, SupportTicket, SystemMetric } from './supabase'
+import { supabase, Company, User, Team, TeamMember, Chat, Message, SupportTicket, SystemMetric } from './supabase'
+import { emailService } from './email'
+import { generateTemporaryPassword } from './utils'
 
-// Company Management
+// Company Management - using your existing companies table
 export const companyService = {
   // Get all companies
   async getCompanies(): Promise<Company[]> {
@@ -25,15 +27,11 @@ export const companyService = {
     return data
   },
 
-  // Create new company
-  async createCompany(companyData: Omit<Company, 'id' | 'created_at' | 'updated_at'>): Promise<Company> {
+  // Create new company - let Supabase handle defaults and triggers
+  async createCompany(companyData: { name: string; subscription_plan?: string; max_users?: number }): Promise<Company> {
     const { data, error } = await supabase
       .from('companies')
-      .insert([{
-        ...companyData,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }])
+      .insert([companyData]) // Supabase will handle id, created_at, updated_at automatically
       .select()
       .single()
     
@@ -41,14 +39,11 @@ export const companyService = {
     return data
   },
 
-  // Update company
+  // Update company - let Supabase handle the updated_at trigger
   async updateCompany(id: string, updates: Partial<Company>): Promise<Company> {
     const { data, error } = await supabase
       .from('companies')
-      .update({
-        ...updates,
-        updated_at: new Date().toISOString()
-      })
+      .update(updates) // Supabase will handle updated_at automatically via trigger
       .eq('id', id)
       .select()
       .single()
@@ -77,13 +72,13 @@ export const companyService = {
     if (usersError) throw usersError
 
     const totalUsers = users?.length || 0
-    const activeUsers = users?.filter(u => u.status === 'active').length || 0
+    const onlineUsers = users?.filter(u => u.status === 'online').length || 0
 
-    return { totalUsers, activeUsers }
+    return { totalUsers, onlineUsers }
   }
 }
 
-// User Management
+// User Management - using your existing users table with Supabase Auth
 export const userService = {
   // Get all users
   async getUsers(): Promise<User[]> {
@@ -93,7 +88,7 @@ export const userService = {
         *,
         companies (
           name,
-          domain
+          subscription_plan
         )
       `)
       .order('created_at', { ascending: false })
@@ -114,47 +109,57 @@ export const userService = {
     return data || []
   },
 
-  // Create new user
-  async createUser(userData: Omit<User, 'id' | 'created_at' | 'updated_at'>): Promise<User> {
-    const { data, error } = await supabase
-      .from('users')
-      .insert([{
+  // Create new user with Supabase Auth - let Supabase handle defaults and triggers
+  async createUser(userData: { 
+    email: string; 
+    name: string; 
+    company_id?: string; 
+    role?: string; 
+    status?: string; 
+  }): Promise<User> {
+    try {
+      // Generate temporary password
+      const temporaryPassword = generateTemporaryPassword()
+      
+      // Create user with Supabase Auth and profile
+      const result = await emailService.createUserWithAuth({
         ...userData,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }])
-      .select()
-      .single()
-    
-    if (error) throw error
-    return data
+        password: temporaryPassword
+      })
+      
+      // Return the profile data
+      return result.profile
+    } catch (error) {
+      console.error('Error creating user:', error)
+      throw error
+    }
   },
 
-  // Bulk create users
-  async bulkCreateUsers(usersData: Omit<User, 'id' | 'created_at' | 'updated_at'>[]): Promise<User[]> {
-    const usersWithTimestamps = usersData.map(user => ({
-      ...user,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    }))
-
-    const { data, error } = await supabase
-      .from('users')
-      .insert(usersWithTimestamps)
-      .select()
-    
-    if (error) throw error
-    return data || []
+  // Bulk create users with Supabase Auth - let Supabase handle defaults and triggers
+  async bulkCreateUsers(usersData: Array<{ 
+    email: string; 
+    name: string; 
+    company_id?: string; 
+    role?: string; 
+    status?: string; 
+  }>): Promise<User[]> {
+    try {
+      // Use the email service for bulk creation with Supabase Auth
+      const results = await emailService.bulkCreateUsersWithAuth(usersData)
+      
+      // Return just the profile data
+      return results.map(result => result.profile)
+    } catch (error) {
+      console.error('Error creating bulk users:', error)
+      throw error
+    }
   },
 
-  // Update user
+  // Update user - let Supabase handle the updated_at trigger
   async updateUser(id: string, updates: Partial<User>): Promise<User> {
     const { data, error } = await supabase
       .from('users')
-      .update({
-        ...updates,
-        updated_at: new Date().toISOString()
-      })
+      .update(updates) // Supabase will handle updated_at automatically via trigger
       .eq('id', id)
       .select()
       .single()
@@ -174,12 +179,79 @@ export const userService = {
   },
 
   // Update user status
-  async updateUserStatus(id: string, status: User['status']): Promise<User> {
+  async updateUserStatus(id: string, status: string): Promise<User> {
     return this.updateUser(id, { status })
+  },
+
+  // Reset user password and send new temporary password via Supabase Auth
+  async resetUserPassword(userId: string): Promise<string> {
+    try {
+      const temporaryPassword = await emailService.resetUserPassword(userId)
+      return temporaryPassword
+    } catch (error) {
+      console.error('Error resetting user password:', error)
+      throw error
+    }
   }
 }
 
-// Support Ticket Management
+// Team Management - using your existing teams table
+export const teamService = {
+  // Get teams by company
+  async getTeamsByCompany(companyId: string): Promise<Team[]> {
+    const { data, error } = await supabase
+      .from('teams')
+      .select('*')
+      .eq('company_id', companyId)
+      .eq('is_archived', false)
+      .order('created_at', { ascending: false })
+    
+    if (error) throw error
+    return data || []
+  },
+
+  // Get team members
+  async getTeamMembers(teamId: string): Promise<TeamMember[]> {
+    const { data, error } = await supabase
+      .from('team_members')
+      .select('*')
+      .eq('team_id', teamId)
+      .order('joined_at', { ascending: false })
+    
+    if (error) throw error
+    return data || []
+  }
+}
+
+// Chat Management - using your existing chats table
+export const chatService = {
+  // Get chats by company
+  async getChatsByCompany(companyId: string): Promise<Chat[]> {
+    const { data, error } = await supabase
+      .from('chats')
+      .select('*')
+      .eq('company_id', companyId)
+      .eq('is_archived', false)
+      .order('updated_at', { ascending: false })
+    
+    if (error) throw error
+    return data || []
+  },
+
+  // Get messages for a chat
+  async getChatMessages(chatId: string): Promise<Message[]> {
+    const { data, error } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('chat_id', chatId)
+      .order('created_at', { ascending: true })
+    
+    if (error) throw error
+    return data || []
+  }
+}
+
+// Support Ticket Management - this will need to be created in your existing database
 export const supportService = {
   // Get all tickets
   async getTickets(): Promise<SupportTicket[]> {
@@ -188,7 +260,7 @@ export const supportService = {
       .select(`
         *,
         users (
-          full_name,
+          name,
           email
         ),
         companies (
@@ -205,11 +277,7 @@ export const supportService = {
   async createTicket(ticketData: Omit<SupportTicket, 'id' | 'created_at' | 'updated_at'>): Promise<SupportTicket> {
     const { data, error } = await supabase
       .from('support_tickets')
-      .insert([{
-        ...ticketData,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }])
+      .insert([ticketData]) // Supabase will handle id, created_at, updated_at automatically
       .select()
       .single()
     
@@ -221,10 +289,7 @@ export const supportService = {
   async updateTicket(id: string, updates: Partial<SupportTicket>): Promise<SupportTicket> {
     const { data, error } = await supabase
       .from('support_tickets')
-      .update({
-        ...updates,
-        updated_at: new Date().toISOString()
-      })
+      .update(updates) // Supabase will handle updated_at automatically via trigger
       .eq('id', id)
       .select()
       .single()
@@ -283,7 +348,7 @@ export const analyticsService = {
 
     const { data, error } = await supabase
       .from('users')
-      .select('created_at, last_active')
+      .select('created_at, last_seen')
       .gte('created_at', startDate.toISOString())
     
     if (error) throw error
@@ -298,7 +363,7 @@ export const analyticsService = {
       }
       activityByDate[date].newUsers++
       
-      if (user.last_active && new Date(user.last_active) >= startDate) {
+      if (user.last_seen && new Date(user.last_seen) >= startDate) {
         activityByDate[date].activeUsers++
       }
     })
@@ -316,20 +381,20 @@ export const analyticsService = {
 
     const { data, error } = await supabase
       .from('companies')
-      .select('created_at, plan')
+      .select('created_at, subscription_plan')
       .gte('created_at', startDate.toISOString())
     
     if (error) throw error
 
-    const growthByDate: Record<string, { total: number; basic: number; professional: number; enterprise: number }> = {}
+    const growthByDate: Record<string, { total: number; basic: number; premium: number; enterprise: number }> = {}
     
     data?.forEach(company => {
       const date = company.created_at.split('T')[0]
       if (!growthByDate[date]) {
-        growthByDate[date] = { total: 0, basic: 0, professional: 0, enterprise: 0 }
+        growthByDate[date] = { total: 0, basic: 0, premium: 0, enterprise: 0 }
       }
       growthByDate[date].total++
-      growthByDate[date][company.plan.toLowerCase() as keyof typeof growthByDate[string]]++
+      growthByDate[date][company.subscription_plan as keyof typeof growthByDate[string]]++
     })
 
     return Object.entries(growthByDate).map(([date, stats]) => ({
@@ -343,6 +408,8 @@ export const analyticsService = {
 export const db = {
   companies: companyService,
   users: userService,
+  teams: teamService,
+  chats: chatService,
   support: supportService,
   analytics: analyticsService
 }
