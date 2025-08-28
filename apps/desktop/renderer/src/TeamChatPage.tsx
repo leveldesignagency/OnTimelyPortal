@@ -1651,7 +1651,7 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
             color: isDark ? '#ffffff' : '#000000',
             outline: 'none',
             fontSize: '15px',
-            padding: '14px 160px 14px 20px',
+            padding: '14px 120px 14px 20px',
             borderRadius: '12px',
             boxShadow: 'none',
             position: 'relative',
@@ -1671,12 +1671,12 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
         {/* Icons Container - positioned absolutely over the input */}
         <div style={{
           position: 'absolute',
-          right: '44px',
-          top: '37%',
+          right: '16px',
+          top: '50%',
           transform: 'translateY(-50%)',
           display: 'flex',
           alignItems: 'center',
-          gap: '16px',
+          gap: '12px',
           pointerEvents: 'none'
         }}>
           {/* Emoji Button */}
@@ -1693,18 +1693,15 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
               pointerEvents: 'auto'
             }}
           >
-            <div style={{
-              width: 24,
-              height: 24,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '16px',
-              color: isDark ? '#ffffff' : '#000000',
-              fontWeight: 'bold'
-            }}>
-              😊
-            </div>
+            <img 
+              src="/svg/smiley-svgrepo-com.svg" 
+              alt="emoji"
+              width={24}
+              height={24}
+              style={{ 
+                filter: isDark ? 'invert(1)' : 'brightness(0)'
+              }}
+            />
           </button>
 
           {/* Attachment Button */}
@@ -1721,18 +1718,15 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
               pointerEvents: 'auto'
             }}
           >
-            <div style={{
-              width: 24,
-              height: 24,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '16px',
-              color: isDark ? '#ffffff' : '#000000',
-              fontWeight: 'bold'
-            }}>
-              📎
-            </div>
+            <img 
+              src="/svg/paper-clip-svgrepo-com.svg" 
+              alt="attachment"
+              width={24}
+              height={24}
+              style={{ 
+                filter: isDark ? 'invert(1)' : 'brightness(0)'
+              }}
+            />
           </button>
 
           {/* Send Button */}
@@ -1751,18 +1745,15 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
               pointerEvents: 'auto'
             }}
           >
-            <div style={{
-              width: 24,
-              height: 24,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '16px',
-              color: text.trim() ? (isDark ? '#ffffff' : '#000000') : (isDark ? '#666666' : '#999999'),
-              fontWeight: 'bold'
-            }}>
-              ➤
-            </div>
+            <img 
+              src="/svg/send-1-svgrepo-com.svg" 
+              alt="send"
+              width={24}
+              height={24}
+              style={{ 
+                filter: text.trim() ? (isDark ? 'invert(1)' : 'brightness(0)') : (isDark ? 'brightness(0.4)' : 'brightness(0.6)')
+              }}
+            />
           </button>
         </div>
       </div>
