@@ -55,6 +55,8 @@ type Message = {
   editedAt?: string;
   sent: boolean;
   sender_id?: string;
+  sender_avatar?: string; // Add sender's avatar URL
+  sender_name?: string;   // Add sender's full name
 };
 
 // Global hover popup management
@@ -233,6 +235,8 @@ const convertSupabaseMessage = (supabaseMessage: SupabaseMessage): Message => {
     text: supabaseMessage.content,
     sender: supabaseMessage.sender?.name || 'Unknown',
     sender_id: supabaseMessage.sender_id,
+    sender_avatar: supabaseMessage.sender?.avatar_url || null, // Extract sender's avatar
+    sender_name: supabaseMessage.sender?.name || 'Unknown', // Extract sender's full name
     timestamp: supabaseMessage.created_at, // Store raw date string
     type: supabaseMessage.message_type as MessageType,
     fileUrl: supabaseMessage.file_url,
@@ -1170,10 +1174,11 @@ const MessageBubble = ({ message, sent, isDark, onReact, onReply, onEdit, onDele
           alignSelf: 'flex-start',
           marginTop: '8px'
         }}>
-          {CURRENT_USER && isAvatarUrl(CURRENT_USER.avatar) ? (
+          {/* For received messages, show the SENDER's avatar, not current user's */}
+          {message.sender_avatar && isAvatarUrl(message.sender_avatar) ? (
             <img
-              src={CURRENT_USER.avatar}
-              alt={CURRENT_USER.name}
+              src={message.sender_avatar}
+              alt={message.sender_name || message.sender || 'User'}
               style={{
                 width: '100%',
                 height: '100%',
@@ -1181,7 +1186,7 @@ const MessageBubble = ({ message, sent, isDark, onReact, onReply, onEdit, onDele
               }}
             />
           ) : (
-            getSenderInitials(message.sender)
+            getSenderInitials(message.sender_name || message.sender || 'Unknown')
           )}
         </div>
       )}
