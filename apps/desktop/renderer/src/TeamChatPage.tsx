@@ -1701,16 +1701,18 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
               e.currentTarget.style.backgroundColor = 'transparent';
             }}
           >
-            <img 
-              src="/svg/smiley-svgrepo-com.svg" 
-              alt="emoji"
-              width={24}
-              height={24}
-              style={{ 
-                filter: isDark ? 'invert(1)' : 'brightness(0)',
-                opacity: 0.9
-              }}
-            />
+            <div style={{
+              width: 24,
+              height: 24,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '16px',
+              color: isDark ? '#ffffff' : '#000000',
+              fontWeight: 'bold'
+            }}>
+              😊
+            </div>
           </button>
 
           {/* Attachment Button */}
@@ -1735,16 +1737,18 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
               e.currentTarget.style.backgroundColor = 'transparent';
             }}
           >
-            <img 
-              src="/svg/paper-clip-svgrepo-com.svg" 
-              alt="attachment"
-              width={24}
-              height={24}
-              style={{ 
-                filter: isDark ? 'invert(1)' : 'brightness(0)',
-                opacity: 0.9
-              }}
-            />
+            <div style={{
+              width: 24,
+              height: 24,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '16px',
+              color: isDark ? '#ffffff' : '#000000',
+              fontWeight: 'bold'
+            }}>
+              📎
+            </div>
           </button>
 
           {/* Send Button */}
@@ -1773,16 +1777,18 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
               e.currentTarget.style.backgroundColor = 'transparent';
             }}
           >
-            <img 
-              src="/svg/send-1-svgrepo-com.svg" 
-              alt="send"
-              width={24}
-              height={24}
-              style={{ 
-                filter: isDark ? 'invert(1)' : 'brightness(0)',
-                opacity: text.trim() ? 0.9 : 0.5
-              }}
-            />
+            <div style={{
+              width: 24,
+              height: 24,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '16px',
+              color: text.trim() ? (isDark ? '#ffffff' : '#000000') : (isDark ? '#666666' : '#999999'),
+              fontWeight: 'bold'
+            }}>
+              ➤
+            </div>
           </button>
         </div>
       </div>
