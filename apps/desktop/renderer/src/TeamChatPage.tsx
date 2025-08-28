@@ -1720,21 +1720,17 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
               pointerEvents: 'auto'
             }}
           >
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              style={{
-                color: isDark ? '#ffffff' : '#000000'
-              }}
-            >
-              <path d="M16.5 6v11.5a4.5 4.5 0 1 1-9 0V6a2.5 2.5 0 0 1 5 0v10a1 1 0 1 0 2 0V6" />
-            </svg>
+            <div style={{
+              width: 30,
+              height: 30,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '18px',
+              color: isDark ? '#ffffff' : '#000000'
+            }}>
+              📎
+            </div>
           </button>
 
 
