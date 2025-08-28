@@ -1729,7 +1729,7 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
               fontSize: '18px',
               color: isDark ? '#ffffff' : '#000000'
             }}>
-              📎
+              ⎋
             </div>
           </button>
 
