@@ -1695,15 +1695,17 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
               pointerEvents: 'auto'
             }}
           >
-            <img 
-              src="/icons/__smiley.svg" 
-              alt="emoji"
-              width={30}
-              height={30}
-              style={{ 
-                filter: isDark ? 'invert(1)' : 'brightness(0)'
-              }}
-            />
+            <div style={{
+              width: 30,
+              height: 30,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '20px',
+              color: isDark ? '#ffffff' : '#000000'
+            }}>
+              😊
+            </div>
           </button>
 
           {/* Attachment Button */}
@@ -1720,15 +1722,17 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
               pointerEvents: 'auto'
             }}
           >
-            <img 
-              src="/icons/__attach.svg" 
-              alt="attach"
-              width={30}
-              height={30}
-              style={{ 
-                filter: isDark ? 'invert(1)' : 'brightness(0)'
-              }}
-            />
+            <div style={{
+              width: 30,
+              height: 30,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '20px',
+              color: isDark ? '#ffffff' : '#000000'
+            }}>
+              📎
+            </div>
           </button>
 
 
@@ -1749,15 +1753,17 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
               pointerEvents: 'auto'
             }}
           >
-            <img 
-              src="/icons/__send.svg" 
-              alt="send"
-              width={30}
-              height={30}
-              style={{ 
-                filter: isDark ? 'invert(1)' : 'brightness(0)'
-              }}
-            />
+            <div style={{
+              width: 30,
+              height: 30,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '20px',
+              color: text.trim() ? (isDark ? '#ffffff' : '#000000') : (isDark ? '#666666' : '#cccccc')
+            }}>
+              ➤
+            </div>
           </button>
         </div>
       </div>
