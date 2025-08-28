@@ -1653,20 +1653,18 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
             fontSize: '15px',
             padding: '14px 160px 14px 20px',
             borderRadius: '12px',
-            boxShadow: isDark ? 'inset 0 2px 4px rgba(0,0,0,0.3)' : 'inset 0 2px 4px rgba(0,0,0,0.1)',
+            boxShadow: 'none',
             position: 'relative',
             backdropFilter: 'blur(10px)',
             transition: 'all 0.2s ease'
           }}
           onFocus={e => {
             e.currentTarget.style.borderColor = isDark ? '#ffffff' : '#007bff';
-            e.currentTarget.style.boxShadow = isDark 
-              ? '0 0 0 3px rgba(255,255,255,0.1), inset 0 2px 4px rgba(0,0,0,0.3)' 
-              : '0 0 0 3px rgba(0,123,255,0.1), inset 0 2px 4px rgba(0,0,0,0.1)';
+            e.currentTarget.style.boxShadow = 'none';
           }}
           onBlur={e => {
             e.currentTarget.style.borderColor = isDark ? '#404040' : '#dee2e6';
-            e.currentTarget.style.boxShadow = isDark ? 'inset 0 2px 4px rgba(0,0,0,0.3)' : 'inset 0 2px 4px rgba(0,0,0,0.1)';
+            e.currentTarget.style.boxShadow = 'none';
           }}
         />
 
@@ -1695,15 +1693,17 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
               pointerEvents: 'auto'
             }}
           >
-            <img 
-              src="/icons/__smiley.svg" 
-              alt="emoji"
-              width={30}
-              height={30}
-              style={{ 
-                filter: isDark ? 'invert(1)' : 'brightness(0)'
-              }}
-            />
+            <div style={{
+              width: 30,
+              height: 30,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '18px',
+              color: isDark ? '#ffffff' : '#000000'
+            }}>
+              ☺
+            </div>
           </button>
 
           {/* Attachment Button */}
@@ -1733,7 +1733,7 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
                 color: isDark ? '#ffffff' : '#000000'
               }}
             >
-              <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+              <path d="M16.5 6v11.5a4.5 4.5 0 1 1-9 0V6a2.5 2.5 0 0 1 5 0v10a1 1 0 1 0 2 0V6" />
             </svg>
           </button>
 
@@ -1755,15 +1755,17 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
               pointerEvents: 'auto'
             }}
           >
-            <img 
-              src="/icons/__send.svg" 
-              alt="send"
-              width={30}
-              height={30}
-              style={{ 
-                filter: isDark ? 'invert(1)' : 'brightness(0)'
-              }}
-            />
+            <div style={{
+              width: 30,
+              height: 30,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '18px',
+              color: text.trim() ? (isDark ? '#ffffff' : '#000000') : (isDark ? '#666666' : '#cccccc')
+            }}>
+              ➤
+            </div>
           </button>
         </div>
       </div>
