@@ -1701,10 +1701,10 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: '20px',
+              fontSize: '16px',
               color: isDark ? '#ffffff' : '#000000'
             }}>
-              😊
+              ☺
             </div>
           </button>
 
@@ -1728,10 +1728,10 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: '20px',
+              fontSize: '16px',
               color: isDark ? '#ffffff' : '#000000'
             }}>
-              📎
+              ⎋
             </div>
           </button>
 
@@ -1759,10 +1759,10 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: '20px',
+              fontSize: '16px',
               color: text.trim() ? (isDark ? '#ffffff' : '#000000') : (isDark ? '#666666' : '#cccccc')
             }}>
-              ➤
+              →
             </div>
           </button>
         </div>
