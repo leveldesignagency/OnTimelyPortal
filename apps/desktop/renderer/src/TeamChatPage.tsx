@@ -1695,17 +1695,15 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
               pointerEvents: 'auto'
             }}
           >
-            <div style={{
-              width: 30,
-              height: 30,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '16px',
-              color: isDark ? '#ffffff' : '#000000'
-            }}>
-              ☺
-            </div>
+            <img 
+              src="/icons/__smiley.svg" 
+              alt="emoji"
+              width={30}
+              height={30}
+              style={{ 
+                filter: isDark ? 'invert(1)' : 'brightness(0)'
+              }}
+            />
           </button>
 
           {/* Attachment Button */}
@@ -1722,17 +1720,21 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
               pointerEvents: 'auto'
             }}
           >
-            <div style={{
-              width: 30,
-              height: 30,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '18px',
-              color: isDark ? '#ffffff' : '#000000'
-            }}>
-              📎
-            </div>
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{
+                color: isDark ? '#ffffff' : '#000000'
+              }}
+            >
+              <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+            </svg>
           </button>
 
 
@@ -1753,17 +1755,15 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
               pointerEvents: 'auto'
             }}
           >
-            <div style={{
-              width: 30,
-              height: 30,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '18px',
-              color: text.trim() ? (isDark ? '#ffffff' : '#000000') : (isDark ? '#666666' : '#cccccc')
-            }}>
-              ➤
-            </div>
+            <img 
+              src="/icons/__send.svg" 
+              alt="send"
+              width={30}
+              height={30}
+              style={{ 
+                filter: isDark ? 'invert(1)' : 'brightness(0)'
+              }}
+            />
           </button>
         </div>
       </div>
