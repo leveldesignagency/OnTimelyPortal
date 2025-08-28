@@ -21,17 +21,18 @@
     "build:web": "cd renderer && npm run build:web",
     "build:electron": "cd renderer && npm run build:electron && cd .. && tsc main.ts --outDir dist-electron --target es2020 --module commonjs",
     "build:desktop": "npm run build:electron && electron-builder",
-    "dmg": "npm run build:electron && electron-builder --mac",
+    "dmg": "rm -f dist-electron/*.dmg && npm run build:electron && electron-builder --mac",
     "clean": "rm -rf dist dist-electron node_modules package-lock.json && cd renderer && rm -rf dist node_modules package-lock.json",
     "lint": "eslint .",
     "preview": "cd renderer && npm run preview"
   },
   "build": {
     "appId": "com.timely.app",
-    "productName": "Timely",
+    "productName": "OnTimelyEM",
     "directories": {
       "output": "dist-electron"
     },
+    "artifactName": "OnTimelyEM.${ext}",
     "files": [
       "dist/**/*",
       "dist-electron/main.js"
