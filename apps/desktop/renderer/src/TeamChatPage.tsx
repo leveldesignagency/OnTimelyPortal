@@ -148,8 +148,8 @@ let CURRENT_USER: User | null = null;
 // Enhanced theme system inspired by calendar design
 const themes = {
   light: {
-    bg: '#f8f9fa', // Light grey background to match calendar
-    panelBg: '#f8f9fa',
+    bg: '#ffffff', // White background for light mode
+    panelBg: '#ffffff',
     chatBg: 'rgba(255, 255, 255, 0.7)', // Glass effect
     text: '#1a1a1a',
     textSecondary: '#6c757d',
@@ -632,7 +632,7 @@ const SearchResultItem = ({ user, onClick, isDark }: { user: User, onClick: () =
       transition: 'background-color 0.2s'
     }}
     onMouseEnter={(e) => {
-      e.currentTarget.style.backgroundColor = isDark ? '#2a2a2a' : '#f8f9fa';
+      e.currentTarget.style.backgroundColor = isDark ? '#2a2a2a' : '#ffffff';
     }}
     onMouseLeave={(e) => {
       e.currentTarget.style.backgroundColor = isDark ? '#1e1e1e' : '#ffffff';
@@ -685,7 +685,7 @@ const TeamSearchResultItem = ({ team, onClick, isDark }: { team: Team, onClick: 
       transition: 'background-color 0.2s'
     }}
     onMouseEnter={(e) => {
-      e.currentTarget.style.backgroundColor = isDark ? '#2a2a2a' : '#f8f9fa';
+      e.currentTarget.style.backgroundColor = isDark ? '#2a2a2a' : '#ffffff';
     }}
     onMouseLeave={(e) => {
       e.currentTarget.style.backgroundColor = isDark ? '#1e1e1e' : '#ffffff';
@@ -1671,12 +1671,12 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
         {/* Icons Container - positioned absolutely over the input */}
         <div style={{
           position: 'absolute',
-          right: '16px',
+          right: '20px',
           top: '50%',
           transform: 'translateY(-50%)',
           display: 'flex',
           alignItems: 'center',
-          gap: '12px',
+          gap: '8px',
           pointerEvents: 'none'
         }}>
           {/* Emoji Button */}
@@ -1696,8 +1696,8 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
             <img 
               src="/svg/smiley-svgrepo-com.svg" 
               alt="emoji"
-              width={24}
-              height={24}
+              width={18}
+              height={18}
               style={{ 
                 filter: isDark ? 'invert(1)' : 'brightness(0)'
               }}
@@ -1721,8 +1721,8 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
             <img 
               src="/svg/paper-clip-svgrepo-com.svg" 
               alt="attachment"
-              width={24}
-              height={24}
+              width={18}
+              height={18}
               style={{ 
                 filter: isDark ? 'invert(1)' : 'brightness(0)'
               }}
@@ -1748,8 +1748,8 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
             <img 
               src="/svg/send-1-svgrepo-com.svg" 
               alt="send"
-              width={24}
-              height={24}
+              width={18}
+              height={18}
               style={{ 
                 filter: text.trim() ? (isDark ? 'invert(1)' : 'brightness(0)') : (isDark ? 'brightness(0.4)' : 'brightness(0.6)')
               }}
