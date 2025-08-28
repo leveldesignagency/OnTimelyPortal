@@ -1676,30 +1676,39 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
           transform: 'translateY(-50%)',
           display: 'flex',
           alignItems: 'center',
-          gap: '12px',
+          gap: '16px',
           pointerEvents: 'none'
         }}>
           {/* Emoji Button */}
-        <button
+          <button
             onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-          style={{
+            style={{
               background: 'none',
-            border: 'none',
+              border: 'none',
               cursor: 'pointer',
-              padding: '0',
+              padding: '8px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              pointerEvents: 'auto'
+              pointerEvents: 'auto',
+              borderRadius: '6px',
+              transition: 'background-color 0.2s ease'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
             }}
           >
             <img 
               src="/svg/smiley-svgrepo-com.svg" 
               alt="emoji"
-              width={30}
-              height={30}
+              width={24}
+              height={24}
               style={{ 
-                filter: isDark ? 'invert(1)' : 'brightness(0)'
+                filter: isDark ? 'invert(1)' : 'brightness(0)',
+                opacity: 0.9
               }}
             />
           </button>
@@ -1711,25 +1720,32 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
               background: 'none',
               border: 'none',
               cursor: 'pointer',
-              padding: '0',
+              padding: '8px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              pointerEvents: 'auto'
+              pointerEvents: 'auto',
+              borderRadius: '6px',
+              transition: 'background-color 0.2s ease'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
             }}
           >
             <img 
               src="/svg/paper-clip-svgrepo-com.svg" 
               alt="attachment"
-              width={30}
-              height={30}
+              width={24}
+              height={24}
               style={{ 
-                filter: isDark ? 'invert(1)' : 'brightness(0)'
+                filter: isDark ? 'invert(1)' : 'brightness(0)',
+                opacity: 0.9
               }}
             />
           </button>
-
-
 
           {/* Send Button */}
           <button 
@@ -1742,18 +1758,29 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              padding: '0',
-              opacity: text.trim() ? 1 : 0.5,
-              pointerEvents: 'auto'
+              padding: '8px',
+              opacity: text.trim() ? 1 : 0.4,
+              pointerEvents: 'auto',
+              borderRadius: '6px',
+              transition: 'background-color 0.2s ease'
+            }}
+            onMouseEnter={(e) => {
+              if (text.trim()) {
+                e.currentTarget.style.backgroundColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
             }}
           >
             <img 
               src="/svg/send-1-svgrepo-com.svg" 
               alt="send"
-              width={30}
-              height={30}
+              width={24}
+              height={24}
               style={{ 
-                filter: text.trim() ? (isDark ? 'invert(1)' : 'brightness(0)') : (isDark ? 'brightness(0.4)' : 'brightness(0.6)')
+                filter: isDark ? 'invert(1)' : 'brightness(0)',
+                opacity: text.trim() ? 0.9 : 0.5
               }}
             />
           </button>
