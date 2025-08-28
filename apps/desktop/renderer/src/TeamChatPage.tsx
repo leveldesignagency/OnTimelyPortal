@@ -1686,19 +1686,11 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
               background: 'none',
               border: 'none',
               cursor: 'pointer',
-              padding: '8px',
+              padding: '0',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              pointerEvents: 'auto',
-              borderRadius: '6px',
-              transition: 'background-color 0.2s ease'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'transparent';
+              pointerEvents: 'auto'
             }}
           >
             <div style={{
@@ -1722,19 +1714,11 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
               background: 'none',
               border: 'none',
               cursor: 'pointer',
-              padding: '8px',
+              padding: '0',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              pointerEvents: 'auto',
-              borderRadius: '6px',
-              transition: 'background-color 0.2s ease'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'transparent';
+              pointerEvents: 'auto'
             }}
           >
             <div style={{
@@ -1762,19 +1746,9 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              padding: '8px',
+              padding: '0',
               opacity: text.trim() ? 1 : 0.4,
-              pointerEvents: 'auto',
-              borderRadius: '6px',
-              transition: 'background-color 0.2s ease'
-            }}
-            onMouseEnter={(e) => {
-              if (text.trim()) {
-                e.currentTarget.style.backgroundColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)';
-              }
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'transparent';
+              pointerEvents: 'auto'
             }}
           >
             <div style={{
