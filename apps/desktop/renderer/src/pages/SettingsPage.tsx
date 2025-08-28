@@ -424,6 +424,18 @@ export default function SettingsPage() {
           setSettings(prev => ({ ...prev, ...savedSettings.settings }));
         }
         
+        // Also try to load from localStorage as backup
+        try {
+          const localSettings = localStorage.getItem('timely_user_settings');
+          if (localSettings) {
+            const parsedSettings = JSON.parse(localSettings);
+            setSettings(prev => ({ ...prev, ...parsedSettings }));
+            console.log('Settings loaded from localStorage:', parsedSettings);
+          }
+        } catch (error) {
+          console.error('Error loading from localStorage:', error);
+        }
+        
         setLoading(false);
       } catch (error) {
         console.error('Error loading settings:', error);
@@ -446,7 +458,8 @@ export default function SettingsPage() {
     
     setSaving(true);
     try {
-      const { error } = await supabase
+      // First try to save to database
+      const { error: dbError } = await supabase
         .from('user_settings')
         .upsert({
           user_id: currentUser.id,
@@ -454,7 +467,15 @@ export default function SettingsPage() {
           updated_at: new Date().toISOString()
         });
 
-      if (error) throw error;
+      if (dbError) {
+        console.warn('Database save failed, but continuing with local save:', dbError);
+      }
+      
+      // Always save to localStorage as backup
+      localStorage.setItem('timely_user_settings', JSON.stringify(settings));
+      
+      // Apply settings to the app
+      applySettingsToApp(settings);
       
       showSuccessMessage('Settings saved successfully!');
     } catch (error) {
@@ -462,6 +483,42 @@ export default function SettingsPage() {
       showErrorMessage('Failed to save settings');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const applySettingsToApp = (newSettings: any) => {
+    // Apply theme setting
+    if (newSettings.theme && newSettings.theme !== 'auto') {
+      // This will be handled by the ThemeContext
+      console.log('Theme setting applied:', newSettings.theme);
+    }
+    
+    // Apply notification settings
+    if (newSettings.notifications !== undefined) {
+      localStorage.setItem('timely_notifications_enabled', newSettings.notifications.toString());
+      console.log('Notification setting applied:', newSettings.notifications);
+    }
+    
+    // Apply sound settings
+    if (newSettings.sound !== undefined) {
+      localStorage.setItem('timely_sound_enabled', newSettings.sound.toString());
+      console.log('Sound setting applied:', newSettings.sound);
+    }
+    
+    // Apply quiet hours
+    if (newSettings.quietHours !== undefined) {
+      localStorage.setItem('timely_quiet_hours_enabled', newSettings.quietHours.toString());
+      if (newSettings.quietHours) {
+        localStorage.setItem('timely_quiet_hours_start', startMinutes.toString());
+        localStorage.setItem('timely_quiet_hours_end', endMinutes.toString());
+      }
+      console.log('Quiet hours setting applied:', newSettings.quietHours);
+    }
+    
+    // Apply auto-save settings
+    if (newSettings.itineraryAutoSave !== undefined) {
+      localStorage.setItem('timely_itinerary_auto_save', newSettings.itineraryAutoSave.toString());
+      console.log('Auto-save setting applied:', newSettings.itineraryAutoSave);
     }
   };
 

@@ -128,6 +128,13 @@ const UpdateManager: React.FC<UpdateManagerProps> = ({ isDark }) => {
           setUpdateAvailable(null);
           setLastChecked(new Date());
         }
+        
+        // Show success message for web mode
+        if (hasUpdate) {
+          setError(null);
+        } else {
+          setError('No updates available. You are running the latest version.');
+        }
       }
     } catch (err) {
       setError('Failed to check for updates');
