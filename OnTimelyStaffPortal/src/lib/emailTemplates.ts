@@ -1,7 +1,14 @@
 import { Resend } from 'resend';
 
-// Initialize Resend
-const resend = new Resend(process.env.RESEND_API_KEY);
+// TODO: Get your Resend API key from:
+// 1. Go to https://resend.com/api-keys
+// 2. Copy your API key (starts with 're_')
+// 3. Replace the placeholder below
+// 4. Or add VITE_RESEND_API_KEY to your .env.local file and use: import.meta.env.VITE_RESEND_API_KEY
+
+// Initialize Resend - Try Vite env first, fallback to hardcoded key
+const resendApiKey = import.meta.env.VITE_RESEND_API_KEY || 're_1234567890abcdef'; // TODO: Replace with your actual API key
+const resend = new Resend(resendApiKey);
 
 export interface EmailData {
   email: string;
