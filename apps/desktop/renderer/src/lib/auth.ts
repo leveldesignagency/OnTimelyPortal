@@ -461,20 +461,74 @@ export const getCompanyEvents = async (companyId: string): Promise<Event[]> => {
       return []
     }
 
-    const { data, error } = await supabase
-      .from('events')
-      .select('*')
-      .eq('company_id', companyId)
-      .order('from', { ascending: true })
+    // First get team memberships for the user
+    const { data: teamMemberships, error: teamMembershipsError } = await supabase
+      .from('team_members')
+      .select('team_id')
+      .eq('user_id', currentUser.id)
 
-    if (error) {
-      console.error('❌ Failed to fetch company events:', error)
+    if (teamMembershipsError) {
+      console.error('❌ Failed to fetch team memberships:', teamMembershipsError)
       return []
     }
 
-    console.log(`✅ Successfully loaded ${data?.length || 0} events for company ${companyId}`)
-    console.log(`📅 Events data:`, data)
-    return data || []
+    const teamIds = (teamMemberships || []).map(tm => tm.team_id)
+    
+    // Get events created by the user
+    const { data: userCreatedEvents, error: userEventsError } = await supabase
+      .from('events')
+      .select('*')
+      .eq('company_id', companyId)
+      .eq('created_by', currentUser.id)
+
+    if (userEventsError) {
+      console.error('❌ Failed to fetch user created events:', userEventsError)
+      return []
+    }
+
+    // Get events the user is assigned to via teams
+    let teamAssignedEvents: Event[] = []
+    if (teamIds.length > 0) {
+      const { data: teamEvents, error: teamEventsError } = await supabase
+        .from('team_events')
+        .select('event_id')
+        .in('team_id', teamIds)
+
+      if (teamEventsError) {
+        console.error('❌ Failed to fetch team events:', teamEventsError)
+      } else {
+        const eventIds = (teamEvents || []).map(te => te.event_id)
+        
+        if (eventIds.length > 0) {
+          const { data: assignedEvents, error: assignedEventsError } = await supabase
+            .from('events')
+            .select('*')
+            .eq('company_id', companyId)
+            .in('id', eventIds)
+
+          if (assignedEventsError) {
+            console.error('❌ Failed to fetch assigned events:', assignedEventsError)
+          } else {
+            teamAssignedEvents = assignedEvents || []
+          }
+        }
+      }
+    }
+
+    // Merge and deduplicate events
+    const allEvents = [...(userCreatedEvents || []), ...teamAssignedEvents]
+    const dedupedEvents = Object.values(
+      allEvents.reduce((acc: Record<string, Event>, event: Event) => {
+        acc[event.id] = event
+        return acc
+      }, {})
+    ) as Event[]
+
+    console.log(`✅ User ${currentUser.email} can see ${dedupedEvents.length} events:`, 
+      dedupedEvents.map((e: Event) => ({ id: e.id, name: e.name, created_by: e.created_by }))
+    )
+    
+    return dedupedEvents
   } catch (error) {
     console.error('Failed to load company events:', error)
     return []
