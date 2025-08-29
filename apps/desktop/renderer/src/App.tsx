@@ -1,4 +1,4 @@
-import React, { useState, useContext, useEffect } from 'react';
+import React, { useState, useContext, useEffect, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import CreateEventPage from './CreateEventPage';
 import EventDashboardPage from './EventDashboardPage';
@@ -19,6 +19,8 @@ import ResetPasswordPage from './pages/ResetPasswordPage';
 import ResetPasswordConfirmPage from './pages/ResetPasswordConfirmPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import WelcomeScreen from './components/WelcomeScreen';
+import ErrorBoundary from './components/ErrorBoundary';
+import SuspenseFallback from './components/SuspenseFallback';
 import { ThemeProvider, ThemeContext } from './ThemeContext';
 import { getCurrentUser, getCompanyEvents, clearCachedAuth, migrateLegacyUserToSupabase } from './lib/auth';
 import { supabase } from './lib/supabase';
@@ -474,46 +476,50 @@ const AppContent = () => {
         />
       )}
       <main style={mainContentStyle}>
-        <Routes>
-          {/* Public routes - NO SIDEBAR */}
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/reset-password" element={<ResetPasswordPage />} />
-          <Route path="/reset-password-confirm" element={<ResetPasswordConfirmPage />} />
-          
-          {/* Protected routes - WITH SIDEBAR */}
-          <Route path="/" element={<ProtectedRoute><Navigate to="/dashboard" replace /></ProtectedRoute>} />
-          <Route path="/dashboard" element={<ProtectedRoute><Dashboard events={events} /></ProtectedRoute>} />
-          <Route path="/create-event" element={<ProtectedRoute><CreateEventPage onCreate={handleCreateEvent} /></ProtectedRoute>} />
-          <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
-          <Route path="/event/:id" element={<ProtectedRoute><EventDashboardPage events={events} onDeleteEvent={handleDeleteEvent} /></ProtectedRoute>} />
-          <Route path="/event/:id/add-guests" element={<ProtectedRoute><CreateGuests /></ProtectedRoute>} />
-          <Route path="/event/:eventId/guests/edit/:guestIndex" element={<ProtectedRoute><CreateGuests /></ProtectedRoute>} />
-          <Route path="/event/:eventId/itinerary/create" element={<ProtectedRoute><CreateItinerary /></ProtectedRoute>} />
-          <Route path="/event/:eventId/itinerary/edit/:itineraryId" element={<ProtectedRoute><CreateItinerary /></ProtectedRoute>} />
-          <Route path="/event/:eventId/modules" element={<ProtectedRoute><ModulesPage /></ProtectedRoute>} />
-          <Route path="/realtime-test" element={<ProtectedRoute><RealtimeTestPage /></ProtectedRoute>} />
-          <Route path="/teams" element={<ProtectedRoute><TeamsLayout /></ProtectedRoute>}>
-            <Route index element={<Navigate to="chat" replace />} />
-            <Route path="chat" element={<TeamChatPage />} />
-            <Route path="calendar" element={<CalendarPage />} />
-            <Route path="canvas" element={<CanvasPage />} />
-            <Route path="create" element={<CreateTeamPage />} />
-          </Route>
-          <Route path="/guest-form/:eventId" element={<ProtectedRoute><GuestFormPage /></ProtectedRoute>} />
-          <Route path="/guest-form/:eventId/edit/:guestIndex" element={<ProtectedRoute><GuestFormPage /></ProtectedRoute>} />
-          <Route path="/guest-forms/:eventId" element={<ProtectedRoute><GuestFormsPage /></ProtectedRoute>} />
-          <Route path="/link-itineraries/:id" element={<LinkItinerariesPage />} />
-          <Route path="/link-itineraries/:id/assign-overview" element={<AssignOverviewPage />} />
-          <Route path="/event-portal-management" element={<ProtectedRoute><EventPortalManagementPage /></ProtectedRoute>} />
-          <Route path="/event-portal-management/:eventId" element={<ProtectedRoute><EventPortalManagementPage /></ProtectedRoute>} />
-          <Route path="/event-homepage-builder" element={<ProtectedRoute><EventHomepageBuilderPage /></ProtectedRoute>} />
-          <Route path="/guest-chat" element={<ProtectedRoute><GuestChatPage /></ProtectedRoute>} />
-          <Route path="/export-report/:eventId" element={<ProtectedRoute><ExportReportPage /></ProtectedRoute>} />
-          <Route path="/event/:id/notification-settings" element={<ProtectedRoute><NotificationSettingsPage /></ProtectedRoute>} />
-          <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
-          {/* Public form preview route (dev only; prod served on separate host) */}
-          <Route path="/forms/:token" element={<React.Suspense fallback={<div/>}><PublicFormPage /></React.Suspense>} />
-        </Routes>
+        <ErrorBoundary>
+          <Suspense fallback={<SuspenseFallback />}>
+            <Routes>
+              {/* Public routes - NO SIDEBAR */}
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/reset-password" element={<ResetPasswordPage />} />
+              <Route path="/reset-password-confirm" element={<ResetPasswordConfirmPage />} />
+              
+              {/* Protected routes - WITH SIDEBAR */}
+              <Route path="/" element={<ProtectedRoute><Navigate to="/dashboard" replace /></ProtectedRoute>} />
+              <Route path="/dashboard" element={<ProtectedRoute><Dashboard events={events} /></ProtectedRoute>} />
+              <Route path="/create-event" element={<ProtectedRoute><CreateEventPage onCreate={handleCreateEvent} /></ProtectedRoute>} />
+              <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
+              <Route path="/event/:id" element={<ProtectedRoute><EventDashboardPage events={events} onDeleteEvent={handleDeleteEvent} /></ProtectedRoute>} />
+              <Route path="/event/:id/add-guests" element={<ProtectedRoute><CreateGuests /></ProtectedRoute>} />
+              <Route path="/event/:eventId/guests/edit/:guestIndex" element={<ProtectedRoute><CreateGuests /></ProtectedRoute>} />
+              <Route path="/event/:eventId/itinerary/create" element={<ProtectedRoute><CreateItinerary /></ProtectedRoute>} />
+              <Route path="/event/:eventId/itinerary/edit/:itineraryId" element={<ProtectedRoute><CreateItinerary /></ProtectedRoute>} />
+              <Route path="/event/:eventId/modules" element={<ProtectedRoute><ModulesPage /></ProtectedRoute>} />
+              <Route path="/realtime-test" element={<ProtectedRoute><RealtimeTestPage /></ProtectedRoute>} />
+              <Route path="/teams" element={<ProtectedRoute><TeamsLayout /></ProtectedRoute>}>
+                <Route index element={<Navigate to="chat" replace />} />
+                <Route path="chat" element={<TeamChatPage />} />
+                <Route path="calendar" element={<CalendarPage />} />
+                <Route path="canvas" element={<CanvasPage />} />
+                <Route path="create" element={<CreateTeamPage />} />
+              </Route>
+              <Route path="/guest-form/:eventId" element={<ProtectedRoute><GuestFormPage /></ProtectedRoute>} />
+              <Route path="/guest-form/:eventId/edit/:guestIndex" element={<ProtectedRoute><GuestFormPage /></ProtectedRoute>} />
+              <Route path="/guest-forms/:eventId" element={<ProtectedRoute><GuestFormsPage /></ProtectedRoute>} />
+              <Route path="/link-itineraries/:id" element={<LinkItinerariesPage />} />
+              <Route path="/link-itineraries/:id/assign-overview" element={<AssignOverviewPage />} />
+              <Route path="/event-portal-management" element={<ProtectedRoute><EventPortalManagementPage /></ProtectedRoute>} />
+              <Route path="/event-portal-management/:eventId" element={<ProtectedRoute><EventPortalManagementPage /></ProtectedRoute>} />
+              <Route path="/event-homepage-builder" element={<ProtectedRoute><EventHomepageBuilderPage /></ProtectedRoute>} />
+              <Route path="/guest-chat" element={<ProtectedRoute><GuestChatPage /></ProtectedRoute>} />
+              <Route path="/export-report/:eventId" element={<ProtectedRoute><ExportReportPage /></ProtectedRoute>} />
+              <Route path="/event/:id/notification-settings" element={<ProtectedRoute><NotificationSettingsPage /></ProtectedRoute>} />
+              <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+              {/* Public form preview route (dev only; prod served on separate host) */}
+              <Route path="/forms/:token" element={<React.Suspense fallback={<SuspenseFallback />}><PublicFormPage /></React.Suspense>} />
+            </Routes>
+          </Suspense>
+        </ErrorBoundary>
       </main>
     </div>
   );
