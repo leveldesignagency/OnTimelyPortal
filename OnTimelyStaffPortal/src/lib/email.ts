@@ -237,20 +237,31 @@ export const emailService = {
     }
   },
 
-  // Send password reset email using the same flow as desktop app
-  async sendPasswordResetEmail(email: string, name: string, companyId?: string): Promise<void> {
-    try {
-      // Use the same password reset flow as your desktop app
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: 'https://dashboard.ontimely.co.uk/reset-password-confirm'
-      })
+        // Send password reset email using the same flow as desktop app
+      async sendPasswordResetEmail(email: string, name: string, companyId?: string): Promise<void> {
+        try {
+          // First check if user exists in database
+          const { data: existingUser, error: userCheckError } = await supabase
+            .from('users')
+            .select('id')
+            .eq('email', email)
+            .single()
 
-      if (error) throw error
+          if (userCheckError || !existingUser) {
+            throw new Error('Email not found in database')
+          }
 
-      console.log(`Password reset email sent successfully to ${email}`)
-    } catch (error) {
-      console.error('Error sending password reset email:', error)
-      throw error
-    }
-  }
+          // Use the same password reset flow as your desktop app
+          const { error } = await supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: 'https://dashboard.ontimely.co.uk/reset-password.html'
+          })
+
+          if (error) throw error
+
+          console.log(`Password reset email sent successfully to ${email}`)
+        } catch (error) {
+          console.error('Error sending password reset email:', error)
+          throw error
+        }
+      }
 }
