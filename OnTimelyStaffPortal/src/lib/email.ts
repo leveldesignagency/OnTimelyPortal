@@ -122,7 +122,7 @@ export const emailService = {
   async sendWelcomeEmailViaSupabase(data: WelcomeEmailData): Promise<void> {
     try {
       // Generate confirmation URL with token
-      const confirmationUrl = `https://dashboard.ontimely.co.uk/confirm-account?token=${encodeURIComponent(data.email)}&type=signup`;
+      const confirmationUrl = `https://ontimely.co.uk/confirm-account?token=${encodeURIComponent(data.email)}&type=signup`;
       
       // Send professional confirmation email via Resend
       await sendAccountConfirmationEmail({
@@ -138,7 +138,7 @@ export const emailService = {
       
       // Fallback to simple email template
       try {
-        const confirmationUrl = `https://dashboard.ontimely.co.uk/confirm-account?token=${encodeURIComponent(data.email)}&type=signup`;
+        const confirmationUrl = `https://ontimely.co.uk/confirm-account?token=${encodeURIComponent(data.email)}&type=signup`;
         await sendSimpleConfirmationEmail({
           email: data.email,
           name: data.name,
