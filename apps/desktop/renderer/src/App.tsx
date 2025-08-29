@@ -20,7 +20,7 @@ import ResetPasswordConfirmPage from './pages/ResetPasswordConfirmPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import WelcomeScreen from './components/WelcomeScreen';
 import { ThemeProvider, ThemeContext } from './ThemeContext';
-import { getCurrentUser, getCompanyEvents, clearCachedAuth } from './lib/auth';
+import { getCurrentUser, getCompanyEvents, clearCachedAuth, migrateLegacyUserToSupabase } from './lib/auth';
 import { supabase } from './lib/supabase';
 import { getEvents, createEvent, Event, getUserTeamEvents } from './lib/supabase';
 import LinkItinerariesPage from './pages/LinkItinerariesPage';
@@ -351,19 +351,73 @@ const AppContent = () => {
       if (!user) {
         throw new Error('User not authenticated');
       }
-      const newEvent = await createEvent({
-        ...eventData,
-        company_id: user.company_id,
-        created_by: user.id,
-        name: eventData.name || 'Untitled Event',
-        from: eventData.from || new Date().toISOString(),
-        to: eventData.to || new Date().toISOString(),
-        status: eventData.status || 'draft'
-      });
-      setEvents(prev => [newEvent, ...prev]);
-      return newEvent;
+      
+      // Check if we're using legacy authentication (localStorage) or Supabase auth
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      
+      console.log('🔍 Auth check - Supabase user:', authUser?.id, authUser?.email);
+      console.log('🔍 Profile user:', user.id, user.email);
+      
+      if (authUser && authUser.id) {
+        // Using Supabase auth - use auth user ID for RLS
+        console.log('✅ Using Supabase auth - authUser.id:', authUser.id);
+        const newEvent = await createEvent({
+          ...eventData,
+          company_id: user.company_id,
+          created_by: authUser.id,
+          name: eventData.name || 'Untitled Event',
+          from: eventData.from || new Date().toISOString(),
+          to: eventData.to || new Date().toISOString(),
+          status: eventData.status || 'draft'
+        });
+        setEvents(prev => [newEvent, ...prev]);
+        return newEvent;
+      } else {
+        console.log('⚠️ No Supabase auth user found, using fallback');
+        // Using legacy authentication - we need to handle this differently
+        console.log('⚠️ Legacy user detected, attempting to migrate to Supabase auth...');
+        
+        // Try to migrate the legacy user to proper Supabase auth
+        // We'll need their password to do this - for now, we'll try to create the event
+        // and if it fails, we'll provide a helpful error message
+        
+        try {
+          // First, try to create the event with the current approach
+          const eventPayload = {
+            ...eventData,
+            company_id: user.company_id,
+            created_by: user.id, // Use profile ID as fallback
+            name: eventData.name || 'Untitled Event',
+            from: eventData.from || new Date().toISOString(),
+            to: eventData.to || new Date().toISOString(),
+            status: eventData.status || 'draft'
+          };
+          
+          console.log('🎯 Attempting to create event with payload:', eventPayload);
+          console.log('🎯 User details:', { id: user.id, company_id: user.company_id, email: user.email });
+          
+          const newEvent = await createEvent(eventPayload);
+          setEvents(prev => [newEvent, ...prev]);
+          return newEvent;
+        } catch (createError) {
+          console.error('Failed to create event with legacy user:', createError);
+          console.error('CreateError type:', typeof createError);
+          console.error('CreateError message:', createError?.message);
+          console.error('CreateError details:', createError);
+          
+          // If RLS still blocks us, provide helpful guidance
+          if (createError?.message && createError.message.includes('row-level security policy')) {
+            throw new Error(`Event creation failed due to authentication system mismatch. Your account needs to be migrated to the new authentication system. Please contact support or try logging out and back in with your password.`);
+          }
+          
+          throw new Error(`Event creation failed for legacy user: ${createError?.message || JSON.stringify(createError)}`);
+        }
+      }
     } catch (error) {
       console.error('Failed to create event:', error);
+      console.error('Error type:', typeof error);
+      console.error('Error message:', error?.message);
+      console.error('Error details:', error);
       throw error;
     }
   };

@@ -35,10 +35,38 @@ export const emailService = {
         }
       }
 
-      // Create user profile in your users table FIRST using admin client (bypasses RLS)
+      // FIRST: Create the Supabase Auth user (unconfirmed)
+      console.log('Creating Supabase Auth user...')
+      const { data: authData, error: authError } = await supabaseAdmin.auth.signUp({
+        email: userData.email,
+        password: userData.password,
+        options: {
+          data: {
+            name: userData.name,
+            company_id: userData.company_id,
+            role: userData.role || 'user',
+            status: userData.status || 'offline'
+          },
+          emailRedirectTo: 'https://dashboard.ontimely.co.uk/confirm-email'
+        }
+      })
+
+      if (authError) {
+        console.error('Supabase Auth creation failed:', authError)
+        throw authError
+      }
+
+      if (!authData.user) {
+        throw new Error('Supabase Auth user creation succeeded but no user data returned')
+      }
+
+      console.log('Supabase Auth user created successfully:', authData.user.id)
+
+      // SECOND: Create user profile using the Supabase Auth ID
       const { data: profileData, error: profileError } = await supabaseAdmin
         .from('users')
         .insert([{
+          id: authData.user.id, // Use the Supabase Auth ID here!
           email: userData.email,
           name: userData.name,
           company_id: userData.company_id,
@@ -49,46 +77,28 @@ export const emailService = {
           avatar_url: null,
           description: null,
           company_role: null
-          // id, created_at, updated_at, last_seen are handled by defaults/triggers
+          // created_at, updated_at, last_seen are handled by defaults/triggers
         }])
         .select()
         .single()
 
       if (profileError) {
         console.error('Profile creation failed:', profileError)
+        // If profile creation fails, we should clean up the auth user
+        try {
+          await supabaseAdmin.auth.admin.deleteUser(authData.user.id)
+          console.log('Cleaned up Supabase Auth user after profile creation failure')
+        } catch (cleanupError) {
+          console.warn('Failed to clean up Supabase Auth user:', cleanupError)
+        }
         throw profileError
       }
 
-      console.log('User profile created successfully:', profileData)
-
-      // Now create the Supabase Auth user (this will be rate limited but profile already exists)
-      try {
-        const { data: authData, error: authError } = await supabaseAdmin.auth.signUp({
-          email: userData.email,
-          password: userData.password,
-          options: {
-            data: {
-              name: userData.name,
-              company_id: userData.company_id,
-              role: userData.role || 'user',
-              status: userData.status || 'offline'
-            }
-          }
-        })
-
-        if (authError) {
-          console.warn('Supabase Auth creation failed (rate limited), but profile exists:', authError)
-          // Don't throw - user profile was created successfully
-        } else {
-          console.log('Supabase Auth user created successfully:', authData)
-        }
-      } catch (authError) {
-        console.warn('Supabase Auth creation failed, but profile exists:', authError)
-        // Don't throw - user profile was created successfully
-      }
+      console.log('User profile created successfully with matching ID:', profileData.id)
 
       // Try to send welcome email, but don't fail if it doesn't work
       try {
+        // Send confirmation email for the unconfirmed user
         await this.sendWelcomeEmailViaSupabase({
           email: userData.email,
           name: userData.name,
@@ -100,7 +110,7 @@ export const emailService = {
         // Don't throw this error - user creation succeeded
       }
 
-      return { profile: profileData, auth: null } // Return profile data for UI
+      return { profile: profileData, auth: authData.user } // Return both profile and auth data for UI
     } catch (error) {
       console.error('Error creating user with auth:', error)
       throw error

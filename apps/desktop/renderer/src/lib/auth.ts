@@ -100,25 +100,45 @@ export const logout = async (): Promise<void> => {
   }
 }
 
-// Restored working getCurrentUser - check Supabase session
+// Restored working getCurrentUser - check Supabase session first, fallback to localStorage
 export const getCurrentUser = async (): Promise<User | null> => {
   try {
-    // Check Supabase auth session
+    // First, try to get Supabase auth session
     const { data: { user: authUser } } = await supabase.auth.getUser();
-    if (!authUser || !authUser.email) return null;
     
-    // If we have a Supabase user, fetch their profile
-    const { data: userProfile, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('email', authUser.email)
-      .single();
-      
-    if (error || !userProfile) {
-      console.error('Failed to fetch user profile:', error);
-      return null;
+    if (authUser && authUser.email) {
+      console.log('🔐 Supabase auth session found for:', authUser.email);
+      // If we have a Supabase user, fetch their profile
+      const { data: userProfile, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', authUser.email)
+        .single();
+        
+      if (error || !userProfile) {
+        console.error('Failed to fetch user profile:', error);
+        return null;
+      }
+      console.log('✅ User profile fetched from Supabase:', userProfile.id);
+      return userProfile;
     }
-    return userProfile;
+    
+    console.log('⚠️ No Supabase auth session found, checking localStorage...');
+    // Fallback: check localStorage for legacy authentication
+    const storedUser = localStorage.getItem('currentUser');
+    if (storedUser) {
+      try {
+        const userProfile = JSON.parse(storedUser);
+        console.log('✅ Using legacy authentication from localStorage');
+        return userProfile;
+      } catch (parseError) {
+        console.error('Failed to parse stored user:', parseError);
+        localStorage.removeItem('currentUser');
+      }
+    }
+    
+    console.log('❌ No authentication found');
+    return null;
   } catch (error) {
     console.error('Failed to get current user:', error);
     return null;
@@ -181,6 +201,59 @@ export const createSupabaseAuthUsers = async (): Promise<void> => {
     console.error('Failed to create Supabase auth users:', error)
   }
 }
+
+// Function to migrate a legacy user to Supabase auth
+export const migrateLegacyUserToSupabase = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+  try {
+    console.log(`🔄 Attempting to migrate legacy user: ${email}`);
+    
+    // First, check if user already exists in Supabase auth
+    const { data: existingUser, error: checkError } = await supabase.auth.signInWithPassword({
+      email,
+      password
+    });
+    
+    if (existingUser.user) {
+      console.log(`✅ User ${email} already has Supabase auth session`);
+      return { success: true };
+    }
+    
+    // If not, try to create a new Supabase auth user
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: undefined // Skip email confirmation for development
+      }
+    });
+    
+    if (error) {
+      if (error.message.includes('already registered')) {
+        // User exists but password might be wrong, try to sign in
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+          email,
+          password
+        });
+        
+        if (signInError) {
+          return { success: false, error: `Failed to authenticate existing user: ${signInError.message}` };
+        }
+        
+        console.log(`✅ Successfully authenticated existing Supabase user: ${email}`);
+        return { success: true };
+      }
+      
+      return { success: false, error: `Failed to create Supabase auth user: ${error.message}` };
+    }
+    
+    console.log(`✅ Successfully created Supabase auth user for: ${email}`);
+    return { success: true };
+    
+  } catch (error) {
+    console.error('Failed to migrate legacy user:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error during migration' };
+  }
+};
 
 export const updateUserStatus = async (userId: string, status: User['status']): Promise<void> => {
   try {

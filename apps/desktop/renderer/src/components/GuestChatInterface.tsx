@@ -738,11 +738,9 @@ const MessageBubble = ({ message, isDark, currentUserEmail, onReply, onReact, me
                 style={{
                   background: 'transparent',
                   border: 'none',
-                  fontSize: '16px',
                   cursor: 'pointer',
                   padding: '6px',
                   borderRadius: '4px',
-                  color: isDark ? '#ffffff' : '#1a1a1a',
                   transition: 'background 0.2s ease'
                 }}
                 onMouseEnter={e => {
@@ -753,7 +751,13 @@ const MessageBubble = ({ message, isDark, currentUserEmail, onReply, onReact, me
                 }}
                 title="React"
               >
-                😀
+                <img 
+                  src="/svg/smiley-svgrepo-com.svg" 
+                  alt="emoji"
+                  width={16}
+                  height={16}
+                  style={{ filter: isDark ? 'invert(1)' : 'brightness(0)' }}
+                />
               </button>
             </div>
           )}
@@ -796,11 +800,13 @@ const MessageBubble = ({ message, isDark, currentUserEmail, onReply, onReact, me
                   style={{
                     background: 'transparent',
                     border: 'none',
-                    fontSize: '18px',
                     cursor: 'pointer',
-                    padding: '4px',
+                    padding: '8px',
                     borderRadius: '4px',
-                    transition: 'background 0.2s ease'
+                    transition: 'background 0.2s ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
                   }}
                   onMouseEnter={e => {
                     e.currentTarget.style.background = isDark ? '#404040' : '#f8f9fa';
@@ -809,7 +815,7 @@ const MessageBubble = ({ message, isDark, currentUserEmail, onReply, onReact, me
                     e.currentTarget.style.background = 'transparent';
                   }}
                 >
-                  {iconItem.icon}
+                  <span style={{ fontSize: '20px' }}>{iconItem.icon}</span>
                 </button>
               ))}
             </div>
@@ -1130,14 +1136,18 @@ const MessageInput = ({ onSendMessage, isDark, sending, broadcastTyping, editing
         padding: '20px 24px',
         position: 'relative'
       }}>
-        {/* Single Input Field */}
-        <input
-          type="text"
+        {/* Single Input Field (now a textarea) */}
+        <textarea
           placeholder={editingMessageId ? "Edit your message..." : selectedFile ? "Add a caption (optional)..." : "Type a message..."}
           value={text}
           onChange={(e) => { setText(e.target.value); broadcastTyping(); }}
-          onKeyPress={handleKeyPress}
+          onKeyDown={handleKeyPress}
           disabled={sending || uploading}
+          onInput={(e) => {
+            const target = e.target as HTMLTextAreaElement;
+            target.style.height = 'auto';
+            target.style.height = Math.min(target.scrollHeight, 120) + 'px';
+          }}
           style={{
             width: '100%',
             border: `1px solid ${isDark ? '#404040' : '#dee2e6'}`,
@@ -1145,23 +1155,21 @@ const MessageInput = ({ onSendMessage, isDark, sending, broadcastTyping, editing
             color: isDark ? '#ffffff' : '#000000',
             outline: 'none',
             fontSize: '15px',
+            lineHeight: '20px',
             padding: '14px 150px 14px 20px',
             borderRadius: '12px',
-            boxShadow: isDark ? 'inset 0 2px 4px rgba(0,0,0,0.3)' : 'inset 0 2px 4px rgba(0,0,0,0.1)',
             position: 'relative',
-            backdropFilter: 'blur(10px)',
-            transition: 'all 0.2s ease',
+            transition: 'border-color 0.2s ease',
+            resize: 'none',
+            overflowY: 'auto',
+            maxHeight: '120px',
             opacity: (sending || uploading) ? 0.7 : 1
           }}
           onFocus={e => {
             e.currentTarget.style.borderColor = isDark ? '#ffffff' : '#007bff';
-            e.currentTarget.style.boxShadow = isDark 
-              ? '0 0 0 3px rgba(255,255,255,0.1), inset 0 2px 4px rgba(0,0,0,0.3)' 
-              : '0 0 0 3px rgba(0,123,255,0.1), inset 0 2px 4px rgba(0,0,0,0.1)';
           }}
           onBlur={e => {
             e.currentTarget.style.borderColor = isDark ? '#404040' : '#dee2e6';
-            e.currentTarget.style.boxShadow = isDark ? 'inset 0 2px 4px rgba(0,0,0,0.3)' : 'inset 0 2px 4px rgba(0,0,0,0.1)';
           }}
         />
 
@@ -1169,7 +1177,7 @@ const MessageInput = ({ onSendMessage, isDark, sending, broadcastTyping, editing
         <div style={{
           position: 'absolute',
           right: '44px',
-          top: '37%',
+          top: '50%',
           transform: 'translateY(-50%)',
           display: 'flex',
           alignItems: 'center',
@@ -1189,17 +1197,19 @@ const MessageInput = ({ onSendMessage, isDark, sending, broadcastTyping, editing
               alignItems: 'center',
               justifyContent: 'center',
               pointerEvents: 'auto',
-              opacity: (sending || uploading) ? 0.5 : 1
+              opacity: (sending || uploading) ? 0.5 : 1,
+              boxShadow: 'none',
+              outline: 'none'
             }}
             title="Attach file"
           >
             <img 
-              src="/icons/__attach.svg" 
+              src="/svg/paper-clip-svgrepo-com.svg" 
               alt="attach"
-              width={30}
-              height={30}
+              width={18}
+              height={18}
               style={{ 
-                filter: isDark ? 'invert(1)' : 'brightness(0) invert(1)'
+                filter: isDark ? 'invert(1)' : 'brightness(0)'
               }}
             />
           </button>
@@ -1217,16 +1227,18 @@ const MessageInput = ({ onSendMessage, isDark, sending, broadcastTyping, editing
               alignItems: 'center',
               justifyContent: 'center',
               pointerEvents: 'auto',
-              opacity: sending ? 0.5 : 1
+              opacity: sending ? 0.5 : 1,
+              boxShadow: 'none',
+              outline: 'none'
             }}
           >
             <img 
-              src="/icons/__smiley.svg" 
+              src="/svg/smiley-svgrepo-com.svg" 
               alt="emoji"
-              width={30}
-              height={30}
+              width={18}
+              height={18}
               style={{ 
-                filter: isDark ? 'invert(1)' : 'brightness(0) invert(1)'
+                filter: isDark ? 'invert(1)' : 'brightness(0)'
               }}
             />
           </button>
@@ -1244,7 +1256,9 @@ const MessageInput = ({ onSendMessage, isDark, sending, broadcastTyping, editing
               justifyContent: 'center',
               padding: '0',
               opacity: ((text.trim() || selectedFile) && !sending && !uploading) ? 1 : 0.5,
-              pointerEvents: 'auto'
+              pointerEvents: 'auto',
+              boxShadow: 'none',
+              outline: 'none'
             }}
           >
             {uploading ? (
@@ -1258,12 +1272,12 @@ const MessageInput = ({ onSendMessage, isDark, sending, broadcastTyping, editing
               }} />
             ) : (
               <img 
-                src="/icons/__send.svg" 
+                src="/svg/send-1-svgrepo-com.svg" 
                 alt="send"
-                width={30}
-                height={30}
+                width={18}
+                height={18}
                 style={{ 
-                  filter: isDark ? 'invert(1)' : 'brightness(0) invert(1)'
+                  filter: isDark ? 'invert(1)' : 'brightness(0)'
                 }}
               />
             )}

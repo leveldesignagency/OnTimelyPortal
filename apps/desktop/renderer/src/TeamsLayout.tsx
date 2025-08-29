@@ -81,8 +81,8 @@ export default function TeamsLayout() {
       
       <aside style={{
         width: '80px',
-        background: '#2d2d2d', // Same grey as main sidebar
-        borderLeft: `1px solid ${isDark ? '#333' : '#e0e0e0'}`,
+        background: '#2d2d2d', // Same grey as main sidebar - consistent in both themes
+        borderLeft: `1px solid #333`,
         padding: '20px 12px',
         display: 'flex',
         flexDirection: 'column',
@@ -103,32 +103,49 @@ export default function TeamsLayout() {
           zIndex: 10001,
           pointerEvents: 'auto'
         }}>
-          {teamNavLinks.map(({ to, label, icon }) => (
-            <button
-              key={to}
-              onClick={() => {
-                console.log('TeamsLayout: Navigating to:', to);
-                navigate(to);
-              }}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                cursor: 'pointer',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                marginBottom: '16px',
-                padding: '8px',
-                color: isDark ? '#ffffff' : '#333333',
-                boxShadow: 'none',
-                outline: 'none',
-                borderRadius: '0'
-              }}
-            >
-              {icon}
-            </button>
-          ))}
+          {teamNavLinks.map(({ to, label, icon }) => {
+            const isActive = location.pathname === to;
+            return (
+              <button
+                key={to}
+                onClick={() => {
+                  console.log('TeamsLayout: Navigating to:', to);
+                  navigate(to);
+                }}
+                style={{
+                  background: isActive ? (isDark ? '#404040' : '#e0e0e0') : 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginBottom: '16px',
+                  padding: '8px',
+                  color: isActive ? '#00a884' : (isDark ? '#ffffff' : '#ffffff'),
+                  boxShadow: 'none',
+                  outline: 'none',
+                  borderRadius: '8px',
+                  transition: 'all 0.2s ease',
+                  transform: isActive ? 'scale(1.1)' : 'scale(1)'
+                }}
+                onMouseEnter={e => {
+                  if (!isActive) {
+                    e.currentTarget.style.background = isDark ? '#404040' : '#e0e0e0';
+                    e.currentTarget.style.transform = 'scale(1.05)';
+                  }
+                }}
+                onMouseLeave={e => {
+                  if (!isActive) {
+                    e.currentTarget.style.background = 'transparent';
+                    e.currentTarget.style.transform = isActive ? 'scale(1.1)' : 'scale(1)';
+                  }
+                }}
+              >
+                {icon}
+              </button>
+            );
+          })}
         </nav>
       </aside>
     </div>

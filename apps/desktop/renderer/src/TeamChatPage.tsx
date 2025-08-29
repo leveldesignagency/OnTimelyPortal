@@ -26,7 +26,8 @@ import {
   removeUserFromGroup,
   deleteChat,
   leaveGroup,
-  toggleChatArchive
+  toggleChatArchive,
+  toggleChatMute
 } from './lib/chat';
 import { getUserAvatar, isAvatarUrl } from './lib/profile';
 import { supabase } from './lib/supabase';
@@ -204,8 +205,10 @@ const getTeamInitials = (team: Team): string => {
 const convertSupabaseUser = (supabaseUser: AuthUser): User => ({
   id: supabaseUser.id,
   name: supabaseUser.name || 'Unknown User',
-  avatar: getUserInitials(supabaseUser.name || 'Unknown User'),
-  status: 'online' as UserStatus,
+  avatar: (supabaseUser as any).avatar_url && isAvatarUrl((supabaseUser as any).avatar_url) 
+    ? (supabaseUser as any).avatar_url 
+    : getUserInitials(supabaseUser.name || 'Unknown User'),
+  status: (supabaseUser as any).status || 'offline' as UserStatus,
   email: supabaseUser.email,
   company_id: supabaseUser.company_id,
   role: supabaseUser.role as 'admin' | 'member',
@@ -282,7 +285,7 @@ const convertSupabaseChat = (supabaseChat: SupabaseChat): Chat => {
     })) || [],
     created_by: supabaseChat.created_by,
     isPinned: false,
-    isMuted: false,
+    isMuted: supabaseChat.participants?.find(p => p.id === CURRENT_USER?.id)?.is_muted || false,
     isArchived: supabaseChat.is_archived
   };
 };
@@ -743,21 +746,34 @@ const ChatHeader = ({ chat, isDark, onToggleRightPanel }: {
     <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
       {chat && (
         <>
-          <div style={{
-            width: '80px',
-            height: '80px',
+          <div 
+            onClick={() => onToggleRightPanel()}
+            style={{
+              width: '48px',
+              height: '48px',
             borderRadius: '50%',
             background: isDark ? 'linear-gradient(135deg, #4a4a4a, #2a2a2a)' : 'linear-gradient(135deg, #e9ecef, #dee2e6)',
             color: isDark ? '#fff' : '#495057',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: '28px',
+              fontSize: '18px',
             fontWeight: '600',
             margin: '0 auto 12px',
             boxShadow: isDark ? '0 4px 16px rgba(0,0,0,0.3)' : '0 4px 16px rgba(0,0,0,0.1)',
-            overflow: 'hidden'
-          }}>
+              overflow: 'hidden',
+              cursor: 'pointer',
+              transition: 'transform 0.2s ease, box-shadow 0.2s ease'
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.transform = 'scale(1.05)';
+              e.currentTarget.style.boxShadow = isDark ? '0 6px 20px rgba(0,0,0,0.4)' : '0 6px 20px rgba(0,0,0,0.2)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.transform = 'scale(1)';
+              e.currentTarget.style.boxShadow = isDark ? '0 4px 16px rgba(0,0,0,0.3)' : '0 4px 16px rgba(0,0,0,0.1)';
+            }}
+          >
             {chat.type === 'group' ? (
               // Group chat - show first letter of group name
               chat.name ? chat.name.charAt(0).toUpperCase() : 'G'
@@ -805,7 +821,25 @@ const ChatHeader = ({ chat, isDark, onToggleRightPanel }: {
             }}>
               {chat.type === 'group' ? 
                 `${chat.participants.length} members` : 
-                chat.participants.find(p => p.id !== CURRENT_USER?.id)?.status || 'offline'
+                (() => {
+                  const otherUser = chat.participants.find(p => p.id !== CURRENT_USER?.id);
+                  if (otherUser) {
+                    return (
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span style={{
+                          width: '6px',
+                          height: '6px',
+                          borderRadius: '50%',
+                          background: otherUser.status === 'online' ? '#10b981' : 
+                                    otherUser.status === 'away' ? '#f59e0b' : 
+                                    otherUser.status === 'busy' ? '#ef4444' : '#6b7280'
+                        }} />
+                        {otherUser.status.charAt(0).toUpperCase() + otherUser.status.slice(1)}
+                      </span>
+                    );
+                  }
+                  return 'offline';
+                })()
               }
             </div>
           </div>
@@ -1055,7 +1089,7 @@ const FilePreview = ({ message, isDark }: { message: Message, isDark: boolean })
   return null;
 };
 
-const MessageBubble = ({ message, sent, isDark, onReact, onReply, onEdit, onDelete, isSelected, onSelect, deleting, editingMessageId, onShowHover, allMessages }: { 
+const MessageBubble = ({ message, sent, isDark, onReact, onReply, onEdit, onDelete, isSelected, onSelect, deleting, editingMessageId, onShowHover, allMessages, hoverActions, setHoverActions, showEmojiPicker, setShowEmojiPicker }: { 
   message: Message, 
   sent: boolean, 
   isDark: boolean, 
@@ -1068,7 +1102,11 @@ const MessageBubble = ({ message, sent, isDark, onReact, onReply, onEdit, onDele
   deleting?: boolean,
   editingMessageId?: string | null,
   onShowHover?: (message: Message, event: React.MouseEvent) => void,
-  allMessages?: Message[]
+  allMessages?: Message[],
+  hoverActions?: { [messageId: string]: boolean },
+  setHoverActions?: React.Dispatch<React.SetStateAction<{ [messageId: string]: boolean }>>,
+  showEmojiPicker?: { [messageId: string]: boolean },
+  setShowEmojiPicker?: React.Dispatch<React.SetStateAction<{ [messageId: string]: boolean }>>
 }) => {
   const colors = themes[isDark ? 'dark' : 'light'];
 
@@ -1079,7 +1117,16 @@ const MessageBubble = ({ message, sent, isDark, onReact, onReply, onEdit, onDele
 
   const emojis = ['👍', '❤️', '😂', '😮', '😢', '😡', '🎉', '👏', '🙏', '🔥', '💯', '✨', '💪', '🤔', '😎', '🥳', '😴', '🤯', '😍', '🤩', '😭', '🤬', '🤮', '🤧', '🤠', '👻', '🤖', '👽', '👾', '🤡', '👹', '👺', '💀', '☠️'];
 
-
+  // Auto-close timer effect for hover actions only (not emoji picker)
+  React.useEffect(() => {
+    if (hoverActions?.[message.id]) {
+      const timer = setTimeout(() => {
+        setHoverActions?.(prev => ({ ...prev, [message.id]: false }));
+        // Don't auto-close emoji picker here - let it stay open
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [hoverActions?.[message.id], message.id, setHoverActions]);
 
   return (
     <div style={{
@@ -1213,16 +1260,163 @@ const MessageBubble = ({ message, sent, isDark, onReact, onReply, onEdit, onDele
             boxShadow: isDark 
               ? '0 4px 16px rgba(0,0,0,0.3)' 
               : '0 4px 16px rgba(0,0,0,0.1)',
-            cursor: sent ? 'pointer' : 'default'
+            cursor: sent ? 'pointer' : 'pointer'
           }}
           onClick={(e) => {
-            if (sent) {
+            if (!sent) {
+              // For incoming messages (left side), toggle click actions
+              e.stopPropagation();
+              setHoverActions?.(prev => ({ ...prev, [message.id]: !prev[message.id] }));
+              // Only close emoji picker if we're closing the hover actions
+              if (!hoverActions?.[message.id]) {
+                setShowEmojiPicker?.(prev => ({ ...prev, [message.id]: false }));
+              }
+            } else if (sent) {
+              // For outgoing messages (right side), show popup on click
               e.stopPropagation();
               onShowHover?.(message, e);
             }
           }}
         >
+                              {/* Left side click actions for incoming messages (auto-close after 3 seconds, emoji button shows picker) */}
+          {!sent && hoverActions[message.id] && (
+            <>
+              <div 
+                style={{
+                  position: 'absolute',
+                  top: '50%',
+                  right: '-100px',
+                  transform: 'translateY(-50%)',
+                  display: 'flex',
+                  flexDirection: 'row',
+                  gap: '4px',
+                  background: isDark ? '#2a2a2a' : '#ffffff',
+                  borderRadius: '8px',
+                  padding: '4px',
+                  boxShadow: isDark ? '0 4px 12px rgba(0,0,0,0.3)' : '0 4px 12px rgba(0,0,0,0.15)',
+                  border: `1px solid ${isDark ? '#404040' : '#e9ecef'}`,
+                  zIndex: 10
+                }}
 
+              >
+                {/* Reply button */}
+                <button
+                  onClick={() => onReply(message)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    fontSize: '16px',
+                    cursor: 'pointer',
+                    padding: '6px',
+                    borderRadius: '4px',
+                    color: isDark ? '#ffffff' : '#1a1a1a',
+                    transition: 'background 0.2s ease'
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = isDark ? '#404040' : '#f8f9fa';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = 'transparent';
+                  }}
+                  title="Reply"
+                >
+                  ↺
+                </button>
+                
+                                  {/* Emoji reaction button */}
+                  <button
+                    onClick={() => {
+                      console.log('Emoji button clicked for message:', message.id);
+                      console.log('Current showEmojiPicker state:', showEmojiPicker);
+                      setShowEmojiPicker(prev => {
+                        const newState = { ...prev, [message.id]: !prev[message.id] };
+                        console.log('New showEmojiPicker state:', newState);
+                        return newState;
+                      });
+                      // Keep actions visible when emoji picker is shown
+                      setHoverActions(prev => ({ ...prev, [message.id]: true }));
+                    }}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    fontSize: '16px',
+                    cursor: 'pointer',
+                    padding: '6px',
+                    borderRadius: '4px',
+                    color: isDark ? '#ffffff' : '#1a1a1a',
+                    transition: 'background 0.2s ease'
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = isDark ? '#404040' : '#f8f9fa';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = 'transparent';
+                  }}
+                  title="React"
+                >
+                  <img 
+                    src="/svg/smiley-svgrepo-com.svg" 
+                    alt="emoji"
+                    width={16}
+                    height={16}
+                    style={{ filter: isDark ? 'invert(1)' : 'brightness(0)' }}
+                  />
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* Emoji picker for incoming messages */}
+          {!sent && showEmojiPicker?.[message.id] && (
+            <div 
+              style={{
+                position: 'absolute',
+                top: '50%',
+                right: '-140px',
+                transform: 'translateY(-50%)',
+                background: isDark ? '#2a2a2a' : '#ffffff',
+                borderRadius: '12px',
+                padding: '8px',
+                boxShadow: isDark ? '0 4px 12px rgba(0,0,0,0.3)' : '0 4px 12px rgba(0,0,0,0.15)',
+                border: `1px solid ${isDark ? '#404040' : '#e9ecef'}`,
+                zIndex: 9999,
+                display: 'grid',
+                gridTemplateColumns: 'repeat(6, 1fr)',
+                gap: '4px',
+                minWidth: '200px'
+              }}
+
+            >
+              {emojis.slice(0, 12).map((emoji, index) => (
+                <button
+                  key={index}
+                  onClick={() => {
+                    onReact(message.id, emoji);
+                    setShowEmojiPicker(prev => ({ ...prev, [message.id]: false }));
+                  }}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: '8px',
+                    borderRadius: '4px',
+                    transition: 'background 0.2s ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = isDark ? '#404040' : '#f8f9fa';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = 'transparent';
+                  }}
+                >
+                  <span style={{ fontSize: '20px' }}>{emoji}</span>
+                </button>
+              ))}
+            </div>
+          )}
           {/* Reply preview if this is a reply */}
           {message.replyTo && (
             <div
@@ -1306,9 +1500,10 @@ const MessageBubble = ({ message, sent, isDark, onReact, onReply, onEdit, onDele
         {message.reactions && message.reactions.length > 0 && (
           <div style={{
             display: 'flex',
+            flexDirection: 'row',
             gap: '4px',
             marginTop: '8px',
-            flexWrap: 'wrap'
+            alignItems: 'center'
           }}>
             {message.reactions.map((reaction, index) => (
               <button
@@ -1405,6 +1600,9 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
   useEffect(() => {
     if (editingMessageId && editText) {
       setText(editText);
+    } else if (!editingMessageId) {
+      // Clear text when editing is cancelled or completed
+      setText('');
     }
   }, [editingMessageId, editText]);
 
@@ -1604,11 +1802,13 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
               style={{
                 background: 'transparent',
                 border: 'none',
-                fontSize: '24px',
                 cursor: 'pointer',
                 padding: '8px',
                 borderRadius: '8px',
-                transition: 'background 0.2s ease'
+                transition: 'background 0.2s ease',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
               }}
               onMouseEnter={e => {
                 e.currentTarget.style.background = isDark ? '#404040' : '#f8f9fa';
@@ -1617,7 +1817,7 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
                 e.currentTarget.style.background = 'transparent';
               }}
             >
-              {emoji}
+              <span style={{ fontSize: '24px' }}>{emoji}</span>
             </button>
           ))}
         </div>
@@ -1633,17 +1833,28 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
           type="file"
           ref={fileInputRef}
           onChange={handleFileSelect}
-          style={{ display: 'none' }}
+          style={{ 
+            display: 'none',
+            position: 'absolute',
+            left: '-9999px',
+            visibility: 'hidden'
+          }}
           accept="image/*,.pdf,.doc,.docx,.txt"
         />
         
-        {/* Single Input Field - Direct input with icons inside */}
-            <input
-                type="text"
+        {/* Single Input Field (auto-grow textarea up to max height) */}
+        <textarea
           placeholder={editingMessageId ? "Edit your message..." : "Type a message..."}
                 value={text}
+          rows={1}
                 onChange={(e) => setText(e.target.value)}
-          onKeyPress={handleKeyPress}
+          onKeyDown={handleKeyPress}
+          onInput={(e) => {
+            const el = e.currentTarget as HTMLTextAreaElement;
+            const maxPx = 120;
+            el.style.height = 'auto';
+            el.style.height = Math.min(maxPx, el.scrollHeight) + 'px';
+          }}
           style={{
             width: '100%',
             border: `1px solid ${isDark ? '#404040' : '#dee2e6'}`,
@@ -1651,34 +1862,64 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
             color: isDark ? '#ffffff' : '#000000',
             outline: 'none',
             fontSize: '15px',
-            padding: '14px 120px 14px 20px',
+            lineHeight: '20px',
+            padding: '14px 100px 14px 20px',
             borderRadius: '12px',
             boxShadow: 'none',
             position: 'relative',
-            backdropFilter: 'blur(10px)',
-            transition: 'all 0.2s ease'
+            transition: 'border-color 0.2s ease',
+            resize: 'none',
+            overflowY: 'auto',
+            maxHeight: '120px'
           }}
           onFocus={e => {
             e.currentTarget.style.borderColor = isDark ? '#ffffff' : '#007bff';
             e.currentTarget.style.boxShadow = 'none';
+            e.currentTarget.style.outline = 'none';
           }}
           onBlur={e => {
             e.currentTarget.style.borderColor = isDark ? '#404040' : '#dee2e6';
             e.currentTarget.style.boxShadow = 'none';
+            e.currentTarget.style.outline = 'none';
           }}
         />
 
-        {/* Icons Container - positioned absolutely over the input */}
+        {/* Icons Container */}
         <div style={{
           position: 'absolute',
-          right: '20px',
+          right: '35px',
           top: '50%',
           transform: 'translateY(-50%)',
           display: 'flex',
           alignItems: 'center',
-          gap: '8px',
+          gap: '12px',
           pointerEvents: 'none'
         }}>
+          {/* Attachment Button */}
+        <button
+            onClick={() => fileInputRef.current?.click()}
+          style={{
+              background: 'none',
+            border: 'none',
+              cursor: 'pointer',
+              padding: '0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              pointerEvents: 'auto',
+              boxShadow: 'none',
+              outline: 'none'
+            }}
+          >
+            <img 
+              src="/svg/paper-clip-svgrepo-com.svg" 
+              alt="attach"
+              width={18}
+              height={18}
+              style={{ filter: isDark ? 'invert(1)' : 'brightness(0)' }}
+            />
+          </button>
+
           {/* Emoji Button */}
           <button
             onClick={() => setShowEmojiPicker(!showEmojiPicker)}
@@ -1690,7 +1931,9 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              pointerEvents: 'auto'
+              pointerEvents: 'auto',
+              boxShadow: 'none',
+              outline: 'none'
             }}
           >
             <img 
@@ -1698,34 +1941,7 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
               alt="emoji"
               width={18}
               height={18}
-              style={{ 
-                filter: isDark ? 'invert(1)' : 'brightness(0)'
-              }}
-            />
-          </button>
-
-          {/* Attachment Button */}
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            style={{
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              padding: '0',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              pointerEvents: 'auto'
-            }}
-          >
-            <img 
-              src="/svg/paper-clip-svgrepo-com.svg" 
-              alt="attachment"
-              width={18}
-              height={18}
-              style={{ 
-                filter: isDark ? 'invert(1)' : 'brightness(0)'
-              }}
+              style={{ filter: isDark ? 'invert(1)' : 'brightness(0)' }}
             />
           </button>
 
@@ -1741,8 +1957,10 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
               alignItems: 'center',
               justifyContent: 'center',
               padding: '0',
+              pointerEvents: 'auto',
               opacity: text.trim() ? 1 : 0.4,
-              pointerEvents: 'auto'
+              boxShadow: 'none',
+              outline: 'none'
             }}
           >
             <img 
@@ -1750,9 +1968,7 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
               alt="send"
               width={18}
               height={18}
-              style={{ 
-                filter: text.trim() ? (isDark ? 'invert(1)' : 'brightness(0)') : (isDark ? 'brightness(0.4)' : 'brightness(0.6)')
-              }}
+              style={{ filter: isDark ? 'invert(1)' : 'brightness(0)' }}
             />
           </button>
         </div>
@@ -1760,21 +1976,22 @@ const MessageInput = ({ onSendMessage, onFileUpload, isDark, replyingTo, onCance
         </div>
     );
 };
+interface RightPanelProps {
+  chat: Chat | undefined; 
+  isOpen: boolean; 
+  isDark: boolean;
+  onToggleMute: (chatId: string) => void;
+  onTogglePin: (chatId: string) => void;
+  onToggleArchive: (chatId: string) => void;
+  onRemoveUser: (userId: string, userName: string) => void;
+  onShowConfirmation: (modal: ConfirmationModal) => void;
+  onDeleteChat: (chatId: string) => Promise<boolean>;
+  onUpdateChats: (updater: (prevChats: Chat[]) => Chat[]) => void;
+  onSetActiveChat: (chatId: string) => void;
+  onAddNotification: (message: string, type: Notification['type']) => void;
+}
 
-const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleArchive, onRemoveUser, onShowConfirmation, onDeleteChat, onUpdateChats, onSetActiveChat, onAddNotification }: { 
-  chat: Chat | undefined, 
-  isOpen: boolean, 
-  isDark: boolean,
-  onToggleMute: (chatId: string) => void,
-  onTogglePin: (chatId: string) => void,
-  onToggleArchive: (chatId: string) => void,
-  onRemoveUser: (userId: string, userName: string) => void,
-  onShowConfirmation: (modal: ConfirmationModal) => void,
-  onDeleteChat: (chatId: string) => Promise<boolean>,
-  onUpdateChats: (updater: (prevChats: Chat[]) => Chat[]) => void,
-  onSetActiveChat: (chatId: string) => void,
-  onAddNotification: (message: string, type: Notification['type']) => void
-}) => {
+const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleArchive, onRemoveUser, onShowConfirmation, onDeleteChat, onUpdateChats, onSetActiveChat, onAddNotification }: RightPanelProps) => {
   if (!chat || !isOpen) return null;
 
   const handleMediaClick = (index: number) => {
@@ -2089,8 +2306,8 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
   return (
     <div style={{
       width: '320px',
-      background: isDark ? '#1a1a1a' : '#ffffff',
-      borderLeft: `1px solid ${isDark ? '#2a2a2a' : '#e9ecef'}`,
+      background: '#1a1a1a',
+      borderLeft: '1px solid #2a2a2a',
       display: 'flex',
       flexDirection: 'column',
       height: '100%',
@@ -2098,28 +2315,28 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
       flexShrink: 0,
       position: 'relative',
       zIndex: 2000,
-      boxShadow: isDark ? '-4px 0 20px rgba(0,0,0,0.5)' : '-4px 0 20px rgba(0,0,0,0.15)',
+      boxShadow: '-4px 0 20px rgba(0,0,0,0.5)',
       transform: isOpen ? 'translateX(0)' : 'translateX(100%)',
       transition: 'transform 0.3s ease',
       borderTopRightRadius: '20px',
       borderBottomRightRadius: '20px'
     }}>
       {/* Profile/Group Info */}
-      <div style={{ padding: '20px', borderBottom: `1px solid ${isDark ? '#2a2a2a' : '#e9ecef'}` }}>
+      <div style={{ padding: '20px', borderBottom: '1px solid #2a2a2a' }}>
         <div style={{ textAlign: 'center', marginBottom: '16px' }}>
           <div style={{
-            width: '80px',
-            height: '80px',
+            width: '48px',
+            height: '48px',
             borderRadius: '50%',
-            background: isDark ? 'linear-gradient(135deg, #4a4a4a, #2a2a2a)' : 'linear-gradient(135deg, #e9ecef, #dee2e6)',
-            color: isDark ? '#fff' : '#495057',
+            background: 'linear-gradient(135deg, #4a4a4a, #2a2a2a)',
+            color: '#fff',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: '28px',
+            fontSize: '18px',
             fontWeight: '600',
             margin: '0 auto 12px',
-            boxShadow: isDark ? '0 4px 16px rgba(0,0,0,0.3)' : '0 4px 16px rgba(0,0,0,0.1)',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
             overflow: 'hidden'
           }}>
             {chat.type === 'group' ? (
@@ -2159,14 +2376,14 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
             margin: '0 0 6px 0',
             fontSize: '18px',
             fontWeight: '600',
-            color: isDark ? '#ffffff' : '#1a1a1a'
+            color: '#ffffff'
           }}>
             {getChatDisplayName(chat)}
           </h3>
           <p style={{
             margin: 0,
             fontSize: '13px',
-            color: isDark ? '#adb5bd' : '#6c757d'
+            color: '#adb5bd'
           }}>
             {chat.type === 'group' ? `${chat.participants.length} members` : 'Direct message'}
           </p>
@@ -2175,7 +2392,7 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
 
       {/* Participants */}
       {chat.type === 'group' && (
-        <div style={{ padding: '16px', borderBottom: `1px solid ${isDark ? '#2a2a2a' : '#e9ecef'}` }}>
+        <div style={{ padding: '16px', borderBottom: '1px solid #2a2a2a' }}>
           <h4 style={{
             margin: '0 0 12px 0',
             fontSize: '15px',
@@ -2234,7 +2451,7 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
                     <div style={{
                       fontSize: '14px',
                       fontWeight: '500',
-                      color: isDark ? '#ffffff' : '#1a1a1a',
+                      color: '#ffffff',
                       whiteSpace: 'nowrap',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis'
@@ -2243,7 +2460,7 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
                     </div>
                     <div style={{
                       fontSize: '12px',
-                      color: isDark ? '#adb5bd' : '#6c757d'
+                      color: '#adb5bd'
                     }}>
                       {participant.email || 'No email'}
                     </div>
@@ -2267,10 +2484,30 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
           Shared Media
         </h4>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
-          {[1, 2, 3, 4, 5, 6].map((item) => (
-            <div
-              key={item}
-              onClick={() => handleMediaClick(item - 1)}
+          {(() => {
+            // Get all messages with attachments from the current chat
+            const mediaMessages = chat.messages.filter(msg => 
+              msg.type === 'image' || msg.type === 'file' || msg.fileUrl
+            );
+            
+            if (mediaMessages.length === 0) {
+              return (
+                <div style={{
+                  gridColumn: '1 / -1',
+                  textAlign: 'center',
+                  padding: '20px',
+                  color: isDark ? '#adb5bd' : '#6c757d',
+                  fontSize: '14px'
+                }}>
+                  No shared media yet
+                </div>
+              );
+            }
+            
+            return mediaMessages.slice(0, 9).map((message, index) => (
+              <div
+                key={message.id}
+                onClick={() => handleMediaClick(index)}
                   style={{
                 aspectRatio: '1',
                 background: isDark ? '#2a2a2a' : '#f8f9fa',
@@ -2278,9 +2515,9 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontSize: '16px',
                     cursor: 'pointer',
-                transition: 'all 0.2s ease'
+                  transition: 'all 0.2s ease',
+                  overflow: 'hidden'
               }}
               onMouseEnter={e => {
                 e.currentTarget.style.background = isDark ? '#404040' : '#e9ecef';
@@ -2291,12 +2528,42 @@ const RightPanel = ({ chat, isOpen, isDark, onToggleMute, onTogglePin, onToggleA
                 e.currentTarget.style.transform = 'scale(1)';
               }}
             >
+                {message.type === 'image' && message.fileUrl ? (
+                  <img 
+                    src={message.fileUrl} 
+                    alt={message.fileName || 'Shared image'}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover'
+                    }}
+                  />
+                ) : (
+                  <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '4px',
+                    textAlign: 'center'
+                  }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-                <circle cx="12" cy="13" r="4"/>
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                      <polyline points="14,2 14,8 20,8"/>
+                      <line x1="16" y1="13" x2="8" y2="13"/>
+                      <line x1="16" y1="17" x2="8" y2="17"/>
+                      <polyline points="10,9 9,9 8,9"/>
               </svg>
+                    <span style={{
+                      fontSize: '10px',
+                      color: isDark ? '#adb5bd' : '#6c757d'
+                    }}>
+                      {message.fileName ? message.fileName.substring(0, 8) + '...' : 'File'}
+                    </span>
                 </div>
-              ))}
+                )}
+              </div>
+            ));
+          })()}
         </div>
       </div>
 
@@ -2850,10 +3117,11 @@ const ConfirmationModal = ({ modal, isDark }: {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: '20px',
-              fontWeight: 'bold',
-              boxShadow: `0 8px 16px ${config.color}40, 0 0 0 4px ${config.color}20`,
-              animation: 'pulse 2s infinite'
+              fontSize: '18px',
+              fontWeight: '600',
+              margin: '0 auto 12px',
+              boxShadow: isDark ? '0 4px 16px rgba(0,0,0,0.3)' : '0 4px 16px rgba(0,0,0,0.1)',
+              overflow: 'hidden'
             }}
           >
             {config.icon}
@@ -3071,11 +3339,13 @@ const GlobalHoverPopup = ({
             style={{
               background: 'transparent',
               border: 'none',
-              fontSize: '16px',
               cursor: 'pointer',
-              padding: '4px',
+              padding: '6px',
               borderRadius: '4px',
-              transition: 'background 0.2s ease'
+              transition: 'background 0.2s ease',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
             }}
             onMouseEnter={e => {
               e.currentTarget.style.background = isDark ? '#404040' : '#f8f9fa';
@@ -3084,7 +3354,7 @@ const GlobalHoverPopup = ({
               e.currentTarget.style.background = 'transparent';
             }}
           >
-            {emoji}
+            <span style={{ fontSize: '18px' }}>{emoji}</span>
           </button>
         ))}
       </div>
@@ -3229,6 +3499,14 @@ export default function TeamChatPage() {
     message: null,
     hideTimeoutId: null
   });
+
+  // Left side hover actions state (for incoming messages)
+  const [hoverActions, setHoverActions] = useState<{ [messageId: string]: boolean }>({});
+  const [showEmojiPicker, setShowEmojiPicker] = useState<{ [messageId: string]: boolean }>({});
+  
+  // Bulk mode state
+  const [bulkMode, setBulkMode] = useState(false);
+  const [selectedChats, setSelectedChats] = useState<Set<string>>(new Set());
   
   const messagesEndRef = useRef<null | HTMLDivElement>(null);
   const { theme } = useContext(ThemeContext);
@@ -3650,17 +3928,19 @@ export default function TeamChatPage() {
       shouldNotify: chat && sender && (message.chat_id !== activeChatId || !document.hasFocus())
     });
     
-    // Only show browser notification if app is not focused (no in-app notifications)
-    if (chat && sender && !document.hasFocus()) {
-      console.log('✅ Showing browser notification - app not focused');
+    // Only show browser notification if app is not focused and chat is not muted
+    if (chat && sender && !document.hasFocus() && !chat.isMuted) {
+      console.log('✅ Showing browser notification - app not focused and chat not muted');
       
       // Play notification sound
       console.log('🔊 Playing notification sound');
       playNotificationSound();
       
-      // Show browser notification only when app is not focused
-      console.log('🌐 Showing browser notification');
-      showBrowserNotification(sender.name, message.content, chat.name, chat.type);
+      // Show browser notification only when app is not focused and chat not muted
+        console.log('🌐 Showing browser notification');
+        showBrowserNotification(sender.name, message.content, chat.name, chat.type);
+    } else if (chat?.isMuted) {
+      console.log('🔇 Not showing notification - chat is muted');
     } else {
       console.log('❌ Not showing notification - app is focused or conditions not met');
     }
@@ -4100,13 +4380,32 @@ export default function TeamChatPage() {
 
       if (error) {
         console.error('Error editing message:', error);
+        addNotification('Failed to edit message', 'error');
         return;
       }
 
+      // Update local state with edit status
+      setChats(prevChats =>
+        prevChats.map(chat =>
+          chat.id === activeChatId
+            ? {
+                ...chat,
+                messages: chat.messages.map(msg =>
+                  msg.id === editingMessageId
+                    ? { ...msg, text: text.trim(), edited: true, editedAt: new Date().toISOString() }
+                    : msg
+                ),
+              }
+            : chat
+        )
+      );
+
       setEditingMessageId(null);
       setEditText('');
+      addNotification('Message edited successfully', 'success');
     } catch (error) {
       console.error('Error editing message:', error);
+      addNotification('Failed to edit message', 'error');
     }
   };
 
@@ -4338,14 +4637,127 @@ export default function TeamChatPage() {
     }
   };
 
-  const handleToggleMute = (chatId: string) => {
+  const handleToggleMute = async (chatId: string) => {
+    try {
+      console.log('🔇 Toggling mute status for chat:', chatId);
+      
+      const chat = chats.find(c => c.id === chatId);
+      if (!chat) {
+        console.error('❌ Chat not found in local state');
+        return;
+      }
+
+      console.log('🔇 Current mute status in UI:', chat.isMuted);
+
+      // Call database function
+      const success = await toggleChatMute(chatId);
+      
+      if (success) {
+        // Update local state only if database update succeeded
     setChats(prevChats => 
-      prevChats.map(chat => 
-        chat.id === chatId 
-          ? { ...chat, isMuted: !chat.isMuted }
-          : chat
-      )
-    );
+          prevChats.map(c => 
+            c.id === chatId 
+              ? { ...c, isMuted: !c.isMuted }
+              : c
+        )
+      );
+    
+        const newStatus = !chat.isMuted;
+        console.log('✅ Mute status updated successfully:', newStatus);
+        addNotification(
+          `Chat "${chat.name}" ${newStatus ? 'muted' : 'unmuted'}`,
+          'success'
+        );
+      } else {
+        console.error('❌ Failed to toggle mute status');
+        addNotification('Failed to update mute status', 'error');
+      }
+    } catch (error) {
+      console.error('💥 Error toggling mute:', error);
+      addNotification('An error occurred while updating mute status', 'error');
+    }
+  };
+
+  const handleToggleMuteAll = async () => {
+    try {
+      console.log('🔇 Toggling mute status for all chats');
+      
+      const hasMutedChats = chats.some(chat => chat.isMuted);
+      const newMuteStatus = !hasMutedChats;
+      
+      console.log('🔇 Setting all chats to:', newMuteStatus ? 'muted' : 'unmuted');
+      
+      // Update all chats in parallel
+      const updatePromises = chats.map(async (chat) => {
+        try {
+          const success = await toggleChatMute(chat.id);
+          if (success) {
+            return { chatId: chat.id, success: true };
+          } else {
+            return { chatId: chat.id, success: false };
+          }
+        } catch (error) {
+          console.error(`❌ Failed to update mute status for chat ${chat.id}:`, error);
+          return { chatId: chat.id, success: false };
+        }
+      });
+      
+      const results = await Promise.all(updatePromises);
+      const successfulUpdates = results.filter(r => r.success).length;
+      const failedUpdates = results.filter(r => !r.success).length;
+      
+      if (successfulUpdates > 0) {
+        // Update local state for successful updates
+        setChats(prevChats =>
+          prevChats.map(chat => ({
+            ...chat,
+            isMuted: newMuteStatus
+          }))
+        );
+        
+        addNotification(
+          `Successfully ${newMuteStatus ? 'muted' : 'unmuted'} ${successfulUpdates} chat${successfulUpdates > 1 ? 's' : ''}`,
+          'success'
+        );
+      }
+      
+      if (failedUpdates > 0) {
+        addNotification(
+          `Failed to update ${failedUpdates} chat${failedUpdates > 1 ? 's' : ''}`,
+          'error'
+        );
+      }
+      
+    } catch (error) {
+      console.error('💥 Error toggling mute for all chats:', error);
+      addNotification('An error occurred while updating mute status for all chats', 'error');
+    }
+  };
+
+  const handleBulkArchive = async () => {
+    try {
+      console.log('📁 Bulk archiving selected chats');
+      
+      // For now, just show a notification - implement actual bulk archive logic later
+      addNotification('Bulk archive functionality coming soon', 'info');
+      
+    } catch (error) {
+      console.error('💥 Error in bulk archive:', error);
+      addNotification('An error occurred during bulk archive', 'error');
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    try {
+      console.log('🗑️ Bulk deleting selected chats');
+      
+      // For now, just show a notification - implement actual bulk delete logic later
+      addNotification('Bulk delete functionality coming soon', 'info');
+      
+    } catch (error) {
+      console.error('💥 Error in bulk delete:', error);
+      addNotification('An error occurred during bulk delete', 'error');
+    }
   };
 
   const handleTogglePin = (chatId: string) => {
@@ -4609,7 +5021,7 @@ export default function TeamChatPage() {
         position: 'fixed',
         top: '20px',
         right: '20px',
-        zIndex: 1000,
+        zIndex: 99999,
         display: 'flex',
         flexDirection: 'column',
         gap: '12px',
@@ -4627,7 +5039,7 @@ export default function TeamChatPage() {
 
             </div>
 
-      {/* Main Content with Glass Effect */}
+      {/* Main Content */}
       <div style={{ 
         flex: 1, 
         display: 'flex', 
@@ -4637,22 +5049,15 @@ export default function TeamChatPage() {
         overflow: 'hidden',
         margin: '20px',
         borderRadius: '20px',
-        boxShadow: isDark 
-          ? '0 8px 32px rgba(0,0,0,0.4)' 
-          : '0 8px 32px rgba(0,0,0,0.1)',
         border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'}`
       }}>
         
-        {/* Left Sidebar with Glass Effect */}
+        {/* Left Sidebar */}
         <div style={{ 
           width: '320px', 
           display: 'flex', 
           flexDirection: 'column',
           background: colors.chatBg,
-          backdropFilter: 'blur(20px)',
-          boxShadow: isDark 
-            ? '2px 0 8px rgba(0,0,0,0.2)' 
-            : '2px 0 8px rgba(0,0,0,0.08)',
           flexShrink: 0,
           borderRight: `1px solid ${isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}`,
           borderTopLeftRadius: '20px',
@@ -4672,7 +5077,7 @@ export default function TeamChatPage() {
             onClick={() => setIsProfileModalOpen(true)}
           />
 
-          {/* Search Bar with Glass Effect */}
+          {/* Search Bar */}
           <div style={{ 
             padding: '20px', 
             borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
@@ -4693,15 +5098,12 @@ export default function TeamChatPage() {
                   color: colors.text,
                   outline: 'none',
                   fontSize: '14px',
-                  backdropFilter: 'blur(20px)',
                   boxSizing: 'border-box',
-                  transition: 'all 0.2s ease'
+                  transition: 'border-color 0.2s ease'
                 }}
                 onFocus={e => {
                   e.currentTarget.style.borderColor = colors.accent;
-                  e.currentTarget.style.boxShadow = isDark 
-                    ? '0 0 0 3px rgba(255,255,255,0.1)' 
-                    : '0 0 0 3px rgba(0,0,0,0.1)';
+                  e.currentTarget.style.boxShadow = 'none';
                 }}
                 onBlur={e => {
                   e.currentTarget.style.borderColor = colors.border;
@@ -4738,7 +5140,167 @@ export default function TeamChatPage() {
                 </svg>
               </div>
             </div>
+
+            {/* Quick Actions - Icons Only */}
+            <div style={{
+              display: 'flex',
+              gap: '12px',
+              alignItems: 'center',
+              marginTop: '16px'
+            }}>
+              {/* Mute All/Unmute All */}
+              <button
+                onClick={() => handleToggleMuteAll()}
+                style={{
+                  background: 'transparent',
+                  border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
+                  padding: '8px',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'background 0.2s ease, border-color 0.2s ease',
+                  color: colors.textSecondary
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
+                  e.currentTarget.style.borderColor = isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.borderColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
+                }}
+                title={chats.some(chat => chat.isMuted) ? 'Unmute All Chats' : 'Mute All Chats'}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  {chats.some(chat => chat.isMuted) ? (
+                    // Unmute icon
+                    <>
+                      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                      <line x1="23" y1="9" x2="17" y2="15"/>
+                      <line x1="17" y1="9" x2="23" y2="15"/>
+                    </>
+                  ) : (
+                    // Mute icon
+                    <>
+                      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                      <line x1="23" y1="9" x2="17" y2="15"/>
+                      <line x1="17" y1="9" x2="23" y2="15"/>
+                    </>
+                  )}
+                </svg>
+              </button>
+
+              {/* Bulk Actions */}
+              <button
+                onClick={() => setBulkMode(!bulkMode)}
+                style={{
+                  background: bulkMode ? colors.accent : 'transparent',
+                  border: `1px solid ${bulkMode ? colors.accent : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)')}`,
+                  padding: '8px',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'background 0.2s ease, border-color 0.2s ease',
+                  color: bulkMode ? (isDark ? colors.bg : '#ffffff') : colors.textSecondary
+                }}
+                onMouseEnter={e => {
+                  if (!bulkMode) {
+                    e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
+                    e.currentTarget.style.borderColor = isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)';
+                  }
+                }}
+                onMouseLeave={e => {
+                  if (!bulkMode) {
+                    e.currentTarget.style.background = 'transparent';
+                    e.currentTarget.style.borderColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
+                  }
+                }}
+                title="Bulk Actions"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                  <line x1="9" y1="9" x2="15" y2="9"/>
+                  <line x1="9" y1="13" x2="15" y2="13"/>
+                  <line x1="9" y1="17" x2="15" y2="17"/>
+                </svg>
+              </button>
+            </div>
           </div>
+
+          {/* Bulk Actions Controls */}
+          {bulkMode && (
+            <div style={{ 
+              padding: '0 20px 16px 20px',
+              borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}`,
+              marginBottom: '16px'
+            }}>
+              <div style={{
+                display: 'flex',
+                gap: '12px',
+                alignItems: 'center',
+                justifyContent: 'space-between'
+              }}>
+                <span style={{
+                  fontSize: '13px',
+                  color: colors.textSecondary,
+                  fontWeight: '500'
+                }}>
+                  Select chats to perform bulk actions
+                </span>
+                <div style={{
+                  display: 'flex',
+                  gap: '8px'
+                }}>
+                  <button
+                    onClick={() => handleBulkArchive()}
+                    style={{
+                      background: 'transparent',
+                      border: `1px solid ${isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)'}`,
+                      padding: '6px 12px',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: '12px',
+                      color: colors.textSecondary,
+                      transition: 'all 0.2s ease'
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.background = 'transparent';
+                    }}
+                  >
+                    Archive Selected
+                  </button>
+                  <button
+                    onClick={() => handleBulkDelete()}
+                    style={{
+                      background: '#ef4444',
+                      border: '1px solid #ef4444',
+                      padding: '6px 12px',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: '12px',
+                      color: '#ffffff',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.background = '#dc2626';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.background = '#ef4444';
+                    }}
+                  >
+                    Delete Selected
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Tabs with Glass Effect */}
           <div style={{ 
@@ -4949,9 +5511,22 @@ export default function TeamChatPage() {
                           alignItems: 'center',
                           justifyContent: 'center',
                           fontSize: '10px',
-                          fontWeight: '600'
+                          fontWeight: '600',
+                          overflow: 'hidden'
                         }}>
-                          {user.avatar}
+                          {isAvatarUrl(user.avatar) ? (
+                            <img 
+                              src={user.avatar} 
+                              alt={user.name}
+                              style={{
+                                width: '100%',
+                                height: '100%',
+                                objectFit: 'cover'
+                              }}
+                            />
+                          ) : (
+                            user.avatar
+                          )}
                         </div>
                         {user.name}
                         {selectedUsers.some(u => u.id === user.id) && ' ✓'}
@@ -5023,7 +5598,7 @@ export default function TeamChatPage() {
                       flexShrink: 0
                     }}>
                       {selectedUsers.some(u => u.id === user.id) && (
-                        <span style={{ color: 'white', fontSize: '10px', fontWeight: 'bold' }}>✓</span>
+                        <span style={{ color: '#000000', fontSize: '10px', fontWeight: 'bold' }}>✓</span>
                       )}
                     </div>
                                     <div style={{
@@ -5038,27 +5613,35 @@ export default function TeamChatPage() {
                   fontSize: '12px',
                   fontWeight: '600',
                   marginRight: '12px',
-                  flexShrink: 0
+                  flexShrink: 0,
+                  overflow: 'hidden'
                 }}>
-                  {user.avatar}
+                  {isAvatarUrl(user.avatar) ? (
+                    <img 
+                      src={user.avatar} 
+                      alt={user.name}
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover'
+                      }}
+                    />
+                  ) : (
+                    user.avatar
+                  )}
                 </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{
                         fontSize: '14px',
                         fontWeight: '500',
-                        color: isDark ? '#ffffff' : '#1a1a1a',
+                        color: isDark ? '#ffffff' : '#000000',
                         whiteSpace: 'nowrap',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis'
                       }}>
                         {user.name}
               </div>
-                      <div style={{
-                        fontSize: '12px',
-                        color: isDark ? '#adb5bd' : '#6c757d'
-                      }}>
-                        {user.email}
-                      </div>
+
                     </div>
                     <StatusIndicator status={user.status} />
                   </div>
@@ -5087,7 +5670,7 @@ export default function TeamChatPage() {
                     <div style={{
                       fontSize: '12px',
                       fontWeight: '600',
-                      color: isDark ? '#adb5bd' : '#6c757d',
+                      color: '#000000',
                       marginBottom: '6px'
                     }}>
                       Selected Members:
@@ -5370,6 +5953,10 @@ export default function TeamChatPage() {
                         editingMessageId={editingMessageId}
                         onShowHover={showHoverPopup}
                         allMessages={activeChat?.messages}
+                        hoverActions={hoverActions}
+                        setHoverActions={setHoverActions}
+                        showEmojiPicker={showEmojiPicker}
+                        setShowEmojiPicker={setShowEmojiPicker}
                       />
                       {/* Timestamp and edited indicator outside bubble */}
                       <div style={{
@@ -5383,7 +5970,12 @@ export default function TeamChatPage() {
                         paddingLeft: message.sender === CURRENT_USER?.name ? '0' : '48px',
                         paddingRight: message.sender === CURRENT_USER?.name ? '48px' : '0'
                       }}>
-                        {message.edited && (
+                        {message.replyTo && (
+                          <span style={{ fontStyle: 'italic' }}>
+                            replied to
+                          </span>
+                        )}
+                        {message.edited && !message.replyTo && (
                           <span style={{ fontStyle: 'italic' }}>
                             edited
                           </span>

@@ -121,7 +121,11 @@ export function CustomDatePicker({ value, onChange, placeholder, required, place
             <button type="button" onClick={handleNext} style={{ width: 40, height: 32, background: 'transparent', border: `1px solid ${colors.border}`, borderRadius: 8, color: colors.text, fontSize: 18, cursor: 'pointer', padding: 0 }}>›</button>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, marginBottom: 8, width: '100%' }}>
-            {['S','M','T','W','T','F','S'].map((d) => (<div key={d} style={{ textAlign: 'center', fontWeight: 600, color: colors.textSecondary, fontSize: 13 }}>{d}</div>))}
+            {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((label) => (
+              <div key={label} style={{ textAlign: 'center', fontWeight: 600, color: colors.textSecondary, fontSize: 13 }}>
+                {label.charAt(0)}
+              </div>
+            ))}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, width: '100%', flex: 1 }}>
             {calendarCells.map((day, idx) => day ? (

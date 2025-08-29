@@ -12,7 +12,7 @@ export interface Chat {
   is_archived: boolean
   created_at: string
   updated_at: string
-  participants?: User[]
+  participants?: (User & { is_muted?: boolean; is_pinned?: boolean; role?: string })[]
   last_message?: Message
   unread_count?: number
 }
@@ -857,7 +857,12 @@ export const getUserChats = async (userId: string): Promise<Chat[]> => {
     console.log('✅ Successfully fetched chats:', data?.length || 0);
     
     const processedChats = (data || []).map(chat => {
-      const participants = chat.chat_participants?.map(cp => cp.user).filter(Boolean) || [];
+      const participants = chat.chat_participants?.map(cp => ({
+        ...cp.user,
+        is_muted: cp.is_muted,
+        is_pinned: cp.is_pinned,
+        role: cp.role
+      })).filter(Boolean) || [];
       console.log(`📋 Chat "${chat.name}" has ${participants.length} participants:`, participants.map(p => p.name));
       
       return {
@@ -1958,4 +1963,69 @@ export const toggleChatArchive = async (chatId: string): Promise<boolean> => {
     console.error('💥 Failed to toggle chat archive:', error);
     return false;
   }
-} 
+}
+
+// Toggle chat mute status
+export const toggleChatMute = async (chatId: string): Promise<boolean> => {
+  try {
+    console.log('🔇 Toggling mute status for chat:', chatId);
+    
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      console.error('❌ No authenticated user');
+      return false;
+    }
+
+    // First, get the current chat to check permissions and current mute status
+    const { data: chat, error: chatError } = await supabase
+      .from('chats')
+      .select('company_id, created_by, type')
+      .eq('id', chatId)
+      .single();
+
+    if (chatError || !chat) {
+      console.error('❌ Chat not found:', chatError);
+      return false;
+    }
+
+    // Validate company access
+    if (!validateCompanyAccess(chat.company_id)) {
+      console.error('❌ Company access denied');
+      return false;
+    }
+
+    // Get current mute status from chat_participants table
+    const { data: participant, error: participantError } = await supabase
+      .from('chat_participants')
+      .select('is_muted')
+      .eq('chat_id', chatId)
+      .eq('user_id', currentUser.id)
+      .single();
+
+    if (participantError || !participant) {
+      console.error('❌ Participant not found:', participantError);
+      return false;
+    }
+
+    console.log('🔇 Current mute status:', participant.is_muted);
+
+    // Toggle the mute status in chat_participants table
+    const newMuteStatus = !participant.is_muted;
+    const { error: updateError } = await supabase
+      .from('chat_participants')
+      .update({ is_muted: newMuteStatus })
+      .eq('chat_id', chatId)
+      .eq('user_id', currentUser.id);
+
+    if (updateError) {
+      console.error('❌ Failed to update mute status:', updateError);
+      return false;
+    }
+
+    console.log('✅ Chat mute status updated:', newMuteStatus ? 'muted' : 'unmuted');
+    return true;
+  } catch (error) {
+    console.error('💥 Failed to toggle chat mute:', error);
+    return false;
+  }
+}
