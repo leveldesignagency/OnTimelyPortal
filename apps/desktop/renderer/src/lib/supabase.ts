@@ -161,7 +161,7 @@ export const getEvents = async (companyId: string) => {
     const { data: teamEvents, error: teamEventsError } = await supabase
       .from('team_events')
       .select('event_id')
-      .in('team_id', teamIds)w
+      .in('team_id', teamIds)
     if (teamEventsError) {
       console.error('❌ Failed to fetch team events:', teamEventsError)
       return []
