@@ -365,29 +365,9 @@ export default function CalendarPage() {
         });
         setDatabaseEvents(convertedEvents);
       } else {
-        // Fallback: show all company events if user is not in any team and has not created any events
-        const companyEvents = await getEvents(companyId);
-        if (companyEvents) {
-          const convertedEvents: CalendarEvent[] = companyEvents.map((event: any) => {
-            // Parse the varchar date strings properly
-            const fromDate = new Date(event.from + 'T00:00:00');
-            const toDate = new Date(event.to + 'T00:00:00');
-            
-            return {
-              id: `db_${event.id}`,
-              title: event.name,
-              type: 'Event' as const,
-              startDate: fromDate,
-              endDate: toDate,
-              startTime: event.start_time,
-              endTime: event.end_time,
-              status: event.status,
-              color: '#10b981', // Green color for database events
-              attendees: []
-            };
-          });
-          setDatabaseEvents(convertedEvents);
-        }
+        // User has no events - set empty array (no fallback to all company events)
+        setDatabaseEvents([]);
+        console.log(`ℹ️ User ${user.email} has no events assigned or created`);
       }
     } catch (error) {
       console.error('Failed to load database events:', error);

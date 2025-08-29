@@ -134,16 +134,87 @@ export const subscribeToItineraries = (eventId: string, callback: (payload: any)
 // EVENT OPERATIONS
 // ============================================
 
-// Get all events for user's company
+// Get events for user's company - ONLY events user has access to
 export const getEvents = async (companyId: string) => {
-  const { data, error } = await supabase
-    .from('events')
-    .select('*')
-    .eq('company_id', companyId)
-    .order('created_at', { ascending: false })
-  
-  if (error) throw error
-  return data
+  try {
+    // Get current user to check their access
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      console.error('❌ No authenticated user found')
+      return []
+    }
+
+    // First get team memberships for the user
+    const { data: teamMemberships, error: teamMembershipsError } = await supabase
+      .from('team_members')
+      .select('team_id')
+      .eq('user_id', user.id)
+
+    if (teamMembershipsError) {
+      console.error('❌ Failed to fetch team memberships:', teamMembershipsError)
+      return []
+    }
+
+    const teamIds = (teamMemberships || []).map(tm => tm.team_id)
+    
+    // Get events the user is assigned to via teams
+    const { data: teamEvents, error: teamEventsError } = await supabase
+      .from('team_events')
+      .select('event_id')
+      .in('team_id', teamIds)w
+    if (teamEventsError) {
+      console.error('❌ Failed to fetch team events:', teamEventsError)
+      return []
+    }
+
+    const eventIds = (teamEvents || []).map(te => te.event_id)
+    
+    // Get events created by the user
+    const { data: userCreatedEvents, error: userEventsError } = await supabase
+      .from('events')
+      .select('*')
+      .eq('company_id', companyId)
+      .eq('created_by', user.id)
+
+    if (userEventsError) {
+      console.error('❌ Failed to fetch user created events:', userEventsError)
+      return []
+    }
+
+    // Get events the user is assigned to via teams
+    let teamAssignedEvents: any[] = []
+    if (eventIds.length > 0) {
+      const { data: assignedEvents, error: assignedEventsError } = await supabase
+        .from('events')
+        .select('*')
+        .eq('company_id', companyId)
+        .in('id', eventIds)
+
+      if (assignedEventsError) {
+        console.error('❌ Failed to fetch assigned events:', assignedEventsError)
+      } else {
+        teamAssignedEvents = assignedEvents || []
+      }
+    }
+
+    // Merge and deduplicate events
+    const allEvents = [...(userCreatedEvents || []), ...teamAssignedEvents]
+    const dedupedEvents = Object.values(
+      allEvents.reduce((acc: Record<string, any>, event: any) => {
+        acc[event.id] = event
+        return acc
+      }, {})
+    )
+
+    console.log(`✅ User ${user.email} can see ${dedupedEvents.length} events via getEvents:`, 
+      dedupedEvents.map((e: any) => ({ id: e.id, name: e.name, created_by: e.created_by }))
+    )
+    
+    return dedupedEvents
+  } catch (error) {
+    console.error('Failed to load events:', error)
+    return []
+  }
 }
 
 // Create a new event

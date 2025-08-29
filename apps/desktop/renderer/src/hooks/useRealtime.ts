@@ -17,14 +17,85 @@ export const useRealtimeEvents = (companyId?: string | null) => {
     
     try {
       setLoading(true)
-      const { data, error } = await supabase
+      
+      // Get current user to check their access
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        console.error('❌ No authenticated user found in useRealtime')
+        setEvents([])
+        setLoading(false)
+        return
+      }
+
+      // Get events the user is assigned to via teams
+      const { data: teamMemberships, error: teamMembershipsError } = await supabase
+        .from('team_members')
+        .select('team_id')
+        .eq('user_id', user.id)
+
+      if (teamMembershipsError) {
+        console.error('❌ Failed to fetch team memberships:', teamMembershipsError)
+        setEvents([])
+        setLoading(false)
+        return
+      }
+
+      const teamIds = (teamMemberships || []).map(tm => tm.team_id)
+      
+      // Get events created by the user
+      const { data: userCreatedEvents, error: userEventsError } = await supabase
         .from('events')
         .select('*')
         .eq('company_id', companyId)
-        .order('created_at', { ascending: false })
-      
-      if (error) throw error
-      setEvents(data || [])
+        .eq('created_by', user.id)
+
+      if (userEventsError) {
+        console.error('❌ Failed to fetch user created events:', userEventsError)
+        setEvents([])
+        setLoading(false)
+        return
+      }
+
+      // Get events the user is assigned to via teams
+      let teamAssignedEvents: any[] = []
+      if (teamIds.length > 0) {
+        const { data: teamEvents, error: teamEventsError } = await supabase
+          .from('team_events')
+          .select('event_id')
+          .in('team_id', teamIds)
+
+        if (teamEventsError) {
+          console.error('❌ Failed to fetch team events:', teamEventsError)
+        } else {
+          const eventIds = (teamEvents || []).map(te => te.event_id)
+          
+          if (eventIds.length > 0) {
+            const { data: assignedEvents, error: assignedEventsError } = await supabase
+              .from('events')
+              .select('*')
+              .eq('company_id', companyId)
+              .in('id', eventIds)
+
+            if (assignedEventsError) {
+              console.error('❌ Failed to fetch assigned events:', assignedEventsError)
+            } else {
+              teamAssignedEvents = assignedEvents || []
+            }
+          }
+        }
+      }
+
+      // Merge and deduplicate events
+      const allEvents = [...(userCreatedEvents || []), ...teamAssignedEvents]
+      const dedupedEvents = Object.values(
+        allEvents.reduce((acc: Record<string, any>, event: any) => {
+          acc[event.id] = event
+          return acc
+        }, {})
+      )
+
+      console.log(`✅ useRealtime: User ${user.email} can see ${dedupedEvents.length} events`)
+      setEvents(dedupedEvents)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {

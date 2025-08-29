@@ -94,38 +94,59 @@ export interface TeamInvitation {
   invited_by_user?: User
 }
 
-// Enhanced team functions with company isolation
+// Enhanced team functions with company isolation - ONLY show teams user is a member of
 export const getCompanyTeams = async (companyId: string): Promise<Team[]> => {
   try {
     // Validate company access
-    if (!validateCompanyAccess(companyId)) {
+    if (!(await validateCompanyAccess(companyId))) {
       console.error('❌ Access denied to company teams')
       return []
     }
 
-    const { data, error } = await supabase
-      .from('teams')
+    // Get current user to check their team memberships
+    const currentUser = await getCurrentUser()
+    if (!currentUser) {
+      console.error('❌ No authenticated user found')
+      return []
+    }
+
+    // Get teams where the user is a member
+    const { data: userTeams, error: userTeamsError } = await supabase
+      .from('team_members')
       .select(`
-        *,
-        team_members(
-          id,
-          user_id,
-          role,
-          joined_at,
-          user:users!team_members_user_id_fkey(*)
+        team_id,
+        team:teams!team_members_team_id_fkey(
+          *,
+          team_members(
+            id,
+            user_id,
+            role,
+            joined_at,
+            user:users!team_members_user_id_fkey(*)
+          )
         )
       `)
-      .eq('company_id', companyId)
-      .eq('is_archived', false)
-      .order('created_at', { ascending: false })
+      .eq('user_id', currentUser.id)
+      .eq('team.company_id', companyId)
+      .eq('team.is_archived', false)
 
-    if (error) throw error
+    if (userTeamsError) {
+      console.error('❌ Failed to fetch user teams:', userTeamsError)
+      return []
+    }
 
-    return (data || []).map(team => ({
-      ...team,
-      members: team.team_members || [],
-      member_count: team.team_members?.length || 0
+    // Transform the data to match expected format
+    const teams = (userTeams || []).map(ut => ({
+      ...ut.team,
+      members: ut.team.team_members || [],
+      member_count: ut.team.team_members?.length || 0
     }))
+
+    console.log(`✅ User ${currentUser.email} can see ${teams.length} teams:`, 
+      teams.map(t => ({ id: t.id, name: t.name, created_by: t.created_by }))
+    )
+
+    return teams
   } catch (error) {
     console.error('Failed to fetch company teams:', error)
     return []

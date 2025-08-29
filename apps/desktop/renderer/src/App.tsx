@@ -323,13 +323,13 @@ const AppContent = () => {
             return acc;
           }, {} as Record<string, Event>)
         );
-        if (dedupedEvents.length > 0) {
-          setEvents(dedupedEvents as EventType[]);
-        } else {
-          // Fallback: show all company events if user is not in any team and has not created any events
-          const companyEvents = await getEvents(user.company_id);
-          setEvents(companyEvents || []);
-        }
+        // Only show events the user is actually assigned to or created
+        setEvents(dedupedEvents as EventType[]);
+        
+        // Log what events the user can see
+        console.log(`User ${user.email} can see ${dedupedEvents.length} events:`, 
+          dedupedEvents.map((e: Event) => ({ id: e.id, name: e.name, created_by: e.created_by }))
+        );
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load events');
         setEvents([]);

@@ -1,4 +1,5 @@
 import { supabase, supabaseAdmin } from './supabase'
+import { sendAccountConfirmationEmail, sendSimpleConfirmationEmail } from './emailTemplates'
 
 export interface WelcomeEmailData {
   email: string
@@ -47,7 +48,7 @@ export const emailService = {
             role: userData.role || 'user',
             status: userData.status || 'offline'
           },
-          emailRedirectTo: 'https://dashboard.ontimely.co.uk/confirm-email'
+          emailRedirectTo: 'https://dashboard.ontimely.co.uk/confirm-account'
         }
       })
 
@@ -117,20 +118,38 @@ export const emailService = {
     }
   },
 
-  // Send welcome email through Supabase Auth
+  // Send welcome email through Resend
   async sendWelcomeEmailViaSupabase(data: WelcomeEmailData): Promise<void> {
     try {
-      // Use Supabase Auth to send a password reset email (which will serve as welcome email)
-      const { error } = await supabase.auth.resetPasswordForEmail(data.email, {
-        redirectTo: 'https://dashboard.ontimely.co.uk/reset-password-confirm'
-      })
+      // Generate confirmation URL with token
+      const confirmationUrl = `https://dashboard.ontimely.co.uk/confirm-account?token=${encodeURIComponent(data.email)}&type=signup`;
+      
+      // Send professional confirmation email via Resend
+      await sendAccountConfirmationEmail({
+        email: data.email,
+        name: data.name,
+        companyName: data.companyName,
+        confirmationUrl: confirmationUrl
+      });
 
-      if (error) throw error
-
-      console.log(`Welcome email sent successfully to ${data.email} via Supabase Auth`)
+      console.log(`✅ Professional confirmation email sent successfully to ${data.email} via Resend`)
     } catch (error) {
-      console.error('Error sending welcome email via Supabase:', error)
-      // Don't throw error - user creation should still succeed
+      console.error('❌ Error sending confirmation email via Resend:', error);
+      
+      // Fallback to simple email template
+      try {
+        const confirmationUrl = `https://dashboard.ontimely.co.uk/confirm-account?token=${encodeURIComponent(data.email)}&type=signup`;
+        await sendSimpleConfirmationEmail({
+          email: data.email,
+          name: data.name,
+          companyName: data.companyName,
+          confirmationUrl: confirmationUrl
+        });
+        console.log(`✅ Fallback confirmation email sent successfully to ${data.email}`);
+      } catch (fallbackError) {
+        console.error('❌ Fallback email also failed:', fallbackError);
+        // Don't throw error - user creation should still succeed
+      }
     }
   },
 
