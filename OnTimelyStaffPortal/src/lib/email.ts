@@ -79,7 +79,7 @@ export const emailService = {
         }
       }
       
-      const { data: authData, error: authError } = await createAuthUserWithRetry()
+      const { data: authData } = await createAuthUserWithRetry()
 
       if (!authData.user) {
         throw new Error('Supabase Auth user creation succeeded but no user data returned')
