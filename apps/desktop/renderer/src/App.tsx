@@ -447,7 +447,32 @@ const AppContent = () => {
   }
   
   if (error && !isLoginPage && !isResetPasswordPage) {
-    return <div style={{ padding: 64, color: isDark ? '#ff6b6b' : 'red', fontFamily: 'Roboto, Arial, system-ui, sans-serif' }}>{error}</div>;
+    return (
+      <div style={{ 
+        padding: 64, 
+        color: isDark ? '#ff6b6b' : 'red', 
+        fontFamily: 'Roboto, Arial, system-ui, sans-serif',
+        textAlign: 'center'
+      }}>
+        <h2>Something went wrong</h2>
+        <p>{error}</p>
+        <button 
+          onClick={() => window.location.href = '/dashboard'}
+          style={{
+            padding: '12px 24px',
+            background: '#667eea',
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            fontSize: '16px',
+            marginTop: '20px'
+          }}
+        >
+          Go to Dashboard
+        </button>
+      </div>
+    );
   }
 
   const mainContentStyle: React.CSSProperties = {
