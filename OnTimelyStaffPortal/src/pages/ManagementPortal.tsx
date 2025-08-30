@@ -10,8 +10,8 @@ import {
   Settings,
   Menu,
   UserCircle,
-  ChevronLeft,
-  ChevronRight
+  // ChevronLeft, // TODO: Uncomment when needed
+  // ChevronRight // TODO: Uncomment when needed
 } from 'lucide-react'
 
 const ManagementPortal: React.FC = () => {

@@ -6,8 +6,9 @@ import {
   Activity, 
   UserPlus, 
   Building,
-  Clock,
-  CheckCircle
+  // Clock, // TODO: Uncomment when needed
+  CheckCircle,
+  // AlertCircle // TODO: Uncomment when needed
 } from 'lucide-react'
 import { db } from '../lib/database'
 import { Company, User } from '../lib/supabase'
@@ -71,7 +72,23 @@ const Dashboard: React.FC = () => {
     }
   }
 
+  // const getCompanyGrowthData = () => { // TODO: Uncomment when needed
+  //   const now = new Date()
+  //   const months = []
+    
+  //   for (let i = 5; i >= 0; i--) {
+  //     const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
+  //     months.push({
+  //       month: date.toLocaleDateString('en-US', { month: 'short' }),
+  //       companies: 0,
+  //       users: 0
+  //     })
+  //   }
 
+  //   // This would be more efficient with a proper analytics query
+  //   // For now, we'll use the data we already have
+  //     return months
+  // }
 
   if (loading) {
     return (

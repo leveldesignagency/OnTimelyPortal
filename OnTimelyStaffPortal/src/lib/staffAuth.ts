@@ -218,3 +218,6 @@ class StaffAuthService {
 
 // Export singleton instance
 export const staffAuth = new StaffAuthService()
+
+// Export types
+// export type { StaffMember, LoginCredentials, AuthState } // TODO: Uncomment when needed

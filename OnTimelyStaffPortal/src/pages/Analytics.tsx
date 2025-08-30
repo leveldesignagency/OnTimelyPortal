@@ -1,32 +1,32 @@
 import React, { useState } from 'react'
 import { 
-  TrendingUp, 
+  // TrendingUp, // TODO: Uncomment when needed
   Users, 
   Activity, 
   Calendar,
-  Download,
-  Eye,
-  Clock,
-  Globe,
-  Smartphone,
-  Monitor,
+  // Download, // TODO: Uncomment when needed
+  // Eye, // TODO: Uncomment when needed
+  // Clock, // TODO: Uncomment when needed
+  // Globe, // TODO: Uncomment when needed
+  // Smartphone, // TODO: Uncomment when needed
+  // Monitor, // TODO: Uncomment when needed
   BarChart3,
-  PieChart,
-  Filter
+  // PieChart, // TODO: Uncomment when needed
+  // Filter // TODO: Uncomment when needed
 } from 'lucide-react'
 import { 
-  LineChart, 
-  Line, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer, 
+  // LineChart, // TODO: Uncomment when needed
+  // Line, // TODO: Uncomment when needed
+  // XAxis, // TODO: Uncomment when needed
+  // YAxis, // TODO: Uncomment when needed
+  // CartesianGrid, // TODO: Uncomment when needed
+  // Tooltip, // TODO: Uncomment when needed
+  // ResponsiveContainer, // TODO: Uncomment when needed
   BarChart, 
   Bar,
-  PieChart as RechartsPieChart,
-  Pie,
-  Cell
+  // PieChart as RechartsPieChart, // TODO: Uncomment when needed
+  // Pie, // TODO: Uncomment when needed
+  // Cell // TODO: Uncomment when needed
 } from 'recharts'
 
 const Analytics: React.FC = () => {

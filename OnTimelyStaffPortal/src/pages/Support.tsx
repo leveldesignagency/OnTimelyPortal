@@ -3,17 +3,17 @@ import {
   Search, 
   Plus, 
   MessageCircle, 
-  FileText, 
-  Video, 
+  // FileText, // TODO: Uncomment when needed
+  // Video, // TODO: Uncomment when needed
   BookOpen,
   HelpCircle,
-  AlertCircle,
+  // AlertCircle, // TODO: Uncomment when needed
   CheckCircle,
   Clock,
   User,
-  Tag,
-  Filter,
-  ExternalLink
+  // Tag, // TODO: Uncomment when needed
+  // Filter, // TODO: Uncomment when needed
+  // ExternalLink // TODO: Uncomment when needed
 } from 'lucide-react'
 
 const Support: React.FC = () => {

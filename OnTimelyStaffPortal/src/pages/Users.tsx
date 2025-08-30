@@ -1,15 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { 
+  // Users, // TODO: Uncomment when needed
   Plus, 
   Search, 
+  // Filter, // TODO: Uncomment when needed
+  // MoreVertical, // TODO: Uncomment when needed
+  Edit, 
+  Trash2, 
+  // Download, // TODO: Uncomment when needed
+  // Upload, // TODO: Uncomment when needed
   UserPlus,
   X,
   Key,
+  // Eye, // TODO: Uncomment when needed
+  // EyeOff, // TODO: Uncomment when needed
   ChevronDown,
   Check,
-  Shield,
-  Edit,
-  Trash2
+  Shield
 } from 'lucide-react'
 import { db } from '../lib/database'
 import { User, Company } from '../lib/supabase'
@@ -39,7 +46,7 @@ const UsersPage: React.FC = () => {
   const [bulkInput, setBulkInput] = useState('')
   const [bulkCompanyId, setBulkCompanyId] = useState('')
   const [bulkRole, setBulkRole] = useState('user')
-  const [csvFile, setCsvFile] = useState<File | null>(null)
+  // const [csvFile, setCsvFile] = useState<File | null>(null) // TODO: Uncomment when needed
   const [bulkPreview, setBulkPreview] = useState<Array<{ email: string; name: string }>>([])
 
   // Password modal states
@@ -201,7 +208,7 @@ const UsersPage: React.FC = () => {
 
   const handlePasswordReset = async (userId: string) => {
     try {
-      await db.users.resetUserPassword(userId)
+      // const temporaryPassword = await db.users.resetUserPassword(userId) // TODO: Uncomment when needed
       
       // Get user details for password modal
       const user = users.find(u => u.id === userId)
@@ -247,7 +254,7 @@ const UsersPage: React.FC = () => {
   const handleCsvUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (file) {
-      setCsvFile(file)
+      // setCsvFile(file) // TODO: Uncomment when needed
       const reader = new FileReader()
       reader.onload = (e) => {
         const text = e.target?.result as string

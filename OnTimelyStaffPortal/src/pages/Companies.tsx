@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Search, Plus, Filter, MoreVertical, Building2, Users, Mail, Phone, MapPin } from 'lucide-react'
+import { Search, Plus, /* Filter, */ MoreVertical, Building2, Users, /* Mail, Phone, MapPin */ } from 'lucide-react'
 import { db } from '@/lib/database'
 import { Company } from '@/lib/supabase'
 
