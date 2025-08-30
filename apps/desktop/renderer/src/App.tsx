@@ -490,7 +490,7 @@ const AppContent = () => {
               <Route path="/create-event" element={<ProtectedRoute><CreateEventPage onCreate={handleCreateEvent} /></ProtectedRoute>} />
               <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
               <Route path="/event/:id" element={<ProtectedRoute><EventDashboardPage events={events} onDeleteEvent={handleDeleteEvent} /></ProtectedRoute>} />
-              <Route path="/event/:id/add-guests" element={<ProtectedRoute><CreateGuests /></ProtectedRoute>} />
+              <Route path="/event/:eventId/add-guests" element={<ProtectedRoute><CreateGuests /></ProtectedRoute>} />
               <Route path="/event/:eventId/guests/edit/:guestIndex" element={<ProtectedRoute><CreateGuests /></ProtectedRoute>} />
               <Route path="/event/:eventId/itinerary/create" element={<ProtectedRoute><CreateItinerary /></ProtectedRoute>} />
               <Route path="/event/:eventId/itinerary/edit/:itineraryId" element={<ProtectedRoute><CreateItinerary /></ProtectedRoute>} />
@@ -517,6 +517,9 @@ const AppContent = () => {
               <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
               {/* Public form preview route (dev only; prod served on separate host) */}
               <Route path="/forms/:token" element={<React.Suspense fallback={<SuspenseFallback />}><PublicFormPage /></React.Suspense>} />
+              
+              {/* Catch-all route to prevent React Error #310 */}
+              <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>
           </Suspense>
         </ErrorBoundary>
