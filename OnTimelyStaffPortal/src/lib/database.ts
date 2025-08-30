@@ -118,19 +118,28 @@ export const userService = {
     status?: string; 
   }): Promise<User> {
     try {
+      console.log('🔍 DATABASE: createUser called with:', userData);
+      
       // Generate temporary password
       const temporaryPassword = generateTemporaryPassword()
+      console.log('🔍 DATABASE: Generated temporary password');
       
       // Create user with Supabase Auth and profile
+      console.log('🔍 DATABASE: Calling emailService.createUserWithAuth...');
       const result = await emailService.createUserWithAuth({
         ...userData,
         password: temporaryPassword
       })
+      console.log('🔍 DATABASE: emailService.createUserWithAuth completed:', {
+        hasProfile: !!result.profile,
+        hasAuth: !!result.auth,
+        profileId: result.profile?.id
+      });
       
       // Return the profile data
       return result.profile
     } catch (error) {
-      console.error('Error creating user:', error)
+      console.error('❌ DATABASE: Error creating user:', error)
       throw error
     }
   },

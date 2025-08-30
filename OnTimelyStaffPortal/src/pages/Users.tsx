@@ -94,6 +94,13 @@ const UsersPage: React.FC = () => {
 
   const handleCreateUser = async () => {
     try {
+      console.log('🔍 USER CREATION STARTED:', {
+        email: newUser.email,
+        name: newUser.name,
+        company_id: newUser.company_id,
+        role: newUser.role
+      });
+
       if (!newUser.email || !newUser.name || !newUser.company_id) {
         setSuccessMessage('Please fill in all required fields.')
         setShowSuccess(true)
@@ -108,7 +115,9 @@ const UsersPage: React.FC = () => {
         role: newUser.role
       }
 
+      console.log('🔍 CALLING db.users.createUser with:', userData);
       const createdUser = await db.users.createUser(userData)
+      console.log('🔍 USER CREATED SUCCESSFULLY:', createdUser);
       
       // Get company name for password modal
       let companyName: string | undefined
@@ -161,6 +170,12 @@ const UsersPage: React.FC = () => {
 
   const handleBulkCreate = async () => {
     try {
+      console.log('🔍 BULK USER CREATION STARTED:', {
+        count: bulkPreview.length,
+        companyId: bulkCompanyId,
+        role: bulkRole
+      });
+
       if (bulkPreview.length === 0) return
 
       const usersToCreate = bulkPreview.map(user => ({
@@ -170,7 +185,9 @@ const UsersPage: React.FC = () => {
         role: bulkRole
       }))
 
+      console.log('🔍 CALLING db.users.bulkCreateUsers with:', usersToCreate);
       await db.users.bulkCreateUsers(usersToCreate)
+      console.log('🔍 BULK USER CREATION COMPLETED SUCCESSFULLY');
       setShowBulkModal(false)
       setBulkInput('')
       setBulkPreview([])
