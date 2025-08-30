@@ -169,7 +169,7 @@ const Dashboard: React.FC = () => {
             </div>
           </div>
           <div className="mt-4 flex items-center text-sm text-gray-600">
-            <Clock className="w-4 h-4 text-orange-500 mr-1" />
+            {/* <Clock className="w-4 h-4 text-orange-500 mr-1" /> */}
             <span className="text-orange-600">Monthly</span>
           </div>
         </div>

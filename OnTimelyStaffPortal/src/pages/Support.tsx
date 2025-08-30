@@ -261,7 +261,7 @@ const Support: React.FC = () => {
         <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
           <div className="text-center">
             <div className="p-3 bg-green-100 rounded-lg inline-block mb-4">
-              <Video className="h-8 w-8 text-green-600" />
+              {/* <Video className="h-8 w-8 text-green-600" /> */}
             </div>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Video Tutorials</h3>
             <p className="text-gray-600 mb-4">Watch step-by-step guides</p>
