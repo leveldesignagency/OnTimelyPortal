@@ -8,7 +8,14 @@ import { Resend } from 'resend';
 
 // Initialize Resend - Try Vite env first, fallback to hardcoded key
 const resendApiKey = import.meta.env.VITE_RESEND_API_KEY || 're_1234567890abcdef'; // TODO: Replace with your actual API key
+console.log('🔍 RESEND SETUP:', {
+  hasResendPackage: typeof Resend !== 'undefined',
+  apiKey: resendApiKey ? `${resendApiKey.substring(0, 10)}...` : 'NOT FOUND',
+  envVars: Object.keys(import.meta.env).filter(key => key.includes('RESEND'))
+});
+
 const resend = new Resend(resendApiKey);
+console.log('🔍 RESEND CLIENT CREATED:', !!resend);
 
 export interface EmailData {
   email: string;
@@ -323,6 +330,12 @@ export const getAccountConfirmationTemplate = (data: EmailData) => {
 
 // Send account confirmation email via Resend
 export const sendAccountConfirmationEmail = async (data: EmailData) => {
+  console.log('🔍 ATTEMPTING TO SEND RESEND EMAIL:', {
+    to: data.email,
+    hasResendClient: !!resend,
+    apiKeyExists: !!import.meta.env.VITE_RESEND_API_KEY
+  });
+  
   try {
     const { data: emailData, error } = await resend.emails.send({
       from: 'OnTimely <noreply@ontimely.co.uk>',
@@ -332,7 +345,7 @@ export const sendAccountConfirmationEmail = async (data: EmailData) => {
     });
 
     if (error) {
-      console.error('Failed to send confirmation email via Resend:', error);
+      console.error('❌ Resend email failed:', error);
       throw error;
     }
 

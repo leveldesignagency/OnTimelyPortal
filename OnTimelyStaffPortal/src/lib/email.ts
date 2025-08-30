@@ -120,11 +120,19 @@ export const emailService = {
 
   // Send welcome email through Resend
   async sendWelcomeEmailViaSupabase(data: WelcomeEmailData): Promise<void> {
+    console.log('🔍 STARTING EMAIL SEND PROCESS:', {
+      email: data.email,
+      name: data.name,
+      companyName: data.companyName
+    });
+    
     try {
       // Generate confirmation URL with token
       const confirmationUrl = `https://ontimely.co.uk/confirm-account?token=${encodeURIComponent(data.email)}&type=signup`;
+      console.log('🔍 CONFIRMATION URL:', confirmationUrl);
       
       // Send professional confirmation email via Resend
+      console.log('🔍 CALLING sendAccountConfirmationEmail...');
       await sendAccountConfirmationEmail({
         email: data.email,
         name: data.name,
@@ -135,9 +143,15 @@ export const emailService = {
       console.log(`✅ Professional confirmation email sent successfully to ${data.email} via Resend`)
     } catch (error) {
       console.error('❌ Error sending confirmation email via Resend:', error);
+      console.error('❌ ERROR DETAILS:', {
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : 'No stack trace',
+        name: error instanceof Error ? error.name : 'Unknown error type'
+      });
       
       // Fallback to simple email template
       try {
+        console.log('🔍 TRYING FALLBACK EMAIL...');
         const confirmationUrl = `https://ontimely.co.uk/confirm-account?token=${encodeURIComponent(data.email)}&type=signup`;
         await sendSimpleConfirmationEmail({
           email: data.email,
