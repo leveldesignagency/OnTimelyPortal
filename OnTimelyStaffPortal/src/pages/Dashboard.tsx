@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { db } from '../lib/database'
 import { Company, User } from '../lib/supabase'
+import { staffAuth } from '../lib/staffAuth'
 
 const Dashboard: React.FC = () => {
   const [stats, setStats] = useState({
@@ -26,6 +27,18 @@ const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    // Log authentication state
+    const logAuthState = async () => {
+      const currentUser = await staffAuth.getCurrentUser();
+      console.log('🔐 DASHBOARD: Authentication state:', {
+        currentUser,
+        isAuthenticated: !!currentUser,
+        userRole: currentUser?.role,
+        userEmail: currentUser?.email
+      });
+    };
+    
+    logAuthState();
     loadDashboardData()
   }, [])
 

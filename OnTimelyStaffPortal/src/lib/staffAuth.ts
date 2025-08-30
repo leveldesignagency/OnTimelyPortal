@@ -77,6 +77,7 @@ class StaffAuthService {
   // Login staff member - SIMPLE PASSWORD CHECK
   async login(credentials: LoginCredentials): Promise<AuthState> {
     try {
+      console.log('🔐 STAFF AUTH: Login attempt for:', credentials.email);
       this.authState.isLoading = true
       this.authState.error = null
 
@@ -88,13 +89,15 @@ class StaffAuthService {
         .eq('is_active', true)
         .single()
 
+      console.log('🔐 STAFF AUTH: Database query result:', { staffMember, staffError });
+
       if (staffError || !staffMember) {
         throw new Error('Invalid credentials or account not found')
       }
 
       // SIMPLE: Just check if password matches what's stored
       if (staffMember.password_hash !== credentials.password) {
-        console.log('Password check:', {
+        console.log('🔐 STAFF AUTH: Password check failed:', {
           entered: credentials.password,
           stored: staffMember.password_hash
         })
@@ -116,6 +119,12 @@ class StaffAuthService {
       this.authState.user = staffMember
       this.authState.isAuthenticated = true
       this.authState.isLoading = false
+
+      console.log('🔐 STAFF AUTH: Login successful!', {
+        user: staffMember,
+        authState: this.authState,
+        session: this.getCurrentSession()
+      });
 
       return this.authState
     } catch (error) {
