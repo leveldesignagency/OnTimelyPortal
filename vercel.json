@@ -1,0 +1,7 @@
+{
+  "buildCommand": "cd OnTimelyStaffPortal && npm run build",
+  "outputDirectory": "OnTimelyStaffPortal/dist",
+  "framework": "vite",
+  "installCommand": "cd OnTimelyStaffPortal && npm install",
+  "devCommand": "cd OnTimelyStaffPortal && npm run dev"
+}
