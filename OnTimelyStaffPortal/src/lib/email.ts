@@ -271,7 +271,7 @@ export const emailService = {
   },
 
         // Send password reset email using the same flow as desktop app
-      async sendPasswordResetEmail(email: string, name: string, companyId?: string): Promise<void> {
+      async sendPasswordResetEmail(email: string, name: string): Promise<void> {
         try {
           // First check if user exists in database
           const { data: existingUser, error: userCheckError } = await supabase

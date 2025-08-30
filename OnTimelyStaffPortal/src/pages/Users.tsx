@@ -1,22 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { 
-  Users, 
   Plus, 
   Search, 
-  Filter, 
-  MoreVertical, 
-  Edit, 
-  Trash2, 
-  Download,
-  Upload,
   UserPlus,
   X,
   Key,
-  Eye,
-  EyeOff,
   ChevronDown,
   Check,
-  Shield
+  Shield,
+  Edit,
+  Trash2
 } from 'lucide-react'
 import { db } from '../lib/database'
 import { User, Company } from '../lib/supabase'
@@ -208,7 +201,7 @@ const UsersPage: React.FC = () => {
 
   const handlePasswordReset = async (userId: string) => {
     try {
-      const temporaryPassword = await db.users.resetUserPassword(userId)
+      await db.users.resetUserPassword(userId)
       
       // Get user details for password modal
       const user = users.find(u => u.id === userId)

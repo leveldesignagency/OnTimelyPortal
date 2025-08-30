@@ -11,14 +11,11 @@ import {
   RefreshCw,
   AlertTriangle,
   CheckCircle,
-  Clock,
   Server,
   HardDrive,
   Cpu,
   Network,
-  FileText,
-  Key,
-  Globe
+  Key
 } from 'lucide-react'
 
 const Admin: React.FC = () => {
