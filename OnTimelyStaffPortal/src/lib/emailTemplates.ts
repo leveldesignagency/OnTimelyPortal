@@ -32,26 +32,32 @@ console.log('🔍 CURRENT LOCATION:', {
   fullUrl: window.location.href
 });
 
-try {
-  console.log('🔍 TESTING GENERAL NETWORK CONNECTIVITY...');
-  
-  // Test general internet connectivity
-  const googleResponse = await fetch('https://www.google.com');
-  console.log('🔍 GOOGLE CONNECTIVITY:', {
-    status: googleResponse.status,
-    ok: googleResponse.ok
-  });
-  
-  // Test Resend API specifically
-  const testResponse = await fetch('https://api.resend.com/health');
-  console.log('🔍 RESEND API HEALTH CHECK:', {
-    status: testResponse.status,
-    ok: testResponse.ok,
-    statusText: testResponse.statusText
-  });
-} catch (connectivityError) {
-  console.error('❌ NETWORK CONNECTIVITY FAILED:', connectivityError);
-}
+// Network connectivity test function
+const testNetworkConnectivity = async () => {
+  try {
+    console.log('🔍 TESTING GENERAL NETWORK CONNECTIVITY...');
+    
+    // Test general internet connectivity
+    const googleResponse = await fetch('https://www.google.com');
+    console.log('🔍 GOOGLE CONNECTIVITY:', {
+      status: googleResponse.status,
+      ok: googleResponse.ok
+    });
+    
+    // Test Resend API specifically
+    const testResponse = await fetch('https://api.resend.com/health');
+    console.log('🔍 RESEND API HEALTH CHECK:', {
+      status: testResponse.status,
+      ok: testResponse.ok,
+      statusText: testResponse.statusText
+    });
+  } catch (connectivityError) {
+    console.error('❌ NETWORK CONNECTIVITY FAILED:', connectivityError);
+  }
+};
+
+// Call the function when module loads
+testNetworkConnectivity();
 
 export interface EmailData {
   email: string;
