@@ -6,17 +6,18 @@ import { Resend } from 'resend';
 // 3. Replace the placeholder below
 // 4. Or add VITE_RESEND_API_KEY to your .env.local file and use: import.meta.env.VITE_RESEND_API_KEY
 
-// Initialize Resend - Use Vite env variable
-const resendApiKey = import.meta.env.VITE_RESEND_API_KEY;
+// Initialize Resend - Use the working API key from .env.local
+const resendApiKey = import.meta.env.RESEND_API_KEY;
 console.log('🔍 RESEND SETUP:', {
   hasResendPackage: typeof Resend !== 'undefined',
   apiKey: resendApiKey ? `${resendApiKey.substring(0, 10)}...` : 'NOT FOUND',
-  envVars: Object.keys(import.meta.env).filter(key => key.includes('RESEND'))
+  envVars: Object.keys(import.meta.env).filter(key => key.includes('RESEND')),
+  fromEmail: import.meta.env.FROM_EMAIL
 });
 
 if (!resendApiKey) {
-  console.error('❌ RESEND API KEY MISSING: VITE_RESEND_API_KEY not found in environment variables');
-  throw new Error('Resend API key not configured. Please set VITE_RESEND_API_KEY in your .env.local file.');
+  console.error('❌ RESEND API KEY MISSING: RESEND_API_KEY not found in environment variables');
+  throw new Error('Resend API key not configured. Please set RESEND_API_KEY in your .env.local file.');
 }
 
 const resend = new Resend(resendApiKey);
@@ -342,8 +343,9 @@ export const sendAccountConfirmationEmail = async (data: EmailData) => {
   });
   
   try {
+    const fromEmail = import.meta.env.FROM_EMAIL || 'noreply@ontimely.co.uk';
     console.log('🔍 SENDING TO RESEND:', {
-      from: 'OnTimely <noreply@ontimely.co.uk>',
+      from: `OnTimely <${fromEmail}>`,
       to: [data.email],
       subject: `Confirm Your OnTimely Account - Welcome ${data.name}!`,
       hasHtml: !!getAccountConfirmationTemplate(data),
@@ -351,7 +353,7 @@ export const sendAccountConfirmationEmail = async (data: EmailData) => {
     });
     
     const { data: emailData, error } = await resend.emails.send({
-      from: 'OnTimely <noreply@ontimely.co.uk>',
+      from: `OnTimely <${fromEmail}>`,
       to: [data.email],
       subject: `Confirm Your OnTimely Account - Welcome ${data.name}!`,
       html: getAccountConfirmationTemplate(data),
@@ -427,8 +429,9 @@ export const getSimpleConfirmationTemplate = (data: EmailData) => {
 // Send simple confirmation email (fallback)
 export const sendSimpleConfirmationEmail = async (data: EmailData) => {
   try {
+    const fromEmail = import.meta.env.FROM_EMAIL || 'noreply@ontimely.co.uk';
     const { data: emailData, error } = await resend.emails.send({
-      from: 'OnTimely <noreply@ontimely.co.uk>',
+      from: `OnTimely <${fromEmail}>`,
       to: [data.email],
       subject: `Confirm Your OnTimely Account`,
       html: getSimpleConfirmationTemplate(data),
