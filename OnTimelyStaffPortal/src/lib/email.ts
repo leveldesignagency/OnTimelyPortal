@@ -48,7 +48,7 @@ export const emailService = {
             role: userData.role || 'user',
             status: userData.status || 'offline'
           },
-          emailRedirectTo: 'https://dashboard.ontimely.co.uk/confirm-account'
+          emailRedirectTo: 'https://ontimely.co.uk/confirm-account'
         }
       })
 
@@ -270,14 +270,16 @@ export const emailService = {
             throw new Error('Email not found in database')
           }
 
-          // Use the same password reset flow as your desktop app
-          const { error } = await supabase.auth.resetPasswordForEmail(email, {
-            redirectTo: 'https://dashboard.ontimely.co.uk/reset-password.html'
-          })
+          // Use Resend for password reset emails
+          const resetUrl = `https://ontimely.co.uk/set-initial-password?token=${encodeURIComponent(email)}&type=recovery`;
+          
+          await sendSimpleConfirmationEmail({
+            email: email,
+            name: name,
+            confirmationUrl: resetUrl
+          });
 
-          if (error) throw error
-
-          console.log(`Password reset email sent successfully to ${email}`)
+          console.log(`✅ Password reset email sent successfully to ${email} via Resend`)
         } catch (error) {
           console.error('Error sending password reset email:', error)
           throw error
