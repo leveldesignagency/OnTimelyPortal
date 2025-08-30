@@ -22,8 +22,8 @@ import {
   // CartesianGrid, // TODO: Uncomment when needed
   // Tooltip, // TODO: Uncomment when needed
   // ResponsiveContainer, // TODO: Uncomment when needed
-  BarChart, 
-  Bar,
+  // BarChart, // TODO: Uncomment when needed
+  // Bar, // TODO: Uncomment when needed
   // PieChart as RechartsPieChart, // TODO: Uncomment when needed
   // Pie, // TODO: Uncomment when needed
   // Cell // TODO: Uncomment when needed
@@ -83,21 +83,21 @@ const Analytics: React.FC = () => {
     // }
   ]
 
-  const userActivityData = [
-    { date: 'Jan 1', users: 1200, sessions: 1800, events: 45 },
-    { date: 'Jan 2', users: 1350, sessions: 2100, events: 52 },
-    { date: 'Jan 3', users: 1100, sessions: 1650, events: 38 },
-    { date: 'Jan 4', users: 1500, sessions: 2400, events: 67 },
-    { date: 'Jan 5', users: 1400, sessions: 2200, events: 58 },
-    { date: 'Jan 6', users: 1600, sessions: 2600, events: 72 },
-    { date: 'Jan 7', users: 1450, sessions: 2300, events: 61 }
-  ]
+  // const userActivityData = [ // TODO: Uncomment when charts are restored
+  //   { date: 'Jan 1', users: 1200, sessions: 1800, events: 45 },
+  //   { date: 'Jan 2', users: 1350, sessions: 2100, events: 52 },
+  //   { date: 'Jan 3', users: 1100, sessions: 1650, events: 38 },
+  //   { date: 'Jan 4', users: 1500, sessions: 2400, events: 67 },
+  //   { date: 'Jan 5', users: 1400, sessions: 2200, events: 58 },
+  //   { date: 'Jan 6', users: 1600, sessions: 2600, events: 72 },
+  //   { date: 'Jan 7', users: 1450, sessions: 2300, events: 61 }
+  // ]
 
-  const deviceUsageData = [
-    { name: 'Desktop', value: 65, color: '#3b82f6' },
-    { name: 'Mobile', value: 25, color: '#10b981' },
-    { name: 'Tablet', value: 10, color: '#f59e0b' }
-  ]
+  // const deviceUsageData = [ // TODO: Uncomment when charts are restored
+  //   { name: 'Desktop', value: 65, color: '#3b82f6' },
+  //   { name: 'Mobile', value: 25, color: '#10b981' },
+  //   { name: 'Tablet', value: 10, color: '#f59e0b' }
+  // ]
 
   const topFeatures = [
     { feature: 'Event Creation', usage: 85, change: '+12%' },
