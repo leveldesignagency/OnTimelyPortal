@@ -18,9 +18,12 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   useEffect(() => {
     const checkAuth = async () => {
       try {
+        console.log('🔐 PROTECTED ROUTE: Checking authentication...');
         const state = await staffAuth.init()
+        console.log('🔐 PROTECTED ROUTE: Auth state:', state);
         setAuthState(state)
       } catch (error) {
+        console.error('🔐 PROTECTED ROUTE: Auth check failed:', error);
         setAuthState({
           user: null,
           isAuthenticated: false,
@@ -46,8 +49,11 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   }
 
   if (!authState?.isAuthenticated) {
+    console.log('🔐 PROTECTED ROUTE: Not authenticated, redirecting to login');
     return <Navigate to="/login" replace />
   }
+  
+  console.log('🔐 PROTECTED ROUTE: Authentication successful, rendering protected content');
 
   return <>{children}</>
 }
