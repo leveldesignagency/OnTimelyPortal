@@ -6,13 +6,18 @@ import { Resend } from 'resend';
 // 3. Replace the placeholder below
 // 4. Or add VITE_RESEND_API_KEY to your .env.local file and use: import.meta.env.VITE_RESEND_API_KEY
 
-// Initialize Resend - Try Vite env first, fallback to hardcoded key
-const resendApiKey = import.meta.env.VITE_RESEND_API_KEY || 're_1234567890abcdef'; // TODO: Replace with your actual API key
+// Initialize Resend - Use Vite env variable
+const resendApiKey = import.meta.env.VITE_RESEND_API_KEY;
 console.log('🔍 RESEND SETUP:', {
   hasResendPackage: typeof Resend !== 'undefined',
   apiKey: resendApiKey ? `${resendApiKey.substring(0, 10)}...` : 'NOT FOUND',
   envVars: Object.keys(import.meta.env).filter(key => key.includes('RESEND'))
 });
+
+if (!resendApiKey) {
+  console.error('❌ RESEND API KEY MISSING: VITE_RESEND_API_KEY not found in environment variables');
+  throw new Error('Resend API key not configured. Please set VITE_RESEND_API_KEY in your .env.local file.');
+}
 
 const resend = new Resend(resendApiKey);
 console.log('🔍 RESEND CLIENT CREATED:', !!resend);
@@ -338,7 +343,7 @@ export const sendAccountConfirmationEmail = async (data: EmailData) => {
   
   try {
     const { data: emailData, error } = await resend.emails.send({
-      from: 'OnTimely <noreply@ontimely.co.uk>',
+      from: 'OnTimely <onboarding@resend.dev>',
       to: [data.email],
       subject: `Confirm Your OnTimely Account - Welcome ${data.name}!`,
       html: getAccountConfirmationTemplate(data),
@@ -407,7 +412,7 @@ export const getSimpleConfirmationTemplate = (data: EmailData) => {
 export const sendSimpleConfirmationEmail = async (data: EmailData) => {
   try {
     const { data: emailData, error } = await resend.emails.send({
-      from: 'OnTimely <noreply@ontimely.co.uk>',
+      from: 'OnTimely <onboarding@resend.dev>',
       to: [data.email],
       subject: `Confirm Your OnTimely Account`,
       html: getSimpleConfirmationTemplate(data),
