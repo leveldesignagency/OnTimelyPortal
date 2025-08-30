@@ -48,7 +48,7 @@ export const emailService = {
             role: userData.role || 'user',
             status: userData.status || 'offline'
           },
-          emailRedirectTo: 'https://ontimely.co.uk/confirm-account'
+          emailRedirectTo: 'https://dashboard.ontimely.co.uk/confirm-account'
         }
       })
 
@@ -128,7 +128,7 @@ export const emailService = {
     
     try {
       // Generate confirmation URL with token
-      const confirmationUrl = `https://ontimely.co.uk/confirm-account?token=${encodeURIComponent(data.email)}&type=signup`;
+      const confirmationUrl = `https://dashboard.ontimely.co.uk/confirm-account?token=${encodeURIComponent(data.email)}&type=signup`;
       console.log('🔍 CONFIRMATION URL:', confirmationUrl);
       
       // Send professional confirmation email via Resend
@@ -152,7 +152,7 @@ export const emailService = {
       // Fallback to simple email template
       try {
         console.log('🔍 TRYING FALLBACK EMAIL...');
-        const confirmationUrl = `https://ontimely.co.uk/confirm-account?token=${encodeURIComponent(data.email)}&type=signup`;
+        const confirmationUrl = `https://dashboard.ontimely.co.uk/confirm-account?token=${encodeURIComponent(data.email)}&type=signup`;
         await sendSimpleConfirmationEmail({
           email: data.email,
           name: data.name,

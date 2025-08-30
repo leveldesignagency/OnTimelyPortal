@@ -343,7 +343,7 @@ export const sendAccountConfirmationEmail = async (data: EmailData) => {
   
   try {
     console.log('🔍 SENDING TO RESEND:', {
-      from: 'OnTimely <onboarding@resend.dev>',
+      from: 'OnTimely <noreply@ontimely.co.uk>',
       to: [data.email],
       subject: `Confirm Your OnTimely Account - Welcome ${data.name}!`,
       hasHtml: !!getAccountConfirmationTemplate(data),
@@ -351,7 +351,7 @@ export const sendAccountConfirmationEmail = async (data: EmailData) => {
     });
     
     const { data: emailData, error } = await resend.emails.send({
-      from: 'OnTimely <onboarding@resend.dev>',
+      from: 'OnTimely <noreply@ontimely.co.uk>',
       to: [data.email],
       subject: `Confirm Your OnTimely Account - Welcome ${data.name}!`,
       html: getAccountConfirmationTemplate(data),
@@ -360,8 +360,6 @@ export const sendAccountConfirmationEmail = async (data: EmailData) => {
     if (error) {
       console.error('❌ Resend email failed:', {
         message: error.message,
-        code: error.code,
-        statusCode: error.statusCode,
         details: error
       });
       throw error;
@@ -430,7 +428,7 @@ export const getSimpleConfirmationTemplate = (data: EmailData) => {
 export const sendSimpleConfirmationEmail = async (data: EmailData) => {
   try {
     const { data: emailData, error } = await resend.emails.send({
-      from: 'OnTimely <onboarding@resend.dev>',
+      from: 'OnTimely <noreply@ontimely.co.uk>',
       to: [data.email],
       subject: `Confirm Your OnTimely Account`,
       html: getSimpleConfirmationTemplate(data),
@@ -439,8 +437,6 @@ export const sendSimpleConfirmationEmail = async (data: EmailData) => {
     if (error) {
       console.error('❌ Simple confirmation email failed:', {
         message: error.message,
-        code: error.code,
-        statusCode: error.statusCode,
         details: error
       });
       throw error;
