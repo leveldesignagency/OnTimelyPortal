@@ -1,5 +1,5 @@
 import { supabase, supabaseAdmin } from './supabase'
-import { sendAccountConfirmationEmail, sendSimpleConfirmationEmail } from './emailTemplates'
+// Removed unused imports - now using Edge Functions instead
 
 export interface WelcomeEmailData {
   email: string
@@ -337,16 +337,28 @@ export const emailService = {
             throw new Error('Email not found in database')
           }
 
-          // Use Resend for password reset emails
+          // Use Edge Function for password reset emails
           const resetUrl = `https://ontimely.co.uk/set-initial-password?token=${encodeURIComponent(email)}&type=recovery`;
           
-          await sendSimpleConfirmationEmail({
-            email: email,
-            name: name,
-            confirmationUrl: resetUrl
+          const response = await fetch('/api/send-email', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              email: email,
+              name: name,
+              companyName: undefined,
+              confirmationUrl: resetUrl
+            })
           });
 
-          console.log(`✅ Password reset email sent successfully to ${email} via Resend`)
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(`Edge Function failed: ${errorData.error || response.statusText}`);
+          }
+
+          console.log(`✅ Password reset email sent successfully to ${email} via Edge Function`)
         } catch (error) {
           console.error('Error sending password reset email:', error)
           throw error
