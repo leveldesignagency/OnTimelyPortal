@@ -25,7 +25,24 @@ console.log('🔍 RESEND CLIENT CREATED:', !!resend);
 
 // Test Resend API connectivity
 console.log('🔍 TESTING RESEND API CONNECTIVITY...');
+console.log('🔍 CURRENT LOCATION:', {
+  hostname: window.location.hostname,
+  port: window.location.port,
+  protocol: window.location.protocol,
+  fullUrl: window.location.href
+});
+
 try {
+  console.log('🔍 TESTING GENERAL NETWORK CONNECTIVITY...');
+  
+  // Test general internet connectivity
+  const googleResponse = await fetch('https://www.google.com');
+  console.log('🔍 GOOGLE CONNECTIVITY:', {
+    status: googleResponse.status,
+    ok: googleResponse.ok
+  });
+  
+  // Test Resend API specifically
   const testResponse = await fetch('https://api.resend.com/health');
   console.log('🔍 RESEND API HEALTH CHECK:', {
     status: testResponse.status,
@@ -33,7 +50,7 @@ try {
     statusText: testResponse.statusText
   });
 } catch (connectivityError) {
-  console.error('❌ RESEND API CONNECTIVITY FAILED:', connectivityError);
+  console.error('❌ NETWORK CONNECTIVITY FAILED:', connectivityError);
 }
 
 export interface EmailData {
@@ -376,13 +393,11 @@ export const sendAccountConfirmationEmail = async (data: EmailData) => {
     });
 
     if (error) {
-      console.error('❌ Resend email failed:', {
-        message: error.message,
-        errorType: typeof error,
-        errorKeys: Object.keys(error),
-        fullError: JSON.stringify(error, null, 2),
-        details: error
-      });
+      console.error('❌ Resend email failed - MESSAGE:', error.message);
+      console.error('❌ Resend email failed - TYPE:', typeof error);
+      console.error('❌ Resend email failed - KEYS:', Object.keys(error));
+      console.error('❌ Resend email failed - FULL ERROR:', error);
+      console.error('❌ Resend email failed - STRINGIFIED:', JSON.stringify(error, null, 2));
       throw error;
     }
 
