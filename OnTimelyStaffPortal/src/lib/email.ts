@@ -155,39 +155,68 @@ export const emailService = {
       const confirmationUrl = `https://dashboard.ontimely.co.uk/confirm-account?token=${encodeURIComponent(data.email)}&type=signup`;
       console.log('🔍 CONFIRMATION URL:', confirmationUrl);
       
-      // Send professional confirmation email via Resend
-      console.log('🔍 CALLING sendAccountConfirmationEmail...');
-      await sendAccountConfirmationEmail({
-        email: data.email,
-        name: data.name,
-        companyName: data.companyName,
-        confirmationUrl: confirmationUrl
+      // Send professional confirmation email via Edge Function (bypasses Vercel network restrictions)
+      console.log('🔍 CALLING Edge Function for email...');
+      
+      const response = await fetch('/api/send-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: data.email,
+          name: data.name,
+          companyName: data.companyName,
+          confirmationUrl: confirmationUrl
+        })
       });
 
-      console.log(`✅ Professional confirmation email sent successfully to ${data.email} via Resend`)
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`Edge Function failed: ${errorData.error || response.statusText}`);
+      }
+
+      const result = await response.json();
+      console.log('✅ Edge Function email result:', result);
+
+      console.log(`✅ Professional confirmation email sent successfully to ${data.email} via Edge Function`)
     } catch (error) {
-      console.error('❌ Error sending confirmation email via Resend:', error);
+      console.error('❌ Error sending confirmation email via Edge Function:', error);
       console.error('❌ ERROR DETAILS:', {
         message: error instanceof Error ? error.message : String(error),
         stack: error instanceof Error ? error.stack : 'No stack trace',
         name: error instanceof Error ? error.name : 'Unknown error type'
       });
       
-      // Fallback to simple email template
-      try {
-        console.log('🔍 TRYING FALLBACK EMAIL...');
-        const confirmationUrl = `https://dashboard.ontimely.co.uk/confirm-account?token=${encodeURIComponent(data.email)}&type=signup`;
-        await sendSimpleConfirmationEmail({
-          email: data.email,
-          name: data.name,
-          companyName: data.companyName,
-          confirmationUrl: confirmationUrl
-        });
-        console.log(`✅ Fallback confirmation email sent successfully to ${data.email}`);
-      } catch (fallbackError) {
-        console.error('❌ Fallback email also failed:', fallbackError);
-        // Don't throw error - user creation should still succeed
-      }
+              // Fallback to simple email template via Edge Function
+        try {
+          console.log('🔍 TRYING FALLBACK EMAIL via Edge Function...');
+          const confirmationUrl = `https://dashboard.ontimely.co.uk/confirm-account?token=${encodeURIComponent(data.email)}&type=signup`;
+          
+          const fallbackResponse = await fetch('/api/send-email', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              email: data.email,
+              name: data.name,
+              companyName: data.companyName,
+              confirmationUrl: confirmationUrl
+            })
+          });
+
+          if (!fallbackResponse.ok) {
+            const errorData = await fallbackResponse.json();
+            throw new Error(`Fallback Edge Function failed: ${errorData.error || fallbackResponse.statusText}`);
+          }
+
+          const fallbackResult = await fallbackResponse.json();
+          console.log('✅ Fallback Edge Function email result:', fallbackResult);
+        } catch (fallbackError) {
+          console.error('❌ Fallback email also failed:', fallbackError);
+          // Don't throw error - user creation should still succeed
+        }
     }
   },
 
