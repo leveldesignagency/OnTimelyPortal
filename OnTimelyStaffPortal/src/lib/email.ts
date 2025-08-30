@@ -36,26 +36,50 @@ export const emailService = {
         }
       }
 
-      // FIRST: Create the Supabase Auth user (unconfirmed)
+      // FIRST: Create the Supabase Auth user (unconfirmed) with retry logic
       console.log('Creating Supabase Auth user...')
-      const { data: authData, error: authError } = await supabaseAdmin.auth.signUp({
-        email: userData.email,
-        password: userData.password,
-        options: {
-          data: {
-            name: userData.name,
-            company_id: userData.company_id,
-            role: userData.role || 'user',
-            status: userData.status || 'offline'
-          },
-          emailRedirectTo: 'https://dashboard.ontimely.co.uk/confirm-account'
+      
+      // Retry function for rate limiting
+      const createAuthUserWithRetry = async (attempts = 0): Promise<any> => {
+        try {
+          const { data: authData, error: authError } = await supabaseAdmin.auth.signUp({
+            email: userData.email,
+            password: userData.password,
+            options: {
+              data: {
+                name: userData.name,
+                company_id: userData.company_id,
+                role: userData.role || 'user',
+                status: userData.status || 'offline'
+              },
+              emailRedirectTo: 'https://dashboard.ontimely.co.uk/confirm-account'
+            }
+          })
+          
+          if (authError) {
+            // Check if it's a rate limit error
+            if (authError.message.includes('For security purposes, you can only request this after') && attempts < 3) {
+              const waitTime = Math.pow(2, attempts) * 1000 + 5000 // Exponential backoff: 5s, 7s, 9s
+              console.log(`Rate limited, waiting ${waitTime}ms before retry ${attempts + 1}/3...`)
+              await new Promise(resolve => setTimeout(resolve, waitTime))
+              return createAuthUserWithRetry(attempts + 1)
+            }
+            throw authError
+          }
+          
+          return { data: authData, error: null }
+        } catch (error) {
+          if (attempts < 3 && error instanceof Error && error.message?.includes('For security purposes, you can only request this after')) {
+            const waitTime = Math.pow(2, attempts) * 1000 + 5000
+            console.log(`Rate limited, waiting ${waitTime}ms before retry ${attempts + 1}/3...`)
+            await new Promise(resolve => setTimeout(resolve, waitTime))
+            return createAuthUserWithRetry(attempts + 1)
+          }
+          throw error
         }
-      })
-
-      if (authError) {
-        console.error('Supabase Auth creation failed:', authError)
-        throw authError
       }
+      
+      const { data: authData, error: authError } = await createAuthUserWithRetry()
 
       if (!authData.user) {
         throw new Error('Supabase Auth user creation succeeded but no user data returned')
