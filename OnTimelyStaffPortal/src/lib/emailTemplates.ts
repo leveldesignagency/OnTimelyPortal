@@ -342,6 +342,14 @@ export const sendAccountConfirmationEmail = async (data: EmailData) => {
   });
   
   try {
+    console.log('🔍 SENDING TO RESEND:', {
+      from: 'OnTimely <onboarding@resend.dev>',
+      to: [data.email],
+      subject: `Confirm Your OnTimely Account - Welcome ${data.name}!`,
+      hasHtml: !!getAccountConfirmationTemplate(data),
+      htmlLength: getAccountConfirmationTemplate(data).length
+    });
+    
     const { data: emailData, error } = await resend.emails.send({
       from: 'OnTimely <onboarding@resend.dev>',
       to: [data.email],
@@ -350,14 +358,24 @@ export const sendAccountConfirmationEmail = async (data: EmailData) => {
     });
 
     if (error) {
-      console.error('❌ Resend email failed:', error);
+      console.error('❌ Resend email failed:', {
+        message: error.message,
+        code: error.code,
+        statusCode: error.statusCode,
+        details: error
+      });
       throw error;
     }
 
     console.log('✅ Account confirmation email sent successfully via Resend:', emailData);
     return emailData;
   } catch (error) {
-    console.error('❌ Error sending confirmation email via Resend:', error);
+    console.error('❌ Error sending confirmation email via Resend:', {
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : 'No stack trace',
+      name: error instanceof Error ? error.name : 'Unknown error type',
+      fullError: error
+    });
     throw error;
   }
 };
@@ -419,14 +437,24 @@ export const sendSimpleConfirmationEmail = async (data: EmailData) => {
     });
 
     if (error) {
-      console.error('Failed to send simple confirmation email:', error);
+      console.error('❌ Simple confirmation email failed:', {
+        message: error.message,
+        code: error.code,
+        statusCode: error.statusCode,
+        details: error
+      });
       throw error;
     }
 
     console.log('✅ Simple confirmation email sent successfully:', emailData);
     return emailData;
   } catch (error) {
-    console.error('❌ Error sending simple confirmation email:', error);
+    console.error('❌ Error sending simple confirmation email:', {
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : 'No stack trace',
+      name: error instanceof Error ? error.name : 'Unknown error type',
+      fullError: error
+    });
     throw error;
   }
 };
