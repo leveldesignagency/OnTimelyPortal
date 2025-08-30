@@ -23,6 +23,19 @@ if (!resendApiKey) {
 const resend = new Resend(resendApiKey);
 console.log('🔍 RESEND CLIENT CREATED:', !!resend);
 
+// Test Resend API connectivity
+console.log('🔍 TESTING RESEND API CONNECTIVITY...');
+try {
+  const testResponse = await fetch('https://api.resend.com/health');
+  console.log('🔍 RESEND API HEALTH CHECK:', {
+    status: testResponse.status,
+    ok: testResponse.ok,
+    statusText: testResponse.statusText
+  });
+} catch (connectivityError) {
+  console.error('❌ RESEND API CONNECTIVITY FAILED:', connectivityError);
+}
+
 export interface EmailData {
   email: string;
   name: string;
@@ -349,9 +362,12 @@ export const sendAccountConfirmationEmail = async (data: EmailData) => {
       to: [data.email],
       subject: `Confirm Your OnTimely Account - Welcome ${data.name}!`,
       hasHtml: !!getAccountConfirmationTemplate(data),
-      htmlLength: getAccountConfirmationTemplate(data).length
+      htmlLength: getAccountConfirmationTemplate(data).length,
+      resendClient: !!resend,
+      apiKeyLength: resendApiKey?.length
     });
     
+    console.log('🔍 ABOUT TO CALL resend.emails.send...');
     const { data: emailData, error } = await resend.emails.send({
       from: `OnTimely <${fromEmail}>`,
       to: [data.email],
@@ -362,6 +378,9 @@ export const sendAccountConfirmationEmail = async (data: EmailData) => {
     if (error) {
       console.error('❌ Resend email failed:', {
         message: error.message,
+        errorType: typeof error,
+        errorKeys: Object.keys(error),
+        fullError: JSON.stringify(error, null, 2),
         details: error
       });
       throw error;
@@ -374,7 +393,10 @@ export const sendAccountConfirmationEmail = async (data: EmailData) => {
       message: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : 'No stack trace',
       name: error instanceof Error ? error.name : 'Unknown error type',
-      fullError: error
+      errorType: typeof error,
+      errorKeys: error instanceof Error ? Object.keys(error) : 'Not an Error object',
+      fullError: JSON.stringify(error, null, 2),
+      rawError: error
     });
     throw error;
   }
