@@ -254,7 +254,7 @@ export default function SendFormModal({ isOpen, onClose, eventId, eventName }: S
           
           console.log('Request body:', requestBody);
           
-          const response = await fetch(`/api/send-email`, {
+          const response = await fetch(`/api/send-guest-form-email`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(requestBody)
