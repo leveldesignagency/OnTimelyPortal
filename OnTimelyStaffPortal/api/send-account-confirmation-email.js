@@ -1,17 +1,32 @@
-import { Resend } from 'resend';
+const { Resend } = require('resend');
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Use your verified domain now that DNS is configured
+const FROM_EMAIL = 'noreply@ontimely.co.uk';
 
-export default async function handler(req, res) {
+module.exports = async (req, res) => {
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    res.setHeader('Allow', 'POST');
+    return res.status(405).end('Method Not Allowed');
   }
 
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    console.error('RESEND_API_KEY not configured');
+    return res.status(500).json({ error: 'RESEND_API_KEY not configured' });
+  }
+  
+  const resend = new Resend(apiKey);
+
   try {
-    const { email, name, companyName, confirmationUrl } = req.body;
+    const { email, name, companyName, confirmationUrl } = req.body || {};
+    console.log('Received request:', { email, name, companyName, confirmationUrl });
     
-    const { data, error } = await resend.emails.send({
-      from: 'OnTimely <noreply@ontimely.co.uk>',
+    if (!email || !name || !confirmationUrl) {
+      return res.status(400).json({ error: 'Missing required fields: email, name, confirmationUrl' });
+    }
+
+    const emailPayload = {
+      from: `OnTimely <${FROM_EMAIL}>`,
       to: [email],
       subject: `Confirm Your OnTimely Account - Welcome ${name}!`,
       html: `
@@ -55,15 +70,22 @@ export default async function handler(req, res) {
           </div>
         </body>
         </html>
-      `
-    });
+      `,
+    };
+
+    console.log('Sending email with payload:', emailPayload);
+
+    const { data, error } = await resend.emails.send(emailPayload);
 
     if (error) {
-      return res.status(400).json({ error: error.message });
+      console.error('Resend error:', error);
+      return res.status(400).json(error);
     }
 
-    return res.status(200).json({ success: true, data });
-  } catch (error) {
-    return res.status(500).json({ error: error.message });
+    console.log('Resend success:', data);
+    return res.status(200).json(data);
+  } catch (e) {
+    console.error('Edge Function error:', e);
+    return res.status(500).json({ error: 'Failed to send email', details: e.message });
   }
-}
+};
