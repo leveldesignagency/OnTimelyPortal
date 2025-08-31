@@ -158,7 +158,7 @@ export const emailService = {
       // Send professional confirmation email via Edge Function (bypasses Vercel network restrictions)
       console.log('🔍 CALLING Edge Function for email...');
       
-      const response = await fetch('/api/send-email', {
+      const response = await fetch('/api/send-account-confirmation-email', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -193,7 +193,7 @@ export const emailService = {
           console.log('🔍 TRYING FALLBACK EMAIL via Edge Function...');
           const confirmationUrl = `https://dashboard.ontimely.co.uk/confirm-account?token=${encodeURIComponent(data.email)}&type=signup`;
           
-          const fallbackResponse = await fetch('/api/send-email', {
+          const fallbackResponse = await fetch('/api/send-account-confirmation-email', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
